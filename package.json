@@ -1,0 +1,16 @@
+{
+  "name": "posthog-js",
+  "version": "1.0.0",
+  "description": "Posthog-js allows you to automatically capture usage and send events to posthog.",
+  "main": "index.js",
+  "repository": "https://github.com/PostHog/posthog-js",
+  "author": "hey@posthog.com",
+  "license": "MIT",
+  "scripts": {
+      "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
+      "build": "parcel watch src/loader-globals.js --out-file dist/array.min.js"
+  },
+  "dependencies": {
+    "parcel": "^1.12.4"
+  }
+}

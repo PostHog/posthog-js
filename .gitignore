@@ -1,0 +1,17 @@
+venv
+env
+*.pyc
+staticfiles
+.env
+.cache
+settings.yml
+.DS_Store
+debug.log
+*.swp
+*.swo
+node_modules/*
+*.code-workspace
+node_modules
+.vscode/*
+.mypy_cache
+yarn.lock
