@@ -53,7 +53,7 @@ An ID alone might not be enough to work out which user is who within PostHog. Th
 You can make this call on every page view to make sure this information is up-to-date. Alternatively, you can also do this whenever a user first appears (afer signup) or when they change their information.
 
 ```js
-posthog.people.set({$email: 'john@gmail.com'})
+posthog.people.set({$email: 'joe.bloggs@example.com'})
 ```
 
 ## Aliasing users
