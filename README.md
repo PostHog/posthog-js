@@ -57,7 +57,7 @@ posthog.people.set({$email: 'john@gmail.com'})
 ```
 
 ## Aliasing users
-Before a user signs up, they are anonymous. To make sure you can track users from the moment they hit your website, until they're using the product, make sure you call `alias` right after they sign up (though BEFORE the `identify` call).
+Before a user signs up, they are anonymous. To make sure you can track users from the moment they hit your website, until they're using the product, make sure you call `alias` right after they sign up. Calling `alias` will also call `identify`.
 
 This will link the users' anonymous ID with your internal ID.
 
@@ -78,8 +78,6 @@ function signup(email) {
     posthog.alias(user_id);
     // Set email (will be sent once user is identified)
     posthog.people.set({$email: email});
-    // Identify user with internal ID
-    posthog.identify(user_id);
 }
 ```
 
