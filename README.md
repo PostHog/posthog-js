@@ -1,6 +1,6 @@
 # PostHog.js
 
-This library allows you to capture events and send those to any PostHog instance.
+This library allows you to capture events and send those to any [PostHog](https://posthog.com) instance.
 
 
 ## Installation
