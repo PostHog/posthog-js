@@ -34,7 +34,7 @@ posthog.init("[your-token]");
 By default, PostHog captures every click on certain elements (like `a`, `button`, `input` etc.) and page views. However, if it's often worth sending more context whenever a user does something. In that case, you can send an event with any metadata you may have.
 
 ```js
-posthog.capture('[event-name]', {property1: 'value', property2: 'another value'})
+posthog.capture('[event-name]', {property1: 'value', property2: 'another value'});
 ```
 
 ## Identifying users
@@ -43,8 +43,10 @@ To make sure you understand which user is performing actions within your app, yo
 The ID can by anything, but is usually the unique ID that you identify users by in the database. 
 Normally, you would put this below `posthog.init` if you have the information there.
 
+If a user was previously anonymous (because they hadn't signed up or logged in yet), we'll automatically alias their anonymous ID with their new unique ID. That means all their events from before and after they signed up will be shown under the same user.
+
 ```js
-posthog.identify('[user unique id]')
+posthog.identify('[user unique id]');
 ```
 
 ## Sending user information
@@ -53,17 +55,19 @@ An ID alone might not be enough to work out which user is who within PostHog. Th
 You can make this call on every page view to make sure this information is up-to-date. Alternatively, you can also do this whenever a user first appears (afer signup) or when they change their information.
 
 ```js
-posthog.people.set({$email: 'john@gmail.com'})
+posthog.people.set({$email: 'john@gmail.com'});
 ```
 
-## Aliasing users
-Before a user signs up, they are anonymous. To make sure you can track users from the moment they hit your website, until they're using the product, make sure you call `alias` right after they sign up (though BEFORE the `identify` call).
+## One-page apps and pageviews
+This JS snippet automatically sends pageview events whenever it gets loaded. If you have a one-page app that means it'll only send a pageview once, when your app loads.
 
-This will link the users' anonymous ID with your internal ID.
+To make sure any navigating a user does within your app gets captured, you can make a pageview call manually.
 
 ```js
-posthog.alias('[user unique id]')
+posthog.capture('$pageview');
 ```
+
+This will automatically send the current URL.
 
 ## Complete signup psuedocode
 
@@ -74,12 +78,10 @@ function signup(email) {
     // Your own internal logic for creating an account and getting a user_id
     let user_id = create_account(email);
 
-    // Make sure the anonymous events are linked with the new user
-    posthog.alias(user_id);
-    // Set email (will be sent once user is identified)
-    posthog.people.set({$email: email});
     // Identify user with internal ID
     posthog.identify(user_id);
+    // Set email (will be sent once user is identified)
+    posthog.people.set({$email: email});
 }
 ```
 
@@ -95,3 +97,7 @@ To create a minified production version, run
 ```bash
 yarn build
 ```
+
+# Contributions
+
+Contributions are very welcome! Please open a PR and we'll review it asap. If you have any questions, please shoot an email to hey@posthog.com.
