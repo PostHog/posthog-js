@@ -50,12 +50,12 @@ posthog.identify('[user unique id]');
 ```
 
 ## Sending user information
-An ID alone might not be enough to work out which user is who within PostHog. That's why it's useful to send over more metadata of the user. At minimum, we recommend sending the `$email` property.
+An ID alone might not be enough to work out which user is who within PostHog. That's why it's useful to send over more metadata of the user. At minimum, we recommend sending the `email` property, which is also what we use to display in PostHog.
 
 You can make this call on every page view to make sure this information is up-to-date. Alternatively, you can also do this whenever a user first appears (afer signup) or when they change their information.
 
 ```js
-posthog.people.set({$email: 'john@gmail.com'});
+posthog.people.set({email: 'john@gmail.com'});
 ```
 
 ## One-page apps and pageviews
