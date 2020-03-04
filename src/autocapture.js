@@ -317,7 +317,7 @@ var autocapture = {
     _loadEditor: function(instance, editorParams) {
         if (!window['_mpEditorLoaded']) { // only load the codeless event editor once, even if there are multiple instances of PostHogLib
             window['_mpEditorLoaded'] = true;
-            var editorUrl = instance.get_config('app_host')
+            var editorUrl = instance.get_config('api_host')
               + '/static/editor.js?_ts='
               + (new Date()).getTime();
             this._loadScript(editorUrl, function() {
