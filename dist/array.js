@@ -4636,7 +4636,6 @@ PostHogLib.prototype._init = function (token, config, name) {
   }));
 
   this['_jsc'] = function () {}; // batching requests variabls
-  // TODO: add options to allow disabling of polling or intervals?
 
 
   this._event_queue = [];
@@ -4770,6 +4769,7 @@ PostHogLib.prototype._event_enqueue = function (url, data, options, callback) {
 PostHogLib.prototype._event_queue_poll = function () {
   var _this2 = this;
 
+  var POLL_INTERVAL = 3000;
   setTimeout(function () {
     if (_this2._event_queue.length > 0) {
       var requests = {};
@@ -4789,6 +4789,15 @@ PostHogLib.prototype._event_queue_poll = function () {
     } else {
       _this2._empty_queue_count++;
     }
+    /**
+     * _empty_queue_count will increment each time the queue is polled
+     *  and it is empty. To avoid emtpy polling (user went idle, stepped away from comp)
+     *  we can turn it off with the _should_poll flag.
+     * 
+     * Polling will be re enabled when the next time PostHogLib.capture is called with
+     *  an event that should be added to the event queue. 
+     */
+
 
     if (_this2._empty_queue_count > 4) {
       _this2._should_poll = false;
@@ -4798,7 +4807,7 @@ PostHogLib.prototype._event_queue_poll = function () {
     if (_this2._should_poll) {
       _this2._event_queue_poll();
     }
-  }, 3000);
+  }, POLL_INTERVAL);
 };
 
 PostHogLib.prototype._send_request = function (url, data, options, callback) {
