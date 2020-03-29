@@ -98,7 +98,8 @@ var DEFAULT_CONFIG = {
     'property_blacklist':                [],
     'xhr_headers':                       {}, // { header: value, header2: value }
     'inapp_protocol':                    '//',
-    'inapp_link_new_window':             false
+    'inapp_link_new_window':             false,
+    'request_batching':                  true
 };
 
 var DOM_LOADED = false;
@@ -277,8 +278,9 @@ PostHogLib.prototype._dom_loaded = function () {
         _.each(this.__request_queue, function (item) {
             this._send_request.apply(this, item);
         }, this);
-        // only poll if opted in
-        this._event_queue_poll()
+        if(this.get_config('request_batching')) {
+            this._event_queue_poll()
+        }
     }
 
     delete this.__dom_loaded_queue;
@@ -334,8 +336,8 @@ PostHogLib.prototype._prepare_callback = function(callback, data) {
     }
 };
 
-PostHogLib.prototype._event_enqueue = function (event) {
-    this._event_queue.push(event)
+PostHogLib.prototype._event_enqueue = function (url, data, options, callback) {
+    this._event_queue.push({url, data, options, callback})
 
     if (!this._should_poll) {
         this._should_poll = true
@@ -348,12 +350,12 @@ PostHogLib.prototype._event_queue_poll = function () {
         if (this._event_queue.length > 0) {
             const requests = {}
             _.each(this._event_queue, (request) => {
-                const { URI, data } = request
-                if (requests[URI] === undefined) requests[URI] = []
-                requests[URI].push(data.data)
+                const { url, data } = request
+                if (requests[url] === undefined) requests[url] = []
+                requests[url].push(data.data)
             })
-            for (let uri in requests) {
-                this._send_request(uri, requests[uri], __NOOPTIONS, __NOOP)
+            for (let url in requests) {
+                this._send_request(url, requests[url], __NOOPTIONS, __NOOP)
             }
             this._event_queue.length = 0 // flush the _event_queue
         } else {
@@ -380,6 +382,7 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
         method: this.get_config('api_method'),
         transport: this.get_config('api_transport')
     };
+
     var body_data = null;
 
     if (!callback && (_.isFunction(options) || typeof options === 'string')) {
@@ -390,6 +393,7 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
     if (!USE_XHR) {
         options.method = 'GET';
     }
+
     var use_sendBeacon = sendBeacon && options.transport.toLowerCase() === 'sendbeacon';
     var use_post = use_sendBeacon || options.method === 'POST';
 
@@ -417,8 +421,16 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
     args['_'] = new Date().getTime().toString();
 
     url += '?' + _.HTTPBuildQuery(args);
-    body_data = JSON.stringify(data)
 
+    if(use_post) {
+        if (Array.isArray(data)) {
+            body_data = JSON.stringify(data)
+        } else {
+            body_data = 'data=' + data['data'];
+            delete data['data'];
+        }
+    }
+    
     if ('img' in data) {
         var img = document.createElement('img');
         img.src = url;
@@ -436,7 +448,11 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
 
             var headers = this.get_config('xhr_headers');
             if (use_post) {
-                headers['Content-Type'] = 'application/json';
+                if(!Array.isArray(data)) {
+                    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                } else {
+                    headers['Content-Type'] = 'application/json';
+                }
             }
             _.each(headers, function(headerValue, headerName) {
                 req.setRequestHeader(headerName, headerValue);
@@ -662,21 +678,21 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
         'properties': properties
     };
     var truncated_data  = _.truncate(data, 255);
+    var json_data      = _.JSONEncode(truncated_data);
+    var encoded_data   = _.base64Encode(json_data);
 
-    if (callback !== __NOOP || options !== __NOOPTIONS) {
-        this._send_request(
-            this.get_config('api_host') + '/e/',
-            { 'data': truncated_data },
-            options,
-            this._prepare_callback(callback, truncated_data)
-        );
+    const url = this.get_config('api_host') + '/e/'
+    const data_object = {'data': encoded_data}
+    const cb = this._prepare_callback(callback, truncated_data)
+
+    const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
+    const args = [url, data_object, options, cb]
+
+    if (!this.get_config('request_batching') || has_unique_traits) {
+        this._send_request(...args);
     } else {
-        this._event_enqueue({
-            URI: this.get_config('api_host') + '/e/',
-            data: { 'data': truncated_data },
-            options: options,
-            cb: this._prepare_callback(callback, truncated_data)
-        })
+        data_object.data = truncated_data
+        this._event_enqueue(...args)
     }
 
     return truncated_data;

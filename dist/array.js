@@ -4497,7 +4497,8 @@ var DEFAULT_CONFIG = {
   'xhr_headers': {},
   // { header: value, header2: value }
   'inapp_protocol': '//',
-  'inapp_link_new_window': false
+  'inapp_link_new_window': false,
+  'request_batching': true
 };
 var DOM_LOADED = false;
 /**
@@ -4685,10 +4686,11 @@ PostHogLib.prototype._dom_loaded = function () {
   if (!this.has_opted_out_captureing()) {
     _utils._.each(this.__request_queue, function (item) {
       this._send_request.apply(this, item);
-    }, this); // only poll if opted in
+    }, this);
 
-
-    this._event_queue_poll();
+    if (this.get_config('request_batching')) {
+      this._event_queue_poll();
+    }
   }
 
   delete this.__dom_loaded_queue;
@@ -4750,8 +4752,13 @@ PostHogLib.prototype._prepare_callback = function (callback, data) {
   }
 };
 
-PostHogLib.prototype._event_enqueue = function (event) {
-  this._event_queue.push(event);
+PostHogLib.prototype._event_enqueue = function (url, data, options, callback) {
+  this._event_queue.push({
+    url: url,
+    data: data,
+    options: options,
+    callback: callback
+  });
 
   if (!this._should_poll) {
     this._should_poll = true;
@@ -4768,14 +4775,14 @@ PostHogLib.prototype._event_queue_poll = function () {
       var requests = {};
 
       _utils._.each(_this2._event_queue, function (request) {
-        var URI = request.URI,
+        var url = request.url,
             data = request.data;
-        if (requests[URI] === undefined) requests[URI] = [];
-        requests[URI].push(data.data);
+        if (requests[url] === undefined) requests[url] = [];
+        requests[url].push(data.data);
       });
 
-      for (var uri in requests) {
-        _this2._send_request(uri, requests[uri], __NOOPTIONS, __NOOP);
+      for (var url in requests) {
+        _this2._send_request(url, requests[url], __NOOPTIONS, __NOOP);
       }
 
       _this2._event_queue.length = 0; // flush the _event_queue
@@ -4855,7 +4862,15 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
   args['ip'] = this.get_config('ip') ? 1 : 0;
   args['_'] = new Date().getTime().toString();
   url += '?' + _utils._.HTTPBuildQuery(args);
-  body_data = JSON.stringify(data);
+
+  if (use_post) {
+    if (Array.isArray(data)) {
+      body_data = JSON.stringify(data);
+    } else {
+      body_data = 'data=' + data['data'];
+      delete data['data'];
+    }
+  }
 
   if ('img' in data) {
     var img = _utils.document.createElement('img');
@@ -4876,7 +4891,11 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
       var headers = this.get_config('xhr_headers');
 
       if (use_post) {
-        headers['Content-Type'] = 'application/json';
+        if (!Array.isArray(data)) {
+          headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        } else {
+          headers['Content-Type'] = 'application/json';
+        }
       }
 
       _utils._.each(headers, function (headerValue, headerName) {
@@ -5132,19 +5151,26 @@ PostHogLib.prototype.capture = (0, _gdprUtils.addOptOutCheckPostHogLib)(function
 
   var truncated_data = _utils._.truncate(data, 255);
 
-  if (callback !== __NOOP || options !== __NOOPTIONS) {
-    this._send_request(this.get_config('api_host') + '/e/', {
-      'data': truncated_data
-    }, options, this._prepare_callback(callback, truncated_data));
+  var json_data = _utils._.JSONEncode(truncated_data);
+
+  var encoded_data = _utils._.base64Encode(json_data);
+
+  var url = this.get_config('api_host') + '/e/';
+  var data_object = {
+    'data': encoded_data
+  };
+
+  var cb = this._prepare_callback(callback, truncated_data);
+
+  var has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS;
+  var args = [url, data_object, options, cb];
+
+  if (!this.get_config('request_batching') || has_unique_traits) {
+    this._send_request.apply(this, args);
   } else {
-    this._event_enqueue({
-      URI: this.get_config('api_host') + '/e/',
-      data: {
-        'data': truncated_data
-      },
-      options: options,
-      cb: this._prepare_callback(callback, truncated_data)
-    });
+    data_object.data = truncated_data;
+
+    this._event_enqueue.apply(this, args);
   }
 
   return truncated_data;
