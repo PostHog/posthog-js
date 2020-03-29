@@ -6,9 +6,10 @@
   "author": "hey@posthog.com",
   "license": "MIT",
   "scripts": {
-      "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
-      "build": "parcel build src/loader-globals.js --out-file dist/array.min.js",
-      "build-module": "webpack src/loader-module.js --out-file dist/module.js"
+    "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
+    "serve": "parcel serve src/loader-globals.js --port 3001 --out-file dist/array.js",
+    "build": "parcel build src/loader-globals.js --out-file dist/array.min.js",
+    "build-module": "webpack src/loader-module.js --out-file dist/module.js"
   },
   "main": "dist/module.js",
   "devDependencies": {

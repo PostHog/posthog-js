@@ -38,6 +38,9 @@ var init_type;       // MODULE or SNIPPET loader
 var posthog_master; // main posthog instance / object
 var INIT_MODULE  = 0;
 var INIT_SNIPPET = 1;
+// some globals for comparisons
+var __NOOP = function () {}
+var __NOOPTIONS = {}
 
 /** @const */ var PRIMARY_INSTANCE_NAME = 'posthog';
 
@@ -224,6 +227,12 @@ PostHogLib.prototype._init = function(token, config, name) {
 
     this['_jsc'] = function() {};
 
+    // batching requests variabls
+    // TODO: add options to allow disabling of polling or intervals?
+    this._event_queue = []
+    this._empty_queue_count = 0 // to track empty polls
+    this._should_poll = true // flag to continue to recursively poll or not
+
     this.__dom_loaded_queue = [];
     this.__request_queue = [];
     this.__disabled_events = [];
@@ -259,15 +268,17 @@ PostHogLib.prototype._loaded = function() {
     }
 };
 
-PostHogLib.prototype._dom_loaded = function() {
-    _.each(this.__dom_loaded_queue, function(item) {
+PostHogLib.prototype._dom_loaded = function () {
+    _.each(this.__dom_loaded_queue, function (item) {
         this._capture_dom.apply(this, item);
     }, this);
 
     if (!this.has_opted_out_captureing()) {
-        _.each(this.__request_queue, function(item) {
+        _.each(this.__request_queue, function (item) {
             this._send_request.apply(this, item);
         }, this);
+        // only poll if opted in
+        this._event_queue_poll()
     }
 
     delete this.__dom_loaded_queue;
@@ -323,6 +334,42 @@ PostHogLib.prototype._prepare_callback = function(callback, data) {
     }
 };
 
+PostHogLib.prototype._event_enqueue = function (event) {
+    this._event_queue.push(event)
+
+    if (!this._should_poll) {
+        this._should_poll = true
+        this._event_queue_poll()
+    }
+}
+
+PostHogLib.prototype._event_queue_poll = function () {
+    setTimeout(() => {
+        if (this._event_queue.length > 0) {
+            const requests = {}
+            _.each(this._event_queue, (request) => {
+                const { URI, data } = request
+                if (requests[URI] === undefined) requests[URI] = []
+                requests[URI].push(data.data)
+            })
+            for (let uri in requests) {
+                this._send_request(uri, requests[uri], __NOOPTIONS, __NOOP)
+            }
+            this._event_queue.length = 0 // flush the _event_queue
+        } else {
+            this._empty_queue_count++
+        }
+
+        if (this._empty_queue_count > 4) {
+            this._should_poll = false
+            this._empty_queue_count = 0
+        }
+        if (this._should_poll) {
+            this._event_queue_poll()
+        }
+    }, 3000)
+}
+
 PostHogLib.prototype._send_request = function(url, data, options, callback) {
     if (ENQUEUE_REQUESTS) {
         this.__request_queue.push(arguments);
@@ -365,15 +412,12 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
         }
     }
 
-    data['ip'] = this.get_config('ip')?1:0;
-    data['_'] = new Date().getTime().toString();
+    var args = {}
+    args['ip'] = this.get_config('ip') ? 1 : 0;
+    args['_'] = new Date().getTime().toString();
 
-    if (use_post) {
-        body_data = 'data=' + data['data'];
-        delete data['data'];
-    }
-
-    url += '?' + _.HTTPBuildQuery(data);
+    url += '?' + _.HTTPBuildQuery(args);
+    body_data = JSON.stringify(data)
 
     if ('img' in data) {
         var img = document.createElement('img');
@@ -392,7 +436,7 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
 
             var headers = this.get_config('xhr_headers');
             if (use_post) {
-                headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                headers['Content-Type'] = 'application/json';
             }
             _.each(headers, function(headerValue, headerName) {
                 req.setRequestHeader(headerName, headerValue);
@@ -556,13 +600,13 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
         callback = options;
         options = null;
     }
-    options = options || {};
+    options = options || __NOOPTIONS;
     var transport = options['transport']; // external API, don't minify 'transport' prop
     if (transport) {
         options.transport = transport; // 'transport' prop name can be minified internally
     }
     if (typeof callback !== 'function') {
-        callback = function() {};
+        callback = __NOOP
     }
 
     if (_.isUndefined(event_name)) {
@@ -617,19 +661,23 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
         'event': event_name,
         'properties': properties
     };
-    var truncated_data = _.truncate(data, 255);
-    var json_data      = _.JSONEncode(truncated_data);
-    var encoded_data   = _.base64Encode(json_data);
+    var truncated_data  = _.truncate(data, 255);
 
-    console.log('POSTHOG REQUEST:');
-    console.log(truncated_data);
-
-    this._send_request(
-        this.get_config('api_host') + '/e/',
-        { 'data': encoded_data },
-        options,
-        this._prepare_callback(callback, truncated_data)
-    );
+    if (callback !== __NOOP || options !== __NOOPTIONS) {
+        this._send_request(
+            this.get_config('api_host') + '/e/',
+            { 'data': truncated_data },
+            options,
+            this._prepare_callback(callback, truncated_data)
+        );
+    } else {
+        this._event_enqueue({
+            URI: this.get_config('api_host') + '/e/',
+            data: { 'data': truncated_data },
+            options: options,
+            cb: this._prepare_callback(callback, truncated_data)
+        })
+    }
 
     return truncated_data;
 });
