@@ -1,17 +1,19 @@
 {
   "name": "posthog-js",
-  "version": "1.0.2",
-  "description": "Posthog-js allows you to automatically capture usage and send events to posthog.",
+  "version": "1.0.4",
+  "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
   "repository": "https://github.com/PostHog/posthog-js",
   "author": "hey@posthog.com",
   "license": "MIT",
   "scripts": {
-      "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
-      "build": "parcel build src/loader-globals.js --out-file dist/array.min.js",
-      "build-module": "webpack src/loader-module.js --out-file dist/module.js"
+    "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
+    "build": "parcel build src/loader-globals.js --out-file dist/array.min.js",
+    "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js"
   },
   "main": "dist/module.js",
   "devDependencies": {
-    "parcel": "^1.12.4"
+    "parcel": "^1.12.4",
+    "rollup": "^1.32.0",
+    "rollup-plugin-npm": "1.4.0"
   }
 }
