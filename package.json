@@ -13,7 +13,7 @@
   "main": "dist/module.js",
   "devDependencies": {
     "parcel": "^1.12.4",
-    "rollup": "^1.32.0",
+    "rollup": "^2.3.2",
     "rollup-plugin-npm": "1.4.0"
   }
 }
