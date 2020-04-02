@@ -5155,7 +5155,8 @@ PostHogLib.prototype.capture = (0, _gdprUtils.addOptOutCheckPostHogLib)(function
 
   var data = {
     'event': event_name,
-    'properties': properties
+    'properties': properties,
+    'timestamp': new Date().toISOString()
   };
 
   var truncated_data = _utils._.truncate(data, 255);
@@ -6331,7 +6332,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "59071" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "49577" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};

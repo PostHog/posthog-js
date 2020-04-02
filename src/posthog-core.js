@@ -683,7 +683,8 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
 
     var data = {
         'event': event_name,
-        'properties': properties
+        'properties': properties,
+        'timestamp': new Date().toISOString()
     };
     var truncated_data  = _.truncate(data, 255);
     var json_data      = _.JSONEncode(truncated_data);
