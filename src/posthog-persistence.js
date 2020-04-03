@@ -17,11 +17,6 @@ import { _, console } from './utils';
  */
 /** @const */ var SET_QUEUE_KEY          = '__mps';
 /** @const */ var SET_ONCE_QUEUE_KEY     = '__mpso';
-/** @const */ var UNSET_QUEUE_KEY        = '__mpus';
-/** @const */ var ADD_QUEUE_KEY          = '__mpa';
-/** @const */ var APPEND_QUEUE_KEY       = '__mpap';
-/** @const */ var REMOVE_QUEUE_KEY       = '__mpr';
-/** @const */ var UNION_QUEUE_KEY        = '__mpu';
 // This key is deprecated, but we want to check for it to see whether aliasing is allowed.
 /** @const */ var PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id';
 /** @const */ var ALIAS_ID_KEY           = '__alias';
@@ -30,11 +25,6 @@ import { _, console } from './utils';
 /** @const */ var RESERVED_PROPERTIES = [
     SET_QUEUE_KEY,
     SET_ONCE_QUEUE_KEY,
-    UNSET_QUEUE_KEY,
-    ADD_QUEUE_KEY,
-    APPEND_QUEUE_KEY,
-    REMOVE_QUEUE_KEY,
-    UNION_QUEUE_KEY,
     PEOPLE_DISTINCT_ID_KEY,
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,
@@ -317,23 +307,11 @@ PostHogPersistence.prototype._add_to_people_queue = function(queue, data) {
     var q_key = this._get_queue_key(queue),
         q_data = data[queue],
         set_q = this._get_or_create_queue(SET_ACTION),
-        set_once_q = this._get_or_create_queue(SET_ONCE_ACTION),
-        unset_q = this._get_or_create_queue(UNSET_ACTION),
-        add_q = this._get_or_create_queue(ADD_ACTION),
-        union_q = this._get_or_create_queue(UNION_ACTION),
-        remove_q = this._get_or_create_queue(REMOVE_ACTION, []),
-        append_q = this._get_or_create_queue(APPEND_ACTION, []);
+        set_once_q = this._get_or_create_queue(SET_ONCE_ACTION);
 
     if (q_key === SET_QUEUE_KEY) {
         // Update the set queue - we can override any existing values
         _.extend(set_q, q_data);
-        // if there was a pending increment, override it
-        // with the set.
-        this._pop_from_people_queue(ADD_ACTION, q_data);
-        // if there was a pending union, override it
-        // with the set.
-        this._pop_from_people_queue(UNION_ACTION, q_data);
-        this._pop_from_people_queue(UNSET_ACTION, q_data);
     } else if (q_key === SET_ONCE_QUEUE_KEY) {
         // only queue the data if there is not already a set_once call for it.
         _.each(q_data, function(v, k) {
@@ -341,58 +319,6 @@ PostHogPersistence.prototype._add_to_people_queue = function(queue, data) {
                 set_once_q[k] = v;
             }
         });
-        this._pop_from_people_queue(UNSET_ACTION, q_data);
-    } else if (q_key === UNSET_QUEUE_KEY) {
-        _.each(q_data, function(prop) {
-
-            // undo previously-queued actions on this key
-            _.each([set_q, set_once_q, add_q, union_q], function(enqueued_obj) {
-                if (prop in enqueued_obj) {
-                    delete enqueued_obj[prop];
-                }
-            });
-            _.each(append_q, function(append_obj) {
-                if (prop in append_obj) {
-                    delete append_obj[prop];
-                }
-            });
-
-            unset_q[prop] = true;
-
-        });
-    } else if (q_key === ADD_QUEUE_KEY) {
-        _.each(q_data, function(v, k) {
-            // If it exists in the set queue, increment
-            // the value
-            if (k in set_q) {
-                set_q[k] += v;
-            } else {
-                // If it doesn't exist, update the add
-                // queue
-                if (!(k in add_q)) {
-                    add_q[k] = 0;
-                }
-                add_q[k] += v;
-            }
-        }, this);
-        this._pop_from_people_queue(UNSET_ACTION, q_data);
-    } else if (q_key === UNION_QUEUE_KEY) {
-        _.each(q_data, function(v, k) {
-            if (_.isArray(v)) {
-                if (!(k in union_q)) {
-                    union_q[k] = [];
-                }
-                // We may send duplicates, the server will dedup them.
-                union_q[k] = union_q[k].concat(v);
-            }
-        });
-        this._pop_from_people_queue(UNSET_ACTION, q_data);
-    } else if (q_key === REMOVE_QUEUE_KEY) {
-        remove_q.push(q_data);
-        this._pop_from_people_queue(APPEND_ACTION, q_data);
-    } else if (q_key === APPEND_QUEUE_KEY) {
-        append_q.push(q_data);
-        this._pop_from_people_queue(UNSET_ACTION, q_data);
     }
 
     console.log('POSTHOG PEOPLE REQUEST (QUEUED, PENDING IDENTIFY):');
@@ -405,18 +331,7 @@ PostHogPersistence.prototype._pop_from_people_queue = function(queue, data) {
     var q = this._get_queue(queue);
     if (!_.isUndefined(q)) {
         _.each(data, function(v, k) {
-            if (queue === APPEND_ACTION || queue === REMOVE_ACTION) {
-                // list actions: only remove if both k+v match
-                // e.g. remove should not override append in a case like
-                // append({foo: 'bar'}); remove({foo: 'qux'})
-                _.each(q, function(queued_action) {
-                    if (queued_action[k] === v) {
-                        delete queued_action[k];
-                    }
-                });
-            } else {
-                delete q[k];
-            }
+            delete q[k];
         }, this);
 
         this.save();
@@ -428,16 +343,6 @@ PostHogPersistence.prototype._get_queue_key = function(queue) {
         return SET_QUEUE_KEY;
     } else if (queue === SET_ONCE_ACTION) {
         return SET_ONCE_QUEUE_KEY;
-    } else if (queue === UNSET_ACTION) {
-        return UNSET_QUEUE_KEY;
-    } else if (queue === ADD_ACTION) {
-        return ADD_QUEUE_KEY;
-    } else if (queue === APPEND_ACTION) {
-        return APPEND_QUEUE_KEY;
-    } else if (queue === REMOVE_ACTION) {
-        return REMOVE_QUEUE_KEY;
-    } else if (queue === UNION_ACTION) {
-        return UNION_QUEUE_KEY;
     } else {
         console.error('Invalid queue:', queue);
     }
@@ -474,11 +379,6 @@ export {
     PostHogPersistence,
     SET_QUEUE_KEY,
     SET_ONCE_QUEUE_KEY,
-    UNSET_QUEUE_KEY,
-    ADD_QUEUE_KEY,
-    APPEND_QUEUE_KEY,
-    REMOVE_QUEUE_KEY,
-    UNION_QUEUE_KEY,
     PEOPLE_DISTINCT_ID_KEY,
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,

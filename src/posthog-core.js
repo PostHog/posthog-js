@@ -3,7 +3,6 @@ import Config from './config';
 import { _, console, userAgent, window, document, navigator } from './utils';
 import { autocapture } from './autocapture';
 import { LinkCapture } from './dom-capture';
-import { PostHogGroup } from './posthog-group';
 import { PostHogPeople } from './posthog-people';
 import {
     PostHogPersistence,
@@ -264,7 +263,7 @@ PostHogLib.prototype._init = function(token, config, name) {
 PostHogLib.prototype._loaded = function() {
     this.get_config('loaded')(this);
 
-    // this happens after so a user can call identify/name_tag in
+    // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
         this.capture_pageview();
@@ -608,25 +607,6 @@ PostHogLib.prototype.push = function(item) {
 };
 
 /**
- * Disable events on the PostHog object. If passed no arguments,
- * this function disables capturing of any event. If passed an
- * array of event names, those events will be disabled, but other
- * events will continue to be captureed.
- *
- * Note: this function does not stop other posthog functions from
- * firing, such as register() or people.set().
- *
- * @param {Array} [events] An array of event names to disable
- */
-PostHogLib.prototype.disable = function(events) {
-    if (typeof(events) === 'undefined') {
-        this._flags.disable_all_events = true;
-    } else {
-        this.__disabled_events = this.__disabled_events.concat(events);
-    }
-};
-
-/**
  * Capture an event. This is the most important and
  * frequently used PostHog function.
  *
@@ -734,133 +714,12 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
     return truncated_data;
 });
 
-/**
- * Register the current user into one/many groups.
- *
- * ### Usage:
- *
- *      posthog.set_group('company', ['posthog', 'google']) // an array of IDs
- *      posthog.set_group('company', 'posthog')
- *      posthog.set_group('company', 128746312)
- *
- * @param {String} group_key Group key
- * @param {Array|String|Number} group_ids An array of group IDs, or a singular group ID
- * @param {Function} [callback] If provided, the callback will be called after capturing the event.
- *
- */
-PostHogLib.prototype.set_group = addOptOutCheckPostHogLib(function(group_key, group_ids, callback) {
-    if (!_.isArray(group_ids)) {
-        group_ids = [group_ids];
-    }
-    var prop = {};
-    prop[group_key] = group_ids;
-    this.register(prop);
-    return this['people'].set(group_key, group_ids, callback);
-});
-
-/**
- * Add a new group for this user.
- *
- * ### Usage:
- *
- *      posthog.add_group('company', 'posthog')
- *
- * @param {String} group_key Group key
- * @param {*} group_id A valid PostHog property type
- * @param {Function} [callback] If provided, the callback will be called after capturing the event.
- */
-PostHogLib.prototype.add_group = addOptOutCheckPostHogLib(function(group_key, group_id, callback) {
-    var old_values = this.get_property(group_key);
-    if (old_values === undefined) {
-        var prop = {};
-        prop[group_key] = [group_id];
-        this.register(prop);
-    } else {
-        if (old_values.indexOf(group_id) === -1) {
-            old_values.push(group_id);
-            this.register(prop);
-        }
-    }
-    return this['people'].union(group_key, group_id, callback);
-});
-
-/**
- * Remove a group from this user.
- *
- * ### Usage:
- *
- *      posthog.remove_group('company', 'posthog')
- *
- * @param {String} group_key Group key
- * @param {*} group_id A valid PostHog property type
- * @param {Function} [callback] If provided, the callback will be called after capturing the event.
- */
-PostHogLib.prototype.remove_group = addOptOutCheckPostHogLib(function(group_key, group_id, callback) {
-    var old_value = this.get_property(group_key);
-    // if the value doesn't exist, the persistent store is unchanged
-    if (old_value !== undefined) {
-        var idx = old_value.indexOf(group_id);
-        if (idx > -1) {
-            old_value.splice(idx, 1);
-            this.register({group_key: old_value});
-        }
-        if (old_value.length === 0) {
-            this.unregister(group_key);
-        }
-    }
-    return this['people'].remove(group_key, group_id, callback);
-});
-
-/**
- * Capture an event with specific groups.
- *
- * ### Usage:
- *
- *      posthog.capture_with_groups('purchase', {'product': 'iphone'}, {'University': ['UCB', 'UCLA']})
- *
- * @param {String} event_name The name of the event (see `posthog.capture()`)
- * @param {Object=} properties A set of properties to include with the event you're sending (see `posthog.capture()`)
- * @param {Object=} groups An object mapping group name keys to one or more values
- * @param {Function} [callback] If provided, the callback will be called after capturing the event.
- */
-PostHogLib.prototype.capture_with_groups = addOptOutCheckPostHogLib(function(event_name, properties, groups, callback) {
-    var capturing_props = _.extend({}, properties || {});
-    _.each(groups, function(v, k) {
-        if (v !== null && v !== undefined) {
-            capturing_props[k] = v;
-        }
-    });
-    return this.capture(event_name, capturing_props, callback);
-});
-
 PostHogLib.prototype._create_map_key = function (group_key, group_id) {
     return group_key + '_' + JSON.stringify(group_id);
 };
 
 PostHogLib.prototype._remove_group_from_cache = function (group_key, group_id) {
     delete this._cached_groups[this._create_map_key(group_key, group_id)];
-};
-
-/**
- * Look up reference to a PostHog group
- *
- * ### Usage:
- *
- *       posthog.get_group(group_key, group_id)
- *
- * @param {String} group_key Group key
- * @param {Object} group_id A valid PostHog property type
- * @returns {Object} A PostHogGroup identifier
- */
-PostHogLib.prototype.get_group = function (group_key, group_id) {
-    var map_key = this._create_map_key(group_key, group_id);
-    var group = this._cached_groups[map_key];
-    if (group === undefined || group._group_key !== group_key || group._group_id !== group_id) {
-        group = new PostHogGroup();
-        group._init(this, group_key, group_id);
-        this._cached_groups[map_key] = group;
-    }
-    return group;
 };
 
 /**
@@ -939,36 +798,6 @@ PostHogLib.prototype.capture_links = function() {
  */
 PostHogLib.prototype.capture_forms = function() {
     return this._capture_dom.call(this, FormCaptureer, arguments);
-};
-
-/**
- * Time an event by including the time between this call and a
- * later 'capture' call for the same event in the properties sent
- * with the event.
- *
- * ### Usage:
- *
- *     // time an event named 'Registered'
- *     posthog.time_event('Registered');
- *     posthog.capture('Registered', {'Gender': 'Male', 'Age': 21});
- *
- * When called for a particular event name, the next capture call for that event
- * name will include the elapsed time between the 'time_event' and 'capture'
- * calls. This value is stored as seconds in the '$duration' property.
- *
- * @param {String} event_name The name of the event.
- */
-PostHogLib.prototype.time_event = function(event_name) {
-    if (_.isUndefined(event_name)) {
-        console.error('No event name provided to posthog.time_event');
-        return;
-    }
-
-    if (this._event_is_disabled(event_name)) {
-        return;
-    }
-
-    this['persistence'].set_event_timer(event_name,  new Date().getTime());
 };
 
 /**
@@ -1061,15 +890,11 @@ PostHogLib.prototype._register_single = function(prop, value) {
  * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
  */
 PostHogLib.prototype.identify = function(
-    new_distinct_id, _set_callback, _add_callback, _append_callback, _set_once_callback, _union_callback, _unset_callback, _remove_callback
+    new_distinct_id, _set_callback, _set_once_callback
 ) {
     // Optional Parameters
     //  _set_callback:function  A callback to be run if and when the People set queue is flushed
-    //  _add_callback:function  A callback to be run if and when the People add queue is flushed
-    //  _append_callback:function  A callback to be run if and when the People append queue is flushed
     //  _set_once_callback:function  A callback to be run if and when the People set_once queue is flushed
-    //  _union_callback:function  A callback to be run if and when the People union queue is flushed
-    //  _unset_callback:function  A callback to be run if and when the People unset queue is flushed
 
     var previous_distinct_id = this.get_distinct_id();
     this.register({'$user_id': new_distinct_id});
@@ -1090,10 +915,9 @@ PostHogLib.prototype.identify = function(
         this.unregister(ALIAS_ID_KEY);
         this.register({'distinct_id': new_distinct_id});
     }
-    // this._check_and_handle_notifications(this.get_distinct_id());
     this._flags.identify_called = true;
     // Flush any queued up people requests
-    this['people']._flush(_set_callback, _add_callback, _append_callback, _set_once_callback, _union_callback, _unset_callback, _remove_callback);
+    this['people']._flush(_set_callback, _set_once_callback);
 
     // send an $identify event any time the distinct_id is changing - logic on the server
     // will determine whether or not to do anything with it.
@@ -1181,21 +1005,6 @@ PostHogLib.prototype.alias = function(alias, original) {
         this.identify(alias);
         return -1;
     }
-};
-
-/**
- * Provide a string to recognize the user by. The string passed to
- * this method will appear in the PostHog Streams product rather
- * than an automatically generated name. Name tags do not have to
- * be unique.
- *
- * This value will only be included in Streams data.
- *
- * @param {String} name_tag A human readable name for the user
- * @api private
- */
-PostHogLib.prototype.name_tag = function(name_tag) {
-    this._register_single('ph_name_tag', name_tag);
 };
 
 /**
@@ -1353,10 +1162,6 @@ PostHogLib.prototype._event_is_disabled = function(event_name) {
     return _.isBlockedUA(userAgent) ||
         this._flags.disable_all_events ||
         _.include(this.__disabled_events, event_name);
-};
-
-PostHogLib.prototype._handle_user_decide_check_complete = function() {
-    this._user_decide_check_complete = true;
 };
 
 // perform some housekeeping around GDPR opt-in/out state
@@ -1591,41 +1396,30 @@ PostHogLib.prototype.clear_opt_in_out_capturing = function(options) {
 // PostHogLib Exports
 PostHogLib.prototype['init']                               = PostHogLib.prototype.init;
 PostHogLib.prototype['reset']                              = PostHogLib.prototype.reset;
-PostHogLib.prototype['disable']                            = PostHogLib.prototype.disable;
-PostHogLib.prototype['time_event']                         = PostHogLib.prototype.time_event;
-PostHogLib.prototype['capture']                              = PostHogLib.prototype.capture;
-PostHogLib.prototype['capture_links']                        = PostHogLib.prototype.capture_links;
-PostHogLib.prototype['capture_forms']                        = PostHogLib.prototype.capture_forms;
-PostHogLib.prototype['capture_pageview']                     = PostHogLib.prototype.capture_pageview;
+PostHogLib.prototype['capture']                            = PostHogLib.prototype.capture;
+PostHogLib.prototype['capture_links']                      = PostHogLib.prototype.capture_links;
+PostHogLib.prototype['capture_forms']                      = PostHogLib.prototype.capture_forms;
+PostHogLib.prototype['capture_pageview']                   = PostHogLib.prototype.capture_pageview;
 PostHogLib.prototype['register']                           = PostHogLib.prototype.register;
 PostHogLib.prototype['register_once']                      = PostHogLib.prototype.register_once;
 PostHogLib.prototype['unregister']                         = PostHogLib.prototype.unregister;
 PostHogLib.prototype['identify']                           = PostHogLib.prototype.identify;
 PostHogLib.prototype['alias']                              = PostHogLib.prototype.alias;
-PostHogLib.prototype['name_tag']                           = PostHogLib.prototype.name_tag;
 PostHogLib.prototype['set_config']                         = PostHogLib.prototype.set_config;
 PostHogLib.prototype['get_config']                         = PostHogLib.prototype.get_config;
 PostHogLib.prototype['get_property']                       = PostHogLib.prototype.get_property;
 PostHogLib.prototype['get_distinct_id']                    = PostHogLib.prototype.get_distinct_id;
 PostHogLib.prototype['toString']                           = PostHogLib.prototype.toString;
-PostHogLib.prototype['_check_and_handle_notifications']    = PostHogLib.prototype._check_and_handle_notifications;
-PostHogLib.prototype['_handle_user_decide_check_complete'] = PostHogLib.prototype._handle_user_decide_check_complete;
-// PostHogLib.prototype['_show_notification']                 = PostHogLib.prototype._show_notification;
-PostHogLib.prototype['opt_out_captureing']                  = PostHogLib.prototype.opt_out_capturing;
-PostHogLib.prototype['opt_in_captureing']                   = PostHogLib.prototype.opt_in_capturing;
-PostHogLib.prototype['has_opted_out_captureing']            = PostHogLib.prototype.has_opted_out_capturing;
-PostHogLib.prototype['has_opted_in_captureing']             = PostHogLib.prototype.has_opted_in_capturing;
-PostHogLib.prototype['clear_opt_in_out_captureing']         = PostHogLib.prototype.clear_opt_in_out_capturing;
-PostHogLib.prototype['opt_out_capturing']                   = PostHogLib.prototype.opt_out_capturing;
-PostHogLib.prototype['opt_in_capturing']                    = PostHogLib.prototype.opt_in_capturing;
-PostHogLib.prototype['has_opted_out_capturing']             = PostHogLib.prototype.has_opted_out_capturing;
-PostHogLib.prototype['has_opted_in_capturing']              = PostHogLib.prototype.has_opted_in_capturing;
-PostHogLib.prototype['clear_opt_in_out_capturing']          = PostHogLib.prototype.clear_opt_in_out_capturing;
-PostHogLib.prototype['get_group']                          = PostHogLib.prototype.get_group;
-PostHogLib.prototype['set_group']                          = PostHogLib.prototype.set_group;
-PostHogLib.prototype['add_group']                          = PostHogLib.prototype.add_group;
-PostHogLib.prototype['remove_group']                       = PostHogLib.prototype.remove_group;
-PostHogLib.prototype['capture_with_groups']                  = PostHogLib.prototype.capture_with_groups;
+PostHogLib.prototype['opt_out_captureing']                 = PostHogLib.prototype.opt_out_capturing;
+PostHogLib.prototype['opt_in_captureing']                  = PostHogLib.prototype.opt_in_capturing;
+PostHogLib.prototype['has_opted_out_captureing']           = PostHogLib.prototype.has_opted_out_capturing;
+PostHogLib.prototype['has_opted_in_captureing']            = PostHogLib.prototype.has_opted_in_capturing;
+PostHogLib.prototype['clear_opt_in_out_captureing']        = PostHogLib.prototype.clear_opt_in_out_capturing;
+PostHogLib.prototype['opt_out_capturing']                  = PostHogLib.prototype.opt_out_capturing;
+PostHogLib.prototype['opt_in_capturing']                   = PostHogLib.prototype.opt_in_capturing;
+PostHogLib.prototype['has_opted_out_capturing']            = PostHogLib.prototype.has_opted_out_capturing;
+PostHogLib.prototype['has_opted_in_capturing']             = PostHogLib.prototype.has_opted_in_capturing;
+PostHogLib.prototype['clear_opt_in_out_capturing']         = PostHogLib.prototype.clear_opt_in_out_capturing;
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties']            = PostHogPersistence.prototype.properties;
@@ -1634,7 +1428,7 @@ PostHogPersistence.prototype['update_referrer_info']  = PostHogPersistence.proto
 PostHogPersistence.prototype['get_cross_subdomain']   = PostHogPersistence.prototype.get_cross_subdomain;
 PostHogPersistence.prototype['clear']                 = PostHogPersistence.prototype.clear;
 
-_.safewrap_class(PostHogLib, ['identify', '_check_and_handle_notifications']);
+_.safewrap_class(PostHogLib, ['identify']);
 
 
 var instances = {};
