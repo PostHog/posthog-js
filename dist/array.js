@@ -4454,7 +4454,7 @@ var USE_XHR = _utils.window.XMLHttpRequest && 'withCredentials' in new XMLHttpRe
 
 var ENQUEUE_REQUESTS = !USE_XHR && _utils.userAgent.indexOf('MSIE') === -1 && _utils.userAgent.indexOf('Mozilla') === -1; // save reference to navigator.sendBeacon so it can be minified
 
-var sendBeacon = _utils.navigator['sendBeacon'];
+var sendBeacon = _utils.window.navigator['sendBeacon'];
 
 if (sendBeacon) {
   sendBeacon = _utils._.bind(sendBeacon, _utils.navigator);
@@ -4498,7 +4498,7 @@ var DEFAULT_CONFIG = {
   // { header: value, header2: value }
   'inapp_protocol': '//',
   'inapp_link_new_window': false,
-  'request_batching': true
+  'request_batching': false
 };
 var DOM_LOADED = false;
 /**
@@ -4643,6 +4643,9 @@ PostHogLib.prototype._init = function (token, config, name) {
 
   this._should_poll = true; // flag to continue to recursively poll or not
 
+  this._poller = function () {}; // to become interval for reference to clear later
+
+
   this.__dom_loaded_queue = [];
   this.__request_queue = [];
   this.__disabled_events = [];
@@ -4664,7 +4667,10 @@ PostHogLib.prototype._init = function (token, config, name) {
       'distinct_id': uuid,
       '$device_id': uuid
     }, '');
-  }
+  } // Set up the window close event handler "unload"
+
+
+  _utils.window.addEventListener("unload", this._handle_unload.bind(this));
 }; // Private methods
 
 
@@ -4766,20 +4772,26 @@ PostHogLib.prototype._event_enqueue = function (url, data, options, callback) {
   }
 };
 
+PostHogLib.prototype._format_event_queue_data = function () {
+  var requests = {};
+
+  _utils._.each(this._event_queue, function (request) {
+    var url = request.url,
+        data = request.data;
+    if (requests[url] === undefined) requests[url] = [];
+    requests[url].push(data.data);
+  });
+
+  return requests;
+};
+
 PostHogLib.prototype._event_queue_poll = function () {
   var _this2 = this;
 
   var POLL_INTERVAL = 3000;
-  setTimeout(function () {
+  this._poller = setTimeout(function () {
     if (_this2._event_queue.length > 0) {
-      var requests = {};
-
-      _utils._.each(_this2._event_queue, function (request) {
-        var url = request.url,
-            data = request.data;
-        if (requests[url] === undefined) requests[url] = [];
-        requests[url].push(data.data);
-      });
+      var requests = _this2._format_event_queue_data();
 
       for (var url in requests) {
         _this2._send_request(url, requests[url], __NOOPTIONS, __NOOP);
@@ -4808,6 +4820,37 @@ PostHogLib.prototype._event_queue_poll = function () {
       _this2._event_queue_poll();
     }
   }, POLL_INTERVAL);
+};
+
+PostHogLib.prototype._handle_unload = function () {
+  if (!this.get_config('request_batching')) {
+    this.capture('$pageleave', null, {
+      transport: 'sendbeacon'
+    });
+    return;
+  }
+
+  clearInterval(this._poller);
+  this.capture('$pageleave');
+  var data = {};
+
+  if (this._event_queue.length > 0) {
+    data = this._format_event_queue_data();
+  }
+
+  this._event_queue.length = 0;
+
+  for (var url in data) {
+    // sendbeacon has some hard requirments and cant be treated 
+    // like a normal post request. Because of that it needs to be encoded
+    var encoded_data = _utils._.base64Encode(_utils._.JSONEncode(data[url]));
+
+    this._send_request(url, {
+      data: encoded_data
+    }, {
+      transport: 'sendbeacon'
+    }, __NOOP);
+  }
 };
 
 PostHogLib.prototype._send_request = function (url, data, options, callback) {
@@ -4871,11 +4914,14 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
   args['ip'] = this.get_config('ip') ? 1 : 0;
   args['_'] = new Date().getTime().toString();
   url += '?' + _utils._.HTTPBuildQuery(args);
+  var headers = this.get_config('xhr_headers');
 
   if (use_post) {
     if (Array.isArray(data)) {
+      headers['Content-Type'] = 'application/json';
       body_data = JSON.stringify(data);
     } else {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
       body_data = 'data=' + data['data'];
       delete data['data'];
     }
@@ -4888,24 +4934,18 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
 
     _utils.document.body.appendChild(img);
   } else if (use_sendBeacon) {
-    try {
-      sendBeacon(url, body_data);
-    } catch (e) {
-      _utils.console.error(e);
-    }
+    // beacon documentation https://w3c.github.io/beacon/
+    // beacons format the message and use the type property
+    // also no need to try catch as sendBeacon does not report errors
+    //   and is defined as best effort attempt
+    var body = new Blob([body_data], {
+      type: 'application/x-www-form-urlencoded'
+    });
+    sendBeacon(url, body);
   } else if (USE_XHR) {
     try {
       var req = new XMLHttpRequest();
       req.open(options.method, url, true);
-      var headers = this.get_config('xhr_headers');
-
-      if (use_post) {
-        if (!Array.isArray(data)) {
-          headers['Content-Type'] = 'application/x-www-form-urlencoded';
-        } else {
-          headers['Content-Type'] = 'application/json';
-        }
-      }
 
       _utils._.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue);
