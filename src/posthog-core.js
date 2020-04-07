@@ -2,7 +2,7 @@
 import Config from './config';
 import { _, console, userAgent, window, document, navigator } from './utils';
 import { autocapture } from './autocapture';
-import { FormCapture, LinkCapture } from './dom-capture';
+import { LinkCapture } from './dom-capture';
 import { PostHogGroup } from './posthog-group';
 import { PostHogPeople } from './posthog-people';
 import {

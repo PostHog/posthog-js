@@ -315,6 +315,7 @@ var autocapture = {
     },
 
     _loadEditor: function(instance, editorParams) {
+        var _this = this;
         if (!window['_mpEditorLoaded']) { // only load the codeless event editor once, even if there are multiple instances of PostHogLib
             window['_mpEditorLoaded'] = true;
             var editorUrl = instance.get_config('api_host')
@@ -322,6 +323,11 @@ var autocapture = {
               + (new Date()).getTime();
             this._loadScript(editorUrl, function() {
                 window['ph_load_editor'](editorParams);
+            });
+            // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
+            _.register_event(window, 'turbolinks:load', function() {
+                window['_mpEditorLoaded'] = false;
+                _this._loadEditor(instance, editorParams);
             });
             return true;
         }
