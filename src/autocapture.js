@@ -221,6 +221,10 @@ var autocapture = {
 
         if (!this._maybeLoadEditor(instance)) { // don't autocapture actions when the editor is enabled
             var parseDecideResponse = _.bind(function(response) {
+                if(response['is_authenticated']) {
+                    this._loadEditor(instance, {apiURL: instance.get_config('api_host')})
+                    instance.set_config({debug: true})
+                }
                 if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
 
                     if (response['custom_properties']) {
