@@ -2472,6 +2472,8 @@ var autocapture = {
     }
   },
   _loadEditor: function _loadEditor(instance, editorParams) {
+    var _this = this;
+
     if (!window['_mpEditorLoaded']) {
       // only load the codeless event editor once, even if there are multiple instances of PostHogLib
       window['_mpEditorLoaded'] = true;
@@ -2479,6 +2481,13 @@ var autocapture = {
 
       this._loadScript(editorUrl, function () {
         window['ph_load_editor'](editorParams);
+      }); // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
+
+
+      _utils._.register_event(window, 'turbolinks:load', function () {
+        window['_mpEditorLoaded'] = false;
+
+        _this._loadEditor(instance, editorParams);
       });
 
       return true;
@@ -4498,7 +4507,7 @@ var DEFAULT_CONFIG = {
   // { header: value, header2: value }
   'inapp_protocol': '//',
   'inapp_link_new_window': false,
-  'request_batching': false
+  'request_batching': true
 };
 var DOM_LOADED = false;
 /**
@@ -6372,7 +6381,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "49577" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "50122" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
