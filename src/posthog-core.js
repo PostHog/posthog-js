@@ -99,7 +99,7 @@ var DEFAULT_CONFIG = {
     'xhr_headers':                       {}, // { header: value, header2: value }
     'inapp_protocol':                    '//',
     'inapp_link_new_window':             false,
-    'request_batching':                  false
+    'request_batching':                  true
 };
 
 var DOM_LOADED = false;
