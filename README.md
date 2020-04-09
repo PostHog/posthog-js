@@ -1,5 +1,5 @@
 # PostHog.js
 
-Please see the main [PostHog docs](https://github.com/PostHog/posthog/wiki).
+Please see the main [PostHog docs](https://docs.posthog.com).
 
-Specifically, the JS integration details are [here](https://github.com/PostHog/posthog/wiki/JS-integration).
+Specifically, the JS integration details are [here](https://docs.posthog.com/#/integrations/js-integration).
