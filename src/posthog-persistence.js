@@ -12,6 +12,11 @@ import { _, console } from './utils';
  */
 /** @const */ var SET_QUEUE_KEY          = '__mps';
 /** @const */ var SET_ONCE_QUEUE_KEY     = '__mpso';
+/** @const */ var UNSET_QUEUE_KEY        = '__mpus';
+/** @const */ var ADD_QUEUE_KEY          = '__mpa';
+/** @const */ var APPEND_QUEUE_KEY       = '__mpap';
+/** @const */ var REMOVE_QUEUE_KEY       = '__mpr';
+/** @const */ var UNION_QUEUE_KEY        = '__mpu';
 // This key is deprecated, but we want to check for it to see whether aliasing is allowed.
 /** @const */ var PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id';
 /** @const */ var ALIAS_ID_KEY           = '__alias';
@@ -20,6 +25,11 @@ import { _, console } from './utils';
 /** @const */ var RESERVED_PROPERTIES = [
     SET_QUEUE_KEY,
     SET_ONCE_QUEUE_KEY,
+    UNSET_QUEUE_KEY,
+    ADD_QUEUE_KEY,
+    APPEND_QUEUE_KEY,
+    REMOVE_QUEUE_KEY,
+    UNION_QUEUE_KEY,
     PEOPLE_DISTINCT_ID_KEY,
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,
