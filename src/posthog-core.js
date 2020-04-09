@@ -3,7 +3,6 @@ import Config from './config';
 import { _, console, userAgent, window, document, navigator } from './utils';
 import { autocapture } from './autocapture';
 import { LinkCapture } from './dom-capture';
-import { PostHogGroup } from './posthog-group';
 import { PostHogPeople } from './posthog-people';
 import {
     PostHogPersistence,
@@ -91,10 +90,10 @@ var DEFAULT_CONFIG = {
     'disable_cookie':                    false,
     'secure_cookie':                     false,
     'ip':                                true,
-    'opt_out_captureing_by_default':       false,
+    'opt_out_capturing_by_default':      false,
     'opt_out_persistence_by_default':    false,
-    'opt_out_captureing_persistence_type': 'localStorage',
-    'opt_out_captureing_cookie_prefix':    null,
+    'opt_out_capturing_persistence_type': 'localStorage',
+    'opt_out_capturing_cookie_prefix':   null,
     'property_blacklist':                [],
     'xhr_headers':                       {}, // { header: value, header2: value }
     'inapp_protocol':                    '//',
@@ -176,7 +175,7 @@ var create_mplib = function(token, config, name) {
 // Initialization methods
 
 /**
- * This function initializes a new instance of the PostHog captureing object.
+ * This function initializes a new instance of the PostHog capturing object.
  * All new instances are added to the main posthog object as sub properties (such as
  * posthog.library_name) and also returned by this function. To define a
  * second instance on the page, you would call:
@@ -264,7 +263,7 @@ PostHogLib.prototype._init = function(token, config, name) {
 PostHogLib.prototype._loaded = function() {
     this.get_config('loaded')(this);
 
-    // this happens after so a user can call identify/name_tag in
+    // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
         this.capture_pageview();
@@ -276,8 +275,8 @@ PostHogLib.prototype._dom_loaded = function () {
         this._capture_dom.apply(this, item);
     }, this);
 
-    if (!this.has_opted_out_captureing()) {
-        _.each(this.__request_queue, function (item) {
+    if (!this.has_opted_out_capturing()) {
+        _.each(this.__request_queue, function(item) {
             this._send_request.apply(this, item);
         }, this);
         if(this.get_config('request_batching')) {
@@ -291,7 +290,7 @@ PostHogLib.prototype._dom_loaded = function () {
 
 PostHogLib.prototype._capture_dom = function(DomClass, args) {
     if (this.get_config('img')) {
-        console.error('You can\'t use DOM captureing functions with img = true.');
+        console.error('You can\'t use DOM capturing functions with img = true.');
         return false;
     }
 
@@ -547,25 +546,25 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
  * (and are thus stored in an array so they can be called later)
  *
  * Note: we fire off all the posthog function calls && user defined
- * functions BEFORE we fire off posthog captureing calls. This is so
+ * functions BEFORE we fire off posthog capturing calls. This is so
  * identify/register/set_config calls can properly modify early
- * captureing calls.
+ * capturing calls.
  *
  * @param {Array} array
  */
 PostHogLib.prototype._execute_array = function(array) {
-    var fn_name, alias_calls = [], other_calls = [], captureing_calls = [];
+    var fn_name, alias_calls = [], other_calls = [], capturing_calls = [];
     _.each(array, function(item) {
         if (item) {
             fn_name = item[0];
             if (_.isArray(fn_name)) {
-                captureing_calls.push(item); // chained call e.g. posthog.get_group().set()
+                capturing_calls.push(item); // chained call e.g. posthog.get_group().set()
             } else if (typeof(item) === 'function') {
                 item.call(this);
             } else if (_.isArray(item) && fn_name === 'alias') {
                 alias_calls.push(item);
             } else if (_.isArray(item) && fn_name.indexOf('capture') !== -1 && typeof(this[fn_name]) === 'function') {
-                captureing_calls.push(item);
+                capturing_calls.push(item);
             } else {
                 other_calls.push(item);
             }
@@ -588,7 +587,7 @@ PostHogLib.prototype._execute_array = function(array) {
 
     execute(alias_calls, this);
     execute(other_calls, this);
-    execute(captureing_calls, this);
+    execute(capturing_calls, this);
 };
 
 /**
@@ -605,25 +604,6 @@ PostHogLib.prototype._execute_array = function(array) {
  */
 PostHogLib.prototype.push = function(item) {
     this._execute_array([item]);
-};
-
-/**
- * Disable events on the PostHog object. If passed no arguments,
- * this function disables captureing of any event. If passed an
- * array of event names, those events will be disabled, but other
- * events will continue to be captureed.
- *
- * Note: this function does not stop other posthog functions from
- * firing, such as register() or people.set().
- *
- * @param {Array} [events] An array of event names to disable
- */
-PostHogLib.prototype.disable = function(events) {
-    if (typeof(events) === 'undefined') {
-        this._flags.disable_all_events = true;
-    } else {
-        this.__disabled_events = this.__disabled_events.concat(events);
-    }
 };
 
 /**
@@ -644,7 +624,7 @@ PostHogLib.prototype.disable = function(events) {
  * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
  * @param {Object} [options] Optional configuration for this capture request.
  * @param {String} [options.transport] Transport method for network request ('xhr' or 'sendBeacon').
- * @param {Function} [callback] If provided, the callback function will be called after captureing the event.
+ * @param {Function} [callback] If provided, the callback function will be called after capturing the event.
  */
 PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, properties, options, callback) {
     if (!callback && typeof options === 'function') {
@@ -734,133 +714,12 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
     return truncated_data;
 });
 
-/**
- * Register the current user into one/many groups.
- *
- * ### Usage:
- *
- *      posthog.set_group('company', ['posthog', 'google']) // an array of IDs
- *      posthog.set_group('company', 'posthog')
- *      posthog.set_group('company', 128746312)
- *
- * @param {String} group_key Group key
- * @param {Array|String|Number} group_ids An array of group IDs, or a singular group ID
- * @param {Function} [callback] If provided, the callback will be called after captureing the event.
- *
- */
-PostHogLib.prototype.set_group = addOptOutCheckPostHogLib(function(group_key, group_ids, callback) {
-    if (!_.isArray(group_ids)) {
-        group_ids = [group_ids];
-    }
-    var prop = {};
-    prop[group_key] = group_ids;
-    this.register(prop);
-    return this['people'].set(group_key, group_ids, callback);
-});
-
-/**
- * Add a new group for this user.
- *
- * ### Usage:
- *
- *      posthog.add_group('company', 'posthog')
- *
- * @param {String} group_key Group key
- * @param {*} group_id A valid PostHog property type
- * @param {Function} [callback] If provided, the callback will be called after captureing the event.
- */
-PostHogLib.prototype.add_group = addOptOutCheckPostHogLib(function(group_key, group_id, callback) {
-    var old_values = this.get_property(group_key);
-    if (old_values === undefined) {
-        var prop = {};
-        prop[group_key] = [group_id];
-        this.register(prop);
-    } else {
-        if (old_values.indexOf(group_id) === -1) {
-            old_values.push(group_id);
-            this.register(prop);
-        }
-    }
-    return this['people'].union(group_key, group_id, callback);
-});
-
-/**
- * Remove a group from this user.
- *
- * ### Usage:
- *
- *      posthog.remove_group('company', 'posthog')
- *
- * @param {String} group_key Group key
- * @param {*} group_id A valid PostHog property type
- * @param {Function} [callback] If provided, the callback will be called after captureing the event.
- */
-PostHogLib.prototype.remove_group = addOptOutCheckPostHogLib(function(group_key, group_id, callback) {
-    var old_value = this.get_property(group_key);
-    // if the value doesn't exist, the persistent store is unchanged
-    if (old_value !== undefined) {
-        var idx = old_value.indexOf(group_id);
-        if (idx > -1) {
-            old_value.splice(idx, 1);
-            this.register({group_key: old_value});
-        }
-        if (old_value.length === 0) {
-            this.unregister(group_key);
-        }
-    }
-    return this['people'].remove(group_key, group_id, callback);
-});
-
-/**
- * Capture an event with specific groups.
- *
- * ### Usage:
- *
- *      posthog.capture_with_groups('purchase', {'product': 'iphone'}, {'University': ['UCB', 'UCLA']})
- *
- * @param {String} event_name The name of the event (see `posthog.capture()`)
- * @param {Object=} properties A set of properties to include with the event you're sending (see `posthog.capture()`)
- * @param {Object=} groups An object mapping group name keys to one or more values
- * @param {Function} [callback] If provided, the callback will be called after captureing the event.
- */
-PostHogLib.prototype.capture_with_groups = addOptOutCheckPostHogLib(function(event_name, properties, groups, callback) {
-    var captureing_props = _.extend({}, properties || {});
-    _.each(groups, function(v, k) {
-        if (v !== null && v !== undefined) {
-            captureing_props[k] = v;
-        }
-    });
-    return this.capture(event_name, captureing_props, callback);
-});
-
 PostHogLib.prototype._create_map_key = function (group_key, group_id) {
     return group_key + '_' + JSON.stringify(group_id);
 };
 
 PostHogLib.prototype._remove_group_from_cache = function (group_key, group_id) {
     delete this._cached_groups[this._create_map_key(group_key, group_id)];
-};
-
-/**
- * Look up reference to a PostHog group
- *
- * ### Usage:
- *
- *       posthog.get_group(group_key, group_id)
- *
- * @param {String} group_key Group key
- * @param {Object} group_id A valid PostHog property type
- * @returns {Object} A PostHogGroup identifier
- */
-PostHogLib.prototype.get_group = function (group_key, group_id) {
-    var map_key = this._create_map_key(group_key, group_id);
-    var group = this._cached_groups[map_key];
-    if (group === undefined || group._group_key !== group_key || group._group_id !== group_id) {
-        group = new PostHogGroup();
-        group._init(this, group_key, group_id);
-        this._cached_groups[map_key] = group;
-    }
-    return group;
 };
 
 /**
@@ -939,36 +798,6 @@ PostHogLib.prototype.capture_links = function() {
  */
 PostHogLib.prototype.capture_forms = function() {
     return this._capture_dom.call(this, FormCaptureer, arguments);
-};
-
-/**
- * Time an event by including the time between this call and a
- * later 'capture' call for the same event in the properties sent
- * with the event.
- *
- * ### Usage:
- *
- *     // time an event named 'Registered'
- *     posthog.time_event('Registered');
- *     posthog.capture('Registered', {'Gender': 'Male', 'Age': 21});
- *
- * When called for a particular event name, the next capture call for that event
- * name will include the elapsed time between the 'time_event' and 'capture'
- * calls. This value is stored as seconds in the '$duration' property.
- *
- * @param {String} event_name The name of the event.
- */
-PostHogLib.prototype.time_event = function(event_name) {
-    if (_.isUndefined(event_name)) {
-        console.error('No event name provided to posthog.time_event');
-        return;
-    }
-
-    if (this._event_is_disabled(event_name)) {
-        return;
-    }
-
-    this['persistence'].set_event_timer(event_name,  new Date().getTime());
 };
 
 /**
@@ -1061,15 +890,11 @@ PostHogLib.prototype._register_single = function(prop, value) {
  * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
  */
 PostHogLib.prototype.identify = function(
-    new_distinct_id, _set_callback, _add_callback, _append_callback, _set_once_callback, _union_callback, _unset_callback, _remove_callback
+    new_distinct_id, _set_callback, _set_once_callback
 ) {
     // Optional Parameters
     //  _set_callback:function  A callback to be run if and when the People set queue is flushed
-    //  _add_callback:function  A callback to be run if and when the People add queue is flushed
-    //  _append_callback:function  A callback to be run if and when the People append queue is flushed
     //  _set_once_callback:function  A callback to be run if and when the People set_once queue is flushed
-    //  _union_callback:function  A callback to be run if and when the People union queue is flushed
-    //  _unset_callback:function  A callback to be run if and when the People unset queue is flushed
 
     var previous_distinct_id = this.get_distinct_id();
     this.register({'$user_id': new_distinct_id});
@@ -1090,10 +915,9 @@ PostHogLib.prototype.identify = function(
         this.unregister(ALIAS_ID_KEY);
         this.register({'distinct_id': new_distinct_id});
     }
-    // this._check_and_handle_notifications(this.get_distinct_id());
     this._flags.identify_called = true;
     // Flush any queued up people requests
-    this['people']._flush(_set_callback, _add_callback, _append_callback, _set_once_callback, _union_callback, _unset_callback, _remove_callback);
+    this['people']._flush(_set_callback, _set_once_callback);
 
     // send an $identify event any time the distinct_id is changing - logic on the server
     // will determine whether or not to do anything with it.
@@ -1184,27 +1008,12 @@ PostHogLib.prototype.alias = function(alias, original) {
 };
 
 /**
- * Provide a string to recognize the user by. The string passed to
- * this method will appear in the PostHog Streams product rather
- * than an automatically generated name. Name tags do not have to
- * be unique.
- *
- * This value will only be included in Streams data.
- *
- * @param {String} name_tag A human readable name for the user
- * @api private
- */
-PostHogLib.prototype.name_tag = function(name_tag) {
-    this._register_single('ph_name_tag', name_tag);
-};
-
-/**
  * Update the configuration of a posthog library instance.
  *
  * The default config is:
  *
  *     {
- *       // HTTP method for captureing requests
+ *       // HTTP method for capturing requests
  *       api_method: 'POST'
  *
  *       // transport for sending requests ('XHR' or 'sendBeacon')
@@ -1212,7 +1021,7 @@ PostHogLib.prototype.name_tag = function(name_tag) {
  *       // page unload where a "best-effort" attempt to send is
  *       // acceptable; the sendBeacon API does not support callbacks
  *       // or any way to know the result of the request. PostHog
- *       // captureing via sendBeacon will not support any event-
+ *       // capturing via sendBeacon will not support any event-
  *       // batching or retry mechanisms.
  *       api_transport: 'XHR'
  *
@@ -1234,18 +1043,18 @@ PostHogLib.prototype.name_tag = function(name_tag) {
  *       //the client
  *       ip: true
  *
- *       // opt users out of captureing by this PostHog instance by default
- *       opt_out_captureing_by_default: false
+ *       // opt users out of capturing by this PostHog instance by default
+ *       opt_out_capturing_by_default: false
  *
  *       // opt users out of browser data storage by this PostHog instance by default
  *       opt_out_persistence_by_default: false
  *
  *       // persistence mechanism used by opt-in/opt-out methods - cookie
  *       // or localStorage - falls back to cookie if localStorage is unavailable
- *       opt_out_captureing_persistence_type: 'localStorage'
+ *       opt_out_capturing_persistence_type: 'localStorage'
  *
  *       // customize the name of cookie/localStorage set by opt-in/opt-out methods
- *       opt_out_captureing_cookie_prefix: null
+ *       opt_out_capturing_cookie_prefix: null
  *
  *       // type of persistent store for super properties (cookie/
  *       // localStorage) if set to 'localStorage', any existing
@@ -1355,40 +1164,36 @@ PostHogLib.prototype._event_is_disabled = function(event_name) {
         _.include(this.__disabled_events, event_name);
 };
 
-PostHogLib.prototype._handle_user_decide_check_complete = function() {
-    this._user_decide_check_complete = true;
-};
-
 // perform some housekeeping around GDPR opt-in/out state
 PostHogLib.prototype._gdpr_init = function() {
-    var is_localStorage_requested = this.get_config('opt_out_captureing_persistence_type') === 'localStorage';
+    var is_localStorage_requested = this.get_config('opt_out_capturing_persistence_type') === 'localStorage';
 
     // try to convert opt-in/out cookies to localStorage if possible
     if (is_localStorage_requested && _.localStorage.is_supported()) {
-        if (!this.has_opted_in_captureing() && this.has_opted_in_captureing({'persistence_type': 'cookie'})) {
-            this.opt_in_captureing({'enable_persistence': false});
+        if (!this.has_opted_in_capturing() && this.has_opted_in_capturing({'persistence_type': 'cookie'})) {
+            this.opt_in_capturing({'enable_persistence': false});
         }
-        if (!this.has_opted_out_captureing() && this.has_opted_out_captureing({'persistence_type': 'cookie'})) {
-            this.opt_out_captureing({'clear_persistence': false});
+        if (!this.has_opted_out_capturing() && this.has_opted_out_capturing({'persistence_type': 'cookie'})) {
+            this.opt_out_capturing({'clear_persistence': false});
         }
-        this.clear_opt_in_out_captureing({
+        this.clear_opt_in_out_capturing({
             'persistence_type': 'cookie',
             'enable_persistence': false
         });
     }
 
     // check whether the user has already opted out - if so, clear & disable persistence
-    if (this.has_opted_out_captureing()) {
+    if (this.has_opted_out_capturing()) {
         this._gdpr_update_persistence({'clear_persistence': true});
 
     // check whether we should opt out by default
     // note: we don't clear persistence here by default since opt-out default state is often
     //       used as an initial state while GDPR information is being collected
-    } else if (!this.has_opted_in_captureing() && (
-        this.get_config('opt_out_captureing_by_default') || _.cookie.get('ph_optout')
+    } else if (!this.has_opted_in_capturing() && (
+        this.get_config('opt_out_capturing_by_default') || _.cookie.get('ph_optout')
     )) {
         _.cookie.remove('ph_optout');
-        this.opt_out_captureing({
+        this.opt_out_capturing({
             'clear_persistence': this.get_config('opt_out_persistence_by_default')
         });
     }
@@ -1419,8 +1224,8 @@ PostHogLib.prototype._gdpr_update_persistence = function(options) {
 PostHogLib.prototype._gdpr_call_func = function(func, options) {
     options = _.extend({
         'capture': _.bind(this.capture, this),
-        'persistence_type': this.get_config('opt_out_captureing_persistence_type'),
-        'cookie_prefix': this.get_config('opt_out_captureing_cookie_prefix'),
+        'persistence_type': this.get_config('opt_out_capturing_persistence_type'),
+        'cookie_prefix': this.get_config('opt_out_capturing_cookie_prefix'),
         'cookie_expiration': this.get_config('cookie_expiration'),
         'cross_subdomain_cookie': this.get_config('cross_subdomain_cookie'),
         'secure_cookie': this.get_config('secure_cookie')
@@ -1444,15 +1249,15 @@ PostHogLib.prototype._gdpr_call_func = function(func, options) {
 };
 
 /**
- * Opt the user in to data captureing and cookies/localstorage for this PostHog instance
+ * Opt the user in to data capturing and cookies/localstorage for this PostHog instance
  *
  * ### Usage
  *
  *     // opt user in
- *     posthog.opt_in_captureing();
+ *     posthog.opt_in_capturing();
  *
  *     // opt user in with specific event name, properties, cookie configuration
- *     posthog.opt_in_captureing({
+ *     posthog.opt_in_capturing({
  *         capture_event_name: 'User opted in',
  *         capture_event_properties: {
  *             'Email': 'jdoe@example.com'
@@ -1462,8 +1267,8 @@ PostHogLib.prototype._gdpr_call_func = function(func, options) {
  *     });
  *
  * @param {Object} [options] A dictionary of config options to override
- * @param {function} [options.capture] Function used for captureing a PostHog event to record the opt-in action (default is this PostHog instance's capture method)
- * @param {string} [options.capture_event_name=$opt_in] Event name to be used for captureing the opt-in action
+ * @param {function} [options.capture] Function used for capturing a PostHog event to record the opt-in action (default is this PostHog instance's capture method)
+ * @param {string} [options.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action
  * @param {Object} [options.capture_properties] Set of properties to be captureed along with the opt-in action
  * @param {boolean} [options.enable_persistence=true] If true, will re-enable sdk persistence
  * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
@@ -1472,7 +1277,7 @@ PostHogLib.prototype._gdpr_call_func = function(func, options) {
  * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
  * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
  */
-PostHogLib.prototype.opt_in_captureing = function(options) {
+PostHogLib.prototype.opt_in_capturing = function(options) {
     options = _.extend({
         'enable_persistence': true
     }, options);
@@ -1480,17 +1285,21 @@ PostHogLib.prototype.opt_in_captureing = function(options) {
     this._gdpr_call_func(optIn, options);
     this._gdpr_update_persistence(options);
 };
+PostHogLib.prototype.opt_in_captureing = function(options) {
+    deprecate_warning("opt_in_captureing")
+    this.opt_in_capturing(options)
+}
 
 /**
- * Opt the user out of data captureing and cookies/localstorage for this PostHog instance
+ * Opt the user out of data capturing and cookies/localstorage for this PostHog instance
  *
  * ### Usage
  *
  *     // opt user out
- *     posthog.opt_out_captureing();
+ *     posthog.opt_out_capturing();
  *
  *     // opt user out with different cookie configuration from PostHog instance
- *     posthog.opt_out_captureing({
+ *     posthog.opt_out_capturing({
  *         cookie_expiration: 30,
  *         secure_cookie: true
  *     });
@@ -1504,7 +1313,7 @@ PostHogLib.prototype.opt_in_captureing = function(options) {
  * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
  * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
  */
-PostHogLib.prototype.opt_out_captureing = function(options) {
+PostHogLib.prototype.opt_out_capturing = function(options) {
     options = _.extend({
         'clear_persistence': true,
         'delete_user': true
@@ -1519,13 +1328,17 @@ PostHogLib.prototype.opt_out_captureing = function(options) {
     this._gdpr_call_func(optOut, options);
     this._gdpr_update_persistence(options);
 };
+PostHogLib.prototype.opt_out_captureing = function(options) {
+    deprecate_warning("opt_out_captureing")
+    this.opt_out_capturing(options)
+}
 
 /**
- * Check whether the user has opted in to data captureing and cookies/localstorage for this PostHog instance
+ * Check whether the user has opted in to data capturing and cookies/localstorage for this PostHog instance
  *
  * ### Usage
  *
- *     var has_opted_in = posthog.has_opted_in_captureing();
+ *     var has_opted_in = posthog.has_opted_in_capturing();
  *     // use has_opted_in value
  *
  * @param {Object} [options] A dictionary of config options to override
@@ -1533,16 +1346,20 @@ PostHogLib.prototype.opt_out_captureing = function(options) {
  * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
  * @returns {boolean} current opt-in status
  */
-PostHogLib.prototype.has_opted_in_captureing = function(options) {
+PostHogLib.prototype.has_opted_in_capturing = function(options) {
     return this._gdpr_call_func(hasOptedIn, options);
 };
+PostHogLib.prototype.has_opted_in_captureing = function(options) {
+    deprecate_warning("has_opted_in_captureing")
+    return this.has_opted_in_capturing(options)
+}
 
 /**
- * Check whether the user has opted out of data captureing and cookies/localstorage for this PostHog instance
+ * Check whether the user has opted out of data capturing and cookies/localstorage for this PostHog instance
  *
  * ### Usage
  *
- *     var has_opted_out = posthog.has_opted_out_captureing();
+ *     var has_opted_out = posthog.has_opted_out_capturing();
  *     // use has_opted_out value
  *
  * @param {Object} [options] A dictionary of config options to override
@@ -1550,21 +1367,25 @@ PostHogLib.prototype.has_opted_in_captureing = function(options) {
  * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
  * @returns {boolean} current opt-out status
  */
-PostHogLib.prototype.has_opted_out_captureing = function(options) {
+PostHogLib.prototype.has_opted_out_capturing = function(options) {
     return this._gdpr_call_func(hasOptedOut, options);
 };
+PostHogLib.prototype.has_opted_out_captureing = function(options) {
+    deprecate_warning("has_opted_out_captureing")
+    return this.has_opted_out_capturing(options)
+}
 
 /**
- * Clear the user's opt in/out status of data captureing and cookies/localstorage for this PostHog instance
+ * Clear the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance
  *
  * ### Usage
  *
  *     // clear user's opt-in/out status
- *     posthog.clear_opt_in_out_captureing();
+ *     posthog.clear_opt_in_out_capturing();
  *
  *     // clear user's opt-in/out status with specific cookie configuration - should match
- *     // configuration used when opt_in_captureing/opt_out_captureing methods were called.
- *     posthog.clear_opt_in_out_captureing({
+ *     // configuration used when opt_in_capturing/opt_out_capturing methods were called.
+ *     posthog.clear_opt_in_out_capturing({
  *         cookie_expiration: 30,
  *         secure_cookie: true
  *     });
@@ -1577,7 +1398,7 @@ PostHogLib.prototype.has_opted_out_captureing = function(options) {
  * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
  * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
  */
-PostHogLib.prototype.clear_opt_in_out_captureing = function(options) {
+PostHogLib.prototype.clear_opt_in_out_capturing = function(options) {
     options = _.extend({
         'enable_persistence': true
     }, options);
@@ -1585,42 +1406,44 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function(options) {
     this._gdpr_call_func(clearOptInOut, options);
     this._gdpr_update_persistence(options);
 };
+PostHogLib.prototype.clear_opt_in_out_captureing = function(options) {
+    deprecate_warning("clear_opt_in_out_captureing")
+    this.clear_opt_in_out_capturing(options)
+}
+
+function deprecate_warning(method) {
+    window.console.warn("WARNING! posthog." + method + " is deprecated and will be removed soon! Please use posthog." + (method.split('captureing').join('capturing')) + " instead (without the \"e\")!")
+}
 
 // EXPORTS (for closure compiler)
 
 // PostHogLib Exports
 PostHogLib.prototype['init']                               = PostHogLib.prototype.init;
 PostHogLib.prototype['reset']                              = PostHogLib.prototype.reset;
-PostHogLib.prototype['disable']                            = PostHogLib.prototype.disable;
-PostHogLib.prototype['time_event']                         = PostHogLib.prototype.time_event;
-PostHogLib.prototype['capture']                              = PostHogLib.prototype.capture;
-PostHogLib.prototype['capture_links']                        = PostHogLib.prototype.capture_links;
-PostHogLib.prototype['capture_forms']                        = PostHogLib.prototype.capture_forms;
-PostHogLib.prototype['capture_pageview']                     = PostHogLib.prototype.capture_pageview;
+PostHogLib.prototype['capture']                            = PostHogLib.prototype.capture;
+PostHogLib.prototype['capture_links']                      = PostHogLib.prototype.capture_links;
+PostHogLib.prototype['capture_forms']                      = PostHogLib.prototype.capture_forms;
+PostHogLib.prototype['capture_pageview']                   = PostHogLib.prototype.capture_pageview;
 PostHogLib.prototype['register']                           = PostHogLib.prototype.register;
 PostHogLib.prototype['register_once']                      = PostHogLib.prototype.register_once;
 PostHogLib.prototype['unregister']                         = PostHogLib.prototype.unregister;
 PostHogLib.prototype['identify']                           = PostHogLib.prototype.identify;
 PostHogLib.prototype['alias']                              = PostHogLib.prototype.alias;
-PostHogLib.prototype['name_tag']                           = PostHogLib.prototype.name_tag;
 PostHogLib.prototype['set_config']                         = PostHogLib.prototype.set_config;
 PostHogLib.prototype['get_config']                         = PostHogLib.prototype.get_config;
 PostHogLib.prototype['get_property']                       = PostHogLib.prototype.get_property;
 PostHogLib.prototype['get_distinct_id']                    = PostHogLib.prototype.get_distinct_id;
 PostHogLib.prototype['toString']                           = PostHogLib.prototype.toString;
-PostHogLib.prototype['_check_and_handle_notifications']    = PostHogLib.prototype._check_and_handle_notifications;
-PostHogLib.prototype['_handle_user_decide_check_complete'] = PostHogLib.prototype._handle_user_decide_check_complete;
-// PostHogLib.prototype['_show_notification']                 = PostHogLib.prototype._show_notification;
-PostHogLib.prototype['opt_out_captureing']                   = PostHogLib.prototype.opt_out_captureing;
-PostHogLib.prototype['opt_in_captureing']                    = PostHogLib.prototype.opt_in_captureing;
-PostHogLib.prototype['has_opted_out_captureing']             = PostHogLib.prototype.has_opted_out_captureing;
-PostHogLib.prototype['has_opted_in_captureing']              = PostHogLib.prototype.has_opted_in_captureing;
-PostHogLib.prototype['clear_opt_in_out_captureing']          = PostHogLib.prototype.clear_opt_in_out_captureing;
-PostHogLib.prototype['get_group']                          = PostHogLib.prototype.get_group;
-PostHogLib.prototype['set_group']                          = PostHogLib.prototype.set_group;
-PostHogLib.prototype['add_group']                          = PostHogLib.prototype.add_group;
-PostHogLib.prototype['remove_group']                       = PostHogLib.prototype.remove_group;
-PostHogLib.prototype['capture_with_groups']                  = PostHogLib.prototype.capture_with_groups;
+PostHogLib.prototype['opt_out_captureing']                 = PostHogLib.prototype.opt_out_captureing;
+PostHogLib.prototype['opt_in_captureing']                  = PostHogLib.prototype.opt_in_captureing;
+PostHogLib.prototype['has_opted_out_captureing']           = PostHogLib.prototype.has_opted_out_captureing;
+PostHogLib.prototype['has_opted_in_captureing']            = PostHogLib.prototype.has_opted_in_captureing;
+PostHogLib.prototype['clear_opt_in_out_captureing']        = PostHogLib.prototype.clear_opt_in_out_captureing;
+PostHogLib.prototype['opt_out_capturing']                  = PostHogLib.prototype.opt_out_capturing;
+PostHogLib.prototype['opt_in_capturing']                   = PostHogLib.prototype.opt_in_capturing;
+PostHogLib.prototype['has_opted_out_capturing']            = PostHogLib.prototype.has_opted_out_capturing;
+PostHogLib.prototype['has_opted_in_capturing']             = PostHogLib.prototype.has_opted_in_capturing;
+PostHogLib.prototype['clear_opt_in_out_capturing']         = PostHogLib.prototype.clear_opt_in_out_capturing;
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties']            = PostHogPersistence.prototype.properties;
@@ -1629,7 +1452,7 @@ PostHogPersistence.prototype['update_referrer_info']  = PostHogPersistence.proto
 PostHogPersistence.prototype['get_cross_subdomain']   = PostHogPersistence.prototype.get_cross_subdomain;
 PostHogPersistence.prototype['clear']                 = PostHogPersistence.prototype.clear;
 
-_.safewrap_class(PostHogLib, ['identify', '_check_and_handle_notifications']);
+_.safewrap_class(PostHogLib, ['identify']);
 
 
 var instances = {};
