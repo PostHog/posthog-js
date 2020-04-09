@@ -363,7 +363,9 @@ PostHogLib.prototype._event_queue_poll = function () {
         if (this._event_queue.length > 0) {
             const requests = this._format_event_queue_data()
             for (let url in requests) {
-                this._send_request(url, requests[url], __NOOPTIONS, __NOOP)
+                var json_data = _.JSONEncode(requests[url]);
+                var encoded_data = _.base64Encode(json_data);
+                this._send_request(url, {data: encoded_data}, __NOOPTIONS, __NOOP)
             }
             this._event_queue.length = 0 // flush the _event_queue
         } else {
@@ -457,19 +459,16 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
     args['ip'] = this.get_config('ip') ? 1 : 0;
     args['_'] = new Date().getTime().toString();
 
-    url += '?' + _.HTTPBuildQuery(args);
-
-    var headers = this.get_config('xhr_headers');  
-    if(use_post) {
+    if (use_post) {
         if (Array.isArray(data)) {
-            headers['Content-Type'] = 'application/json';
-            body_data = JSON.stringify(data)
+            body_data = 'data=' + data
         } else {
-            headers['Content-Type'] = 'application/x-www-form-urlencoded';
             body_data = 'data=' + data['data'];
-            delete data['data'];
         }
+        delete data['data'];
     }
+
+    url += '?' + _.HTTPBuildQuery(args);
 
     if ('img' in data) {
         var img = document.createElement('img');
@@ -486,6 +485,10 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
         try {
             var req = new XMLHttpRequest();
             req.open(options.method, url, true);
+            var headers = this.get_config('xhr_headers');
+            if(use_post) {
+                headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            }
             _.each(headers, function(headerValue, headerName) {
                 req.setRequestHeader(headerName, headerValue);
             });
