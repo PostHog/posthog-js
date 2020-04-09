@@ -15,4 +15,5 @@ node_modules
 .vscode/*
 .mypy_cache
 yarn.lock
+package-lock.json
 .idea
