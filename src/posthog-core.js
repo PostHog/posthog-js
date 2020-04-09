@@ -930,13 +930,14 @@ PostHogLib.prototype.identify = function(
  * Clears super properties and generates a new random distinct_id for this instance.
  * Useful for clearing data when a user logs out.
  */
-PostHogLib.prototype.reset = function() {
+PostHogLib.prototype.reset = function(reset_device_id) {
+    let device_id = this.get_property('$device_id');
     this['persistence'].clear();
     this._flags.identify_called = false;
     var uuid = _.UUID();
     this.register_once({
         'distinct_id': uuid,
-        '$device_id': uuid
+        '$device_id': reset_device_id ? uuid : device_id
     }, '');
 };
 
