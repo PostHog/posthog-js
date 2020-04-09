@@ -3,11 +3,6 @@
 import {
     SET_ACTION,
     SET_ONCE_ACTION,
-    UNSET_ACTION,
-    ADD_ACTION,
-    APPEND_ACTION,
-    REMOVE_ACTION,
-    UNION_ACTION
 } from './api-actions';
 import Config from './config';
 import { _, console } from './utils';

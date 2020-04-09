@@ -1,6 +1,6 @@
 {
   "name": "posthog-js",
-  "version": "1.0.4",
+  "version": "1.0.5-beta.2",
   "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
   "repository": "https://github.com/PostHog/posthog-js",
   "author": "hey@posthog.com",
@@ -8,10 +8,12 @@
   "scripts": {
     "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
     "serve": "parcel serve src/loader-globals.js --port 3001 --out-file dist/array.js",
-    "build": "parcel build src/loader-globals.js --out-file dist/array.min.js",
-    "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js"
+    "build": "parcel build src/loader-globals.js --out-file dist/array.js --no-source-maps",
+    "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
+    "prepublish": "yarn build && yarn build-module"
   },
   "main": "dist/module.js",
+  "files": ["dist/*"],
   "devDependencies": {
     "parcel": "^1.12.4",
     "rollup": "^1.32.0",
