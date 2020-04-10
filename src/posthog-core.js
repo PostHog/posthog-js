@@ -351,7 +351,7 @@ PostHogLib.prototype._format_event_queue_data = function() {
     _.each(this._event_queue, (request) => {
         const { url, data } = request
         if (requests[url] === undefined) requests[url] = []
-        requests[url].push(data.data)
+        requests[url].push(data)
     })
     return requests
 }
@@ -362,7 +362,13 @@ PostHogLib.prototype._event_queue_poll = function () {
         if (this._event_queue.length > 0) {
             const requests = this._format_event_queue_data()
             for (let url in requests) {
-                var json_data = _.JSONEncode(requests[url]);
+                let data = requests[url];
+                _.each(data, function(value, key) {
+                    data[key]['offset'] = Math.abs(data[key]['timestamp'] - new Date());
+                    delete data[key]['timestamp'];
+                    console.log(data[key])
+                })
+                var json_data = _.JSONEncode(data);
                 var encoded_data = _.base64Encode(json_data);
                 this._send_request(url, {data: encoded_data}, __NOOPTIONS, __NOOP)
             }
@@ -691,24 +697,22 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
     var data = {
         'event': event_name,
         'properties': properties,
-        'timestamp': new Date().toISOString()
     };
+
     var truncated_data  = _.truncate(data, 255);
     var json_data      = _.JSONEncode(truncated_data);
     var encoded_data   = _.base64Encode(json_data);
 
     const url = this.get_config('api_host') + '/e/'
-    const data_object = {'data': encoded_data}
     const cb = this._prepare_callback(callback, truncated_data)
 
     const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
-    const args = [url, data_object, options, cb]
 
     if (!this.get_config('request_batching') || has_unique_traits) {
-        this._send_request(...args);
+        this._send_request(url, {'data': encoded_data}, options, cb);
     } else {
-        data_object.data = truncated_data
-        this._event_enqueue(...args)
+        data['timestamp'] = new Date();
+        this._event_enqueue(url, data, options, cb)
     }
 
     return truncated_data;
