@@ -16,7 +16,7 @@
   "files": ["dist/*"],
   "devDependencies": {
     "parcel": "^1.12.4",
-    "rollup": "^1.32.0",
+    "rollup": "^2.8.0",
     "rollup-plugin-npm": "1.4.0"
   }
 }
