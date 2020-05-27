@@ -900,6 +900,12 @@ PostHogLib.prototype.identify = function(
     //  _set_callback:function  A callback to be run if and when the People set queue is flushed
     //  _set_once_callback:function  A callback to be run if and when the People set_once queue is flushed
 
+    //if the new_distinct_id has not been set ignore the identify event
+    if (!new_distinct_id) {
+        console.error('Unique user id has not been set in posthog.identify')
+        return;
+    }
+
     var previous_distinct_id = this.get_distinct_id();
     this.register({'$user_id': new_distinct_id});
 
