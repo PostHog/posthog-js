@@ -221,7 +221,7 @@ var autocapture = {
 
         if (!this._maybeLoadEditor(instance)) { // don't autocapture actions when the editor is enabled
             var parseDecideResponse = _.bind(function(response) {
-                if(response['is_authenticated']) {
+                if(response['is_authenticated'] && response['toolbarVersion'].indexOf('toolbar') === 0) {
                     this._loadEditor(instance, {
                         apiURL: instance.get_config('api_host'),
                         jsURL: response['jsURL'] || instance.get_config('api_host'),
