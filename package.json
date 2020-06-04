@@ -1,6 +1,6 @@
 {
   "name": "posthog-js",
-  "version": "1.1.0-beta.4",
+  "version": "1.1.0",
   "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
   "repository": "https://github.com/PostHog/posthog-js",
   "author": "hey@posthog.com",
@@ -13,7 +13,9 @@
     "prepublish": "yarn build && yarn build-module"
   },
   "main": "dist/module.js",
-  "files": ["dist/*"],
+  "files": [
+    "dist/*"
+  ],
   "devDependencies": {
     "parcel": "^1.12.4",
     "rollup": "^1.32.0",
