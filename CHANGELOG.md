@@ -1,3 +1,6 @@
+## 1.1.1 - 2020-06-04
+- Show a error if calling `posthog.identify` with `null` user (#34 by @rushabhnagda11)
+
 ## 1.1.0 - 2020-06-04
 - Support loading new PostHog toolbar
 
