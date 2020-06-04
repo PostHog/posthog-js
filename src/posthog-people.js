@@ -124,9 +124,6 @@ PostHogPeople.prototype._send_request = function(data, callback) {
         return truncated_data;
     }
 
-    console.log('POSTHOG PEOPLE REQUEST:');
-    console.log(truncated_data);
-
     this._posthog._send_request(
         this._get_config('api_host') + '/engage/',
         {'data': encoded_data},

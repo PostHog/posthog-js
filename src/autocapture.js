@@ -221,6 +221,14 @@ var autocapture = {
 
         if (!this._maybeLoadEditor(instance)) { // don't autocapture actions when the editor is enabled
             var parseDecideResponse = _.bind(function(response) {
+                if(response['isAuthenticated'] && response['toolbarVersion'].indexOf('toolbar') === 0) {
+                    this._loadEditor(instance, {
+                        apiURL: instance.get_config('api_host'),
+                        jsURL: response['jsURL'] || instance.get_config('api_host'),
+                        toolbarVersion: response['toolbarVersion']
+                    })
+                    instance.set_config({debug: true})
+                }
                 if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
 
                     if (response['custom_properties']) {
@@ -259,6 +267,8 @@ var autocapture = {
                 'actionId': state['actionId'],
                 'projectToken': state['token'],
                 'apiURL': state['apiURL'],
+                'jsURL': state['jsURL'] || state['apiURL'],
+                'toolbarVersion': state['toolbarVersion'],
                 'temporaryToken': state['temporaryToken']
             };
             window.sessionStorage.setItem('editorParams', JSON.stringify(editorParams));
@@ -318,9 +328,10 @@ var autocapture = {
         var _this = this;
         if (!window['_mpEditorLoaded']) { // only load the codeless event editor once, even if there are multiple instances of PostHogLib
             window['_mpEditorLoaded'] = true;
-            var editorUrl = instance.get_config('api_host')
-              + '/static/editor.js?_ts='
-              + (new Date()).getTime();
+            var host = (editorParams['jsURL'] || editorParams['apiURL'] || instance.get_config('api_host'))
+            var toolbarScript = editorParams['toolbarVersion'].indexOf('toolbar') === 0 ? 'toolbar.js' : 'editor.js'
+            var editorUrl = host + (host.endsWith('/') ? '' : '/')
+              + 'static/' + toolbarScript + '?_ts=' + (new Date()).getTime();
             this._loadScript(editorUrl, function() {
                 window['ph_load_editor'](editorParams);
             });

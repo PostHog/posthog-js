@@ -326,9 +326,6 @@ PostHogPersistence.prototype._add_to_people_queue = function(queue, data) {
         });
     }
 
-    console.log('POSTHOG PEOPLE REQUEST (QUEUED, PENDING IDENTIFY):');
-    console.log(data);
-
     this.save();
 };
 

@@ -366,7 +366,6 @@ PostHogLib.prototype._event_queue_poll = function () {
                 _.each(data, function(value, key) {
                     data[key]['offset'] = Math.abs(data[key]['timestamp'] - new Date());
                     delete data[key]['timestamp'];
-                    console.log(data[key])
                 })
                 var json_data = _.JSONEncode(data);
                 var encoded_data = _.base64Encode(json_data);
@@ -889,7 +888,6 @@ PostHogLib.prototype._register_single = function(prop, value) {
  * at the same time can cause a race condition, so it is best
  * practice to call identify on the original, anonymous ID
  * right after you've aliased it.
- * <a href="https://posthog.com/help/questions/articles/how-should-i-handle-my-user-identity-with-the-posthog-javascript-library">Learn more about how posthog.identify and posthog.alias can be used</a>.
  *
  * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
  */
