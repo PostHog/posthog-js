@@ -366,7 +366,6 @@ PostHogLib.prototype._event_queue_poll = function () {
                 _.each(data, function(value, key) {
                     data[key]['offset'] = Math.abs(data[key]['timestamp'] - new Date());
                     delete data[key]['timestamp'];
-                    console.log(data[key])
                 })
                 var json_data = _.JSONEncode(data);
                 var encoded_data = _.base64Encode(json_data);
