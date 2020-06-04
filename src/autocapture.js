@@ -221,7 +221,7 @@ var autocapture = {
 
         if (!this._maybeLoadEditor(instance)) { // don't autocapture actions when the editor is enabled
             var parseDecideResponse = _.bind(function(response) {
-                if(response['isAuthenticated'] && response['toolbarVersion'].indexOf('toolbar') === 0) {
+                if(response['isAuthenticated'] && response['toolbarVersion'] && response['toolbarVersion'].indexOf('toolbar') === 0) {
                     this._loadEditor(instance, {
                         apiURL: instance.get_config('api_host'),
                         jsURL: response['jsURL'] || instance.get_config('api_host'),
@@ -329,7 +329,7 @@ var autocapture = {
         if (!window['_mpEditorLoaded']) { // only load the codeless event editor once, even if there are multiple instances of PostHogLib
             window['_mpEditorLoaded'] = true;
             var host = (editorParams['jsURL'] || editorParams['apiURL'] || instance.get_config('api_host'))
-            var toolbarScript = editorParams['toolbarVersion'].indexOf('toolbar') === 0 ? 'toolbar.js' : 'editor.js'
+            var toolbarScript = editorParams['toolbarVersion'] && editorParams['toolbarVersion'].indexOf('toolbar') === 0 ? 'toolbar.js' : 'editor.js'
             var editorUrl = host + (host.endsWith('/') ? '' : '/')
               + 'static/' + toolbarScript + '?_ts=' + (new Date()).getTime();
             this._loadScript(editorUrl, function() {
