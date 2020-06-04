@@ -1,3 +1,6 @@
+## 1.1.2 - 2020-06-04
+- Fix another error when using a new posthog-js version with an old posthog version
+
 ## 1.1.1 - 2020-06-04
 - Show a error if calling `posthog.identify` with `null` user (#34 by @rushabhnagda11)
 
