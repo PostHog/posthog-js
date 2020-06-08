@@ -221,12 +221,11 @@ var autocapture = {
 
         if (!this._maybeLoadEditor(instance)) { // don't autocapture actions when the editor is enabled
             var parseDecideResponse = _.bind(function(response) {
-                if(response['isAuthenticated'] && response['toolbarVersion'] && response['toolbarVersion'].indexOf('toolbar') === 0) {
-                    this._loadEditor(instance, {
+                var editorParams = response['editorParams'] || (response['toolbarVersion'] ? { toolbarVersion: response['toolbarVersion'] } : {})
+                if(response['isAuthenticated'] && editorParams['toolbarVersion'] && editorParams['toolbarVersion'].indexOf('toolbar') === 0) {
+                    this._loadEditor(instance, Object.assign({}, editorParams, {
                         apiURL: instance.get_config('api_host'),
-                        jsURL: response['jsURL'] || instance.get_config('api_host'),
-                        toolbarVersion: response['toolbarVersion']
-                    })
+                    }))
                     instance.set_config({debug: true})
                 }
                 if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
@@ -261,16 +260,15 @@ var autocapture = {
             var state = _.getHashParam(hash, 'state');
             state = JSON.parse(decodeURIComponent(state));
             var expiresInSeconds = _.getHashParam(hash, 'expires_in');
-            editorParams = {
+            editorParams = Object.assign({}, state, {
                 'accessToken': _.getHashParam(hash, 'access_token'),
-                'accessTokenExpiresAt': (new Date()).getTime() + (Number(expiresInSeconds) * 1000),
-                'actionId': state['actionId'],
-                'projectToken': state['token'],
-                'apiURL': state['apiURL'],
-                'jsURL': state['jsURL'] || state['apiURL'],
-                'toolbarVersion': state['toolbarVersion'],
-                'temporaryToken': state['temporaryToken']
-            };
+                'accessTokenExpiresAt': (new Date()).getTime() + (Number(expiresInSeconds) * 1000)
+            });
+            // posthog v1.8.0 and earlier passed 'token' instead of 'projectToken'
+            if (state['token'] && !state['projectToken']) {
+                state['projectToken'] = state['token']
+                delete state['token']
+            }
             window.sessionStorage.setItem('editorParams', JSON.stringify(editorParams));
             window.sessionStorage.setItem('editorActionId', editorParams['actionId']);
 

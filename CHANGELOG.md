@@ -1,3 +1,6 @@
+## 1.2.0 - 2020-06-08
+- Support passing various/dynamic parameters to the toolbar
+
 ## 1.1.2 - 2020-06-04
 - Fix another error when using a new posthog-js version with an old posthog version
 
