@@ -264,11 +264,6 @@ var autocapture = {
                 'accessToken': _.getHashParam(hash, 'access_token'),
                 'accessTokenExpiresAt': (new Date()).getTime() + (Number(expiresInSeconds) * 1000)
             });
-            // posthog v1.8.0 and earlier passed 'token' instead of 'projectToken'
-            if (state['token'] && !state['projectToken']) {
-                state['projectToken'] = state['token']
-                delete state['token']
-            }
             window.sessionStorage.setItem('editorParams', JSON.stringify(editorParams));
             window.sessionStorage.setItem('editorActionId', editorParams['actionId']);
 
@@ -311,7 +306,7 @@ var autocapture = {
                 editorParams = JSON.parse(window.sessionStorage.getItem('editorParams') || '{}');
             }
 
-            if (editorParams['projectToken'] && instance.get_config('token') === editorParams['projectToken']) {
+            if (editorParams['token'] && instance.get_config('token') === editorParams['token']) {
                 this._loadEditor(instance, editorParams);
                 return true;
             } else {
