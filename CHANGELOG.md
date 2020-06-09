@@ -1,3 +1,6 @@
+## 1.2.1 - 2020-06-09
+- Simplify passing of API token to editor
+
 ## 1.2.0 - 2020-06-08
 - Support passing various/dynamic parameters to the toolbar
 
