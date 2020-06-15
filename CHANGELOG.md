@@ -4,7 +4,7 @@
 - Better test suite
 
 ## 1.2.2 - 2020-06-15
-- Allow properties on anonymous users
+- Allow setting properties on anonymous users
 
 ## 1.2.1 - 2020-06-09
 - Simplify passing of API token to editor
