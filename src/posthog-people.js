@@ -112,18 +112,6 @@ PostHogPeople.prototype._send_request = function(data, callback) {
     var json_data         = _.JSONEncode(date_encoded_data);
     var encoded_data      = _.base64Encode(json_data);
 
-    if (!this._identify_called()) {
-        this._enqueue(data);
-        if (!_.isUndefined(callback)) {
-            if (this._get_config('verbose')) {
-                callback({status: -1, error: null});
-            } else {
-                callback(-1);
-            }
-        }
-        return truncated_data;
-    }
-
     this._posthog._send_request(
         this._get_config('api_host') + '/engage/',
         {'data': encoded_data},
