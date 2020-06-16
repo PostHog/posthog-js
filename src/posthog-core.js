@@ -51,11 +51,6 @@ var __NOOPTIONS = {}
 // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
 var USE_XHR = (window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest());
 
-// IE<10 does not support cross-origin XHR's but script tags
-// with defer won't block window.onload; ENQUEUE_REQUESTS
-// should only be true for Opera<12
-var ENQUEUE_REQUESTS = !USE_XHR && (userAgent.indexOf('MSIE') === -1) && (userAgent.indexOf('Mozilla') === -1);
-
 // save reference to navigator.sendBeacon so it can be minified
 var sendBeacon = window.navigator['sendBeacon'];
 if (sendBeacon) {
@@ -98,7 +93,6 @@ var DEFAULT_CONFIG = {
     'xhr_headers':                       {}, // { header: value, header2: value }
     'inapp_protocol':                    '//',
     'inapp_link_new_window':             false,
-    'request_batching':                  true
 };
 
 var DOM_LOADED = false;
@@ -227,12 +221,6 @@ PostHogLib.prototype._init = function(token, config, name) {
 
     this['_jsc'] = function() {};
 
-    // batching requests variabls
-    this._event_queue = []
-    this._empty_queue_count = 0 // to track empty polls
-    this._should_poll = true // flag to continue to recursively poll or not
-    this._poller = function(){} // to become interval for reference to clear later
-
     this.__dom_loaded_queue = [];
     this.__request_queue = [];
     this.__disabled_events = [];
@@ -279,9 +267,6 @@ PostHogLib.prototype._dom_loaded = function () {
         _.each(this.__request_queue, function(item) {
             this._send_request.apply(this, item);
         }, this);
-        if(this.get_config('request_batching')) {
-            this._event_queue_poll()
-        }
     }
 
     delete this.__dom_loaded_queue;
@@ -337,90 +322,11 @@ PostHogLib.prototype._prepare_callback = function(callback, data) {
     }
 };
 
-PostHogLib.prototype._event_enqueue = function (url, data, options, callback) {
-    this._event_queue.push({url, data, options, callback})
-
-    if (!this._should_poll) {
-        this._should_poll = true
-        this._event_queue_poll()
-    }
-}
-
-PostHogLib.prototype._format_event_queue_data = function() {
-    const requests = {}
-    _.each(this._event_queue, (request) => {
-        const { url, data } = request
-        if (requests[url] === undefined) requests[url] = []
-        requests[url].push(data)
-    })
-    return requests
-}
-
-PostHogLib.prototype._event_queue_poll = function () {
-    const POLL_INTERVAL = 3000
-    this._poller = setTimeout(() => {
-        if (this._event_queue.length > 0) {
-            const requests = this._format_event_queue_data()
-            for (let url in requests) {
-                let data = requests[url];
-                _.each(data, function(value, key) {
-                    data[key]['offset'] = Math.abs(data[key]['timestamp'] - new Date());
-                    delete data[key]['timestamp'];
-                })
-                var json_data = _.JSONEncode(data);
-                var encoded_data = _.base64Encode(json_data);
-                this._send_request(url, {data: encoded_data}, __NOOPTIONS, __NOOP)
-            }
-            this._event_queue.length = 0 // flush the _event_queue
-        } else {
-            this._empty_queue_count++
-        }
-
-        /**
-         * _empty_queue_count will increment each time the queue is polled
-         *  and it is empty. To avoid emtpy polling (user went idle, stepped away from comp)
-         *  we can turn it off with the _should_poll flag.
-         * 
-         * Polling will be re enabled when the next time PostHogLib.capture is called with
-         *  an event that should be added to the event queue. 
-         */
-        if (this._empty_queue_count > 4) {
-            this._should_poll = false
-            this._empty_queue_count = 0
-        }
-        if (this._should_poll) {
-            this._event_queue_poll()
-        }
-    }, POLL_INTERVAL)
-}
-
 PostHogLib.prototype._handle_unload = function() {
-    if (!this.get_config('request_batching')) {
-        this.capture('$pageleave', null, { transport: 'sendbeacon' });
-        return
-    }
-    
-    clearInterval(this._poller)
-    this.capture('$pageleave')
-    let data = {}
-    if (this._event_queue.length > 0) {
-        data = this._format_event_queue_data()
-    }
-    this._event_queue.length = 0
-    for(let url in data) {
-        // sendbeacon has some hard requirments and cant be treated 
-        // like a normal post request. Because of that it needs to be encoded
-        const encoded_data = _.base64Encode(_.JSONEncode(data[url]))
-        this._send_request(url, {data: encoded_data}, {transport: 'sendbeacon'}, __NOOP)
-    }
+    this.capture('$pageleave', null, { transport: 'sendbeacon' });
 }
 
 PostHogLib.prototype._send_request = function(url, data, options, callback) {
-    if (ENQUEUE_REQUESTS) {
-        this.__request_queue.push(arguments);
-        return;
-    }
-
     var DEFAULT_OPTIONS = {
         method: this.get_config('api_method'),
         transport: this.get_config('api_transport')
@@ -705,14 +611,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
     const url = this.get_config('api_host') + '/e/'
     const cb = this._prepare_callback(callback, truncated_data)
 
-    const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
-
-    if (!this.get_config('request_batching') || has_unique_traits) {
-        this._send_request(url, {'data': encoded_data}, options, cb);
-    } else {
-        data['timestamp'] = new Date();
-        this._event_enqueue(url, data, options, cb)
-    }
+    this._send_request(url, {'data': encoded_data}, options, cb);
 
     return truncated_data;
 });
