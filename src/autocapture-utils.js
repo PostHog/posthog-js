@@ -42,7 +42,7 @@ export function getSafeText(el) {
         });
     }
 
-    return _.trim(elText);
+    return _.trim(elText).substring(0, 400);
 }
 
 /*
