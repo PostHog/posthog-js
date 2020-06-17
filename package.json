@@ -1,6 +1,10 @@
 {
   "name": "posthog-js",
+<<<<<<< HEAD
   "version": "1.2.3",
+=======
+  "version": "1.2.2-beta.0",
+>>>>>>> 1.2.2-beta.0
   "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
   "repository": "https://github.com/PostHog/posthog-js",
   "author": "hey@posthog.com",
