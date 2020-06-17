@@ -24,4 +24,16 @@
         <a href='https://posthog.com'>Here's a link to the outside world</a>
     </div>
 
+    <div style="padding: 2rem;background:green;display:none;color:white" id="feature"><h2>Look, a new beta feature</h2></div>
+    <script>
+        console.log(posthog.isFeatureEnabled('beta-feature'))
+        posthog.onFeatureFlags(function(featureFlags) {
+            console.log(featureFlags)
+            if(posthog.isFeatureEnabled('beta-feature')) {
+                document.getElementById('feature').style.display = 'block'
+            }
+        })
+
+    </script>
+
 </body>

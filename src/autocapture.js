@@ -205,12 +205,7 @@ var autocapture = {
 
     _customProperties: {},
     init: function(instance) {
-        if (!(document && document.body)) {
-            console.log('document not ready yet, trying again in 500 milliseconds...');
-            var that = this;
-            setTimeout(function() { that.init(instance); }, 500);
-            return;
-        }
+        if (this._maybeLoadEditor(instance)) return; // don't autocapture actions when the editor is enabled
 
         var token = instance.get_config('token');
         if (this._initializedTokens.indexOf(token) > -1) {
@@ -219,39 +214,45 @@ var autocapture = {
         }
         this._initializedTokens.push(token);
 
-        if (!this._maybeLoadEditor(instance)) { // don't autocapture actions when the editor is enabled
-            var parseDecideResponse = _.bind(function(response) {
-                var editorParams = response['editorParams'] || (response['toolbarVersion'] ? { toolbarVersion: response['toolbarVersion'] } : {})
-                if(response['isAuthenticated'] && editorParams['toolbarVersion'] && editorParams['toolbarVersion'].indexOf('toolbar') === 0) {
-                    this._loadEditor(instance, Object.assign({}, editorParams, {
-                        apiURL: instance.get_config('api_host'),
-                    }))
-                    instance.set_config({debug: true})
+        var parseDecideResponse = _.bind(function(response) {
+            if (!(document && document.body)) {
+                console.log('document not ready yet, trying again in 500 milliseconds...');
+                setTimeout(function() { parseDecideResponse(response) }, 500);
+                return;
+            }
+            var editorParams = response['editorParams'] || (response['toolbarVersion'] ? { toolbarVersion: response['toolbarVersion'] } : {})
+            if(response['isAuthenticated'] && editorParams['toolbarVersion'] && editorParams['toolbarVersion'].indexOf('toolbar') === 0) {
+                this._loadEditor(instance, Object.assign({}, editorParams, {
+                    apiURL: instance.get_config('api_host'),
+                }))
+                instance.set_config({debug: true})
+            }
+            if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
+                if (response['custom_properties']) {
+                    this._customProperties = response['custom_properties'];
                 }
-                if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
+                this._addDomEventHandlers(instance);
+            } else {
+                instance['__autocapture_enabled'] = false;
+            }
+            if(response['featureFlags'].length > 0) {
+                instance.persistence.register({'$active_feature_flags': response['featureFlags']})
+            } else {
+                instance.persistence.unregister('$active_feature_flags')
+            }
+        }, this);
 
-                    if (response['custom_properties']) {
-                        this._customProperties = response['custom_properties'];
-                    }
-
-                    this._addDomEventHandlers(instance);
-
-                } else {
-                    instance['__autocapture_enabled'] = false;
-                }
-            }, this);
-
-            instance._send_request(
-                instance.get_config('api_host') + '/decide/', {
-                    'verbose': true,
-                    'version': '1',
-                    'lib': 'web',
-                    'token': token
-                },
-                {method: 'GET'},
-                instance._prepare_callback(parseDecideResponse)
-            );
-        }
+        var json_data = _.JSONEncode({
+            'token': token,
+            'distinct_id': instance.get_distinct_id()
+        });
+        var encoded_data = _.base64Encode(json_data);
+        instance._send_request(
+            instance.get_config('api_host') + '/decide/',
+            {data: encoded_data},
+            {method: 'POST'},
+            instance._prepare_callback(parseDecideResponse)
+        );
     },
 
     _editorParamsFromHash: function(instance, hash) {
