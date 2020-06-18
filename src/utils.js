@@ -1584,6 +1584,8 @@ _.info = {
             '$device': _.info.device(userAgent)
         }), {
             '$current_url': win.location.href,
+            '$host': win.location.host,
+            '$pathname': win.location.pathname,
             '$browser_version': _.info.browserVersion(userAgent, navigator.vendor, windowOpera),
             '$screen_height': screen.height,
             '$screen_width': screen.width,
