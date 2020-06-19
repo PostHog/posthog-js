@@ -75,9 +75,7 @@ var autocapture = {
     _getDefaultProperties: function(eventType) {
         return {
             '$event_type': eventType,
-            '$ce_version': 1,
-            '$host': window.location.host,
-            '$pathname': window.location.pathname
+            '$ce_version': 1
         };
     },
 
