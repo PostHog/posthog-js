@@ -257,55 +257,48 @@ var autocapture = {
     },
 
     _editorParamsFromHash: function(instance, hash) {
-        var editorParams;
         try {
             var state = _.getHashParam(hash, 'state');
-            state = JSON.parse(decodeURIComponent(state));
-            var expiresInSeconds = _.getHashParam(hash, 'expires_in');
-            editorParams = Object.assign({}, state, {
-                'accessToken': _.getHashParam(hash, 'access_token'),
-                'accessTokenExpiresAt': (new Date()).getTime() + (Number(expiresInSeconds) * 1000)
-            });
-            window.sessionStorage.setItem('editorParams', JSON.stringify(editorParams));
-            window.sessionStorage.setItem('editorActionId', editorParams['actionId']);
-
-            if (state['desiredHash']) {
-                window.location.hash = state['desiredHash'];
-            } else if (window.history) {
-                history.replaceState('', document.title, window.location.pathname + window.location.search); // completely remove hash
-            } else {
-                window.location.hash = ''; // clear hash (but leaves # unfortunately)
-            }
+            return JSON.parse(decodeURIComponent(state));
         } catch (e) {
             console.error('Unable to parse data from hash', e);
         }
-        return editorParams;
+        return {};
     },
 
     /**
      * To load the visual editor, we need an access token and other state. That state comes from one of three places:
      * 1. In the URL hash params if the customer is using an old snippet
-     * 2. From session storage under the key `_mpcehash` if the snippet already parsed the hash
-     * 3. From session storage under the key `editorParams` if the editor was initialized on a previous page
+     * 2. From session storage under the key `editorParams` if the editor was initialized on a previous page
      */
     _maybeLoadEditor: function(instance) {
         try {
-            var parseFromUrl = false;
-            if (_.getHashParam(window.location.hash, 'state')) {
-                var state = _.getHashParam(window.location.hash, 'state');
-                state = JSON.parse(decodeURIComponent(state));
-                parseFromUrl = state['action'] === 'mpeditor';
-            }
-            var parseFromStorage = !!window.sessionStorage.getItem('_mpcehash');
+            var stateHash = _.getHashParam(window.location.hash, 'state');
+            var state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null;
+            var parseFromUrl = state && state['action'] === 'mpeditor';
             var editorParams;
 
             if (parseFromUrl) { // happens if they are initializing the editor using an old snippet
-                editorParams = this._editorParamsFromHash(instance, window.location.hash);
-            } else if (parseFromStorage) { // happens if they are initialized the editor and using the new snippet
-                editorParams = this._editorParamsFromHash(instance, window.sessionStorage.getItem('_mpcehash'));
-                window.sessionStorage.removeItem('_mpcehash');
+                editorParams = state
+
+                if (editorParams && Object.keys(editorParams).length > 0) {
+                    window.sessionStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams));
+
+                    if (state['desiredHash']) { // hash that was in the url before the redirect
+                        window.location.hash = state['desiredHash'];
+                    } else if (window.history) {
+                        history.replaceState('', document.title, window.location.pathname + window.location.search); // completely remove hash
+                    } else {
+                        window.location.hash = ''; // clear hash (but leaves # unfortunately)
+                    }
+                }
+
             } else { // get credentials from sessionStorage from a previous initialzation
-                editorParams = JSON.parse(window.sessionStorage.getItem('editorParams') || '{}');
+                editorParams = JSON.parse(window.sessionStorage.getItem('_postHogEditorParams') || '{}');
+
+                // delete "add-action" or other intent from editorParams, otherwise we'll have the same intent
+                // every time we open the page (e.g. you just visiting your own site an hour later)
+                delete editorParams.userIntent
             }
 
             if (editorParams['token'] && instance.get_config('token') === editorParams['token']) {
@@ -321,8 +314,8 @@ var autocapture = {
 
     _loadEditor: function(instance, editorParams) {
         var _this = this;
-        if (!window['_mpEditorLoaded']) { // only load the codeless event editor once, even if there are multiple instances of PostHogLib
-            window['_mpEditorLoaded'] = true;
+        if (!window['_postHogToolbarLoaded']) { // only load the codeless event editor once, even if there are multiple instances of PostHogLib
+            window['_postHogToolbarLoaded'] = true;
             var host = (editorParams['jsURL'] || editorParams['apiURL'] || instance.get_config('api_host'))
             var toolbarScript = editorParams['toolbarVersion'] && editorParams['toolbarVersion'].indexOf('toolbar') === 0 ? 'toolbar.js' : 'editor.js'
             var editorUrl = host + (host.endsWith('/') ? '' : '/')
@@ -332,7 +325,7 @@ var autocapture = {
             });
             // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
             _.register_event(window, 'turbolinks:load', function() {
-                window['_mpEditorLoaded'] = false;
+                window['_postHogToolbarLoaded'] = false;
                 _this._loadEditor(instance, editorParams);
             });
             return true;
