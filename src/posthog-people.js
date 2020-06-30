@@ -129,6 +129,17 @@ PostHogPeople.prototype._identify_called = function() {
     return this._posthog._flags.identify_called === true;
 };
 
+// Queue up engage operations if identify hasn't been called yet.
+PostHogPeople.prototype._enqueue = function(data) {
+    if (SET_ACTION in data) {
+        this._posthog['persistence']._add_to_people_queue(SET_ACTION, data);
+    } else if (SET_ONCE_ACTION in data) {
+        this._posthog['persistence']._add_to_people_queue(SET_ONCE_ACTION, data);
+    } else {
+        console.error('Invalid call to _enqueue():', data);
+    }
+};
+
 PostHogPeople.prototype._flush_one_queue = function(action, action_method, callback, queue_to_params_fn) {
     var _this = this;
     var queued_data = _.extend({}, this._posthog['persistence']._get_queue(action));

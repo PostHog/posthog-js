@@ -1544,6 +1544,7 @@ var add_dom_loaded_handler = function() {
         dom_loaded_handler.done = true;
 
         DOM_LOADED = true;
+        ENQUEUE_REQUESTS = false;
 
         _.each(instances, function(inst) {
             inst._dom_loaded();
