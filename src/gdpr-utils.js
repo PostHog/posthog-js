@@ -18,7 +18,7 @@ import { _, window } from './utils';
  * @callback captureFunction
  * @param {String} event_name The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', 'Item Purchased', etc.
  * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
- * @param {Function} [callback] If provided, the callback function will be called after captureing the event.
+ * @param {Function} [callback] If provided, the callback function will be called after capturing the event.
  */
 
 /** Public **/
@@ -26,15 +26,17 @@ import { _, window } from './utils';
 var GDPR_DEFAULT_PERSISTENCE_PREFIX = '__ph_opt_in_out_';
 
 /**
- * Opt the user in to data captureing and cookies/localstorage for the given token
- * @param {string} token - PostHog project captureing token
+ * Opt the user in to data capturing and cookies/localstorage for the given token
+ * @param {string} token - PostHog project capturing token
  * @param {Object} [options]
- * @param {captureFunction} [options.capture] - function used for captureing a PostHog event to record the opt-in action
- * @param {string} [options.captureEventName] - event name to be used for captureing the opt-in action
- * @param {Object} [options.captureProperties] - set of properties to be captureed along with the opt-in action
+ * @param {captureFunction} [options.capture] - function used for capturing a PostHog event to record the opt-in action
+ * @param {string} [options.captureEventName] - event name to be used for capturing the opt-in action
+ * @param {Object} [options.captureProperties] - set of properties to be captured along with the opt-in action
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @param {Number} [options.cookieExpiration] - number of days until the opt-in cookie expires
+ * @param {string} [options.cookieDomain] - custom cookie domain
+ * @param {boolean} [options.crossSiteCookie] - whether the opt-in cookie is set as cross-site-enabled
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
@@ -43,12 +45,14 @@ export function optIn(token, options) {
 }
 
 /**
- * Opt the user out of data captureing and cookies/localstorage for the given token
- * @param {string} token - PostHog project captureing token
+ * Opt the user out of data capturing and cookies/localstorage for the given token
+ * @param {string} token - PostHog project capturing token
  * @param {Object} [options]
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @param {Number} [options.cookieExpiration] - number of days until the opt-out cookie expires
+ * @param {string} [options.cookieDomain] - custom cookie domain
+ * @param {boolean} [options.crossSiteCookie] - whether the opt-in cookie is set as cross-site-enabled
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-out cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-out cookie is set as secure or not
  */
@@ -57,8 +61,8 @@ export function optOut(token, options) {
 }
 
 /**
- * Check whether the user has opted in to data captureing and cookies/localstorage for the given token
- * @param {string} token - PostHog project captureing token
+ * Check whether the user has opted in to data capturing and cookies/localstorage for the given token
+ * @param {string} token - PostHog project capturing token
  * @param {Object} [options]
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
@@ -69,22 +73,23 @@ export function hasOptedIn(token, options) {
 }
 
 /**
- * Check whether the user has opted out of data captureing and cookies/localstorage for the given token
- * @param {string} token - PostHog project captureing token
+ * Check whether the user has opted out of data capturing and cookies/localstorage for the given token
+ * @param {string} token - PostHog project capturing token
  * @param {Object} [options]
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
+ * @param {boolean} [options.ignoreDnt] - flag to ignore browser DNT settings and always return false
  * @returns {boolean} whether the user has opted out of the given opt type
  */
 export function hasOptedOut(token, options) {
-    if (_hasDoNotCaptureFlagOn(options)) {
+    if (_hasDoNotTrackFlagOn(options)) {
         return true;
     }
     return _getStorageValue(token, options) === '0';
 }
 
 /**
- * Wrap a PostHogLib method with a check for whether the user is opted out of data captureing and cookies/localstorage for the given token
+ * Wrap a PostHogLib method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
  * If the user has opted out, return early instead of executing the method.
  * If a callback argument was provided, execute it passing the 0 error code.
  * @param {function} method - wrapped method to be executed if the user has not opted out
@@ -97,7 +102,7 @@ export function addOptOutCheckPostHogLib(method) {
 }
 
 /**
- * Wrap a PostHogPeople method with a check for whether the user is opted out of data captureing and cookies/localstorage for the given token
+ * Wrap a PostHogPeople method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
  * If the user has opted out, return early instead of executing the method.
  * If a callback argument was provided, execute it passing the 0 error code.
  * @param {function} method - wrapped method to be executed if the user has not opted out
@@ -110,7 +115,7 @@ export function addOptOutCheckPostHogPeople(method) {
 }
 
 /**
- * Wrap a PostHogGroup method with a check for whether the user is opted out of data captureing and cookies/localstorage for the given token
+ * Wrap a PostHogGroup method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
  * If the user has opted out, return early instead of executing the method.
  * If a callback argument was provided, execute it passing the 0 error code.
  * @param {function} method - wrapped method to be executed if the user has not opted out
@@ -123,18 +128,22 @@ export function addOptOutCheckPostHogGroup(method) {
 }
 
 /**
- * Clear the user's opt in/out status of data captureing and cookies/localstorage for the given token
- * @param {string} token - PostHog project captureing token
+ * Clear the user's opt in/out status of data capturing and cookies/localstorage for the given token
+ * @param {string} token - PostHog project capturing token
  * @param {Object} [options]
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @param {Number} [options.cookieExpiration] - number of days until the opt-in cookie expires
+ * @param {string} [options.cookieDomain] - custom cookie domain
+ * @param {boolean} [options.crossSiteCookie] - whether the opt-in cookie is set as cross-site-enabled
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
 export function clearOptInOut(token, options) {
     options = options || {};
-    _getStorage(options).remove(_getStorageKey(token, options), !!options.crossSubdomainCookie);
+    _getStorage(options).remove(
+        _getStorageKey(token, options), !!options.crossSubdomainCookie, options.cookieDomain
+    );
 }
 
 /** Private **/
@@ -151,8 +160,8 @@ function _getStorage(options) {
 }
 
 /**
- * Get the name of the cookie that is used for the given opt type (captureing, cookie, etc.)
- * @param {string} token - PostHog project captureing token
+ * Get the name of the cookie that is used for the given opt type (capturing, cookie, etc.)
+ * @param {string} token - PostHog project capturing token
  * @param {Object} [options]
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @returns {string} the name of the cookie for the given opt type
@@ -163,8 +172,8 @@ function _getStorageKey(token, options) {
 }
 
 /**
- * Get the value of the cookie that is used for the given opt type (captureing, cookie, etc.)
- * @param {string} token - PostHog project captureing token
+ * Get the value of the cookie that is used for the given opt type (capturing, cookie, etc.)
+ * @param {string} token - PostHog project capturing token
  * @param {Object} [options]
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @returns {string} the value of the cookie for the given opt type
@@ -174,20 +183,24 @@ function _getStorageValue(token, options) {
 }
 
 /**
- * Check whether the user has set the DNT/doNotCapture setting to true in their browser
+ * Check whether the user has set the DNT/doNotTrack setting to true in their browser
  * @param {Object} [options]
  * @param {string} [options.window] - alternate window object to check; used to force various DNT settings in browser tests
+ * @param {boolean} [options.ignoreDnt] - flag to ignore browser DNT settings and always return false
  * @returns {boolean} whether the DNT setting is true
  */
-function _hasDoNotCaptureFlagOn(options) {
+function _hasDoNotTrackFlagOn(options) {
+    if (options && options.ignoreDnt) {
+        return false;
+    }
     var win = (options && options.window) || window;
     var nav = win['navigator'] || {};
     var hasDntOn = false;
 
     _.each([
-        nav['doNotCapture'], // standard
-        nav['msDoNotCapture'],
-        win['doNotCapture']
+        nav['doNotTrack'], // standard
+        nav['msDoNotTrack'],
+        win['doNotTrack']
     ], function(dntValue) {
         if (_.includes([true, 1, '1', 'yes'], dntValue)) {
             hasDntOn = true;
@@ -200,13 +213,15 @@ function _hasDoNotCaptureFlagOn(options) {
 /**
  * Set cookie/localstorage for the user indicating that they are opted in or out for the given opt type
  * @param {boolean} optValue - whether to opt the user in or out for the given opt type
- * @param {string} token - PostHog project captureing token
+ * @param {string} token - PostHog project capturing token
  * @param {Object} [options]
- * @param {captureFunction} [options.capture] - function used for captureing a PostHog event to record the opt-in action
- * @param {string} [options.captureEventName] - event name to be used for captureing the opt-in action
- * @param {Object} [options.captureProperties] - set of properties to be captureed along with the opt-in action
+ * @param {captureFunction} [options.capture] - function used for capturing a PostHog event to record the opt-in action
+ * @param {string} [options.captureEventName] - event name to be used for capturing the opt-in action
+ * @param {Object} [options.captureProperties] - set of properties to be captured along with the opt-in action
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @param {Number} [options.cookieExpiration] - number of days until the opt-in cookie expires
+ * @param {string} [options.cookieDomain] - custom cookie domain
+ * @param {boolean} [options.crossSiteCookie] - whether the opt-in cookie is set as cross-site-enabled
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
@@ -223,16 +238,20 @@ function _optInOut(optValue, token, options) {
         optValue ? 1 : 0,
         _.isNumber(options.cookieExpiration) ? options.cookieExpiration : null,
         !!options.crossSubdomainCookie,
-        !!options.secureCookie
+        !!options.secureCookie,
+        !!options.crossSiteCookie,
+        options.cookieDomain
     );
 
     if (options.capture && optValue) { // only capture event if opting in (optValue=true)
-        options.capture(options.captureEventName || '$opt_in', options.captureProperties);
+        options.capture(options.captureEventName || '$opt_in', options.captureProperties, {
+            'send_immediately': true
+        });
     }
 }
 
 /**
- * Wrap a method with a check for whether the user is opted out of data captureing and cookies/localstorage for the given token
+ * Wrap a method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
  * If the user has opted out, return early instead of executing the method.
  * If a callback argument was provided, execute it passing the 0 error code.
  * @param {function} method - wrapped method to be executed if the user has not opted out
@@ -245,19 +264,21 @@ function _addOptOutCheck(method, getConfigValue) {
 
         try {
             var token = getConfigValue.call(this, 'token');
-            var persistenceType = getConfigValue.call(this, 'opt_out_captureing_persistence_type');
-            var persistencePrefix = getConfigValue.call(this, 'opt_out_captureing_cookie_prefix');
+            var ignoreDnt = getConfigValue.call(this, 'ignore_dnt');
+            var persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type');
+            var persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix');
             var win = getConfigValue.call(this, 'window'); // used to override window during browser tests
 
             if (token) { // if there was an issue getting the token, continue method execution as normal
                 optedOut = hasOptedOut(token, {
+                    ignoreDnt: ignoreDnt,
                     persistenceType: persistenceType,
                     persistencePrefix: persistencePrefix,
                     window: win
                 });
             }
         } catch(err) {
-            console.error('Unexpected error when checking captureing opt-out status: ' + err);
+            console.error('Unexpected error when checking capturing opt-out status: ' + err);
         }
 
         if (!optedOut) {

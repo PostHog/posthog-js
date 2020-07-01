@@ -255,7 +255,7 @@ PostHogLib.prototype._init = function(token, config, name) {
         }, '');
     }
     // Set up the window close event handler "unload"
-    window.addEventListener("unload", this._handle_unload.bind(this))
+    window.addEventListener && window.addEventListener("unload", this._handle_unload.bind(this))
 };
 
 // Private methods

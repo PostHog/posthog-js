@@ -148,7 +148,7 @@ var autocapture = {
                     href = shouldCaptureEl && shouldCaptureValue(href) && href;
                 }
 
-                // allow users to programatically prevent captureing of elements by adding class 'ph-no-capture'
+                // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
                 var classes = getClassName(el).split(' ');
                 if (_.includes(classes, 'ph-no-capture')) {
                     explicitNoCapture = true;
@@ -158,6 +158,10 @@ var autocapture = {
             }, this);
 
             elementsJson[0]['$el_text'] = getSafeText(target);
+
+            if (href) {
+                elementsJson[0]['attr__href'] = href;
+            }
 
             if (explicitNoCapture) {
                 return false;
