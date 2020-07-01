@@ -79,7 +79,7 @@ export function isTextNode(el) {
 
 export var usefulElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label'];
 /*
- * Check whether a DOM event should be "captureed" or if it may contain sentitive data
+ * Check whether a DOM event should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
@@ -94,10 +94,25 @@ export function shouldCaptureDomEvent(el, event) {
     var targetElementList = [el];
     var curEl = el;
     while (curEl.parentNode && !isTag(curEl, 'body')) {
-        if(usefulElements.indexOf(curEl.parentNode.tagName.toLowerCase()) > -1) parentIsUsefulElement = true;
+        if(usefulElements.indexOf(curEl.parentNode.tagName.toLowerCase()) > -1) {
+            parentIsUsefulElement = true;
+        } else {
+            let compStyles = window.getComputedStyle(curEl.parentNode)
+            if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
+                parentIsUsefulElement = true;
+            }
+        }
+
         targetElementList.push(curEl.parentNode);
         curEl = curEl.parentNode;
     }
+
+    let compStyles = window.getComputedStyle(el)
+    if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer' && event.type === 'click') {
+        return true
+    }
+
+
     var tag = el.tagName.toLowerCase();
     switch (tag) {
         case 'html':
@@ -110,7 +125,7 @@ export function shouldCaptureDomEvent(el, event) {
         case 'textarea':
             return event.type === 'change' || event.type === 'click';
         default:
-            if(parentIsUsefulElement) return event.type == 'click';
+            if(parentIsUsefulElement) return event.type === 'click';
             return event.type === 'click' && (usefulElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true');
     }
 }
