@@ -4,6 +4,7 @@ import { _, console, userAgent, window, document, navigator } from './utils';
 import { autocapture } from './autocapture';
 import { LinkCapture } from './dom-capture';
 import { PostHogPeople } from './posthog-people';
+import { PostHogFeatureFlags } from './posthog-featureflags';
 import {
     PostHogPersistence,
     PEOPLE_DISTINCT_ID_KEY,
@@ -140,6 +141,9 @@ var create_mplib = function(token, config, name) {
 
     instance['people'] = new PostHogPeople();
     instance['people']._init(instance);
+
+    instance['feature_flags'] = new PostHogFeatureFlags()
+    instance['feature_flags']._init(instance);
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true
@@ -504,18 +508,14 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
                 if (req.readyState === 4) { // XMLHttpRequest.DONE == 4, except in safari 4
                     if (req.status === 200) {
                         if (callback) {
-                            if (verbose_mode) {
-                                var response;
-                                try {
-                                    response = _.JSONDecode(req.responseText);
-                                } catch (e) {
-                                    console.error(e);
-                                    return;
-                                }
-                                callback(response);
-                            } else {
-                                callback(Number(req.responseText));
+                            var response;
+                            try {
+                                response = _.JSONDecode(req.responseText);
+                            } catch (e) {
+                                console.error(e);
+                                return;
                             }
+                            callback(response);
                         }
                     } else {
                         var error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText;
@@ -863,6 +863,32 @@ PostHogLib.prototype._register_single = function(prop, value) {
     props[prop] = value;
     this.register(props);
 };
+
+/*
+* See if feature flag is enabled for user.
+*
+* ### Usage:
+*
+*     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
+*
+* @param {Object|String} prop Key of the feature flag.
+*/
+PostHogLib.prototype.isFeatureEnabled = function(key) {
+    return this.feature_flags.isFeatureEnabled(key)
+}
+
+/*
+* See if feature flags are available.
+*
+* ### Usage:
+*
+*     posthog.onFeatureFlags(function(featureFlags) { // do something })
+*
+* @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
+*/
+PostHogLib.prototype.onFeatureFlags = function(callback) {
+    return this.feature_flags.onFeatureFlags(callback)
+}
 
 /**
  * Identify a user with a unique ID instead of a PostHog
@@ -1453,6 +1479,8 @@ PostHogLib.prototype['opt_in_capturing']                   = PostHogLib.prototyp
 PostHogLib.prototype['has_opted_out_capturing']            = PostHogLib.prototype.has_opted_out_capturing;
 PostHogLib.prototype['has_opted_in_capturing']             = PostHogLib.prototype.has_opted_in_capturing;
 PostHogLib.prototype['clear_opt_in_out_capturing']         = PostHogLib.prototype.clear_opt_in_out_capturing;
+PostHogLib.prototype['isFeatureEnabled']                   = PostHogLib.prototype.isFeatureEnabled;
+PostHogLib.prototype['onFeatureFlags']                     = PostHogLib.prototype.onFeatureFlags;
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties']            = PostHogPersistence.prototype.properties;
