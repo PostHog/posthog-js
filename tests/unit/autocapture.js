@@ -5,6 +5,7 @@ import sinon from 'sinon';
 import { autocapture } from '../../src/autocapture';
 
 import jsdomSetup from './jsdom-setup';
+import { _ } from '../../src/utils'
 
 const triggerMouseEvent = function(node, eventType) {
   node.dispatchEvent(new MouseEvent(eventType, {
@@ -819,12 +820,15 @@ describe('Autocapture system', function() {
     it('should call instance._send_request', function() {
       autocapture.init(lib);
       expect(lib._send_request.calledOnce).to.equal(true);
-      expect(lib._send_request.calledWith('https://test.com/decide/', {
-        'verbose': true,
-        'version': '1',
-        'lib': 'web',
-        'token': 'testtoken',
-      })).to.equal(true);
+      expect(lib._send_request.firstCall.args[0]).to.equal('https://test.com/decide/')
+      expect(lib._send_request.firstCall.args[1]).to.deep.equal({
+        data: _.base64Encode(_.JSONEncode( {
+          'token': 'testtoken',
+          'distinct_id': 'distinctid'
+        }))
+      })
+      expect(lib._send_request.firstCall.args[2]).to.deep.equal({method: 'POST'})
+      expect(typeof lib._send_request.firstCall.args[3]).to.equal('function')
     });
 
     it('should check whether to load the editor', function() {
