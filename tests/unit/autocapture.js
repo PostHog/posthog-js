@@ -2,7 +2,6 @@ import { expect } from 'chai';
 import jsdom from 'jsdom-global';
 import sinon from 'sinon';
 
-import { _ } from '../../src/utils';
 import { autocapture } from '../../src/autocapture';
 
 import jsdomSetup from './jsdom-setup';
@@ -193,8 +192,6 @@ describe('Autocapture system', function() {
       expect(autocapture._getDefaultProperties('test')).to.deep.equal({
         '$event_type': 'test',
         '$ce_version': 1,
-        '$host': 'example.com',
-        '$pathname': '/about/',
       });
     });
   });
@@ -468,7 +465,6 @@ describe('Autocapture system', function() {
       const props = captureArgs[1];
       expect(event).to.equal('$autocapture');
       expect(props['$event_type']).to.equal('click');
-      expect(props).to.have.property('$host', 'example.com');
       expect(props['$elements'][0]).to.have.property('attr__href', 'http://test.com');
       expect(props['$elements'][1]).to.have.property('tag_name', 'span');
       expect(props['$elements'][2]).to.have.property('tag_name', 'div');
