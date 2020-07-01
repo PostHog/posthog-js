@@ -848,7 +848,7 @@ describe('Autocapture system', function() {
         flag_1: 0,
         flag_2: 1,
       }
-      const state = {
+      editorParams = {
         action: 'mpeditor',
         desiredHash: '#myhash',
         projectId: 3,
@@ -860,20 +860,8 @@ describe('Autocapture system', function() {
       };
       const hashParams = {
         access_token: 'test_access_token',
-        state: encodeURIComponent(JSON.stringify(state)),
+        state: encodeURIComponent(JSON.stringify(editorParams)),
         expires_in: 3600,
-      };
-      editorParams = {
-        action: 'mpeditor',
-        desiredHash: '#myhash',
-        projectId: 3,
-        projectOwnerId: 722725,
-        readOnly: false,
-        token: 'test_token',
-        userFlags,
-        userId: 12345,
-        accessToken: 'test_access_token',
-        accessTokenExpiresAt: 3600000,
       };
 
       hash = Object.keys(hashParams).map(k => `${k}=${hashParams[k]}`).join('&');
@@ -889,15 +877,15 @@ describe('Autocapture system', function() {
       autocapture._maybeLoadEditor(lib);
       expect(autocapture._loadEditor.calledOnce).to.equal(true);
       expect(autocapture._loadEditor.calledWith(lib, editorParams)).to.equal(true);
-      expect(JSON.parse(window.sessionStorage.getItem('editorParams'))).to.deep.equal(editorParams);
+      expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).to.deep.equal(editorParams);
     });
 
-    it('should initialize the visual editor when the hash was parsed by the snippet', function() {
-      window.sessionStorage.setItem('_mpcehash', `#${hash}`);
+    it('should initialize the visual editor when there are editor params in the session', function() {
+      window.sessionStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams));
       autocapture._maybeLoadEditor(lib);
       expect(autocapture._loadEditor.calledOnce).to.equal(true);
       expect(autocapture._loadEditor.calledWith(lib, editorParams)).to.equal(true);
-      expect(JSON.parse(window.sessionStorage.getItem('editorParams'))).to.deep.equal(editorParams);
+      expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).to.deep.equal(editorParams);
     });
 
     it('should NOT initialize the visual editor when the activation query param does not exist', function() {

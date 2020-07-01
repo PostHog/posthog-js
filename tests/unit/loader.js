@@ -13,6 +13,7 @@ describe(`Module-based loader in Node env`, function() {
   it("should load and capture the pageview event", function() {
     const sandbox = sinon.createSandbox();
     let loaded = false
+    posthog._originalCapture = posthog.capture
     posthog.capture = sandbox.spy()
     posthog.init(`test-token`, {
       debug: true,
@@ -29,6 +30,9 @@ describe(`Module-based loader in Node env`, function() {
     const props = captureArgs[1];
     expect(event).to.equal("$pageview");
     expect(loaded).to.equal(true)
+
+    posthog.capture = posthog._originalCapture
+    delete posthog._originalCapture
   });
 
   it(`supports identify()`, function() {
