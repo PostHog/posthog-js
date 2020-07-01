@@ -388,6 +388,7 @@ describe('Autocapture system', function() {
       sandbox = sinon.createSandbox();
       lib = {
         _ceElementTextProperties: [],
+        get_distinct_id() { return 'distinctid' },
         capture: sandbox.spy(),
       };
     });
@@ -414,7 +415,8 @@ describe('Autocapture system', function() {
           }
         }),
         token: 'testtoken',
-        capture: sandbox.spy()
+        capture: sandbox.spy(),
+        get_distinct_id() { return 'distinctid' }
       };
       autocapture.init(lib);
 
@@ -708,7 +710,8 @@ describe('Autocapture system', function() {
 
   describe('_addDomEventHandlers', function() {
     const lib = {
-      capture: sinon.spy()
+      capture: sinon.spy(),
+      get_distinct_id() { return 'distinctid' }
     };
 
     let navigateSpy;
@@ -763,6 +766,7 @@ describe('Autocapture system', function() {
         }),
         token: 'testtoken',
         capture: sandbox.spy(),
+        get_distinct_id() { return 'distinctid' }
       };
     });
 
