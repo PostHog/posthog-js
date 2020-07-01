@@ -1,3 +1,6 @@
+## 1.2.4 - 2020-07-01
+- Add support for feature flags (`posthog.isFeatureEnabled('keyword')`)
+
 ## 1.2.3 - 2020-07-01
 - Send $host and $pathname with $pageview requests (was just with $autocapture)
 - Track clicks on elements which have `cursor:pointer`
