@@ -1,11 +1,11 @@
-name: Lint
+name: Unit Tests
 
 on:
   - pull_request
 
 jobs:
   build:
-    name: ESLint
+    name: Mocha
     runs-on: ubuntu-latest
     steps:
       # Check out the repository
