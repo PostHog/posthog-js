@@ -1,8 +1,10 @@
-## 1.2.2 - 2020-07-01
+## 1.2.3 - 2020-07-01
 - Send $host and $pathname with $pageview requests (was just with $autocapture)
 - Track clicks on elements which have `cursor:pointer`
-- Allow properties on anonymous users
 - Better test suite
+
+## 1.2.2 - 2020-06-15
+- Allow properties on anonymous users
 
 ## 1.2.1 - 2020-06-09
 - Simplify passing of API token to editor
