@@ -43,6 +43,7 @@
         "sinon-chai": "3.5.0",
         "typescript": "^3.9.6"
     },
+    "types": "dist/module.d.ts",
     "husky": {
         "hooks": {
             "pre-commit": "lint-staged"
