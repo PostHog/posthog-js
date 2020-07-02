@@ -1,8 +1,7 @@
 // Type definitions for exported methods
 
 export declare namespace posthog {
-    export type Properties = { [key: string]; value: any }
-
+    export type Properties = { [key: string]: any }
     export type CaptureResult = { event: string; properties: Properties } | undefined
     export type CaptureCallback = (response: any, data: any) => void
 
