@@ -25,13 +25,24 @@
     "babel-preset-es2015": "6.6.0",
     "parcel": "^1.12.4",
     "chai": "3.5.0",
+    "husky": "^4.2.5",
     "jsdom": "11.12.0",
     "jsdom-global": "3.0.2",
+    "lint-staged": "^10.2.11",
     "localStorage": "1.0.4",
     "mocha": "7.1.1",
     "rollup": "^1.32.0",
     "rollup-plugin-npm": "1.4.0",
     "sinon": "8.1.1",
     "sinon-chai": "3.5.0"
+  },
+  "husky": {
+    "hooks": {
+        "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+      "*.{js,css,scss}": "prettier --write",
+      "*.js": "prettier --write && eslint"
   }
 }
