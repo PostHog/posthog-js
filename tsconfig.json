@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "target": "es2015",
+        "lib": ["dom", "dom.iterable", "esnext"],
+        "allowJs": true,
+        "checkJs": true,
+        "skipLibCheck": false,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "strict": true,
+        "forceConsistentCasingInFileNames": true,
+        "module": "esnext",
+        "moduleResolution": "node",
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "declaration": true,
+        "noImplicitReturns": true,
+        "noUnusedParameters": true,
+        "sourceMap": true,
+        "inlineSources": true
+    },
+    "include": ["src"]
+}
