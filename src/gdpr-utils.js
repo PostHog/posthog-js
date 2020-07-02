@@ -11,7 +11,7 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { _, window } from './utils';
+import { _, window } from './utils'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)
@@ -23,7 +23,7 @@ import { _, window } from './utils';
 
 /** Public **/
 
-var GDPR_DEFAULT_PERSISTENCE_PREFIX = '__ph_opt_in_out_';
+var GDPR_DEFAULT_PERSISTENCE_PREFIX = '__ph_opt_in_out_'
 
 /**
  * Opt the user in to data capturing and cookies/localstorage for the given token
@@ -41,7 +41,7 @@ var GDPR_DEFAULT_PERSISTENCE_PREFIX = '__ph_opt_in_out_';
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
 export function optIn(token, options) {
-    _optInOut(true, token, options);
+    _optInOut(true, token, options)
 }
 
 /**
@@ -57,7 +57,7 @@ export function optIn(token, options) {
  * @param {boolean} [options.secureCookie] - whether the opt-out cookie is set as secure or not
  */
 export function optOut(token, options) {
-    _optInOut(false, token, options);
+    _optInOut(false, token, options)
 }
 
 /**
@@ -69,7 +69,7 @@ export function optOut(token, options) {
  * @returns {boolean} whether the user has opted in to the given opt type
  */
 export function hasOptedIn(token, options) {
-    return _getStorageValue(token, options) === '1';
+    return _getStorageValue(token, options) === '1'
 }
 
 /**
@@ -83,9 +83,9 @@ export function hasOptedIn(token, options) {
  */
 export function hasOptedOut(token, options) {
     if (_hasDoNotTrackFlagOn(options)) {
-        return true;
+        return true
     }
-    return _getStorageValue(token, options) === '0';
+    return _getStorageValue(token, options) === '0'
 }
 
 /**
@@ -96,9 +96,9 @@ export function hasOptedOut(token, options) {
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
 export function addOptOutCheckPostHogLib(method) {
-    return _addOptOutCheck(method, function(name) {
-        return this.get_config(name);
-    });
+    return _addOptOutCheck(method, function (name) {
+        return this.get_config(name)
+    })
 }
 
 /**
@@ -109,9 +109,9 @@ export function addOptOutCheckPostHogLib(method) {
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
 export function addOptOutCheckPostHogPeople(method) {
-    return _addOptOutCheck(method, function(name) {
-        return this._get_config(name);
-    });
+    return _addOptOutCheck(method, function (name) {
+        return this._get_config(name)
+    })
 }
 
 /**
@@ -122,9 +122,9 @@ export function addOptOutCheckPostHogPeople(method) {
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
 export function addOptOutCheckPostHogGroup(method) {
-    return _addOptOutCheck(method, function(name) {
-        return this._get_config(name);
-    });
+    return _addOptOutCheck(method, function (name) {
+        return this._get_config(name)
+    })
 }
 
 /**
@@ -140,10 +140,8 @@ export function addOptOutCheckPostHogGroup(method) {
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
 export function clearOptInOut(token, options) {
-    options = options || {};
-    _getStorage(options).remove(
-        _getStorageKey(token, options), !!options.crossSubdomainCookie, options.cookieDomain
-    );
+    options = options || {}
+    _getStorage(options).remove(_getStorageKey(token, options), !!options.crossSubdomainCookie, options.cookieDomain)
 }
 
 /** Private **/
@@ -155,8 +153,8 @@ export function clearOptInOut(token, options) {
  * @returns {object} either _.cookie or _.localstorage
  */
 function _getStorage(options) {
-    options = options || {};
-    return options.persistenceType === 'localStorage' ? _.localStorage : _.cookie;
+    options = options || {}
+    return options.persistenceType === 'localStorage' ? _.localStorage : _.cookie
 }
 
 /**
@@ -167,8 +165,8 @@ function _getStorage(options) {
  * @returns {string} the name of the cookie for the given opt type
  */
 function _getStorageKey(token, options) {
-    options = options || {};
-    return (options.persistencePrefix || GDPR_DEFAULT_PERSISTENCE_PREFIX) + token;
+    options = options || {}
+    return (options.persistencePrefix || GDPR_DEFAULT_PERSISTENCE_PREFIX) + token
 }
 
 /**
@@ -179,7 +177,7 @@ function _getStorageKey(token, options) {
  * @returns {string} the value of the cookie for the given opt type
  */
 function _getStorageValue(token, options) {
-    return _getStorage(options).get(_getStorageKey(token, options));
+    return _getStorage(options).get(_getStorageKey(token, options))
 }
 
 /**
@@ -191,23 +189,26 @@ function _getStorageValue(token, options) {
  */
 function _hasDoNotTrackFlagOn(options) {
     if (options && options.ignoreDnt) {
-        return false;
+        return false
     }
-    var win = (options && options.window) || window;
-    var nav = win['navigator'] || {};
-    var hasDntOn = false;
+    var win = (options && options.window) || window
+    var nav = win['navigator'] || {}
+    var hasDntOn = false
 
-    _.each([
-        nav['doNotTrack'], // standard
-        nav['msDoNotTrack'],
-        win['doNotTrack']
-    ], function(dntValue) {
-        if (_.includes([true, 1, '1', 'yes'], dntValue)) {
-            hasDntOn = true;
+    _.each(
+        [
+            nav['doNotTrack'], // standard
+            nav['msDoNotTrack'],
+            win['doNotTrack'],
+        ],
+        function (dntValue) {
+            if (_.includes([true, 1, '1', 'yes'], dntValue)) {
+                hasDntOn = true
+            }
         }
-    });
+    )
 
-    return hasDntOn;
+    return hasDntOn
 }
 
 /**
@@ -227,11 +228,11 @@ function _hasDoNotTrackFlagOn(options) {
  */
 function _optInOut(optValue, token, options) {
     if (!_.isString(token) || !token.length) {
-        console.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token');
-        return;
+        console.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
+        return
     }
 
-    options = options || {};
+    options = options || {}
 
     _getStorage(options).set(
         _getStorageKey(token, options),
@@ -241,12 +242,13 @@ function _optInOut(optValue, token, options) {
         !!options.secureCookie,
         !!options.crossSiteCookie,
         options.cookieDomain
-    );
+    )
 
-    if (options.capture && optValue) { // only capture event if opting in (optValue=true)
+    if (options.capture && optValue) {
+        // only capture event if opting in (optValue=true)
         options.capture(options.captureEventName || '$opt_in', options.captureProperties, {
-            'send_immediately': true
-        });
+            send_immediately: true,
+        })
     }
 }
 
@@ -259,37 +261,38 @@ function _optInOut(optValue, token, options) {
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
 function _addOptOutCheck(method, getConfigValue) {
-    return function() {
-        var optedOut = false;
+    return function () {
+        var optedOut = false
 
         try {
-            var token = getConfigValue.call(this, 'token');
-            var ignoreDnt = getConfigValue.call(this, 'ignore_dnt');
-            var persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type');
-            var persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix');
-            var win = getConfigValue.call(this, 'window'); // used to override window during browser tests
+            var token = getConfigValue.call(this, 'token')
+            var ignoreDnt = getConfigValue.call(this, 'ignore_dnt')
+            var persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type')
+            var persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix')
+            var win = getConfigValue.call(this, 'window') // used to override window during browser tests
 
-            if (token) { // if there was an issue getting the token, continue method execution as normal
+            if (token) {
+                // if there was an issue getting the token, continue method execution as normal
                 optedOut = hasOptedOut(token, {
                     ignoreDnt: ignoreDnt,
                     persistenceType: persistenceType,
                     persistencePrefix: persistencePrefix,
-                    window: win
-                });
+                    window: win,
+                })
             }
-        } catch(err) {
-            console.error('Unexpected error when checking capturing opt-out status: ' + err);
+        } catch (err) {
+            console.error('Unexpected error when checking capturing opt-out status: ' + err)
         }
 
         if (!optedOut) {
-            return method.apply(this, arguments);
+            return method.apply(this, arguments)
         }
 
-        var callback = arguments[arguments.length - 1];
-        if (typeof(callback) === 'function') {
-            callback(0);
+        var callback = arguments[arguments.length - 1]
+        if (typeof callback === 'function') {
+            callback(0)
         }
 
-        return;
-    };
+        return
+    }
 }

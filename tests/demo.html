@@ -1,39 +1,39 @@
 <script src="../dist/array.js"></script>
 <script>
-    posthog.init('sTMFPsFhdP1Ssg', {api_host: 'http://127.0.0.1:8000', debug: true})
+    posthog.init('sTMFPsFhdP1Ssg', { api_host: 'http://127.0.0.1:8000', debug: true })
 </script>
 <h2>Demo site</h2>
 <button>Here's a button you could click if you want to</button><br /><br />
-<body class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-    <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
-        <a href='https://posthog.com'>Here's a link to the outside world</a>
+<body class="asdlfkjj asdlfkj asdflkj asdflkj asdf">
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf"></div>
+    <div class="asdlfkjj asdlfkj asdflkj asdflkj asdf">
+        <a href="https://posthog.com">Here's a link to the outside world</a>
     </div>
 
-    <div style="padding: 2rem;background:green;display:none;color:white" id="feature"><h2>Look, a new beta feature</h2></div>
+    <div style="padding: 2rem; background: green; display: none; color: white;" id="feature">
+        <h2>Look, a new beta feature</h2>
+    </div>
     <script>
         console.log(posthog.isFeatureEnabled('beta-feature'))
-        posthog.onFeatureFlags(function(featureFlags) {
+        posthog.onFeatureFlags(function (featureFlags) {
             console.log(featureFlags)
-            if(posthog.isFeatureEnabled('beta-feature')) {
+            if (posthog.isFeatureEnabled('beta-feature')) {
                 document.getElementById('feature').style.display = 'block'
             }
         })
-
     </script>
-
 </body>
