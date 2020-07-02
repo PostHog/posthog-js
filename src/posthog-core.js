@@ -178,7 +178,7 @@ var create_mplib = function (token, config, name) {
  *     posthog.library_name.capture(...);
  *
  * @param {String} token   Your PostHog API token
- * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/8b2e1f7b/src/posthog-core.js#L87-L110">See a list of default config options</a>.
+ * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
  * @param {String} [name]    The name for the new posthog instance that you want created
  */
 PostHogLib.prototype.init = function (token, config, name) {
