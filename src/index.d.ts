@@ -4,7 +4,7 @@ export declare namespace posthog {
     export type Properties = { [key: string]; value: any }
 
     export type CaptureResult = { event: string; properties: Properties } | undefined
-    export type CaptureFunction = (event_name: string, properties?: Properties) => void
+    export type CaptureCallback = (response: any, data: any) => void
 
     export interface Config {
         api_host: string
@@ -115,7 +115,7 @@ export declare namespace posthog {
         event_name: string,
         properties?: Properties,
         options?: { transport: 'xhr' | 'sendBeacon' },
-        callback?: (response: any, data: any) => void
+        callback?: CaptureCallback
     ): CaptureResult
 
     /**
@@ -571,4 +571,52 @@ export declare namespace posthog {
     export function onFeatureFlags(callback: (flags: string[]) => void): false | undefined
 
     export function toString(): string
+
+    export namespace people {
+        /*
+         * Set properties on a user record.
+         *
+         * ### Usage:
+         *
+         *     posthog.people.set('gender', 'm');
+         *
+         *     // or set multiple properties at once
+         *     posthog.people.set({
+         *         'Company': 'Acme',
+         *         'Plan': 'Premium',
+         *         'Upgrade date': new Date()
+         *     });
+         *     // properties can be strings, integers, dates, or lists
+         *
+         * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
+         * @param {*} [to] A value to set on the given property name
+         * @param {Function} [callback] If provided, the callback will be called after captureing the event.
+         */
+        export function set(prop: Properties | string, to?: any, callback?: CaptureCallback): Properties
+
+        /*
+         * Set properties on a user record, only if they do not yet exist.
+         * This will not overwrite previous people property values, unlike
+         * people.set().
+         *
+         * ### Usage:
+         *
+         *     posthog.people.set_once('First Login Date', new Date());
+         *
+         *     // or set multiple properties at once
+         *     posthog.people.set_once({
+         *         'First Login Date': new Date(),
+         *         'Starting Plan': 'Premium'
+         *     });
+         *
+         *     // properties can be strings, integers or dates
+         *
+         * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
+         * @param {*} [to] A value to set on the given property name
+         * @param {Function} [callback] If provided, the callback will be called after captureing the event.
+         */
+        export function set_once(prop: Properties | string, to?: any, callback?: CaptureCallback): Properties
+
+        export function toString(): string
+    }
 }
