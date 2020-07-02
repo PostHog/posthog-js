@@ -1,11 +1,11 @@
 // Type definitions for exported methods
 
-export declare namespace posthog {
-    export type Properties = { [key: string]: any }
-    export type CaptureResult = { event: string; properties: Properties } | undefined
-    export type CaptureCallback = (response: any, data: any) => void
+declare namespace posthog {
+    type Properties = { [key: string]: any }
+    type CaptureResult = { event: string; properties: Properties } | undefined
+    type CaptureCallback = (response: any, data: any) => void
 
-    export interface Config {
+    interface Config {
         api_host: string
         api_method: string
         api_transport: string
@@ -42,7 +42,7 @@ export declare namespace posthog {
         request_batching: boolean
     }
 
-    export interface OptInOutCapturingOptions {
+    interface OptInOutCapturingOptions {
         delete_user: boolean
         clear_persistence: boolean
         persistence_type: string
@@ -52,12 +52,12 @@ export declare namespace posthog {
         secure_cookie: boolean
     }
 
-    export interface HasOptedInOutCapturingOptions {
+    interface HasOptedInOutCapturingOptions {
         persistence_type: string
         cookie_prefix: string
     }
 
-    export interface ClearOptInOutCapturingOptions {
+    interface ClearOptInOutCapturingOptions {
         enable_persistence: boolean
         persistence_type: string
         cookie_prefix: string
@@ -82,13 +82,13 @@ export declare namespace posthog {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    export function init(token: string, config?: Config, name?: string)
+    function init(token: string, config?: Config, name?: string)
 
     /**
      * Clears super properties and generates a new random distinct_id for this instance.
      * Useful for clearing data when a user logs out.
      */
-    export function reset(reset_device_id: string): void
+    function reset(reset_device_id: string): void
 
     /**
      * Capture an event. This is the most important and
@@ -110,7 +110,7 @@ export declare namespace posthog {
      * @param {String} [options.transport] Transport method for network request ('xhr' or 'sendBeacon').
      * @param {Function} [callback] If provided, the callback function will be called after capturing the event.
      */
-    export function capture(
+    function capture(
         event_name: string,
         properties?: Properties,
         options?: { transport: 'xhr' | 'sendBeacon' },
@@ -145,7 +145,7 @@ export declare namespace posthog {
      * @param {String} event_name The name of the event to capture
      * @param {Object|Function} [properties] A properties object or function that returns a dictionary of properties when passed a DOMElement
      */
-    export function capture_links(
+    function capture_links(
         query: any,
         event_name: string,
         properties?: Properties | ((element: Element) => Properties)
@@ -178,7 +178,7 @@ export declare namespace posthog {
      * @param {String} event_name The name of the event to capture
      * @param {Object|Function} [properties] This can be a set of properties, or a function that returns a set of properties after being passed a DOMElement
      */
-    export function capture_forms(
+    function capture_forms(
         query: any,
         event_name: string,
         properties?: Properties | ((element: Element) => Properties)
@@ -192,7 +192,7 @@ export declare namespace posthog {
      * @param {String} [page] The url of the page to record. If you don't include this, it defaults to the current url.
      * @api private
      */
-    export function capture_pageview(page?: string): void
+    function capture_pageview(page?: string): void
 
     /**
      * Register a set of super properties, which are included with all
@@ -212,7 +212,7 @@ export declare namespace posthog {
      * @param {Object} properties An associative array of properties to store about the user
      * @param {Number} [days] How many days since the user's last visit to store the super properties
      */
-    export function register(properties: Properties, days?: number): void
+    function register(properties: Properties, days?: number): void
 
     /**
      * Register a set of super properties only once. This will not
@@ -234,14 +234,14 @@ export declare namespace posthog {
      * @param {*} [default_value] Value to override if already set in super properties (ex: 'False') Default: 'None'
      * @param {Number} [days] How many days since the users last visit to store the super properties
      */
-    export function register_once(properties: Properties, default_value?: any, days?: number): void
+    function register_once(properties: Properties, default_value?: any, days?: number): void
 
     /**
      * Delete a super property stored with the current user.
      *
      * @param {String} property The name of the super property to remove
      */
-    export function unregister(property: string): void
+    function unregister(property: string): void
 
     /**
      * Identify a user with a unique ID instead of a PostHog
@@ -270,7 +270,7 @@ export declare namespace posthog {
      *
      * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
      */
-    export function identify(unique_id?: string): void
+    function identify(unique_id?: string): void
 
     /**
      * Create an alias, which PostHog will use to link two distinct_ids going forward (not retroactively).
@@ -293,7 +293,7 @@ export declare namespace posthog {
      * @param {String} alias A unique identifier that you want to use for this user in the future.
      * @param {String} [original] The current identifier being used for this user.
      */
-    export function alias(alias: string, original?: string): CaptureResult | number
+    function alias(alias: string, original?: string): CaptureResult | number
 
     /**
      * Update the configuration of a posthog library instance.
@@ -391,12 +391,12 @@ export declare namespace posthog {
      *
      * @param {Object} config A dictionary of new configuration values to update
      */
-    export function set_config(config: Config): void
+    function set_config(config: Config): void
 
     /**
      * returns the current config object for the library.
      */
-    export function get_config(prop_name: string): any
+    function get_config(prop_name: string): any
 
     /**
      * Returns the value of the super property named property_name. If no such
@@ -416,7 +416,7 @@ export declare namespace posthog {
      *
      * @param {String} property_name The name of the super property you want to retrieve
      */
-    export function get_property(property_name: string): any
+    function get_property(property_name: string): any
 
     /**
      * Returns the current distinct id of the user. This is either the id automatically
@@ -434,7 +434,7 @@ export declare namespace posthog {
      *         }
      *     });
      */
-    export function get_distinct_id(): string
+    function get_distinct_id(): string
 
     /**
      * Opt the user out of data capturing and cookies/localstorage for this PostHog instance
@@ -459,7 +459,7 @@ export declare namespace posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    export function opt_out_capturing(options: OptInOutCapturingOptions): void
+    function opt_out_capturing(options: OptInOutCapturingOptions): void
 
     /**
      * Opt the user in to data capturing and cookies/localstorage for this PostHog instance
@@ -490,7 +490,7 @@ export declare namespace posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    export function opt_in_capturing(options: OptInOutCapturingOptions): void
+    function opt_in_capturing(options: OptInOutCapturingOptions): void
 
     /**
      * Check whether the user has opted out of data capturing and cookies/localstorage for this PostHog instance
@@ -505,7 +505,7 @@ export declare namespace posthog {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-out status
      */
-    export function has_opted_out_capturing(options: HasOptedInOutCapturingOptions): boolean
+    function has_opted_out_capturing(options: HasOptedInOutCapturingOptions): boolean
 
     /**
      * Check whether the user has opted in to data capturing and cookies/localstorage for this PostHog instance
@@ -520,7 +520,7 @@ export declare namespace posthog {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-in status
      */
-    export function has_opted_in_capturing(options: HasOptedInOutCapturingOptions): boolean
+    function has_opted_in_capturing(options: HasOptedInOutCapturingOptions): boolean
 
     /**
      * Clear the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance
@@ -545,7 +545,7 @@ export declare namespace posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    export function clear_opt_in_out_capturing(options: ClearOptInOutCapturingOptions): void
+    function clear_opt_in_out_capturing(options: ClearOptInOutCapturingOptions): void
 
     /*
      * See if feature flag is enabled for user.
@@ -556,7 +556,7 @@ export declare namespace posthog {
      *
      * @param {Object|String} prop Key of the feature flag.
      */
-    export function isFeatureEnabled(key: string): boolean
+    function isFeatureEnabled(key: string): boolean
 
     /*
      * See if feature flags are available.
@@ -567,11 +567,11 @@ export declare namespace posthog {
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
      */
-    export function onFeatureFlags(callback: (flags: string[]) => void): false | undefined
+    function onFeatureFlags(callback: (flags: string[]) => void): false | undefined
 
-    export function toString(): string
+    function toString(): string
 
-    export namespace people {
+    namespace people {
         /*
          * Set properties on a user record.
          *
@@ -591,7 +591,7 @@ export declare namespace posthog {
          * @param {*} [to] A value to set on the given property name
          * @param {Function} [callback] If provided, the callback will be called after captureing the event.
          */
-        export function set(prop: Properties | string, to?: any, callback?: CaptureCallback): Properties
+        function set(prop: Properties | string, to?: any, callback?: CaptureCallback): Properties
 
         /*
          * Set properties on a user record, only if they do not yet exist.
@@ -614,8 +614,10 @@ export declare namespace posthog {
          * @param {*} [to] A value to set on the given property name
          * @param {Function} [callback] If provided, the callback will be called after captureing the event.
          */
-        export function set_once(prop: Properties | string, to?: any, callback?: CaptureCallback): Properties
+        function set_once(prop: Properties | string, to?: any, callback?: CaptureCallback): Properties
 
-        export function toString(): string
+        function toString(): string
     }
 }
+
+export default posthog
