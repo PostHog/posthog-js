@@ -5,14 +5,14 @@
  * currently not supported in the browser lib).
  */
 
-import { _ } from '../../src/utils';
-import { expect } from "chai";
+import { _ } from '../../src/utils'
+import { expect } from 'chai'
 
-describe(`utils.js`, function() {
-  it("should have $host and $pathname in properties", function() {
-    const properties = _.info.properties()
-    expect(properties['$current_url']).to.be.defined
-    expect(properties['$host']).to.be.defined
-    expect(properties['$pathname']).to.be.defined
-  })
+describe(`utils.js`, function () {
+    it('should have $host and $pathname in properties', function () {
+        const properties = _.info.properties()
+        expect(properties['$current_url']).to.be.defined
+        expect(properties['$host']).to.be.defined
+        expect(properties['$pathname']).to.be.defined
+    })
 })

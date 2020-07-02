@@ -1,4 +1,4 @@
-import jsdom from 'jsdom-global';
+import jsdom from 'jsdom-global'
 
 /**
  * Re-import a list of JS modules
@@ -8,12 +8,12 @@ import jsdom from 'jsdom-global';
  * @returns {Object[]} list of re-imported module objects
  */
 function reImport(paths) {
-  return (paths || []).map(path => {
-    delete require.cache[require.resolve(path)];
-    const module = require(path);
-    // return module.default directly if possible to emulate es6 import behavior
-    return typeof(module.default) !== `undefined` ? module.default : module;
-  });
+    return (paths || []).map((path) => {
+        delete require.cache[require.resolve(path)]
+        const module = require(path)
+        // return module.default directly if possible to emulate es6 import behavior
+        return typeof module.default !== `undefined` ? module.default : module
+    })
 }
 
 /**
@@ -42,31 +42,34 @@ function reImport(paths) {
  * @param {function} [options.afterCallback] - callback to be invoked after tearing down jsdom
  * @param {function} [options.*] - all other options passed directly to jsdom
  */
-export default function jsdomSetup(options={}) {
-  const jsdomOptions = Object.assign({
-    url: `http://localhost`, // default for localStorage - "non-opaque" origin required
-  }, options);
+export default function jsdomSetup(options = {}) {
+    const jsdomOptions = Object.assign(
+        {
+            url: `http://localhost`, // default for localStorage - "non-opaque" origin required
+        },
+        options
+    )
 
-  delete jsdomOptions.html;
-  delete jsdomOptions.reImportModules;
-  delete jsdomOptions.beforeCallback;
-  delete jsdomOptions.afterCallback;
+    delete jsdomOptions.html
+    delete jsdomOptions.reImportModules
+    delete jsdomOptions.beforeCallback
+    delete jsdomOptions.afterCallback
 
-  let teardown;
+    let teardown
 
-  beforeEach(function() {
-    this.timeout(5000);
-    teardown = jsdom(options.html, jsdomOptions);
-    const modules = reImport(options.reImportModules);
-    if (typeof(options.beforeCallback) === `function`) {
-      options.beforeCallback(modules);
-    }
-  });
+    beforeEach(function () {
+        this.timeout(5000)
+        teardown = jsdom(options.html, jsdomOptions)
+        const modules = reImport(options.reImportModules)
+        if (typeof options.beforeCallback === `function`) {
+            options.beforeCallback(modules)
+        }
+    })
 
-  afterEach(function() {
-    teardown();
-    if (typeof(options.afterCallback) === `function`) {
-      options.afterCallback();
-    }
-  });
+    afterEach(function () {
+        teardown()
+        if (typeof options.afterCallback === `function`) {
+            options.afterCallback()
+        }
+    })
 }

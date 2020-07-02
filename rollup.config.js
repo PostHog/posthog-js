@@ -1,4 +1,4 @@
-import npm from 'rollup-plugin-npm';
+import npm from 'rollup-plugin-npm'
 
 export default {
     plugins: [
@@ -6,6 +6,6 @@ export default {
             browser: true,
             main: true,
             jsnext: true,
-        })
-    ]
+        }),
+    ],
 }
