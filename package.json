@@ -12,6 +12,7 @@
     "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
     "integration-test": "echo 'Browse to localhost:3000/tests' && node testServer.js",
     "prepublish": "yarn test && yarn build && yarn build-module",
+    "style-code": "prettier --write src && eslint",
     "test": "npm run unit-test",
     "unit-test": "BABEL_ENV=test mocha --require babel-core/register tests/unit/*.js"
   },
@@ -31,6 +32,7 @@
     "localStorage": "1.0.4",
     "mocha": "7.1.1",
     "parcel": "^1.12.4",
+    "prettier": "^2.0.5",
     "rollup": "^1.32.0",
     "rollup-plugin-npm": "1.4.0",
     "sinon": "8.1.1",
@@ -42,6 +44,6 @@
     }
   },
   "lint-staged": {
-      "*.js": "prettier --write src && eslint"
+      "*.js": "yarn style-code"
   }
 }
