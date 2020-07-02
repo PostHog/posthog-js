@@ -42,7 +42,6 @@
     }
   },
   "lint-staged": {
-      "*.{js,css,scss}": "prettier --write",
-      "*.js": "prettier --write && eslint"
+      "*.js": "prettier --write src && eslint"
   }
 }
