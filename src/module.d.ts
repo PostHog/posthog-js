@@ -1,70 +1,5 @@
 // Type definitions for exported methods
 
-declare type Properties = { [key: string]: any }
-declare type CaptureResult = { event: string; properties: Properties } | undefined
-declare type CaptureCallback = (response: any, data: any) => void
-
-declare interface Config {
-    api_host: string
-    api_method: string
-    api_transport: string
-    autocapture: boolean
-    cdn: string
-    cross_subdomain_cookie: boolean
-    persistence: 'localStorage' | 'cookie'
-    persistence_name: string
-    cookie_name: string
-    loaded: (posthog_instance: posthog) => void
-    store_google: boolean
-    save_referrer: boolean
-    test: boolean
-    verbose: boolean
-    img: boolean
-    capture_pageview: boolean
-    debug: boolean
-    capture_links_timeout: number
-    cookie_expiration: number
-    upgrade: boolean
-    disable_persistence: boolean
-    disable_cookie: boolean
-    secure_cookie: boolean
-    ip: boolean
-    opt_out_capturing_by_default: boolean
-    opt_out_persistence_by_default: boolean
-    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
-    opt_out_capturing_cookie_prefix: string | null
-    ignore_dnt: boolean
-    property_blacklist: string[]
-    xhr_headers: { [header_name: string]: string }
-    inapp_protocol: string
-    inapp_link_new_window: boolean
-    request_batching: boolean
-}
-
-declare interface OptInOutCapturingOptions {
-    delete_user: boolean
-    clear_persistence: boolean
-    persistence_type: string
-    cookie_prefix: string
-    cookie_expiration: number
-    cross_subdomain_cookie: boolean
-    secure_cookie: boolean
-}
-
-declare interface HasOptedInOutCapturingOptions {
-    persistence_type: string
-    cookie_prefix: string
-}
-
-declare interface ClearOptInOutCapturingOptions {
-    enable_persistence: boolean
-    persistence_type: string
-    cookie_prefix: string
-    cookie_expiration: number
-    cross_subdomain_cookie: boolean
-    secure_cookie: boolean
-}
-
 declare class posthog {
     /**
      * This function initializes a new instance of the PostHog capturing object.
@@ -82,7 +17,7 @@ declare class posthog {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    static init(token: string, config?: Config, name?: string): posthog
+    static init(token: string, config?: posthog.Config, name?: string): posthog
 
     /**
      * Clears super properties and generates a new random distinct_id for this instance.
@@ -112,10 +47,10 @@ declare class posthog {
      */
     static capture(
         event_name: string,
-        properties?: Properties,
+        properties?: posthog.Properties,
         options?: { transport: 'xhr' | 'sendBeacon' },
-        callback?: CaptureCallback
-    ): CaptureResult
+        callback?: posthog.CaptureCallback
+    ): posthog.CaptureResult
 
     /**
      * Capture clicks on a set of document elements. Selector must be a
@@ -148,7 +83,7 @@ declare class posthog {
     static capture_links(
         query: any,
         event_name: string,
-        properties?: Properties | ((element: Element) => Properties)
+        properties?: posthog.Properties | ((element: Element) => posthog.Properties)
     ): any
 
     /**
@@ -181,7 +116,7 @@ declare class posthog {
     static capture_forms(
         query: any,
         event_name: string,
-        properties?: Properties | ((element: Element) => Properties)
+        properties?: posthog.Properties | ((element: Element) => posthog.Properties)
     ): any
 
     /**
@@ -212,7 +147,7 @@ declare class posthog {
      * @param {Object} properties An associative array of properties to store about the user
      * @param {Number} [days] How many days since the user's last visit to store the super properties
      */
-    static register(properties: Properties, days?: number): void
+    static register(properties: posthog.Properties, days?: number): void
 
     /**
      * Register a set of super properties only once. This will not
@@ -234,7 +169,7 @@ declare class posthog {
      * @param {*} [default_value] Value to override if already set in super properties (ex: 'False') Default: 'None'
      * @param {Number} [days] How many days since the users last visit to store the super properties
      */
-    static register_once(properties: Properties, default_value?: any, days?: number): void
+    static register_once(properties: posthog.Properties, default_value?: any, days?: number): void
 
     /**
      * Delete a super property stored with the current user.
@@ -293,7 +228,7 @@ declare class posthog {
      * @param {String} alias A unique identifier that you want to use for this user in the future.
      * @param {String} [original] The current identifier being used for this user.
      */
-    static alias(alias: string, original?: string): CaptureResult | number
+    static alias(alias: string, original?: string): posthog.CaptureResult | number
 
     /**
      * Update the configuration of a posthog library instance.
@@ -391,7 +326,7 @@ declare class posthog {
      *
      * @param {Object} config A dictionary of new configuration values to update
      */
-    static set_config(config: Config): void
+    static set_config(config: posthog.Config): void
 
     /**
      * returns the current config object for the library.
@@ -459,7 +394,7 @@ declare class posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    static opt_out_capturing(options: OptInOutCapturingOptions): void
+    static opt_out_capturing(options: posthog.OptInOutCapturingOptions): void
 
     /**
      * Opt the user in to data capturing and cookies/localstorage for this PostHog instance
@@ -490,7 +425,7 @@ declare class posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    static opt_in_capturing(options: OptInOutCapturingOptions): void
+    static opt_in_capturing(options: posthog.OptInOutCapturingOptions): void
 
     /**
      * Check whether the user has opted out of data capturing and cookies/localstorage for this PostHog instance
@@ -505,7 +440,7 @@ declare class posthog {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-out status
      */
-    static has_opted_out_capturing(options: HasOptedInOutCapturingOptions): boolean
+    static has_opted_out_capturing(options: posthog.HasOptedInOutCapturingOptions): boolean
 
     /**
      * Check whether the user has opted in to data capturing and cookies/localstorage for this PostHog instance
@@ -520,7 +455,7 @@ declare class posthog {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-in status
      */
-    static has_opted_in_capturing(options: HasOptedInOutCapturingOptions): boolean
+    static has_opted_in_capturing(options: posthog.HasOptedInOutCapturingOptions): boolean
 
     /**
      * Clear the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance
@@ -545,7 +480,7 @@ declare class posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    static clear_opt_in_out_capturing(options: ClearOptInOutCapturingOptions): void
+    static clear_opt_in_out_capturing(options: posthog.ClearOptInOutCapturingOptions): void
 
     /*
      * See if feature flag is enabled for user.
@@ -573,6 +508,71 @@ declare class posthog {
 }
 
 declare namespace posthog {
+    type Properties = { [key: string]: any }
+    type CaptureResult = { event: string; properties: Properties } | undefined
+    type CaptureCallback = (response: any, data: any) => void
+
+    interface Config {
+        api_host: string
+        api_method: string
+        api_transport: string
+        autocapture: boolean
+        cdn: string
+        cross_subdomain_cookie: boolean
+        persistence: 'localStorage' | 'cookie'
+        persistence_name: string
+        cookie_name: string
+        loaded: (posthog_instance: posthog) => void
+        store_google: boolean
+        save_referrer: boolean
+        test: boolean
+        verbose: boolean
+        img: boolean
+        capture_pageview: boolean
+        debug: boolean
+        capture_links_timeout: number
+        cookie_expiration: number
+        upgrade: boolean
+        disable_persistence: boolean
+        disable_cookie: boolean
+        secure_cookie: boolean
+        ip: boolean
+        opt_out_capturing_by_default: boolean
+        opt_out_persistence_by_default: boolean
+        opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
+        opt_out_capturing_cookie_prefix: string | null
+        ignore_dnt: boolean
+        property_blacklist: string[]
+        xhr_headers: { [header_name: string]: string }
+        inapp_protocol: string
+        inapp_link_new_window: boolean
+        request_batching: boolean
+    }
+
+    interface OptInOutCapturingOptions {
+        delete_user: boolean
+        clear_persistence: boolean
+        persistence_type: string
+        cookie_prefix: string
+        cookie_expiration: number
+        cross_subdomain_cookie: boolean
+        secure_cookie: boolean
+    }
+
+    interface HasOptedInOutCapturingOptions {
+        persistence_type: string
+        cookie_prefix: string
+    }
+
+    interface ClearOptInOutCapturingOptions {
+        enable_persistence: boolean
+        persistence_type: string
+        cookie_prefix: string
+        cookie_expiration: number
+        cross_subdomain_cookie: boolean
+        secure_cookie: boolean
+    }
+
     export class people {
         /*
          * Set properties on a user record.
@@ -593,7 +593,7 @@ declare namespace posthog {
          * @param {*} [to] A value to set on the given property name
          * @param {Function} [callback] If provided, the callback will be called after captureing the event.
          */
-        static set(prop: Properties | string, to?: any, callback?: CaptureCallback): Properties
+        static set(prop: posthog.Properties | string, to?: any, callback?: posthog.CaptureCallback): posthog.Properties
 
         /*
          * Set properties on a user record, only if they do not yet exist.
@@ -616,7 +616,11 @@ declare namespace posthog {
          * @param {*} [to] A value to set on the given property name
          * @param {Function} [callback] If provided, the callback will be called after captureing the event.
          */
-        static set_once(prop: Properties | string, to?: any, callback?: CaptureCallback): Properties
+        static set_once(
+            prop: posthog.Properties | string,
+            to?: any,
+            callback?: posthog.CaptureCallback
+        ): posthog.Properties
 
         static toString(): string
     }
