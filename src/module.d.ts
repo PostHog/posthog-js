@@ -573,7 +573,7 @@ declare class posthog {
 }
 
 declare namespace posthog {
-    export declare class people {
+    export class people {
         /*
          * Set properties on a user record.
          *
