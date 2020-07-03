@@ -9,16 +9,13 @@
         "allowSyntheticDefaultImports": true,
         "strict": true,
         "forceConsistentCasingInFileNames": true,
-        "module": "esnext",
+        "module": "es2015",
         "moduleResolution": "node",
-        "resolveJsonModule": true,
         "isolatedModules": true,
-        "noEmit": true,
-        "declaration": true,
         "noImplicitReturns": true,
         "noUnusedParameters": true,
         "sourceMap": true,
         "inlineSources": true
     },
-    "include": ["src"]
+    "include": ["src/*.ts"]
 }
