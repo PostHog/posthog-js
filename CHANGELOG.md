@@ -1,3 +1,6 @@
+## 1.3.0 - 2020-07-03
+- Add TypeScript defintions
+
 ## 1.2.4 - 2020-07-01
 - Add support for feature flags (`posthog.isFeatureEnabled('keyword')`)
 
