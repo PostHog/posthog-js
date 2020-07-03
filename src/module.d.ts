@@ -513,40 +513,40 @@ declare namespace posthog {
     type CaptureCallback = (response: any, data: any) => void
 
     interface Config {
-        api_host: string
-        api_method: string
-        api_transport: string
-        autocapture: boolean
-        cdn: string
-        cross_subdomain_cookie: boolean
-        persistence: 'localStorage' | 'cookie'
-        persistence_name: string
-        cookie_name: string
-        loaded: (posthog_instance: posthog) => void
-        store_google: boolean
-        save_referrer: boolean
-        test: boolean
-        verbose: boolean
-        img: boolean
-        capture_pageview: boolean
-        debug: boolean
-        capture_links_timeout: number
-        cookie_expiration: number
-        upgrade: boolean
-        disable_persistence: boolean
-        disable_cookie: boolean
-        secure_cookie: boolean
-        ip: boolean
-        opt_out_capturing_by_default: boolean
-        opt_out_persistence_by_default: boolean
-        opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
-        opt_out_capturing_cookie_prefix: string | null
-        ignore_dnt: boolean
-        property_blacklist: string[]
-        xhr_headers: { [header_name: string]: string }
-        inapp_protocol: string
-        inapp_link_new_window: boolean
-        request_batching: boolean
+        api_host?: string
+        api_method?: string
+        api_transport?: string
+        autocapture?: boolean
+        cdn?: string
+        cross_subdomain_cookie?: boolean
+        persistence?: 'localStorage' | 'cookie'
+        persistence_name?: string
+        cookie_name?: string
+        loaded?: (posthog_instance: posthog) => void
+        store_google?: boolean
+        save_referrer?: boolean
+        test?: boolean
+        verbose?: boolean
+        img?: boolean
+        capture_pageview?: boolean
+        debug?: boolean
+        capture_links_timeout?: number
+        cookie_expiration?: number
+        upgrade?: boolean
+        disable_persistence?: boolean
+        disable_cookie?: boolean
+        secure_cookie?: boolean
+        ip?: boolean
+        opt_out_capturing_by_default?: boolean
+        opt_out_persistence_by_default?: boolean
+        opt_out_capturing_persistence_type?: 'localStorage' | 'cookie'
+        opt_out_capturing_cookie_prefix?: string | null
+        ignore_dnt?: boolean
+        property_blacklist?: string[]
+        xhr_headers?: { [header_name: string]: string }
+        inapp_protocol?: string
+        inapp_link_new_window?: boolean
+        request_batching?: boolean
     }
 
     interface OptInOutCapturingOptions {
@@ -571,6 +571,59 @@ declare namespace posthog {
         cookie_expiration: number
         cross_subdomain_cookie: boolean
         secure_cookie: boolean
+    }
+
+    export class persistence {
+        static properties(): posthog.Properties
+
+        static load(): void
+
+        static upgrade(config: posthog.Config): void
+
+        static save(): void
+
+        static remove(): void
+
+        static clear(): void
+
+        /**
+         * @param {Object} props
+         * @param {*=} default_value
+         * @param {number=} days
+         */
+        static register_once(props: Properties, default_value?: any, days?: number): boolean
+
+        /**
+         * @param {Object} props
+         * @param {number=} days
+         */
+        static register(props: posthog.Properties, days?: number): boolean
+
+        static unregister(prop: string): void
+
+        static update_campaign_params(): void
+
+        static update_search_keyword(referrer: string): void
+
+        static update_referrer_info(referrer: string): void
+
+        static get_referrer_info(): posthog.Properties
+
+        static safe_merge(props: posthog.Properties): posthog.Properties
+
+        static update_config(config: posthog.Config): void
+
+        static set_disabled(disabled: boolean): void
+
+        static set_cross_subdomain(cross_subdomain: boolean): void
+
+        static get_cross_subdomain(): boolean
+
+        static set_secure(secure: boolean): void
+
+        static set_event_timer(event_name: string, timestamp: Date): void
+
+        static remove_event_timer(event_name: string): Date | undefined
     }
 
     export class people {
@@ -623,6 +676,32 @@ declare namespace posthog {
         ): posthog.Properties
 
         static toString(): string
+    }
+
+    export class feature_flags {
+        static getFlags(): string[]
+
+        /*
+         * See if feature flag is enabled for user.
+         *
+         * ### Usage:
+         *
+         *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
+         *
+         * @param {Object|String} prop Key of the feature flag.
+         */
+        static isFeatureEnabled(key: string): boolean
+
+        /*
+         * See if feature flags are available.
+         *
+         * ### Usage:
+         *
+         *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+         *
+         * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
+         */
+        static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
     }
 }
 
