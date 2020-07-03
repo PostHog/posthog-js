@@ -5,12 +5,11 @@
  * currently not supported in the browser lib).
  */
 
-import posthog from '../../src/loader-module'
-import { expect } from 'chai'
+import posthog from '../loader-module'
 import sinon from 'sinon'
 
-describe(`Module-based loader in Node env`, function () {
-    it('should load and capture the pageview event', function () {
+describe(`Module-based loader in Node env`, () => {
+    it('should load and capture the pageview event', () => {
         const sandbox = sinon.createSandbox()
         let loaded = false
         posthog._originalCapture = posthog.capture
@@ -24,22 +23,22 @@ describe(`Module-based loader in Node env`, function () {
             },
         })
 
-        expect(posthog.capture.calledOnce).to.equal(true)
+        expect(posthog.capture.calledOnce).toBe(true)
         const captureArgs = posthog.capture.args[0]
         const event = captureArgs[0]
         const props = captureArgs[1]
-        expect(event).to.equal('$pageview')
-        expect(loaded).to.equal(true)
+        expect(event).toBe('$pageview')
+        expect(loaded).toBe(true)
 
         posthog.capture = posthog._originalCapture
         delete posthog._originalCapture
     })
 
-    it(`supports identify()`, function () {
+    it(`supports identify()`, () => {
         posthog.identify(`Pat`)
     })
 
-    it(`supports capture()`, function () {
+    it(`supports capture()`, () => {
         posthog.capture(`Did stuff`)
     })
 })
