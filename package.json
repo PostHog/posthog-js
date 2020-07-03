@@ -8,15 +8,16 @@
     "scripts": {
         "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
         "serve": "parcel serve src/loader-globals.js --port 3001 --out-file dist/array.js",
-        "process-types": "eslint src --ext .ts --fix && tsc && cp src/*.d.ts dist",
         "build": "parcel build src/loader-globals.js --out-file dist/array.js --no-source-maps",
         "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
+        "process-types": "eslint src --ext .ts --fix && tsc && cp src/*.d.ts dist/",
         "integration-test": "echo 'Browse to localhost:3000/tests' && node testServer.js",
-        "prepublish": "yarn test && yarn process-types && yarn build && yarn build-module",
+        "prepublish": "yarn test && yarn build && yarn build-module && yarn process-types",
         "test": "npm run unit-test",
         "unit-test": "BABEL_ENV=test mocha --require babel-core/register tests/unit/*.js"
     },
     "main": "dist/module.js",
+    "types": "dist/module.d.ts",
     "files": [
         "dist/*"
     ],
@@ -43,7 +44,6 @@
         "sinon-chai": "3.5.0",
         "typescript": "^3.9.6"
     },
-    "types": "dist/module.d.ts",
     "husky": {
         "hooks": {
             "pre-commit": "lint-staged"
