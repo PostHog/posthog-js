@@ -1,11 +1,8 @@
-import { expect } from 'chai'
-import jsdom from 'jsdom-global'
 import sinon from 'sinon'
 
-import { autocapture } from '../../src/autocapture'
+import { autocapture } from '../autocapture'
 
-import jsdomSetup from './jsdom-setup'
-import { _ } from '../../src/utils'
+import { _ } from '../utils'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
@@ -20,14 +17,17 @@ const simulateClick = function (el) {
     triggerMouseEvent(el, 'click')
 }
 
-describe('Autocapture system', function () {
-    jsdomSetup({
-        url: 'https://example.com/about/?query=param',
+describe('Autocapture system', () => {
+    let testContext = {}
+
+    afterEach(() => {
+        testContext = {}
+        document.getElementsByTagName('html')[0].innerHTML = ''
     })
 
-    describe('_getPropertiesFromElement', function () {
+    describe('_getPropertiesFromElement', () => {
         let div, div2, input, sensitiveInput, hidden, password
-        beforeEach(function () {
+        beforeEach(() => {
             div = document.createElement('div')
             div.className = 'class1 class2 class3'
             div.innerHTML = 'my <span>sweet <i>inner</i></span> text'
@@ -61,143 +61,143 @@ describe('Autocapture system', function () {
             div2.appendChild(password)
         })
 
-        it('should contain the proper tag name', function () {
+        it('should contain the proper tag name', () => {
             const props = autocapture._getPropertiesFromElement(div)
-            expect(props['tag_name']).to.equal('div')
+            expect(props['tag_name']).toBe('div')
         })
 
-        it('should contain class list', function () {
+        it('should contain class list', () => {
             const props = autocapture._getPropertiesFromElement(div)
-            expect(props['classes']).to.deep.equal(['class1', 'class2', 'class3'])
+            expect(props['classes']).toEqual(['class1', 'class2', 'class3'])
         })
 
-        it('should not collect input value', function () {
+        it('should not collect input value', () => {
             const props = autocapture._getPropertiesFromElement(input)
-            expect(props['value']).to.equal(undefined)
+            expect(props['value']).toBeUndefined()
         })
 
-        it('should strip element value with class "ph-sensitive"', function () {
+        it('should strip element value with class "ph-sensitive"', () => {
             const props = autocapture._getPropertiesFromElement(sensitiveInput)
-            expect(props['value']).to.equal(undefined)
+            expect(props['value']).toBeUndefined()
         })
 
-        it('should strip hidden element value', function () {
+        it('should strip hidden element value', () => {
             const props = autocapture._getPropertiesFromElement(hidden)
-            expect(props['value']).to.equal(undefined)
+            expect(props['value']).toBeUndefined()
         })
 
-        it('should strip password element value', function () {
+        it('should strip password element value', () => {
             const props = autocapture._getPropertiesFromElement(password)
-            expect(props['value']).to.equal(undefined)
+            expect(props['value']).toBeUndefined()
         })
 
-        it('should contain nth-of-type', function () {
+        it('should contain nth-of-type', () => {
             const props = autocapture._getPropertiesFromElement(div)
-            expect(props['nth_of_type']).to.equal(2)
+            expect(props['nth_of_type']).toBe(2)
         })
 
-        it('should contain nth-child', function () {
+        it('should contain nth-child', () => {
             const props = autocapture._getPropertiesFromElement(password)
-            expect(props['nth_child']).to.equal(7)
+            expect(props['nth_child']).toBe(7)
         })
     })
 
-    describe('isBrowserSupported', function () {
+    describe('isBrowserSupported', () => {
         let orig
-        beforeEach(function () {
+        beforeEach(() => {
             orig = document.querySelectorAll
         })
 
-        afterEach(function () {
+        afterEach(() => {
             document.querySelectorAll = orig
         })
 
-        it('should return true if document.querySelectorAll is a function', function () {
+        it('should return true if document.querySelectorAll is a function', () => {
             document.querySelectorAll = function () {}
-            expect(autocapture.isBrowserSupported()).to.equal(true)
+            expect(autocapture.isBrowserSupported()).toBe(true)
         })
 
-        it('should return false if document.querySelectorAll is not a function', function () {
+        it('should return false if document.querySelectorAll is not a function', () => {
             document.querySelectorAll = undefined
-            expect(autocapture.isBrowserSupported()).to.equal(false)
+            expect(autocapture.isBrowserSupported()).toBe(false)
         })
     })
 
-    describe('enabledForProject', function () {
-        it('should enable ce for the project with token "d" when 5 buckets are enabled out of 10', function () {
-            expect(autocapture.enabledForProject('d', 10, 5)).to.equal(true)
+    describe('enabledForProject', () => {
+        it('should enable ce for the project with token "d" when 5 buckets are enabled out of 10', () => {
+            expect(autocapture.enabledForProject('d', 10, 5)).toBe(true)
         })
-        it('should NOT enable ce for the project with token "a" when 5 buckets are enabled out of 10', function () {
-            expect(autocapture.enabledForProject('a', 10, 5)).to.equal(false)
+        it('should NOT enable ce for the project with token "a" when 5 buckets are enabled out of 10', () => {
+            expect(autocapture.enabledForProject('a', 10, 5)).toBe(false)
         })
     })
 
-    describe('_previousElementSibling', function () {
-        it('should return the adjacent sibling', function () {
+    describe('_previousElementSibling', () => {
+        it('should return the adjacent sibling', () => {
             const div = document.createElement('div')
             const sibling = document.createElement('div')
             const child = document.createElement('div')
             div.appendChild(sibling)
             div.appendChild(child)
-            expect(autocapture._previousElementSibling(child)).to.equal(sibling)
+            expect(autocapture._previousElementSibling(child)).toBe(sibling)
         })
 
-        it('should return the first child and not the immediately previous sibling (text)', function () {
+        it('should return the first child and not the immediately previous sibling (text)', () => {
             const div = document.createElement('div')
             const sibling = document.createElement('div')
             const child = document.createElement('div')
             div.appendChild(sibling)
             div.appendChild(document.createTextNode('some text'))
             div.appendChild(child)
-            expect(autocapture._previousElementSibling(child)).to.equal(sibling)
+            expect(autocapture._previousElementSibling(child)).toBe(sibling)
         })
 
-        it('should return null when the previous sibling is a text node', function () {
+        it('should return null when the previous sibling is a text node', () => {
             const div = document.createElement('div')
             const child = document.createElement('div')
             div.appendChild(document.createTextNode('some text'))
             div.appendChild(child)
-            expect(autocapture._previousElementSibling(child)).to.equal(null)
+            expect(autocapture._previousElementSibling(child)).toBeNull()
         })
     })
 
-    describe('_loadScript', function () {
-        it('should insert the given script before the one already on the page', function () {
+    describe('_loadScript', () => {
+        it('should insert the given script before the one already on the page', () => {
             document.body.appendChild(document.createElement('script'))
             const callback = (_) => _
             autocapture._loadScript('https://fake_url', callback)
             const scripts = document.getElementsByTagName('script')
             const new_script = scripts[0]
 
-            expect(scripts.length).to.equal(2)
-            expect(new_script.type).to.equal('text/javascript')
-            expect(new_script.src).to.equal('https://fake_url/')
-            expect(new_script.onload).to.equal(callback)
+            expect(scripts.length).toBe(2)
+            expect(new_script.type).toBe('text/javascript')
+            expect(new_script.src).toBe('https://fake_url/')
+            expect(new_script.onload).toBe(callback)
         })
 
-        it("should add the script to the page when there aren't any preexisting scripts on the page", function () {
+        it("should add the script to the page when there aren't any preexisting scripts on the page", () => {
             const callback = (_) => _
             autocapture._loadScript('https://fake_url', callback)
             const scripts = document.getElementsByTagName('script')
             const new_script = scripts[0]
 
-            expect(scripts.length).to.equal(1)
-            expect(new_script.type).to.equal('text/javascript')
-            expect(new_script.src).to.equal('https://fake_url/')
-            expect(new_script.onload).to.equal(callback)
+            expect(scripts.length).toBe(1)
+            expect(new_script.type).toBe('text/javascript')
+            expect(new_script.src).toBe('https://fake_url/')
+            expect(new_script.onload).toBe(callback)
         })
     })
 
-    describe('_getDefaultProperties', function () {
-        it('should return the default properties', function () {
-            expect(autocapture._getDefaultProperties('test')).to.deep.equal({
+    describe('_getDefaultProperties', () => {
+        it('should return the default properties', () => {
+            expect(autocapture._getDefaultProperties('test')).toEqual({
                 $event_type: 'test',
                 $ce_version: 1,
             })
         })
     })
 
-    describe('_getCustomProperties', function () {
+    describe('_getCustomProperties', () => {
         let customProps
         let noCustomProps
         let capturedElem
@@ -209,7 +209,7 @@ describe('Autocapture system', function () {
         let prop2
         let prop3
 
-        beforeEach(function () {
+        beforeEach(() => {
             capturedElem = document.createElement('div')
             capturedElem.className = 'ce_event'
 
@@ -264,50 +264,50 @@ describe('Autocapture system', function () {
             ]
         })
 
-        it('should return custom properties for only matching element selectors', function () {
+        it('should return custom properties for only matching element selectors', () => {
             customProps = autocapture._getCustomProperties([capturedElem])
-            expect(customProps).to.deep.equal({
+            expect(customProps).toEqual({
                 'Custom Property 1': 'Test prop 1',
             })
         })
 
-        it('should return no custom properties for elements that do not match an event selector', function () {
+        it('should return no custom properties for elements that do not match an event selector', () => {
             noCustomProps = autocapture._getCustomProperties([uncapturedElem])
-            expect(noCustomProps).to.deep.equal({})
+            expect(noCustomProps).toEqual({})
         })
 
-        it('should return no custom properties for sensitive elements', function () {
+        it('should return no custom properties for sensitive elements', () => {
             // test password field
             sensitiveInput.setAttribute('type', 'password')
             noCustomProps = autocapture._getCustomProperties([sensitiveInput])
-            expect(noCustomProps).to.deep.equal({})
+            expect(noCustomProps).toEqual({})
             // verify that capturing the sensitive element along with another element only collects
             // the non-sensitive element's custom properties
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveInput])
-            expect(customProps).to.deep.equal({ 'Custom Property 1': 'Test prop 1' })
+            expect(customProps).toEqual({ 'Custom Property 1': 'Test prop 1' })
 
             // test hidden field
             sensitiveInput.setAttribute('type', 'hidden')
             noCustomProps = autocapture._getCustomProperties([sensitiveInput])
-            expect(noCustomProps).to.deep.equal({})
+            expect(noCustomProps).toEqual({})
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveInput])
-            expect(customProps).to.deep.equal({ 'Custom Property 1': 'Test prop 1' })
+            expect(customProps).toEqual({ 'Custom Property 1': 'Test prop 1' })
 
             // test field with sensitive-looking name
             sensitiveInput.setAttribute('type', '')
             sensitiveInput.setAttribute('name', 'cc') // cc assumed to indicate credit card field
             noCustomProps = autocapture._getCustomProperties([sensitiveInput])
-            expect(noCustomProps).to.deep.equal({})
+            expect(noCustomProps).toEqual({})
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveInput])
-            expect(customProps).to.deep.equal({ 'Custom Property 1': 'Test prop 1' })
+            expect(customProps).toEqual({ 'Custom Property 1': 'Test prop 1' })
 
             // test field with sensitive-looking id
             sensitiveInput.setAttribute('name', '')
             sensitiveInput.setAttribute('id', 'cc') // cc assumed to indicate credit card field
             noCustomProps = autocapture._getCustomProperties([sensitiveInput])
-            expect(noCustomProps).to.deep.equal({})
+            expect(noCustomProps).toEqual({})
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveInput])
-            expect(customProps).to.deep.equal({ 'Custom Property 1': 'Test prop 1' })
+            expect(customProps).toEqual({ 'Custom Property 1': 'Test prop 1' })
 
             // clean up
             sensitiveInput.setAttribute('type', '')
@@ -315,12 +315,12 @@ describe('Autocapture system', function () {
             sensitiveInput.setAttribute('id', '')
         })
 
-        it('should return no custom properties for element with sensitive values', function () {
+        it('should return no custom properties for element with sensitive values', () => {
             // verify the base case DOES capture the custom property
             customProps = autocapture._getCustomProperties([sensitiveDiv])
-            expect(customProps).to.deep.equal({ 'Custom Property 3': 'Test prop 3' })
+            expect(customProps).toEqual({ 'Custom Property 3': 'Test prop 3' })
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveDiv])
-            expect(customProps).to.deep.equal({
+            expect(customProps).toEqual({
                 'Custom Property 1': 'Test prop 1',
                 'Custom Property 3': 'Test prop 3',
             })
@@ -328,25 +328,25 @@ describe('Autocapture system', function () {
             // test values that look like credit card numbers
             prop3.innerHTML = '4111111111111111' // valid credit card number
             noCustomProps = autocapture._getCustomProperties([sensitiveDiv])
-            expect(noCustomProps).to.deep.equal({ 'Custom Property 3': '' })
+            expect(noCustomProps).toEqual({ 'Custom Property 3': '' })
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveDiv])
-            expect(customProps).to.deep.equal({
+            expect(customProps).toEqual({
                 'Custom Property 1': 'Test prop 1',
                 'Custom Property 3': '',
             })
             prop3.innerHTML = '5105-1051-0510-5100' // valid credit card number
             noCustomProps = autocapture._getCustomProperties([sensitiveDiv])
-            expect(noCustomProps).to.deep.equal({ 'Custom Property 3': '' })
+            expect(noCustomProps).toEqual({ 'Custom Property 3': '' })
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveDiv])
-            expect(customProps).to.deep.equal({
+            expect(customProps).toEqual({
                 'Custom Property 1': 'Test prop 1',
                 'Custom Property 3': '',
             })
             prop3.innerHTML = '1235-8132-1345-5891' // invalid credit card number
             noCustomProps = autocapture._getCustomProperties([sensitiveDiv])
-            expect(noCustomProps).to.deep.equal({ 'Custom Property 3': '1235-8132-1345-5891' })
+            expect(noCustomProps).toEqual({ 'Custom Property 3': '1235-8132-1345-5891' })
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveDiv])
-            expect(customProps).to.deep.equal({
+            expect(customProps).toEqual({
                 'Custom Property 1': 'Test prop 1',
                 'Custom Property 3': '1235-8132-1345-5891',
             })
@@ -354,17 +354,17 @@ describe('Autocapture system', function () {
             // test values that look like social-security numbers
             prop3.innerHTML = '123-58-1321' // valid SSN
             noCustomProps = autocapture._getCustomProperties([sensitiveDiv])
-            expect(noCustomProps).to.deep.equal({ 'Custom Property 3': '' })
+            expect(noCustomProps).toEqual({ 'Custom Property 3': '' })
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveDiv])
-            expect(customProps).to.deep.equal({
+            expect(customProps).toEqual({
                 'Custom Property 1': 'Test prop 1',
                 'Custom Property 3': '',
             })
             prop3.innerHTML = '1235-81-321' // invalid SSN
             noCustomProps = autocapture._getCustomProperties([sensitiveDiv])
-            expect(noCustomProps).to.deep.equal({ 'Custom Property 3': '1235-81-321' })
+            expect(noCustomProps).toEqual({ 'Custom Property 3': '1235-81-321' })
             customProps = autocapture._getCustomProperties([capturedElem, sensitiveDiv])
-            expect(customProps).to.deep.equal({
+            expect(customProps).toEqual({
                 'Custom Property 1': 'Test prop 1',
                 'Custom Property 3': '1235-81-321',
             })
@@ -374,7 +374,7 @@ describe('Autocapture system', function () {
         })
     })
 
-    describe('_captureEvent', function () {
+    describe('_captureEvent', () => {
         let lib, sandbox
 
         const getCapturedProps = function (captureSpy) {
@@ -384,7 +384,7 @@ describe('Autocapture system', function () {
             return props
         }
 
-        beforeEach(function () {
+        beforeEach(() => {
             sandbox = sinon.createSandbox()
             lib = {
                 _ceElementTextProperties: [],
@@ -395,11 +395,11 @@ describe('Autocapture system', function () {
             }
         })
 
-        afterEach(function () {
+        afterEach(() => {
             sandbox.restore()
         })
 
-        it('should add the custom property when an element matching any of the event selectors is clicked', function () {
+        it('should add the custom property when an element matching any of the event selectors is clicked', () => {
             lib = {
                 _send_request: sandbox.spy((url, params, options, callback) =>
                     callback({
@@ -445,20 +445,20 @@ describe('Autocapture system', function () {
             document.body.appendChild(eventElement2)
             document.body.appendChild(propertyElement)
 
-            expect(lib.capture.callCount).to.equal(0)
+            expect(lib.capture.callCount).toBe(0)
             simulateClick(eventElement1)
             simulateClick(eventElement2)
-            expect(lib.capture.callCount).to.equal(2)
+            expect(lib.capture.callCount).toBe(2)
             const captureArgs1 = lib.capture.args[0]
             const captureArgs2 = lib.capture.args[1]
             const eventType1 = captureArgs1[1]['my property name']
             const eventType2 = captureArgs2[1]['my property name']
-            expect(eventType1).to.equal('my property value')
-            expect(eventType2).to.equal('my property value')
+            expect(eventType1).toBe('my property value')
+            expect(eventType2).toBe('my property value')
             lib.capture.resetHistory()
         })
 
-        it('includes necessary metadata as properties when capturing an event', function () {
+        it('includes necessary metadata as properties when capturing an event', () => {
             const elTarget = document.createElement('a')
             elTarget.setAttribute('href', 'http://test.com')
             const elParent = document.createElement('span')
@@ -473,19 +473,19 @@ describe('Autocapture system', function () {
                 type: 'click',
             }
             autocapture._captureEvent(e, lib)
-            expect(lib.capture.calledOnce).to.equal(true)
+            expect(lib.capture.calledOnce).toBe(true)
             const captureArgs = lib.capture.args[0]
             const event = captureArgs[0]
             const props = captureArgs[1]
-            expect(event).to.equal('$autocapture')
-            expect(props['$event_type']).to.equal('click')
-            expect(props['$elements'][0]).to.have.property('attr__href', 'http://test.com')
-            expect(props['$elements'][1]).to.have.property('tag_name', 'span')
-            expect(props['$elements'][2]).to.have.property('tag_name', 'div')
-            expect(props['$elements'][props['$elements'].length - 1]).to.have.property('tag_name', 'body')
+            expect(event).toBe('$autocapture')
+            expect(props['$event_type']).toBe('click')
+            expect(props['$elements'][0]).toHaveProperty('attr__href', 'http://test.com')
+            expect(props['$elements'][1]).toHaveProperty('tag_name', 'span')
+            expect(props['$elements'][2]).toHaveProperty('tag_name', 'div')
+            expect(props['$elements'][props['$elements'].length - 1]).toHaveProperty('tag_name', 'body')
         })
 
-        it('gets the href attribute from parent anchor tags', function () {
+        it('gets the href attribute from parent anchor tags', () => {
             const elTarget = document.createElement('img')
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
@@ -499,10 +499,10 @@ describe('Autocapture system', function () {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).to.have.property('attr__href', 'http://test.com')
+            expect(getCapturedProps(lib.capture)['$elements'][0]).toHaveProperty('attr__href', 'http://test.com')
         })
 
-        it('does not capture href attribute values from password elements', function () {
+        it('does not capture href attribute values from password elements', () => {
             const elTarget = document.createElement('span')
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
@@ -516,10 +516,10 @@ describe('Autocapture system', function () {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)).not.to.have.property('attr__href')
+            expect(getCapturedProps(lib.capture)).not.toHaveProperty('attr__href')
         })
 
-        it('does not capture href attribute values from hidden elements', function () {
+        it('does not capture href attribute values from hidden elements', () => {
             const elTarget = document.createElement('span')
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
@@ -533,10 +533,10 @@ describe('Autocapture system', function () {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).not.to.have.property('attr__href')
+            expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
         })
 
-        it('does not capture href attribute values that look like credit card numbers', function () {
+        it('does not capture href attribute values that look like credit card numbers', () => {
             const elTarget = document.createElement('span')
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
@@ -550,10 +550,10 @@ describe('Autocapture system', function () {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).not.to.have.property('attr__href')
+            expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
         })
 
-        it('does not capture href attribute values that look like social-security numbers', function () {
+        it('does not capture href attribute values that look like social-security numbers', () => {
             const elTarget = document.createElement('span')
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
@@ -567,10 +567,10 @@ describe('Autocapture system', function () {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).not.to.have.property('attr__href')
+            expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
         })
 
-        it('correctly identifies and formats text content', function () {
+        it('correctly identifies and formats text content', () => {
             const dom = `
       <div>
         <button id='span1'>Some text</button>
@@ -614,7 +614,7 @@ describe('Autocapture system', function () {
             autocapture._captureEvent(e1, lib)
 
             const props1 = getCapturedProps(lib.capture)
-            expect(props1['$elements'][0]).to.have.property(
+            expect(props1['$elements'][0]).toHaveProperty(
                 '$el_text',
                 "Some super duper really long Text with new lines that we'll strip out and also we will want to make this text shorter since it's not likely people really care about text content that's super long and it also takes up more space and bandwidth. Some super d"
             )
@@ -626,7 +626,7 @@ describe('Autocapture system', function () {
             }
             autocapture._captureEvent(e2, lib)
             const props2 = getCapturedProps(lib.capture)
-            expect(props2['$elements'][0]).to.have.property('$el_text', 'Some text')
+            expect(props2['$elements'][0]).toHaveProperty('$el_text', 'Some text')
             lib.capture.resetHistory()
 
             const e3 = {
@@ -635,10 +635,10 @@ describe('Autocapture system', function () {
             }
             autocapture._captureEvent(e3, lib)
             const props3 = getCapturedProps(lib.capture)
-            expect(props3['$elements'][0]).to.have.property('$el_text', '')
+            expect(props3['$elements'][0]).toHaveProperty('$el_text', '')
         })
 
-        it('does not capture sensitive text content', function () {
+        it('does not capture sensitive text content', () => {
             const dom = `
       <div>
         <button id='button1'> Why 123-58-1321 hello there</button>
@@ -664,8 +664,8 @@ describe('Autocapture system', function () {
             }
             autocapture._captureEvent(e1, lib)
             const props1 = getCapturedProps(lib.capture)
-            expect(props1['$elements'][0]).to.have.property('$el_text')
-            expect(props1['$elements'][0]['$el_text']).to.match(/Why\s+hello\s+there/)
+            expect(props1['$elements'][0]).toHaveProperty('$el_text')
+            expect(props1['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
             lib.capture.resetHistory()
 
             const e2 = {
@@ -674,8 +674,8 @@ describe('Autocapture system', function () {
             }
             autocapture._captureEvent(e2, lib)
             const props2 = getCapturedProps(lib.capture)
-            expect(props2['$elements'][0]).to.have.property('$el_text')
-            expect(props2['$elements'][0]['$el_text']).to.match(/Why\s+hello\s+there/)
+            expect(props2['$elements'][0]).toHaveProperty('$el_text')
+            expect(props2['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
             lib.capture.resetHistory()
 
             const e3 = {
@@ -684,22 +684,22 @@ describe('Autocapture system', function () {
             }
             autocapture._captureEvent(e3, lib)
             const props3 = getCapturedProps(lib.capture)
-            expect(props3['$elements'][0]).to.have.property('$el_text')
-            expect(props3['$elements'][0]['$el_text']).to.match(/Why\s+hello\s+there/)
+            expect(props3['$elements'][0]).toHaveProperty('$el_text')
+            expect(props3['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
         })
 
-        it('should capture a submit event with form field props', function () {
+        it('should capture a submit event with form field props', () => {
             const e = {
                 target: document.createElement('form'),
                 type: 'submit',
             }
             autocapture._captureEvent(e, lib)
-            expect(lib.capture.calledOnce).to.equal(true)
+            expect(lib.capture.calledOnce).toBe(true)
             const props = getCapturedProps(lib.capture)
-            expect(props['$event_type']).to.equal('submit')
+            expect(props['$event_type']).toBe('submit')
         })
 
-        it('should capture a click event inside a form with form field props', function () {
+        it('should capture a click event inside a form with form field props', () => {
             var form = document.createElement('form')
             var link = document.createElement('a')
             var input = document.createElement('input')
@@ -712,33 +712,33 @@ describe('Autocapture system', function () {
                 type: 'click',
             }
             autocapture._captureEvent(e, lib)
-            expect(lib.capture.calledOnce).to.equal(true)
+            expect(lib.capture.calledOnce).toBe(true)
             const props = getCapturedProps(lib.capture)
-            expect(props['$event_type']).to.equal('click')
+            expect(props['$event_type']).toBe('click')
         })
 
-        it('should never capture an element with `ph-no-capture` class', function () {
+        it('should never capture an element with `ph-no-capture` class', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')
             a.appendChild(span)
             autocapture._captureEvent({ target: a, type: 'click' }, lib)
-            expect(lib.capture.calledOnce).to.equal(true)
+            expect(lib.capture.calledOnce).toBe(true)
             lib.capture.resetHistory()
 
             autocapture._captureEvent({ target: span, type: 'click' }, lib)
-            expect(lib.capture.calledOnce).to.equal(true)
+            expect(lib.capture.calledOnce).toBe(true)
             lib.capture.resetHistory()
 
             a.className = 'test1 ph-no-capture test2'
             autocapture._captureEvent({ target: a, type: 'click' }, lib)
-            expect(lib.capture.callCount).to.equal(0)
+            expect(lib.capture.callCount).toBe(0)
 
             autocapture._captureEvent({ target: span, type: 'click' }, lib)
-            expect(lib.capture.callCount).to.equal(0)
+            expect(lib.capture.callCount).toBe(0)
         })
     })
 
-    describe('_addDomEventHandlers', function () {
+    describe('_addDomEventHandlers', () => {
         const lib = {
             capture: sinon.spy(),
             get_distinct_id() {
@@ -748,37 +748,37 @@ describe('Autocapture system', function () {
 
         let navigateSpy
 
-        beforeEach(function () {
+        beforeEach(() => {
             document.title = 'test page'
             autocapture._addDomEventHandlers(lib)
             navigateSpy = sinon.spy(autocapture, '_navigate')
             lib.capture.resetHistory()
         })
 
-        after(function () {
+        afterAll(() => {
             navigateSpy.restore()
         })
 
-        it('should capture click events', function () {
+        it('should capture click events', () => {
             const button = document.createElement('button')
             document.body.appendChild(button)
             simulateClick(button)
             simulateClick(button)
-            expect(true).to.equal(lib.capture.calledTwice)
+            expect(true).toBe(lib.capture.calledTwice)
             const captureArgs1 = lib.capture.args[0]
             const captureArgs2 = lib.capture.args[1]
             const eventType1 = captureArgs1[1]['$event_type']
             const eventType2 = captureArgs2[1]['$event_type']
-            expect(eventType1).to.equal('click')
-            expect(eventType2).to.equal('click')
+            expect(eventType1).toBe('click')
+            expect(eventType2).toBe('click')
             lib.capture.resetHistory()
         })
     })
 
-    describe('init', function () {
+    describe('init', () => {
         let lib, sandbox, _maybeLoadEditorStub
 
-        beforeEach(function () {
+        beforeEach(() => {
             document.title = 'test page'
             sandbox = sinon.createSandbox()
             sandbox.spy(autocapture, '_addDomEventHandlers')
@@ -805,38 +805,38 @@ describe('Autocapture system', function () {
             }
         })
 
-        afterEach(function () {
+        afterEach(() => {
             sandbox.restore()
         })
 
-        it('should call _addDomEventHandlders', function () {
+        it('should call _addDomEventHandlders', () => {
             autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.calledOnce).to.equal(true)
+            expect(autocapture._addDomEventHandlers.calledOnce).toBe(true)
         })
 
-        it('should NOT call _addDomEventHandlders if the decide request fails', function () {
+        it('should NOT call _addDomEventHandlders if the decide request fails', () => {
             lib._send_request = sandbox.spy((url, params, options, callback) =>
                 callback({ status: 0, error: 'Bad HTTP status: 400 Bad Request' })
             )
             autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.called).to.equal(false)
+            expect(autocapture._addDomEventHandlers.called).toBe(false)
         })
 
-        it('should NOT call _addDomEventHandlders when loading editor', function () {
+        it('should NOT call _addDomEventHandlders when loading editor', () => {
             _maybeLoadEditorStub.returns(true)
             autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.calledOnce).to.equal(false)
+            expect(autocapture._addDomEventHandlers.calledOnce).toBe(false)
         })
 
-        it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', function () {
+        it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', () => {
             lib._send_request = sandbox.spy((url, params, callback) =>
                 callback({ config: { enable_collect_everything: false } })
             )
             autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.calledOnce).to.equal(false)
+            expect(autocapture._addDomEventHandlers.calledOnce).toBe(false)
         })
 
-        it('should NOT call _addDomEventHandlders when the token has already been initialized', function () {
+        it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
             var lib2 = Object.assign({}, lib)
             var lib3 = Object.assign({ token: 'anotherproject' }, lib)
             lib3.get_config = sandbox.spy(function (key) {
@@ -848,18 +848,18 @@ describe('Autocapture system', function () {
                 }
             })
             autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.callCount).to.equal(1)
+            expect(autocapture._addDomEventHandlers.callCount).toBe(1)
             autocapture.init(lib2)
-            expect(autocapture._addDomEventHandlers.callCount).to.equal(1)
+            expect(autocapture._addDomEventHandlers.callCount).toBe(1)
             autocapture.init(lib3)
-            expect(autocapture._addDomEventHandlers.callCount).to.equal(2)
+            expect(autocapture._addDomEventHandlers.callCount).toBe(2)
         })
 
-        it('should call instance._send_request', function () {
+        it('should call instance._send_request', () => {
             autocapture.init(lib)
-            expect(lib._send_request.calledOnce).to.equal(true)
-            expect(lib._send_request.firstCall.args[0]).to.equal('https://test.com/decide/')
-            expect(lib._send_request.firstCall.args[1]).to.deep.equal({
+            expect(lib._send_request.calledOnce).toBe(true)
+            expect(lib._send_request.firstCall.args[0]).toBe('https://test.com/decide/')
+            expect(lib._send_request.firstCall.args[1]).toEqual({
                 data: _.base64Encode(
                     _.JSONEncode({
                         token: 'testtoken',
@@ -867,27 +867,27 @@ describe('Autocapture system', function () {
                     })
                 ),
             })
-            expect(lib._send_request.firstCall.args[2]).to.deep.equal({ method: 'POST' })
-            expect(typeof lib._send_request.firstCall.args[3]).to.equal('function')
+            expect(lib._send_request.firstCall.args[2]).toEqual({ method: 'POST' })
+            expect(typeof lib._send_request.firstCall.args[3]).toBe('function')
         })
 
-        it('should check whether to load the editor', function () {
+        it('should check whether to load the editor', () => {
             autocapture.init(lib)
-            expect(autocapture._maybeLoadEditor.calledOnce).to.equal(true)
-            expect(autocapture._maybeLoadEditor.calledWith(lib)).to.equal(true)
+            expect(autocapture._maybeLoadEditor.calledOnce).toBe(true)
+            expect(autocapture._maybeLoadEditor.calledWith(lib)).toBe(true)
         })
     })
 
-    describe('_maybeLoadEditor', function () {
+    describe('_maybeLoadEditor', () => {
         let hash,
             editorParams,
             sandbox,
             lib = {}
 
-        beforeEach(function () {
+        beforeEach(() => {
             window.sessionStorage.clear()
 
-            this.clock = sinon.useFakeTimers()
+            testContext.clock = sinon.useFakeTimers()
 
             sandbox = sinon.createSandbox()
             sandbox.stub(autocapture, '_loadEditor')
@@ -920,33 +920,33 @@ describe('Autocapture system', function () {
                 .join('&')
         })
 
-        afterEach(function () {
+        afterEach(() => {
             sandbox.restore()
-            this.clock.restore()
+            testContext.clock.restore()
         })
 
-        it('should initialize the visual editor when the hash state contains action "mpeditor"', function () {
+        it('should initialize the visual editor when the hash state contains action "mpeditor"', () => {
             window.location.hash = `#${hash}`
             autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).to.equal(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).to.equal(true)
-            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).to.deep.equal(editorParams)
+            expect(autocapture._loadEditor.calledOnce).toBe(true)
+            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
+            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
         })
 
-        it('should initialize the visual editor when there are editor params in the session', function () {
+        it('should initialize the visual editor when there are editor params in the session', () => {
             window.sessionStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams))
             autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).to.equal(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).to.equal(true)
-            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).to.deep.equal(editorParams)
+            expect(autocapture._loadEditor.calledOnce).toBe(true)
+            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
+            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
         })
 
-        it('should NOT initialize the visual editor when the activation query param does not exist', function () {
+        it('should NOT initialize the visual editor when the activation query param does not exist', () => {
             autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).to.equal(false)
+            expect(autocapture._loadEditor.calledOnce).toBe(false)
         })
 
-        it('should return false when parsing invalid JSON from fragment state', function () {
+        it('should return false when parsing invalid JSON from fragment state', () => {
             const hashParams = {
                 access_token: 'test_access_token',
                 state: 'literally',
@@ -958,15 +958,15 @@ describe('Autocapture system', function () {
             window.location.hash = `#${hash}`
             var spy = sinon.spy(autocapture, '_maybeLoadEditor')
             spy(lib)
-            expect(spy.returned(false)).to.equal(true)
+            expect(spy.returned(false)).toBe(true)
         })
     })
 
-    describe('load and close editor', function () {
+    describe('load and close editor', () => {
         const lib = {}
         let sandbox
 
-        beforeEach(function () {
+        beforeEach(() => {
             autocapture._editorLoaded = false
             sandbox = sinon.createSandbox()
             sandbox.stub(autocapture, '_loadScript').callsFake((path, callback) => callback())
@@ -976,11 +976,11 @@ describe('Autocapture system', function () {
             window.ph_load_editor = sandbox.spy()
         })
 
-        afterEach(function () {
+        afterEach(() => {
             sandbox.restore()
         })
 
-        it('should load if not previously loaded', function () {
+        it('should load if not previously loaded', () => {
             const editorParams = {
                 accessToken: 'accessToken',
                 expiresAt: 'expiresAt',
@@ -988,15 +988,15 @@ describe('Autocapture system', function () {
                 apiURL: 'http://localhost:8000',
             }
             const loaded = autocapture._loadEditor(lib, editorParams)
-            expect(window.ph_load_editor.calledOnce).to.equal(true)
-            expect(window.ph_load_editor.calledWithExactly(editorParams)).to.equal(true)
-            expect(loaded).to.equal(true)
+            expect(window.ph_load_editor.calledOnce).toBe(true)
+            expect(window.ph_load_editor.calledWithExactly(editorParams)).toBe(true)
+            expect(loaded).toBe(true)
         })
 
-        it('should NOT load if previously loaded', function () {
+        it('should NOT load if previously loaded', () => {
             autocapture._loadEditor(lib, 'accessToken')
             const loaded = autocapture._loadEditor(lib, 'accessToken')
-            expect(loaded).to.equal(false)
+            expect(loaded).toBe(false)
         })
     })
 })

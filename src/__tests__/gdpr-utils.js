@@ -1,7 +1,6 @@
-import { expect } from 'chai'
 import sinon from 'sinon'
 
-import jsdomSetup from './jsdom-setup'
+import * as gdpr from '../gdpr-utils'
 
 const TOKENS = [
     `test-token`,
@@ -20,35 +19,41 @@ function forPersistenceTypes(runTests) {
 function assertPersistenceValue(persistenceType, token, value, persistencePrefix = DEFAULT_PERSISTENCE_PREFIX) {
     if (persistenceType === `cookie`) {
         if (value === null) {
-            expect(document.cookie).to.not.contain(token)
+            expect(document.cookie).not.toContain(token)
         } else {
-            expect(document.cookie).to.contain(token + `=${value}`)
+            expect(document.cookie).toContain(token + `=${value}`)
         }
     } else {
         if (value === null) {
-            expect(window.localStorage.getItem(persistencePrefix + token)).to.be.null
+            expect(window.localStorage.getItem(persistencePrefix + token)).toBeNull()
         } else {
-            expect(window.localStorage.getItem(persistencePrefix + token)).to.equal(`${value}`)
+            expect(window.localStorage.getItem(persistencePrefix + token)).toBe(`${value}`)
         }
     }
 }
+function deleteAllCookies() {
+    var cookies = document.cookie.split(';')
 
-describe(`GDPR utils`, function () {
+    for (var i = 0; i < cookies.length; i++) {
+        var cookie = cookies[i]
+        var eqPos = cookie.indexOf('=')
+        var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
+        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    }
+}
+describe(`GDPR utils`, () => {
     // these imports must be re-required before each test
     // so that they reference the correct jsdom document
-    let _, gdpr
 
-    jsdomSetup({
-        reImportModules: [`../../src/utils`, `../../src/gdpr-utils`],
-        beforeCallback: (modules) => {
-            ;[_, gdpr] = modules
-            window.localStorage.clear()
-        },
+    afterEach(() => {
+        document.getElementsByTagName('html')[0].innerHTML = ''
+        window.localStorage.clear()
+        deleteAllCookies()
     })
 
-    describe(`optIn`, function () {
+    describe(`optIn`, () => {
         forPersistenceTypes(function (persistenceType) {
-            it(`should set a cookie marking the user as opted-in for a given token`, function () {
+            it(`should set a cookie marking the user as opted-in for a given token`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
                     console.log(token, persistenceType)
@@ -56,7 +61,7 @@ describe(`GDPR utils`, function () {
                 })
             })
 
-            it(`shouldn't set cookies for any other tokens`, function () {
+            it(`shouldn't set cookies for any other tokens`, () => {
                 const token = TOKENS[0]
                 gdpr.optIn(token, { persistenceType })
 
@@ -65,51 +70,51 @@ describe(`GDPR utils`, function () {
                 })
             })
 
-            it(`should capture an event recording the opt-in action`, function () {
+            it(`should capture an event recording the opt-in action`, () => {
                 let capture
 
                 TOKENS.forEach((token) => {
                     capture = sinon.spy()
                     gdpr.optIn(token, { capture, persistenceType })
-                    expect(capture.calledOnceWith(`$opt_in`)).to.be.true
+                    expect(capture.calledOnceWith(`$opt_in`)).toBe(true)
 
                     capture = sinon.spy()
                     const captureEventName = `єνєηт`
                     const captureProperties = { '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞': `𝓿𝓪𝓵𝓾𝓮` }
                     gdpr.optIn(token, { capture, captureEventName, captureProperties, persistenceType })
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).to.be.true
+                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
                 })
             })
 
-            it(`shouldn't capture an event if the user has opted out`, function () {
+            it(`shouldn't capture an event if the user has opted out`, () => {
                 TOKENS.forEach((token) => {
                     let capture = sinon.spy()
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optOut(token, { capture, persistenceType })
-                    expect(capture.notCalled).to.be.true
+                    expect(capture.notCalled).toBe(true)
                 })
             })
 
-            it(`should capture an event if the user has opted in`, function () {
+            it(`should capture an event if the user has opted in`, () => {
                 TOKENS.forEach((token) => {
                     let capture = sinon.spy()
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optIn(token, { persistenceType })
                     gdpr.optIn(token, { capture, persistenceType })
-                    expect(capture.calledOnce).to.be.true
+                    expect(capture.calledOnce).toBe(true)
                 })
             })
 
-            it(`should capture an event if the user is switching opt from out to in`, function () {
+            it(`should capture an event if the user is switching opt from out to in`, () => {
                 TOKENS.forEach((token) => {
                     let capture = sinon.spy()
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optIn(token, { capture, persistenceType })
-                    expect(capture.calledOnce).to.be.true
+                    expect(capture.calledOnce).toBe(true)
                 })
             })
 
-            it(`should allow use of a custom "persistence prefix" string (with correct default behavior)`, function () {
+            it(`should allow use of a custom "persistence prefix" string (with correct default behavior)`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
@@ -131,16 +136,16 @@ describe(`GDPR utils`, function () {
         })
     })
 
-    describe(`optOut`, function () {
+    describe(`optOut`, () => {
         forPersistenceTypes(function (persistenceType) {
-            it(`should set a cookie marking the user as opted-out for a given token`, function () {
+            it(`should set a cookie marking the user as opted-out for a given token`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
                     assertPersistenceValue(persistenceType, token, 0)
                 })
             })
 
-            it(`shouldn't set cookies for any other tokens`, function () {
+            it(`shouldn't set cookies for any other tokens`, () => {
                 const token = TOKENS[0]
                 gdpr.optOut(token, { persistenceType })
 
@@ -149,24 +154,24 @@ describe(`GDPR utils`, function () {
                 })
             })
 
-            it(`shouldn't capture an event recording the opt-out action`, function () {
+            it(`shouldn't capture an event recording the opt-out action`, () => {
                 TOKENS.forEach((token) => {
                     const capture = sinon.spy()
                     gdpr.optOut(token, { capture, persistenceType })
-                    expect(capture.notCalled).to.be.true
+                    expect(capture.notCalled).toBe(true)
                 })
             })
 
-            it(`shouldn't capture an event if the user is switching opt from in to out`, function () {
+            it(`shouldn't capture an event if the user is switching opt from in to out`, () => {
                 TOKENS.forEach((token) => {
                     let capture = sinon.spy()
                     gdpr.optIn(token)
                     gdpr.optOut(token, { capture, persistenceType })
-                    expect(capture.calledOnce).to.be.false
+                    expect(capture.calledOnce).toBe(false)
                 })
             })
 
-            it(`should allow use of a custom "persistence prefix" string (with correct default behavior)`, function () {
+            it(`should allow use of a custom "persistence prefix" string (with correct default behavior)`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
                     gdpr.optOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
@@ -188,165 +193,171 @@ describe(`GDPR utils`, function () {
         })
     })
 
-    describe(`hasOptedIn`, function () {
+    describe(`hasOptedIn`, () => {
         forPersistenceTypes(function (persistenceType) {
-            it(`should return 'false' if the user hasn't opted in for a given token`, function () {
+            it(`should return 'false' if the user hasn't opted in for a given token`, () => {
                 TOKENS.forEach((token) => {
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'true' if the user opts in for a given token`, function () {
+            it(`should return 'true' if the user opts in for a given token`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.true
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(true)
                 })
             })
 
-            it(`should return 'false' if the user opts in for any other token`, function () {
+            it(`should return 'false' if the user opts in for any other token`, () => {
                 const token = TOKENS[0]
                 gdpr.optIn(token)
 
                 TOKENS.filter((otherToken) => otherToken !== token).forEach((otherToken) => {
-                    expect(gdpr.hasOptedIn(otherToken, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedIn(otherToken, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'false' if the user opts out`, function () {
+            it(`should return 'false' if the user opts out`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'true' if the user opts out then opts in`, function () {
+            it(`should return 'true' if the user opts out then opts in`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.true
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(true)
                 })
             })
 
-            it(`should return 'false' if the user opts in then opts out`, function () {
+            it(`should return 'false' if the user opts in then opts out`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
                     gdpr.optOut(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'false' if the user opts in then clears their opt status`, function () {
+            it(`should return 'false' if the user opts in then clears their opt status`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
                     gdpr.clearOptInOut(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'true' if the user clears their opt status then opts in`, function () {
+            it(`should return 'true' if the user clears their opt status then opts in`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.clearOptInOut(token, { persistenceType })
                     gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.true
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(true)
                 })
             })
 
-            it(`should allow use of a custom "persistence prefix" string`, function () {
+            it(`should allow use of a custom "persistence prefix" string`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.false
-                    expect(gdpr.hasOptedIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })).to
-                        .be.true
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(false)
+                    expect(
+                        gdpr.hasOptedIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
+                    ).toBe(true)
                     gdpr.optOut(token)
-                    expect(gdpr.hasOptedIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })).to
-                        .be.true
+                    expect(
+                        gdpr.hasOptedIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
+                    ).toBe(true)
                     gdpr.optOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })).to
-                        .be.false
+                    expect(
+                        gdpr.hasOptedIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
+                    ).toBe(false)
                 })
             })
         })
     })
 
-    describe(`hasOptedOut`, function () {
+    describe(`hasOptedOut`, () => {
         forPersistenceTypes(function (persistenceType) {
-            it(`should return 'false' if the user hasn't opted out for a given token`, function () {
+            it(`should return 'false' if the user hasn't opted out for a given token`, () => {
                 TOKENS.forEach((token) => {
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'true' if the user opts out for a given token`, function () {
+            it(`should return 'true' if the user opts out for a given token`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.true
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(true)
                 })
             })
 
-            it(`should return 'false' if the user opts out for any other token`, function () {
+            it(`should return 'false' if the user opts out for any other token`, () => {
                 const token = TOKENS[0]
                 gdpr.optIn(token, { persistenceType })
 
                 TOKENS.filter((otherToken) => otherToken !== token).forEach((otherToken) => {
-                    expect(gdpr.hasOptedIn(otherToken, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedIn(otherToken, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'false' if the user opts in`, function () {
+            it(`should return 'false' if the user opts in`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'true' if the user opts in then opts out`, function () {
+            it(`should return 'true' if the user opts in then opts out`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
                     gdpr.optOut(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.true
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(true)
                 })
             })
 
-            it(`should return 'false' if the user opts out then opts in`, function () {
+            it(`should return 'false' if the user opts out then opts in`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'false' if the user opts out then clears their opt status`, function () {
+            it(`should return 'false' if the user opts out then clears their opt status`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
                     gdpr.clearOptInOut(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should return 'true' if the user clears their opt status then opts out`, function () {
+            it(`should return 'true' if the user clears their opt status then opts out`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.clearOptInOut(token, { persistenceType })
                     gdpr.optOut(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.true
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(true)
                 })
             })
 
-            it(`should allow use of a custom "persistence prefix" string`, function () {
+            it(`should allow use of a custom "persistence prefix" string`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.false
-                    expect(gdpr.hasOptedOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType }))
-                        .to.be.true
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
+                    expect(
+                        gdpr.hasOptedOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
+                    ).toBe(true)
                     gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType }))
-                        .to.be.true
+                    expect(
+                        gdpr.hasOptedOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
+                    ).toBe(true)
                     gdpr.optIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType }))
-                        .to.be.false
+                    expect(
+                        gdpr.hasOptedOut(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
+                    ).toBe(false)
                 })
             })
 
-            it(`should return 'true' if the user has navigator.doNotTrack flag set`, function () {
+            it(`should return 'true' if the user has navigator.doNotTrack flag set`, () => {
                 const falseyValues = [false, 0, `0`, `no`, `unspecified`]
                 const truthyValues = [true, 1, `1`, `yes`]
                 const setters = [
@@ -357,19 +368,19 @@ describe(`GDPR utils`, function () {
 
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
 
                     falseyValues.forEach((value) =>
                         setters.forEach((set) => {
                             set(value)
-                            expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.false
+                            expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
                         })
                     )
 
                     truthyValues.forEach((value) =>
                         setters.forEach((set) => {
                             set(value)
-                            expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.true
+                            expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(true)
                         })
                     )
 
@@ -382,9 +393,9 @@ describe(`GDPR utils`, function () {
         })
     })
 
-    describe(`clearOptInOut`, function () {
+    describe(`clearOptInOut`, () => {
         forPersistenceTypes(function (persistenceType) {
-            it(`should delete any opt cookies for a given token`, function () {
+            it(`should delete any opt cookies for a given token`, () => {
                 ;[gdpr.optIn, gdpr.optOut].forEach((optFunc) => {
                     TOKENS.forEach((token) => {
                         optFunc(token, { persistenceType })
@@ -398,7 +409,7 @@ describe(`GDPR utils`, function () {
                 })
             })
 
-            it(`shouldn't delete opt cookies for any other token`, function () {
+            it(`shouldn't delete opt cookies for any other token`, () => {
                 const token = TOKENS[0]
 
                 ;[gdpr.optIn, gdpr.optOut].forEach((optFunc) => {
@@ -412,25 +423,25 @@ describe(`GDPR utils`, function () {
                 })
             })
 
-            it(`should cause hasOptedIn to switch from returning 'true' to returning 'false'`, function () {
+            it(`should cause hasOptedIn to switch from returning 'true' to returning 'false'`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.true
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(true)
                     gdpr.clearOptInOut(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should cause hasOptedOut to switch from returning 'true' to returning 'false'`, function () {
+            it(`should cause hasOptedOut to switch from returning 'true' to returning 'false'`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).to.be.true
+                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(true)
                     gdpr.clearOptInOut(token, { persistenceType })
-                    expect(gdpr.hasOptedIn(token, { persistenceType })).to.be.false
+                    expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(false)
                 })
             })
 
-            it(`should allow use of a custom "persistence prefix" string`, function () {
+            it(`should allow use of a custom "persistence prefix" string`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, {
                         persistenceType,
@@ -441,14 +452,14 @@ describe(`GDPR utils`, function () {
                             persistenceType,
                             persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
                         })
-                    ).to.be.true
+                    ).toBe(true)
                     gdpr.clearOptInOut(token, { persistenceType })
                     expect(
                         gdpr.hasOptedIn(token, {
                             persistenceType,
                             persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
                         })
-                    ).to.be.true
+                    ).toBe(true)
                     gdpr.clearOptInOut(token, {
                         persistenceType,
                         persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
@@ -458,7 +469,7 @@ describe(`GDPR utils`, function () {
                             persistenceType,
                             persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
                         })
-                    ).to.be.false
+                    ).toBe(false)
                     gdpr.optOut(token, {
                         persistenceType,
                         persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
@@ -468,14 +479,14 @@ describe(`GDPR utils`, function () {
                             persistenceType,
                             persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
                         })
-                    ).to.be.true
+                    ).toBe(true)
                     gdpr.clearOptInOut(token)
                     expect(
                         gdpr.hasOptedOut(token, {
                             persistenceType,
                             persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
                         })
-                    ).to.be.true
+                    ).toBe(true)
                     gdpr.clearOptInOut(token, {
                         persistenceType,
                         persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
@@ -485,119 +496,119 @@ describe(`GDPR utils`, function () {
                             persistenceType,
                             persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
                         })
-                    ).to.be.false
+                    ).toBe(false)
                 })
             })
         })
     })
 
-    describe(`addOptOutCheckPostHogLib`, function () {
+    describe(`addOptOutCheckPostHogLib`, () => {
         const captureEventName = `єνєηт`
         const captureProperties = { '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞': `𝓿𝓪𝓵𝓾𝓮` }
-        let getConfig, capture, mixpanelLib
+        let getConfig, capture, postHogLib
 
         function setupMocks(getConfigFunc, options) {
             getConfig = sinon.spy((name) => getConfigFunc()[name])
             capture = sinon.spy()
-            mixpanelLib = {
+            postHogLib = {
                 get_config: getConfig,
                 capture: gdpr.addOptOutCheckPostHogLib(capture, options),
             }
         }
 
         forPersistenceTypes(function (persistenceType) {
-            it(`should call the wrapped method if the user is neither opted in or opted out`, function () {
+            it(`should call the wrapped method if the user is neither opted in or opted out`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
 
-                    mixpanelLib.capture(captureEventName, captureProperties)
+                    postHogLib.capture(captureEventName, captureProperties)
 
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).to.be.true
+                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
                 })
             })
 
-            it(`should call the wrapped method if the user is opted in`, function () {
+            it(`should call the wrapped method if the user is opted in`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelLib.capture(captureEventName, captureProperties)
+                    postHogLib.capture(captureEventName, captureProperties)
 
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).to.be.true
+                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
                 })
             })
 
-            it(`should not call the wrapped method if the user is opted out`, function () {
+            it(`should not call the wrapped method if the user is opted out`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
 
                     gdpr.optOut(token, { persistenceType })
-                    mixpanelLib.capture(captureEventName, captureProperties)
+                    postHogLib.capture(captureEventName, captureProperties)
 
-                    expect(capture.notCalled).to.be.true
+                    expect(capture.notCalled).toBe(true)
                 })
             })
 
-            it(`should not invoke the callback directly if the user is neither opted in or opted out`, function () {
+            it(`should not invoke the callback directly if the user is neither opted in or opted out`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
                     const callback = sinon.spy()
 
-                    mixpanelLib.capture(captureEventName, captureProperties, callback)
+                    postHogLib.capture(captureEventName, captureProperties, callback)
 
-                    expect(callback.notCalled).to.be.true
+                    expect(callback.notCalled).toBe(true)
                 })
             })
 
-            it(`should not invoke the callback directly if the user is opted in`, function () {
+            it(`should not invoke the callback directly if the user is opted in`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
                     const callback = sinon.spy()
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelLib.capture(captureEventName, captureProperties, callback)
+                    postHogLib.capture(captureEventName, captureProperties, callback)
 
-                    expect(callback.notCalled).to.be.true
+                    expect(callback.notCalled).toBe(true)
                 })
             })
 
-            it(`should invoke the callback directly if the user is opted out`, function () {
+            it(`should invoke the callback directly if the user is opted out`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
                     const callback = sinon.spy()
 
                     gdpr.optOut(token, { persistenceType })
-                    mixpanelLib.capture(captureEventName, captureProperties, callback)
+                    postHogLib.capture(captureEventName, captureProperties, callback)
 
-                    expect(callback.calledOnceWith(0)).to.be.true
+                    expect(callback.calledOnceWith(0)).toBe(true)
                 })
             })
 
-            it(`should call the wrapped method if there is no token available`, function () {
+            it(`should call the wrapped method if there is no token available`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token: null, opt_out_capturing_persistence_type: persistenceType }))
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelLib.capture(captureEventName, captureProperties)
+                    postHogLib.capture(captureEventName, captureProperties)
 
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).to.be.true
+                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
                 })
             })
 
-            it(`should call the wrapped method if an unexpected error occurs`, function () {
+            it(`should call the wrapped method if an unexpected error occurs`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => {
                         throw new Error(`Unexpected error!`)
                     })
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelLib.capture(captureEventName, captureProperties)
+                    postHogLib.capture(captureEventName, captureProperties)
 
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).to.be.true
+                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
                 })
             })
 
-            it(`should allow use of a custom "persistence prefix" string`, function () {
+            it(`should allow use of a custom "persistence prefix" string`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({
                         token,
@@ -606,131 +617,131 @@ describe(`GDPR utils`, function () {
                     }))
 
                     gdpr.optOut(token, { persistenceType, persistencePrefix: CUSTOM_PERSISTENCE_PREFIX })
-                    mixpanelLib.capture(captureEventName, captureProperties)
+                    postHogLib.capture(captureEventName, captureProperties)
 
-                    expect(capture.notCalled).to.be.true
+                    expect(capture.notCalled).toBe(true)
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelLib.capture(captureEventName, captureProperties)
+                    postHogLib.capture(captureEventName, captureProperties)
 
-                    expect(capture.notCalled).to.be.true
+                    expect(capture.notCalled).toBe(true)
 
                     gdpr.optIn(token, { persistenceType, persistencePrefix: CUSTOM_PERSISTENCE_PREFIX })
-                    mixpanelLib.capture(captureEventName, captureProperties)
+                    postHogLib.capture(captureEventName, captureProperties)
 
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).to.be.true
+                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
                 })
             })
         })
     })
 
-    describe(`addOptOutCheckPostHogPeople`, function () {
+    describe(`addOptOutCheckPostHogPeople`, () => {
         const setPropertyName = '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞'
         const setPropertyValue = `𝓿𝓪𝓵𝓾𝓮`
-        let getConfig, set, mixpanelPeople
+        let getConfig, set, postHogPeople
 
         function setupMocks(getConfigFunc, options) {
             getConfig = sinon.spy((name) => getConfigFunc()[name])
             set = sinon.spy()
-            mixpanelPeople = {
+            postHogPeople = {
                 _get_config: getConfig,
                 set: gdpr.addOptOutCheckPostHogPeople(set, options),
             }
         }
 
         forPersistenceTypes(function (persistenceType) {
-            it(`should call the wrapped method if the user is neither opted in or opted out`, function () {
+            it(`should call the wrapped method if the user is neither opted in or opted out`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
 
-                    mixpanelPeople.set(setPropertyName, setPropertyValue)
+                    postHogPeople.set(setPropertyName, setPropertyValue)
 
-                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).to.be.true
+                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).toBe(true)
                 })
             })
 
-            it(`should call the wrapped method if the user is opted in`, function () {
+            it(`should call the wrapped method if the user is opted in`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue)
+                    postHogPeople.set(setPropertyName, setPropertyValue)
 
-                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).to.be.true
+                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).toBe(true)
                 })
             })
 
-            it(`should not call the wrapped method if the user is opted out`, function () {
+            it(`should not call the wrapped method if the user is opted out`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
 
                     gdpr.optOut(token, { persistenceType })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue)
+                    postHogPeople.set(setPropertyName, setPropertyValue)
 
-                    expect(set.notCalled).to.be.true
+                    expect(set.notCalled).toBe(true)
                 })
             })
 
-            it(`should not invoke the callback directly if the user is neither opted in or opted out`, function () {
+            it(`should not invoke the callback directly if the user is neither opted in or opted out`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
                     const callback = sinon.spy()
 
-                    mixpanelPeople.set(setPropertyName, setPropertyValue, callback)
+                    postHogPeople.set(setPropertyName, setPropertyValue, callback)
 
-                    expect(callback.notCalled).to.be.true
+                    expect(callback.notCalled).toBe(true)
                 })
             })
 
-            it(`should not invoke the callback directly if the user is opted in`, function () {
+            it(`should not invoke the callback directly if the user is opted in`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
                     const callback = sinon.spy()
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue, callback)
+                    postHogPeople.set(setPropertyName, setPropertyValue, callback)
 
-                    expect(callback.notCalled).to.be.true
+                    expect(callback.notCalled).toBe(true)
                 })
             })
 
-            it(`should invoke the callback directly if the user is opted out`, function () {
+            it(`should invoke the callback directly if the user is opted out`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
                     const callback = sinon.spy()
 
                     gdpr.optOut(token, { persistenceType })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue, callback)
+                    postHogPeople.set(setPropertyName, setPropertyValue, callback)
 
-                    expect(callback.calledOnceWith(0)).to.be.true
+                    expect(callback.calledOnceWith(0)).toBe(true)
                 })
             })
 
-            it(`should call the wrapped method if there is no token available`, function () {
+            it(`should call the wrapped method if there is no token available`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({ token: null, opt_out_capturing_persistence_type: persistenceType }))
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue)
+                    postHogPeople.set(setPropertyName, setPropertyValue)
 
-                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).to.be.true
+                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).toBe(true)
                 })
             })
 
-            it(`should call the wrapped method if an unexpected error occurs`, function () {
+            it(`should call the wrapped method if an unexpected error occurs`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => {
                         throw new Error(`Unexpected error!`)
                     })
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue)
+                    postHogPeople.set(setPropertyName, setPropertyValue)
 
-                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).to.be.true
+                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).toBe(true)
                 })
             })
 
-            it(`should allow use of a custom "persistence prefix" string`, function () {
+            it(`should allow use of a custom "persistence prefix" string`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({
                         token,
@@ -739,19 +750,19 @@ describe(`GDPR utils`, function () {
                     }))
 
                     gdpr.optOut(token, { persistenceType, persistencePrefix: CUSTOM_PERSISTENCE_PREFIX })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue)
+                    postHogPeople.set(setPropertyName, setPropertyValue)
 
-                    expect(set.notCalled).to.be.true
+                    expect(set.notCalled).toBe(true)
 
                     gdpr.optIn(token, { persistenceType })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue)
+                    postHogPeople.set(setPropertyName, setPropertyValue)
 
-                    expect(set.notCalled).to.be.true
+                    expect(set.notCalled).toBe(true)
 
                     gdpr.optIn(token, { persistenceType, persistencePrefix: CUSTOM_PERSISTENCE_PREFIX })
-                    mixpanelPeople.set(setPropertyName, setPropertyValue)
+                    postHogPeople.set(setPropertyName, setPropertyValue)
 
-                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).to.be.true
+                    expect(set.calledOnceWith(setPropertyName, setPropertyValue)).toBe(true)
                 })
             })
         })

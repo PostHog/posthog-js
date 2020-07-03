@@ -1,8 +1,8 @@
-import npm from 'rollup-plugin-npm'
+import resolve from '@rollup/plugin-node-resolve'
 
 export default {
     plugins: [
-        npm({
+        resolve({
             browser: true,
             main: true,
             jsnext: true,
