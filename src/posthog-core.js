@@ -29,7 +29,7 @@ var posthog_master // main posthog instance / object
 var INIT_MODULE = 0
 var INIT_SNIPPET = 1
 // some globals for comparisons
-var __NOOP = function() {}
+var __NOOP = function () {}
 var __NOOPTIONS = {}
 
 /** @const */ var PRIMARY_INSTANCE_NAME = 'posthog'
@@ -65,7 +65,7 @@ var DEFAULT_CONFIG = {
     persistence: 'cookie',
     persistence_name: '',
     cookie_name: '',
-    loaded: function() {},
+    loaded: function () {},
     store_google: true,
     save_referrer: true,
     test: false,
@@ -97,7 +97,7 @@ var DOM_LOADED = false
  * PostHog Library Object
  * @constructor
  */
-var PostHogLib = function() {}
+var PostHogLib = function () {}
 
 /**
  * create_mplib(token:string, config:object, name:string)
@@ -107,7 +107,7 @@ var PostHogLib = function() {}
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-var create_mplib = function(token, config, name) {
+var create_mplib = function (token, config, name) {
     var instance,
         target = name === PRIMARY_INSTANCE_NAME ? posthog_master : posthog_master[name]
 
@@ -182,7 +182,7 @@ var create_mplib = function(token, config, name) {
  * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
  * @param {String} [name]    The name for the new posthog instance that you want created
  */
-PostHogLib.prototype.init = function(token, config, name) {
+PostHogLib.prototype.init = function (token, config, name) {
     if (_.isUndefined(name)) {
         console.error('You must name your new library: init(token, config, name)')
         return
@@ -206,7 +206,7 @@ PostHogLib.prototype.init = function(token, config, name) {
 // method is this one initializes the actual instance, whereas the
 // init(...) method sets up a new library and calls _init on it.
 //
-PostHogLib.prototype._init = function(token, config, name) {
+PostHogLib.prototype._init = function (token, config, name) {
     this['__loaded'] = true
     this['config'] = {}
     this['_triggered_notifs'] = []
@@ -219,13 +219,13 @@ PostHogLib.prototype._init = function(token, config, name) {
         })
     )
 
-    this['_jsc'] = function() {}
+    this['_jsc'] = function () {}
 
     // batching requests variabls
     this._event_queue = []
     this._empty_queue_count = 0 // to track empty polls
     this._should_poll = true // flag to continue to recursively poll or not
-    this._poller = function() {} // to become interval for reference to clear later
+    this._poller = function () {} // to become interval for reference to clear later
 
     this.__dom_loaded_queue = []
     this.__request_queue = []
@@ -257,7 +257,7 @@ PostHogLib.prototype._init = function(token, config, name) {
 
 // Private methods
 
-PostHogLib.prototype._loaded = function() {
+PostHogLib.prototype._loaded = function () {
     this.get_config('loaded')(this)
 
     // this happens after so a user can call identify in
@@ -267,10 +267,10 @@ PostHogLib.prototype._loaded = function() {
     }
 }
 
-PostHogLib.prototype._dom_loaded = function() {
+PostHogLib.prototype._dom_loaded = function () {
     _.each(
         this.__dom_loaded_queue,
-        function(item) {
+        function (item) {
             this._capture_dom.apply(this, item)
         },
         this
@@ -279,7 +279,7 @@ PostHogLib.prototype._dom_loaded = function() {
     if (!this.has_opted_out_capturing()) {
         _.each(
             this.__request_queue,
-            function(item) {
+            function (item) {
                 this._send_request.apply(this, item)
             },
             this
@@ -293,7 +293,7 @@ PostHogLib.prototype._dom_loaded = function() {
     delete this.__request_queue
 }
 
-PostHogLib.prototype._capture_dom = function(DomClass, args) {
+PostHogLib.prototype._capture_dom = function (DomClass, args) {
     if (this.get_config('img')) {
         console.error("You can't use DOM capturing functions with img = true.")
         return false
@@ -317,13 +317,13 @@ PostHogLib.prototype._capture_dom = function(DomClass, args) {
  * If we are going to use script tags, this returns a string to use as the
  * callback GET param.
  */
-PostHogLib.prototype._prepare_callback = function(callback, data) {
+PostHogLib.prototype._prepare_callback = function (callback, data) {
     if (_.isUndefined(callback)) {
         return null
     }
 
     if (USE_XHR) {
-        var callback_function = function(response) {
+        var callback_function = function (response) {
             callback(response, data)
         }
         return callback_function
@@ -334,7 +334,7 @@ PostHogLib.prototype._prepare_callback = function(callback, data) {
         var jsc = this['_jsc']
         var randomized_cb = '' + Math.floor(Math.random() * 100000000)
         var callback_string = this.get_config('callback_fn') + '[' + randomized_cb + ']'
-        jsc[randomized_cb] = function(response) {
+        jsc[randomized_cb] = function (response) {
             delete jsc[randomized_cb]
             callback(response, data)
         }
@@ -342,7 +342,7 @@ PostHogLib.prototype._prepare_callback = function(callback, data) {
     }
 }
 
-PostHogLib.prototype._event_enqueue = function(url, data, options, callback) {
+PostHogLib.prototype._event_enqueue = function (url, data, options, callback) {
     this._event_queue.push({ url, data, options, callback })
 
     if (!this._should_poll) {
@@ -351,9 +351,9 @@ PostHogLib.prototype._event_enqueue = function(url, data, options, callback) {
     }
 }
 
-PostHogLib.prototype._format_event_queue_data = function() {
+PostHogLib.prototype._format_event_queue_data = function () {
     const requests = {}
-    _.each(this._event_queue, request => {
+    _.each(this._event_queue, (request) => {
         const { url, data } = request
         if (requests[url] === undefined) requests[url] = []
         requests[url].push(data)
@@ -361,14 +361,14 @@ PostHogLib.prototype._format_event_queue_data = function() {
     return requests
 }
 
-PostHogLib.prototype._event_queue_poll = function() {
+PostHogLib.prototype._event_queue_poll = function () {
     const POLL_INTERVAL = 3000
     this._poller = setTimeout(() => {
         if (this._event_queue.length > 0) {
             const requests = this._format_event_queue_data()
             for (let url in requests) {
                 let data = requests[url]
-                _.each(data, function(value, key) {
+                _.each(data, function (value, key) {
                     data[key]['offset'] = Math.abs(data[key]['timestamp'] - new Date())
                     delete data[key]['timestamp']
                 })
@@ -399,7 +399,7 @@ PostHogLib.prototype._event_queue_poll = function() {
     }, POLL_INTERVAL)
 }
 
-PostHogLib.prototype._handle_unload = function() {
+PostHogLib.prototype._handle_unload = function () {
     if (!this.get_config('request_batching')) {
         this.capture('$pageleave', null, { transport: 'sendbeacon' })
         return
@@ -420,7 +420,7 @@ PostHogLib.prototype._handle_unload = function() {
     }
 }
 
-PostHogLib.prototype._send_request = function(url, data, options, callback) {
+PostHogLib.prototype._send_request = function (url, data, options, callback) {
     if (ENQUEUE_REQUESTS) {
         this.__request_queue.push(arguments)
         return
@@ -511,14 +511,14 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
             if (use_post) {
                 headers['Content-Type'] = 'application/x-www-form-urlencoded'
             }
-            _.each(headers, function(headerValue, headerName) {
+            _.each(headers, function (headerValue, headerName) {
                 req.setRequestHeader(headerName, headerValue)
             })
 
             // send the ph_optout cookie
             // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
             req.withCredentials = true
-            req.onreadystatechange = function() {
+            req.onreadystatechange = function () {
                 if (req.readyState === 4) {
                     // XMLHttpRequest.DONE == 4, except in safari 4
                     if (req.status === 200) {
@@ -572,14 +572,14 @@ PostHogLib.prototype._send_request = function(url, data, options, callback) {
  *
  * @param {Array} array
  */
-PostHogLib.prototype._execute_array = function(array) {
+PostHogLib.prototype._execute_array = function (array) {
     var fn_name,
         alias_calls = [],
         other_calls = [],
         capturing_calls = []
     _.each(
         array,
-        function(item) {
+        function (item) {
             if (item) {
                 fn_name = item[0]
                 if (_.isArray(fn_name)) {
@@ -602,14 +602,14 @@ PostHogLib.prototype._execute_array = function(array) {
         this
     )
 
-    var execute = function(calls, context) {
+    var execute = function (calls, context) {
         _.each(
             calls,
-            function(item) {
+            function (item) {
                 if (_.isArray(item[0])) {
                     // chained call
                     var caller = context
-                    _.each(item, function(call) {
+                    _.each(item, function (call) {
                         caller = caller[call[0]].apply(caller, call.slice(1))
                     })
                 } else {
@@ -637,7 +637,7 @@ PostHogLib.prototype._execute_array = function(array) {
  *
  * @param {Array} item A [function_name, args...] array to be executed
  */
-PostHogLib.prototype.push = function(item) {
+PostHogLib.prototype.push = function (item) {
     this._execute_array([item])
 }
 
@@ -661,7 +661,7 @@ PostHogLib.prototype.push = function(item) {
  * @param {String} [options.transport] Transport method for network request ('xhr' or 'sendBeacon').
  * @param {Function} [callback] If provided, the callback function will be called after capturing the event.
  */
-PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, properties, options, callback) {
+PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options, callback) {
     if (!callback && typeof options === 'function') {
         callback = options
         options = null
@@ -715,7 +715,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
 
     var property_blacklist = this.get_config('property_blacklist')
     if (_.isArray(property_blacklist)) {
-        _.each(property_blacklist, function(blacklisted_prop) {
+        _.each(property_blacklist, function (blacklisted_prop) {
             delete properties[blacklisted_prop]
         })
     } else {
@@ -746,11 +746,11 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function(event_name, pro
     return truncated_data
 })
 
-PostHogLib.prototype._create_map_key = function(group_key, group_id) {
+PostHogLib.prototype._create_map_key = function (group_key, group_id) {
     return group_key + '_' + JSON.stringify(group_id)
 }
 
-PostHogLib.prototype._remove_group_from_cache = function(group_key, group_id) {
+PostHogLib.prototype._remove_group_from_cache = function (group_key, group_id) {
     delete this._cached_groups[this._create_map_key(group_key, group_id)]
 }
 
@@ -762,7 +762,7 @@ PostHogLib.prototype._remove_group_from_cache = function(group_key, group_id) {
  * @param {String} [page] The url of the page to record. If you don't include this, it defaults to the current url.
  * @api private
  */
-PostHogLib.prototype.capture_pageview = function(page) {
+PostHogLib.prototype.capture_pageview = function (page) {
     if (_.isUndefined(page)) {
         page = document.location.href
     }
@@ -797,7 +797,7 @@ PostHogLib.prototype.capture_pageview = function(page) {
  * @param {String} event_name The name of the event to capture
  * @param {Object|Function} [properties] A properties object or function that returns a dictionary of properties when passed a DOMElement
  */
-PostHogLib.prototype.capture_links = function() {
+PostHogLib.prototype.capture_links = function () {
     return this._capture_dom.call(this, LinkCapture, arguments)
 }
 
@@ -828,7 +828,7 @@ PostHogLib.prototype.capture_links = function() {
  * @param {String} event_name The name of the event to capture
  * @param {Object|Function} [properties] This can be a set of properties, or a function that returns a set of properties after being passed a DOMElement
  */
-PostHogLib.prototype.capture_forms = function() {
+PostHogLib.prototype.capture_forms = function () {
     return this._capture_dom.call(this, FormCaptureer, arguments)
 }
 
@@ -850,7 +850,7 @@ PostHogLib.prototype.capture_forms = function() {
  * @param {Object} properties An associative array of properties to store about the user
  * @param {Number} [days] How many days since the user's last visit to store the super properties
  */
-PostHogLib.prototype.register = function(props, days) {
+PostHogLib.prototype.register = function (props, days) {
     this['persistence'].register(props, days)
 }
 
@@ -874,7 +874,7 @@ PostHogLib.prototype.register = function(props, days) {
  * @param {*} [default_value] Value to override if already set in super properties (ex: 'False') Default: 'None'
  * @param {Number} [days] How many days since the users last visit to store the super properties
  */
-PostHogLib.prototype.register_once = function(props, default_value, days) {
+PostHogLib.prototype.register_once = function (props, default_value, days) {
     this['persistence'].register_once(props, default_value, days)
 }
 
@@ -883,11 +883,11 @@ PostHogLib.prototype.register_once = function(props, default_value, days) {
  *
  * @param {String} property The name of the super property to remove
  */
-PostHogLib.prototype.unregister = function(property) {
+PostHogLib.prototype.unregister = function (property) {
     this['persistence'].unregister(property)
 }
 
-PostHogLib.prototype._register_single = function(prop, value) {
+PostHogLib.prototype._register_single = function (prop, value) {
     var props = {}
     props[prop] = value
     this.register(props)
@@ -902,7 +902,7 @@ PostHogLib.prototype._register_single = function(prop, value) {
  *
  * @param {Object|String} prop Key of the feature flag.
  */
-PostHogLib.prototype.isFeatureEnabled = function(key) {
+PostHogLib.prototype.isFeatureEnabled = function (key) {
     return this.feature_flags.isFeatureEnabled(key)
 }
 
@@ -915,7 +915,7 @@ PostHogLib.prototype.isFeatureEnabled = function(key) {
  *
  * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
  */
-PostHogLib.prototype.onFeatureFlags = function(callback) {
+PostHogLib.prototype.onFeatureFlags = function (callback) {
     return this.feature_flags.onFeatureFlags(callback)
 }
 
@@ -946,7 +946,7 @@ PostHogLib.prototype.onFeatureFlags = function(callback) {
  *
  * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
  */
-PostHogLib.prototype.identify = function(new_distinct_id, _set_callback, _set_once_callback) {
+PostHogLib.prototype.identify = function (new_distinct_id, _set_callback, _set_once_callback) {
     // Optional Parameters
     //  _set_callback:function  A callback to be run if and when the People set queue is flushed
     //  _set_once_callback:function  A callback to be run if and when the People set_once queue is flushed
@@ -994,7 +994,7 @@ PostHogLib.prototype.identify = function(new_distinct_id, _set_callback, _set_on
  * Clears super properties and generates a new random distinct_id for this instance.
  * Useful for clearing data when a user logs out.
  */
-PostHogLib.prototype.reset = function(reset_device_id) {
+PostHogLib.prototype.reset = function (reset_device_id) {
     let device_id = this.get_property('$device_id')
     this['persistence'].clear()
     this._flags.identify_called = false
@@ -1024,7 +1024,7 @@ PostHogLib.prototype.reset = function(reset_device_id) {
  *         }
  *     });
  */
-PostHogLib.prototype.get_distinct_id = function() {
+PostHogLib.prototype.get_distinct_id = function () {
     return this.get_property('distinct_id')
 }
 
@@ -1049,7 +1049,7 @@ PostHogLib.prototype.get_distinct_id = function() {
  * @param {String} alias A unique identifier that you want to use for this user in the future.
  * @param {String} [original] The current identifier being used for this user.
  */
-PostHogLib.prototype.alias = function(alias, original) {
+PostHogLib.prototype.alias = function (alias, original) {
     // If the $people_distinct_id key exists in persistence, there has been a previous
     // posthog.people.identify() call made for this user. It is VERY BAD to make an alias with
     // this ID, as it will duplicate users.
@@ -1064,7 +1064,7 @@ PostHogLib.prototype.alias = function(alias, original) {
     }
     if (alias !== original) {
         this._register_single(ALIAS_ID_KEY, alias)
-        return this.capture('$create_alias', { alias: alias, distinct_id: original }, function() {
+        return this.capture('$create_alias', { alias: alias, distinct_id: original }, function () {
             // Flush the people queue
             _this.identify(alias)
         })
@@ -1171,7 +1171,7 @@ PostHogLib.prototype.alias = function(alias, original) {
  *
  * @param {Object} config A dictionary of new configuration values to update
  */
-PostHogLib.prototype.set_config = function(config) {
+PostHogLib.prototype.set_config = function (config) {
     if (_.isObject(config)) {
         _.extend(this['config'], config)
 
@@ -1192,7 +1192,7 @@ PostHogLib.prototype.set_config = function(config) {
 /**
  * returns the current config object for the library.
  */
-PostHogLib.prototype.get_config = function(prop_name) {
+PostHogLib.prototype.get_config = function (prop_name) {
     return this['config'][prop_name]
 }
 
@@ -1214,11 +1214,11 @@ PostHogLib.prototype.get_config = function(prop_name) {
  *
  * @param {String} property_name The name of the super property you want to retrieve
  */
-PostHogLib.prototype.get_property = function(property_name) {
+PostHogLib.prototype.get_property = function (property_name) {
     return this['persistence']['props'][property_name]
 }
 
-PostHogLib.prototype.toString = function() {
+PostHogLib.prototype.toString = function () {
     var name = this.get_config('name')
     if (name !== PRIMARY_INSTANCE_NAME) {
         name = PRIMARY_INSTANCE_NAME + '.' + name
@@ -1226,12 +1226,12 @@ PostHogLib.prototype.toString = function() {
     return name
 }
 
-PostHogLib.prototype._event_is_disabled = function(event_name) {
+PostHogLib.prototype._event_is_disabled = function (event_name) {
     return _.isBlockedUA(userAgent) || this._flags.disable_all_events || _.include(this.__disabled_events, event_name)
 }
 
 // perform some housekeeping around GDPR opt-in/out state
-PostHogLib.prototype._gdpr_init = function() {
+PostHogLib.prototype._gdpr_init = function () {
     var is_localStorage_requested = this.get_config('opt_out_capturing_persistence_type') === 'localStorage'
 
     // try to convert opt-in/out cookies to localStorage if possible
@@ -1272,7 +1272,7 @@ PostHogLib.prototype._gdpr_init = function() {
  * @param {boolean} [options.clear_persistence] If true, will delete all data stored by the sdk in persistence and disable it
  * @param {boolean} [options.enable_persistence] If true, will re-enable sdk persistence
  */
-PostHogLib.prototype._gdpr_update_persistence = function(options) {
+PostHogLib.prototype._gdpr_update_persistence = function (options) {
     var disabled
     if (options && options['clear_persistence']) {
         disabled = true
@@ -1288,7 +1288,7 @@ PostHogLib.prototype._gdpr_update_persistence = function(options) {
 }
 
 // call a base gdpr function after constructing the appropriate token and options args
-PostHogLib.prototype._gdpr_call_func = function(func, options) {
+PostHogLib.prototype._gdpr_call_func = function (func, options) {
     options = _.extend(
         {
             capture: _.bind(this.capture, this),
@@ -1347,7 +1347,7 @@ PostHogLib.prototype._gdpr_call_func = function(func, options) {
  * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
  * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
  */
-PostHogLib.prototype.opt_in_capturing = function(options) {
+PostHogLib.prototype.opt_in_capturing = function (options) {
     options = _.extend(
         {
             enable_persistence: true,
@@ -1358,7 +1358,7 @@ PostHogLib.prototype.opt_in_capturing = function(options) {
     this._gdpr_call_func(optIn, options)
     this._gdpr_update_persistence(options)
 }
-PostHogLib.prototype.opt_in_captureing = function(options) {
+PostHogLib.prototype.opt_in_captureing = function (options) {
     deprecate_warning('opt_in_captureing')
     this.opt_in_capturing(options)
 }
@@ -1386,7 +1386,7 @@ PostHogLib.prototype.opt_in_captureing = function(options) {
  * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
  * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
  */
-PostHogLib.prototype.opt_out_capturing = function(options) {
+PostHogLib.prototype.opt_out_capturing = function (options) {
     options = _.extend(
         {
             clear_persistence: true,
@@ -1404,7 +1404,7 @@ PostHogLib.prototype.opt_out_capturing = function(options) {
     this._gdpr_call_func(optOut, options)
     this._gdpr_update_persistence(options)
 }
-PostHogLib.prototype.opt_out_captureing = function(options) {
+PostHogLib.prototype.opt_out_captureing = function (options) {
     deprecate_warning('opt_out_captureing')
     this.opt_out_capturing(options)
 }
@@ -1422,10 +1422,10 @@ PostHogLib.prototype.opt_out_captureing = function(options) {
  * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
  * @returns {boolean} current opt-in status
  */
-PostHogLib.prototype.has_opted_in_capturing = function(options) {
+PostHogLib.prototype.has_opted_in_capturing = function (options) {
     return this._gdpr_call_func(hasOptedIn, options)
 }
-PostHogLib.prototype.has_opted_in_captureing = function(options) {
+PostHogLib.prototype.has_opted_in_captureing = function (options) {
     deprecate_warning('has_opted_in_captureing')
     return this.has_opted_in_capturing(options)
 }
@@ -1443,10 +1443,10 @@ PostHogLib.prototype.has_opted_in_captureing = function(options) {
  * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
  * @returns {boolean} current opt-out status
  */
-PostHogLib.prototype.has_opted_out_capturing = function(options) {
+PostHogLib.prototype.has_opted_out_capturing = function (options) {
     return this._gdpr_call_func(hasOptedOut, options)
 }
-PostHogLib.prototype.has_opted_out_captureing = function(options) {
+PostHogLib.prototype.has_opted_out_captureing = function (options) {
     deprecate_warning('has_opted_out_captureing')
     return this.has_opted_out_capturing(options)
 }
@@ -1474,7 +1474,7 @@ PostHogLib.prototype.has_opted_out_captureing = function(options) {
  * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
  * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
  */
-PostHogLib.prototype.clear_opt_in_out_capturing = function(options) {
+PostHogLib.prototype.clear_opt_in_out_capturing = function (options) {
     options = _.extend(
         {
             enable_persistence: true,
@@ -1485,7 +1485,7 @@ PostHogLib.prototype.clear_opt_in_out_capturing = function(options) {
     this._gdpr_call_func(clearOptInOut, options)
     this._gdpr_update_persistence(options)
 }
-PostHogLib.prototype.clear_opt_in_out_captureing = function(options) {
+PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
     deprecate_warning('clear_opt_in_out_captureing')
     this.clear_opt_in_out_capturing(options)
 }
@@ -1542,9 +1542,9 @@ PostHogPersistence.prototype['clear'] = PostHogPersistence.prototype.clear
 _.safewrap_class(PostHogLib, ['identify'])
 
 var instances = {}
-var extend_mp = function() {
+var extend_mp = function () {
     // add all the sub posthog instances
-    _.each(instances, function(instance, name) {
+    _.each(instances, function (instance, name) {
         if (name !== PRIMARY_INSTANCE_NAME) {
             posthog_master[name] = instance
         }
@@ -1554,10 +1554,10 @@ var extend_mp = function() {
     posthog_master['_'] = _
 }
 
-var override_ph_init_func = function() {
+var override_ph_init_func = function () {
     // we override the snippets init function to handle the case where a
     // user initializes the posthog library after the script loads & runs
-    posthog_master['init'] = function(token, config, name) {
+    posthog_master['init'] = function (token, config, name) {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
@@ -1587,7 +1587,7 @@ var override_ph_init_func = function() {
     }
 }
 
-var add_dom_loaded_handler = function() {
+var add_dom_loaded_handler = function () {
     // Cross browser DOM Loaded support
     function dom_loaded_handler() {
         // function flag since we only want to execute this once
@@ -1599,7 +1599,7 @@ var add_dom_loaded_handler = function() {
         DOM_LOADED = true
         ENQUEUE_REQUESTS = false
 
-        _.each(instances, function(inst) {
+        _.each(instances, function (inst) {
             inst._dom_loaded()
         })
     }
@@ -1657,7 +1657,7 @@ export function init_from_snippet() {
         return
     }
     // Load instances of the PostHog Library
-    _.each(posthog_master['_i'], function(item) {
+    _.each(posthog_master['_i'], function (item) {
         if (item && _.isArray(item)) {
             instances[item[item.length - 1]] = create_mplib.apply(this, item)
         }
@@ -1667,7 +1667,7 @@ export function init_from_snippet() {
     posthog_master['init']()
 
     // Fire loaded events after updating the window's posthog object
-    _.each(instances, function(instance) {
+    _.each(instances, function (instance) {
         instance._loaded()
     })
 
