@@ -1,24 +1,59 @@
 {
-  "name": "posthog-js",
-  "version": "1.2.2",
-  "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
-  "repository": "https://github.com/PostHog/posthog-js",
-  "author": "hey@posthog.com",
-  "license": "MIT",
-  "scripts": {
-    "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
-    "serve": "parcel serve src/loader-globals.js --port 3001 --out-file dist/array.js",
-    "build": "parcel build src/loader-globals.js --out-file dist/array.js --no-source-maps",
-    "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
-    "prepublish": "yarn build && yarn build-module"
-  },
-  "main": "dist/module.js",
-  "files": [
-    "dist/*"
-  ],
-  "devDependencies": {
-    "parcel": "^1.12.4",
-    "rollup": "^1.32.0",
-    "rollup-plugin-npm": "1.4.0"
-  }
+    "name": "posthog-js",
+    "version": "1.3.0",
+    "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
+    "repository": "https://github.com/PostHog/posthog-js",
+    "author": "hey@posthog.com",
+    "license": "MIT",
+    "scripts": {
+        "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
+        "serve": "parcel serve src/loader-globals.js --port 3001 --out-file dist/array.js",
+        "build": "parcel build src/loader-globals.js --out-file dist/array.js --no-source-maps",
+        "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
+        "process-types": "eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
+        "lint": "eslint src tests --fix",
+        "integration-test": "echo 'Browse to localhost:3000/tests' && node testServer.js",
+        "prepublish": "yarn test && yarn build && yarn build-module && yarn process-types",
+        "test": "jest",
+        "unit-test": "BABEL_ENV=test mocha --require babel-core/register tests/unit/*.js"
+    },
+    "main": "dist/module.js",
+    "types": "dist/module.d.ts",
+    "files": [
+        "dist/*"
+    ],
+    "devDependencies": {
+        "@babel/core": "^7.0.0",
+        "@babel/preset-env": "^7.0.0",
+        "@rollup/plugin-node-resolve": "^8.1.0",
+        "@typescript-eslint/eslint-plugin": "^3.5.0",
+        "@typescript-eslint/parser": "^3.5.0",
+        "babel-eslint": "^10.1.0",
+        "babel-jest": "^26.1.0",
+        "eslint": "^7.3.1",
+        "eslint-plugin-prettier": "^3.1.4",
+        "husky": "^4.2.5",
+        "jest": "^26.1.0",
+        "jsdom": "16.2.2",
+        "jsdom-global": "3.0.2",
+        "lint-staged": "^10.2.11",
+        "localStorage": "1.0.4",
+        "parcel": "^1.12.4",
+        "prettier": "^2.0.5",
+        "rollup": "^2.18.2",
+        "sinon": "9.0.2",
+        "typescript": "^3.9.6"
+    },
+    "husky": {
+        "hooks": {
+            "pre-commit": "lint-staged"
+        }
+    },
+    "lint-staged": {
+        "*.{ts,js,json}": "prettier --write",
+        "*.ts": [
+            "eslint -c .eslintrc.ts.js --fix",
+            "tsc"
+        ]
+    }
 }

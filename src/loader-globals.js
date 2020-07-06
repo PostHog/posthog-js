@@ -1,4 +1,4 @@
 /* eslint camelcase: "off" */
-import { init_from_snippet } from './posthog-core';
+import { init_from_snippet } from './posthog-core'
 
-init_from_snippet();
+init_from_snippet()

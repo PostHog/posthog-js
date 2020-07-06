@@ -1,4 +1,4 @@
-import { _ } from './utils';
+import { _ } from './utils'
 
 /*
  * Get the className of an element, accounting for edge cases where element.className is an object
@@ -6,13 +6,14 @@ import { _ } from './utils';
  * @returns {string} the element's class
  */
 export function getClassName(el) {
-    switch(typeof el.className) {
+    switch (typeof el.className) {
         case 'string':
-            return el.className;
+            return el.className
         case 'object': // handle cases where className might be SVGAnimatedString or some other type
-            return el.className.baseVal || el.getAttribute('class') || '';
-        default: // future proof
-            return '';
+            return el.className.baseVal || el.getAttribute('class') || ''
+        default:
+            // future proof
+            return ''
     }
 }
 
@@ -26,23 +27,26 @@ export function getClassName(el) {
  * @returns {string} the element's direct text content
  */
 export function getSafeText(el) {
-    var elText = '';
+    var elText = ''
 
     if (shouldCaptureElement(el) && el.childNodes && el.childNodes.length) {
-        _.each(el.childNodes, function(child) {
+        _.each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
                 elText += _.trim(child.textContent)
                     // scrub potentially sensitive values
-                    .split(/(\s+)/).filter(shouldCaptureValue).join('')
+                    .split(/(\s+)/)
+                    .filter(shouldCaptureValue)
+                    .join('')
                     // normalize whitespace
-                    .replace(/[\r\n]/g, ' ').replace(/[ ]+/g, ' ')
+                    .replace(/[\r\n]/g, ' ')
+                    .replace(/[ ]+/g, ' ')
                     // truncate
-                    .substring(0, 255);
+                    .substring(0, 255)
             }
-        });
+        })
     }
 
-    return _.trim(elText);
+    return _.trim(elText)
 }
 
 /*
@@ -51,7 +55,7 @@ export function getSafeText(el) {
  * @returns {boolean} whether el is of the correct nodeType
  */
 export function isElementNode(el) {
-    return el && el.nodeType === 1; // Node.ELEMENT_NODE - use integer constant for browser portability
+    return el && el.nodeType === 1 // Node.ELEMENT_NODE - use integer constant for browser portability
 }
 
 /*
@@ -65,7 +69,7 @@ export function isElementNode(el) {
  * @returns {boolean} whether el is of the given tag type
  */
 export function isTag(el, tag) {
-    return el && el.tagName && el.tagName.toLowerCase() === tag.toLowerCase();
+    return el && el.tagName && el.tagName.toLowerCase() === tag.toLowerCase()
 }
 
 /*
@@ -74,12 +78,12 @@ export function isTag(el, tag) {
  * @returns {boolean} whether el is of the correct nodeType
  */
 export function isTextNode(el) {
-    return el && el.nodeType === 3; // Node.TEXT_NODE - use integer constant for browser portability
+    return el && el.nodeType === 3 // Node.TEXT_NODE - use integer constant for browser portability
 }
 
-export var usefulElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label'];
+export var usefulElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
 /*
- * Check whether a DOM event should be "captureed" or if it may contain sentitive data
+ * Check whether a DOM event should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
@@ -87,31 +91,48 @@ export var usefulElements = ['a', 'button', 'form', 'input', 'select', 'textarea
  */
 export function shouldCaptureDomEvent(el, event) {
     if (!el || isTag(el, 'html') || !isElementNode(el)) {
-        return false;
+        return false
     }
 
-    var parentIsUsefulElement = false;
-    var targetElementList = [el];
-    var curEl = el;
+    var parentIsUsefulElement = false
+    var targetElementList = [el]
+    var curEl = el
     while (curEl.parentNode && !isTag(curEl, 'body')) {
-        if(usefulElements.indexOf(curEl.parentNode.tagName.toLowerCase()) > -1) parentIsUsefulElement = true;
-        targetElementList.push(curEl.parentNode);
-        curEl = curEl.parentNode;
+        if (usefulElements.indexOf(curEl.parentNode.tagName.toLowerCase()) > -1) {
+            parentIsUsefulElement = true
+        } else {
+            let compStyles = window.getComputedStyle(curEl.parentNode)
+            if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
+                parentIsUsefulElement = true
+            }
+        }
+
+        targetElementList.push(curEl.parentNode)
+        curEl = curEl.parentNode
     }
-    var tag = el.tagName.toLowerCase();
+
+    let compStyles = window.getComputedStyle(el)
+    if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer' && event.type === 'click') {
+        return true
+    }
+
+    var tag = el.tagName.toLowerCase()
     switch (tag) {
         case 'html':
-            return false;
+            return false
         case 'form':
-            return event.type === 'submit';
+            return event.type === 'submit'
         case 'input':
-            return event.type === 'change' || event.type === 'click';
+            return event.type === 'change' || event.type === 'click'
         case 'select':
         case 'textarea':
-            return event.type === 'change' || event.type === 'click';
+            return event.type === 'change' || event.type === 'click'
         default:
-            if(parentIsUsefulElement) return event.type == 'click';
-            return event.type === 'click' && (usefulElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true');
+            if (parentIsUsefulElement) return event.type === 'click'
+            return (
+                event.type === 'click' &&
+                (usefulElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true')
+            )
     }
 }
 
@@ -123,14 +144,14 @@ export function shouldCaptureDomEvent(el, event) {
  */
 export function shouldCaptureElement(el) {
     for (var curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode) {
-        var classes = getClassName(curEl).split(' ');
+        var classes = getClassName(curEl).split(' ')
         if (_.includes(classes, 'ph-sensitive') || _.includes(classes, 'ph-no-capture')) {
-            return false;
+            return false
         }
     }
 
     if (_.includes(getClassName(el).split(' '), 'ph-include')) {
-        return true;
+        return true
     }
 
     // don't send data from inputs or similar elements since there will always be
@@ -141,30 +162,32 @@ export function shouldCaptureElement(el) {
         isTag(el, 'textarea') ||
         el.getAttribute('contenteditable') === 'true'
     ) {
-        return false;
+        return false
     }
 
     // don't include hidden or password fields
-    var type = el.type || '';
-    if (typeof type === 'string') { // it's possible for el.type to be a DOM element if el is a form with a child input[name="type"]
-        switch(type.toLowerCase()) {
+    var type = el.type || ''
+    if (typeof type === 'string') {
+        // it's possible for el.type to be a DOM element if el is a form with a child input[name="type"]
+        switch (type.toLowerCase()) {
             case 'hidden':
-                return false;
+                return false
             case 'password':
-                return false;
+                return false
         }
     }
 
     // filter out data from fields that look like sensitive fields
-    var name = el.name || el.id || '';
-    if (typeof name === 'string') { // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
-        var sensitiveNameRegex = /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i;
+    var name = el.name || el.id || ''
+    if (typeof name === 'string') {
+        // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
+        var sensitiveNameRegex = /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
         if (sensitiveNameRegex.test(name.replace(/[^a-zA-Z0-9]/g, ''))) {
-            return false;
+            return false
         }
     }
 
-    return true;
+    return true
 }
 
 /*
@@ -175,25 +198,25 @@ export function shouldCaptureElement(el) {
  */
 export function shouldCaptureValue(value) {
     if (value === null || _.isUndefined(value)) {
-        return false;
+        return false
     }
 
     if (typeof value === 'string') {
-        value = _.trim(value);
+        value = _.trim(value)
 
         // check to see if input value looks like a credit card number
         // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
-        var ccRegex = /^(?:(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11}))$/;
+        var ccRegex = /^(?:(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11}))$/
         if (ccRegex.test((value || '').replace(/[- ]/g, ''))) {
-            return false;
+            return false
         }
 
         // check to see if input value looks like a social security number
-        var ssnRegex = /(^\d{3}-?\d{2}-?\d{4}$)/;
+        var ssnRegex = /(^\d{3}-?\d{2}-?\d{4}$)/
         if (ssnRegex.test(value)) {
-            return false;
+            return false
         }
     }
 
-    return true;
+    return true
 }

@@ -1,0 +1,23 @@
+name: TypeScript
+
+on:
+  - pull_request
+
+jobs:
+  build:
+    name: Check definitions
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the repository
+      - uses: actions/checkout@v1
+
+      # Install Node.js
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 12
+
+      # Install your dependencies
+      - run: yarn install
+
+      # Run test
+      - run: yarn process-types
