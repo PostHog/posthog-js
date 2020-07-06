@@ -376,7 +376,7 @@ PostHogLib.prototype._event_queue_poll = function () {
                 var json_data = _.JSONEncode(data)
                 if (this.compression['lz64']) {
                     var encoded_data = LZString.compressToBase64(json_data)
-                    this._send_request(url, { data: encoded_data, compression: 'lz-string' }, __NOOPTIONS, __NOOP)
+                    this._send_request(url, { data: encoded_data, compression: 'lz64' }, __NOOPTIONS, __NOOP)
                 } else {
                     var encoded_data = _.base64Encode(json_data)
                     this._send_request(url, { data: encoded_data }, __NOOPTIONS, __NOOP)
