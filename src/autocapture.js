@@ -9,7 +9,8 @@ import {
     shouldCaptureElement,
     shouldCaptureValue,
     usefulElements,
-} from './autocapture-utils'
+    isSensitiveElement
+} from './autocapture-utils';
 
 var autocapture = {
     _initializedTokens: [],
@@ -49,13 +50,13 @@ var autocapture = {
         var classes = getClassName(elem)
         if (classes.length > 0) props['classes'] = classes.split(' ')
 
-        if (shouldCaptureElement(elem)) {
-            _.each(elem.attributes, function (attr) {
-                if (shouldCaptureValue(attr.value)) {
-                    props['attr__' + attr.name] = attr.value
-                }
-            })
-        }
+        _.each(elem.attributes, function (attr) {
+            // Only capture attributes we know are safe
+            if(isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return;
+            if (shouldCaptureValue(attr.value)) {
+                props['attr__' + attr.name] = attr.value
+            }
+        })
 
         var nthChild = 1
         var nthOfType = 1
