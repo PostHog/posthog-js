@@ -273,6 +273,14 @@ var autocapture = {
             } else {
                 instance.persistence.unregister('$active_feature_flags')
             }
+
+            if (response['supportedCompression']) {
+                let compression = {}
+                for (const method of response['supportedCompression']) {
+                    compression[method] = true
+                }
+                instance['compression'] = compression
+            }
         }, this)
 
         var json_data = _.JSONEncode({

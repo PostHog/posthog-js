@@ -210,6 +210,7 @@ PostHogLib.prototype._init = function (token, config, name) {
     this['__loaded'] = true
     this['config'] = {}
     this['_triggered_notifs'] = []
+    this['compression'] = {}
 
     this.set_config(
         _.extend({}, DEFAULT_CONFIG, config, {
@@ -373,8 +374,13 @@ PostHogLib.prototype._event_queue_poll = function () {
                     delete data[key]['timestamp']
                 })
                 var json_data = _.JSONEncode(data)
-                var encoded_data = LZString.compressToBase64(json_data)
-                this._send_request(url, { data: encoded_data, compression: 'lz-string' }, __NOOPTIONS, __NOOP)
+                if (this.compression['lz64']) {
+                    var encoded_data = LZString.compressToBase64(json_data)
+                    this._send_request(url, { data: encoded_data, compression: 'lz-string' }, __NOOPTIONS, __NOOP)
+                } else {
+                    var encoded_data = _.base64Encode(json_data)
+                    this._send_request(url, { data: encoded_data }, __NOOPTIONS, __NOOP)
+                }
             }
             this._event_queue.length = 0 // flush the _event_queue
         } else {
@@ -415,8 +421,13 @@ PostHogLib.prototype._handle_unload = function () {
     for (let url in data) {
         // sendbeacon has some hard requirments and cant be treated
         // like a normal post request. Because of that it needs to be encoded
-        var encoded_data = LZString.compressToBase64(_.JSONEncode(data[url]))
-        this._send_request(url, { data: encoded_data, compression: 'lz-string' }, { transport: 'sendbeacon' }, __NOOP)
+        if (this.compression['lz64']) {
+            const encoded_data = LZString.compressToBase64(_.JSONEncode(data[url]))
+            this._send_request(url, { data: encoded_data, compression: 'lz64' }, { transport: 'sendbeacon' }, __NOOP)
+        } else {
+            const encoded_data = _.base64Encode(_.JSONEncode(data[url]))
+            this._send_request(url, { data: encoded_data }, { transport: 'sendbeacon' }, __NOOP)
+        }
     }
 }
 
@@ -736,8 +747,11 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
 
     if (!this.get_config('request_batching') || has_unique_traits) {
-        var encoded_data = LZString.compressToBase64(json_data)
-        this._send_request(url, { data: encoded_data, compression: 'lz-string' }, options, cb)
+        if (this.compression['lz64']) {
+            this._send_request(url, { data: LZString.compressToBase64(json_data), compression: 'lz64' }, options, cb)
+        } else {
+            this._send_request(url, { data: _.base64Encode(json_data) }, options, cb)
+        }
     } else {
         data['timestamp'] = new Date()
         this._event_enqueue(url, data, options, cb)
