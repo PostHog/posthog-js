@@ -281,6 +281,8 @@ var autocapture = {
                     compression[method] = true
                 }
                 instance['compression'] = compression
+            } else {
+                instance['compression'] = {}
             }
         }, this)
 
