@@ -829,7 +829,7 @@ describe('Autocapture system', () => {
         })
 
         it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', () => {
-            lib._send_request = sandbox.spy((url, params, callback) =>
+            lib._send_request = sandbox.spy((url, params, options, callback) =>
                 callback({ config: { enable_collect_everything: false } })
             )
             autocapture.init(lib)
