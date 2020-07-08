@@ -56,7 +56,7 @@ describe(`GDPR utils`, () => {
             it(`should set a cookie marking the user as opted-in for a given token`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
-                    console.log(token, persistenceType)
+                    // console.log(token, persistenceType)
                     assertPersistenceValue(persistenceType, token, 1)
                 })
             })
