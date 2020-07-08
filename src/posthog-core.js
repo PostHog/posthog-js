@@ -1514,6 +1514,8 @@ function deprecate_warning(method) {
     )
 }
 
+PostHogLib.prototype.decodeLZ64 = LZString.decompressFromBase64
+
 // EXPORTS (for closure compiler)
 
 // PostHogLib Exports
@@ -1545,6 +1547,7 @@ PostHogLib.prototype['has_opted_in_capturing'] = PostHogLib.prototype.has_opted_
 PostHogLib.prototype['clear_opt_in_out_capturing'] = PostHogLib.prototype.clear_opt_in_out_capturing
 PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
+PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties'] = PostHogPersistence.prototype.properties
