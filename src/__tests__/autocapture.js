@@ -960,6 +960,22 @@ describe('Autocapture system', () => {
             spy(lib)
             expect(spy.returned(false)).toBe(true)
         })
+
+        it('should work if calling editor params `__posthog`', () => {
+            const hashParams = {
+                access_token: 'test_access_token',
+                __posthog: encodeURIComponent(JSON.stringify(editorParams)),
+                expires_in: 3600,
+            }
+            hash = Object.keys(hashParams)
+                .map((k) => `${k}=${hashParams[k]}`)
+                .join('&')
+            window.location.hash = `#${hash}`
+            autocapture._maybeLoadEditor(lib)
+            expect(autocapture._loadEditor.calledOnce).toBe(true)
+            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
+            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
+        })
     })
 
     describe('load and close editor', () => {
