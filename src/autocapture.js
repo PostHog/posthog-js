@@ -298,7 +298,7 @@ var autocapture = {
             var stateHash =
                 _.getHashParam(window.location.hash, '__posthog') || _.getHashParam(window.location.hash, 'state')
             var state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
-            var parseFromUrl = state && state['action'] === 'mpeditor'
+            var parseFromUrl = state && (state['action'] === 'mpeditor' || state['action'] === 'ph_authorize')
             var editorParams
 
             if (parseFromUrl) {
