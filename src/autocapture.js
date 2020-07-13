@@ -288,16 +288,6 @@ var autocapture = {
         )
     },
 
-    _editorParamsFromHash: function (instance, hash) {
-        try {
-            var state = _.getHashParam(hash, 'state')
-            return JSON.parse(decodeURIComponent(state))
-        } catch (e) {
-            console.error('Unable to parse data from hash', e)
-        }
-        return {}
-    },
-
     /**
      * To load the visual editor, we need an access token and other state. That state comes from one of three places:
      * 1. In the URL hash params if the customer is using an old snippet
@@ -305,9 +295,10 @@ var autocapture = {
      */
     _maybeLoadEditor: function (instance) {
         try {
-            var stateHash = _.getHashParam(window.location.hash, 'state')
+            var stateHash =
+                _.getHashParam(window.location.hash, '__posthog') || _.getHashParam(window.location.hash, 'state')
             var state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
-            var parseFromUrl = state && state['action'] === 'mpeditor'
+            var parseFromUrl = state && (state['action'] === 'mpeditor' || state['action'] === 'ph_authorize')
             var editorParams
 
             if (parseFromUrl) {

@@ -933,6 +933,26 @@ describe('Autocapture system', () => {
             expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
         })
 
+        it('should initialize the visual editor when the hash state contains action "ph_authorize"', () => {
+            editorParams = {
+                ...editorParams,
+                action: 'ph_authorize',
+            }
+            const hashParams = {
+                state: encodeURIComponent(JSON.stringify(editorParams)),
+            }
+
+            hash = Object.keys(hashParams)
+                .map((k) => `${k}=${hashParams[k]}`)
+                .join('&')
+
+            window.location.hash = `#${hash}`
+            autocapture._maybeLoadEditor(lib)
+            expect(autocapture._loadEditor.calledOnce).toBe(true)
+            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
+            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
+        })
+
         it('should initialize the visual editor when there are editor params in the session', () => {
             window.sessionStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams))
             autocapture._maybeLoadEditor(lib)
@@ -959,6 +979,22 @@ describe('Autocapture system', () => {
             var spy = sinon.spy(autocapture, '_maybeLoadEditor')
             spy(lib)
             expect(spy.returned(false)).toBe(true)
+        })
+
+        it('should work if calling editor params `__posthog`', () => {
+            const hashParams = {
+                access_token: 'test_access_token',
+                __posthog: encodeURIComponent(JSON.stringify(editorParams)),
+                expires_in: 3600,
+            }
+            hash = Object.keys(hashParams)
+                .map((k) => `${k}=${hashParams[k]}`)
+                .join('&')
+            window.location.hash = `#${hash}`
+            autocapture._maybeLoadEditor(lib)
+            expect(autocapture._loadEditor.calledOnce).toBe(true)
+            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
+            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
         })
     })
 
