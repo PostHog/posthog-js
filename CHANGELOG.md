@@ -1,3 +1,6 @@
+## 1.3.3 - 2020-07-16
+- Add payload compression support (with lz-string)
+
 ## 1.3.2 - 2020-07-16
 - Fix request batching when loading the library from npm and running `.init()` after DOM load.
 
