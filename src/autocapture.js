@@ -269,9 +269,20 @@ var autocapture = {
             }
 
             if (response['featureFlags'] && response['featureFlags'].length > 0) {
-                instance.persistence.register({ $active_feature_flags: response['featureFlags'] })
+                instance.persistence &&
+                    instance.persistence.register({ $active_feature_flags: response['featureFlags'] })
             } else {
-                instance.persistence.unregister('$active_feature_flags')
+                instance.persistence && instance.persistence.unregister('$active_feature_flags')
+            }
+
+            if (response['supportedCompression']) {
+                let compression = {}
+                for (const method of response['supportedCompression']) {
+                    compression[method] = true
+                }
+                instance['compression'] = compression
+            } else {
+                instance['compression'] = {}
             }
         }, this)
 

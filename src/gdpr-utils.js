@@ -95,10 +95,14 @@ export function hasOptedOut(token, options) {
  * @param {function} method - wrapped method to be executed if the user has not opted out
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
-export function addOptOutCheckPostHogLib(method) {
-    return _addOptOutCheck(method, function (name) {
-        return this.get_config(name)
-    })
+export function addOptOutCheckPostHogLib(method, silenceErrors) {
+    return _addOptOutCheck(
+        method,
+        function (name) {
+            return this.get_config(name)
+        },
+        silenceErrors
+    )
 }
 
 /**
@@ -108,23 +112,14 @@ export function addOptOutCheckPostHogLib(method) {
  * @param {function} method - wrapped method to be executed if the user has not opted out
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
-export function addOptOutCheckPostHogPeople(method) {
-    return _addOptOutCheck(method, function (name) {
-        return this._get_config(name)
-    })
-}
-
-/**
- * Wrap a PostHogGroup method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
- * If the user has opted out, return early instead of executing the method.
- * If a callback argument was provided, execute it passing the 0 error code.
- * @param {function} method - wrapped method to be executed if the user has not opted out
- * @returns {*} the result of executing method OR undefined if the user has opted out
- */
-export function addOptOutCheckPostHogGroup(method) {
-    return _addOptOutCheck(method, function (name) {
-        return this._get_config(name)
-    })
+export function addOptOutCheckPostHogPeople(method, silenceErrors) {
+    return _addOptOutCheck(
+        method,
+        function (name) {
+            return this._get_config(name)
+        },
+        silenceErrors
+    )
 }
 
 /**
@@ -260,7 +255,7 @@ function _optInOut(optValue, token, options) {
  * @param {function} getConfigValue - getter function for the PostHog API token and other options to be used with opt-out check
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
-function _addOptOutCheck(method, getConfigValue) {
+function _addOptOutCheck(method, getConfigValue, silenceErrors) {
     return function () {
         var optedOut = false
 
@@ -281,7 +276,9 @@ function _addOptOutCheck(method, getConfigValue) {
                 })
             }
         } catch (err) {
-            console.error('Unexpected error when checking capturing opt-out status: ' + err)
+            if (!silenceErrors) {
+                console.error('Unexpected error when checking capturing opt-out status: ' + err)
+            }
         }
 
         if (!optedOut) {

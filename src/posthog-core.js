@@ -1,4 +1,5 @@
 /* eslint camelcase: "off" */
+import { LZString } from './lz-string'
 import Config from './config'
 import { _, console, userAgent, window, document, navigator } from './utils'
 import { autocapture } from './autocapture'
@@ -209,6 +210,7 @@ PostHogLib.prototype._init = function (token, config, name) {
     this['__loaded'] = true
     this['config'] = {}
     this['_triggered_notifs'] = []
+    this['compression'] = {}
 
     this.set_config(
         _.extend({}, DEFAULT_CONFIG, config, {
@@ -382,8 +384,13 @@ PostHogLib.prototype._event_queue_poll = function () {
                     delete data[key]['timestamp']
                 })
                 var json_data = _.JSONEncode(data)
-                var encoded_data = _.base64Encode(json_data)
-                this._send_request(url, { data: encoded_data }, __NOOPTIONS, __NOOP)
+                if (this.compression['lz64']) {
+                    var encoded_data = LZString.compressToBase64(json_data)
+                    this._send_request(url, { data: encoded_data, compression: 'lz64' }, __NOOPTIONS, __NOOP)
+                } else {
+                    var encoded_data = _.base64Encode(json_data)
+                    this._send_request(url, { data: encoded_data }, __NOOPTIONS, __NOOP)
+                }
             }
             this._event_queue.length = 0 // flush the _event_queue
         } else {
@@ -424,8 +431,13 @@ PostHogLib.prototype._handle_unload = function () {
     for (let url in data) {
         // sendbeacon has some hard requirments and cant be treated
         // like a normal post request. Because of that it needs to be encoded
-        const encoded_data = _.base64Encode(_.JSONEncode(data[url]))
-        this._send_request(url, { data: encoded_data }, { transport: 'sendbeacon' }, __NOOP)
+        if (this.compression['lz64']) {
+            const encoded_data = LZString.compressToBase64(_.JSONEncode(data[url]))
+            this._send_request(url, { data: encoded_data, compression: 'lz64' }, { transport: 'sendbeacon' }, __NOOP)
+        } else {
+            const encoded_data = _.base64Encode(_.JSONEncode(data[url]))
+            this._send_request(url, { data: encoded_data }, { transport: 'sendbeacon' }, __NOOP)
+        }
     }
 }
 
@@ -487,11 +499,16 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
 
     if (use_post) {
         if (Array.isArray(data)) {
-            body_data = 'data=' + data
+            body_data = 'data=' + encodeURIComponent(data)
         } else {
-            body_data = 'data=' + data['data']
+            body_data = 'data=' + encodeURIComponent(data['data'])
         }
         delete data['data']
+
+        if (data['compression']) {
+            body_data += '&compression=' + data['compression']
+            delete data['compression']
+        }
     }
 
     url += '?' + _.HTTPBuildQuery(args)
@@ -733,7 +750,6 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
 
     var truncated_data = _.truncate(data, 255)
     var json_data = _.JSONEncode(truncated_data)
-    var encoded_data = _.base64Encode(json_data)
 
     const url = this.get_config('api_host') + '/e/'
     const cb = this._prepare_callback(callback, truncated_data)
@@ -741,7 +757,11 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
 
     if (!this.get_config('request_batching') || has_unique_traits) {
-        this._send_request(url, { data: encoded_data }, options, cb)
+        if (this.compression['lz64']) {
+            this._send_request(url, { data: LZString.compressToBase64(json_data), compression: 'lz64' }, options, cb)
+        } else {
+            this._send_request(url, { data: _.base64Encode(json_data) }, options, cb)
+        }
     } else {
         data['timestamp'] = new Date()
         this._event_enqueue(url, data, options, cb)
@@ -1504,6 +1524,8 @@ function deprecate_warning(method) {
     )
 }
 
+PostHogLib.prototype.decodeLZ64 = LZString.decompressFromBase64
+
 // EXPORTS (for closure compiler)
 
 // PostHogLib Exports
@@ -1535,6 +1557,7 @@ PostHogLib.prototype['has_opted_in_capturing'] = PostHogLib.prototype.has_opted_
 PostHogLib.prototype['clear_opt_in_out_capturing'] = PostHogLib.prototype.clear_opt_in_out_capturing
 PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
+PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties'] = PostHogPersistence.prototype.properties
