@@ -259,10 +259,20 @@ PostHogLib.prototype._init = function (token, config, name) {
 PostHogLib.prototype._loaded = function () {
     this.get_config('loaded')(this)
 
+    this._start_queue_if_opted_in()
+
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
         this.capture_pageview()
+    }
+}
+
+PostHogLib.prototype._start_queue_if_opted_in = function () {
+    if (!this.has_opted_out_capturing()) {
+        if (this.get_config('request_batching')) {
+            this._event_queue_poll()
+        }
     }
 }
 
@@ -283,13 +293,12 @@ PostHogLib.prototype._dom_loaded = function () {
             },
             this
         )
-        if (this.get_config('request_batching')) {
-            this._event_queue_poll()
-        }
     }
 
     delete this.__dom_loaded_queue
     delete this.__request_queue
+
+    this._start_queue_if_opted_in()
 }
 
 PostHogLib.prototype._capture_dom = function (DomClass, args) {
@@ -362,6 +371,7 @@ PostHogLib.prototype._format_event_queue_data = function () {
 
 PostHogLib.prototype._event_queue_poll = function () {
     const POLL_INTERVAL = 3000
+    clearInterval(this._poller)
     this._poller = setTimeout(() => {
         if (this._event_queue.length > 0) {
             const requests = this._format_event_queue_data()
