@@ -29,7 +29,7 @@ export function getClassName(el) {
 export function getSafeText(el) {
     var elText = ''
 
-    if (shouldCaptureElement(el) && el.childNodes && el.childNodes.length) {
+    if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         _.each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
                 elText += _.trim(child.textContent)
@@ -154,17 +154,6 @@ export function shouldCaptureElement(el) {
         return true
     }
 
-    // don't send data from inputs or similar elements since there will always be
-    // a risk of clientside javascript placing sensitive data in attributes
-    if (
-        (isTag(el, 'input') && el.type != 'button') ||
-        isTag(el, 'select') ||
-        isTag(el, 'textarea') ||
-        el.getAttribute('contenteditable') === 'true'
-    ) {
-        return false
-    }
-
     // don't include hidden or password fields
     var type = el.type || ''
     if (typeof type === 'string') {
@@ -188,6 +177,25 @@ export function shouldCaptureElement(el) {
     }
 
     return true
+}
+
+/*
+ * Check whether a DOM element is 'sensitive' and we should only capture limited data
+ * @param {Element} el - element to check
+ * @returns {boolean} whether the element should be captureed
+ */
+export function isSensitiveElement(el) {
+    // don't send data from inputs or similar elements since there will always be
+    // a risk of clientside javascript placing sensitive data in attributes
+    if (
+        (isTag(el, 'input') && el.type != 'button') ||
+        isTag(el, 'select') ||
+        isTag(el, 'textarea') ||
+        el.getAttribute('contenteditable') === 'true'
+    ) {
+        return true
+    }
+    return false
 }
 
 /*
