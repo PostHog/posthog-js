@@ -1,6 +1,12 @@
 import sinon from 'sinon'
 
-import { getSafeText, shouldCaptureDomEvent, shouldCaptureElement, shouldCaptureValue } from '../autocapture-utils'
+import {
+    getSafeText,
+    shouldCaptureDomEvent,
+    shouldCaptureElement,
+    isSensitiveElement,
+    shouldCaptureValue,
+} from '../autocapture-utils'
 
 describe(`Autocapture utility functions`, () => {
     describe(`getSafeText`, () => {
@@ -169,6 +175,31 @@ describe(`Autocapture utility functions`, () => {
         })
     })
 
+    describe(`isSensitiveElement`, () => {
+        it(`should not include input elements`, () => {
+            expect(isSensitiveElement(document.createElement(`input`))).toBe(true)
+        })
+
+        it(`should not include select elements`, () => {
+            expect(isSensitiveElement(document.createElement(`select`))).toBe(true)
+        })
+
+        it(`should not include textarea elements`, () => {
+            expect(isSensitiveElement(document.createElement(`textarea`))).toBe(true)
+        })
+
+        it(`should not include elements where contenteditable="true"`, () => {
+            const editable = document.createElement(`div`)
+            const noneditable = document.createElement(`div`)
+
+            editable.setAttribute(`contenteditable`, `true`)
+            noneditable.setAttribute(`contenteditable`, `false`)
+
+            expect(isSensitiveElement(editable)).toBe(true)
+            expect(isSensitiveElement(noneditable)).toBe(false)
+        })
+    })
+
     describe(`shouldCaptureElement`, () => {
         let el, input, parent1, parent2
 
@@ -181,29 +212,6 @@ describe(`Autocapture utility functions`, () => {
             parent1.appendChild(input)
             parent2.appendChild(parent1)
             document.body.appendChild(parent2)
-        })
-
-        it(`should not include input elements`, () => {
-            expect(shouldCaptureElement(document.createElement(`input`))).toBe(false)
-        })
-
-        it(`should not include select elements`, () => {
-            expect(shouldCaptureElement(document.createElement(`select`))).toBe(false)
-        })
-
-        it(`should not include textarea elements`, () => {
-            expect(shouldCaptureElement(document.createElement(`textarea`))).toBe(false)
-        })
-
-        it(`should not include elements where contenteditable="true"`, () => {
-            const editable = document.createElement(`div`)
-            const noneditable = document.createElement(`div`)
-
-            editable.setAttribute(`contenteditable`, `true`)
-            noneditable.setAttribute(`contenteditable`, `false`)
-
-            expect(shouldCaptureElement(editable)).toBe(false)
-            expect(shouldCaptureElement(noneditable)).toBe(true)
         })
 
         it(`should include sensitive elements with class "ph-include"`, () => {
