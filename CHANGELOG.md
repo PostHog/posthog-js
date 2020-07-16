@@ -1,3 +1,6 @@
+## 1.3.2 - 2020-07-16
+- Fix request batching when loading the library from npm and running `.init()` after DOM load.
+
 ## 1.3.1 - 2020-07-13
 - Support loading the toolbar with a `__posthog` has param (was: `state`) and `ph_authorize` action.
 
