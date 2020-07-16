@@ -22,6 +22,32 @@ PostHogFeatureFlags.prototype.getFlags = function () {
     return this._posthog.persistence.props['$active_feature_flags']
 }
 
+PostHogFeatureFlags.prototype.reloadFeatureFlags = function (callback) {
+    var posthog = this._posthog
+    var parseDecideResponse = _.bind(function (response) {
+        if (response['featureFlags']) {
+            posthog.persistence && posthog.persistence.register({ $active_feature_flags: response['featureFlags'] })
+
+            callback && callback(response['featureFlags'])
+        } else {
+            posthog.persistence && posthog.persistence.unregister('$active_feature_flags')
+        }
+    })
+
+    var token = posthog.config.token
+    var json_data = _.JSONEncode({
+        token: token,
+        distinct_id: posthog.get_distinct_id(),
+    })
+    var encoded_data = _.base64Encode(json_data)
+    posthog._send_request(
+        posthog.get_config('api_host') + '/decide/',
+        { data: encoded_data },
+        { method: 'POST' },
+        posthog._prepare_callback(parseDecideResponse)
+    )
+}
+
 /*
  * See if feature flag is enabled for user.
  *

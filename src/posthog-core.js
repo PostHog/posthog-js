@@ -930,6 +930,10 @@ PostHogLib.prototype.isFeatureEnabled = function (key) {
     return this.feature_flags.isFeatureEnabled(key)
 }
 
+PostHogLib.prototype.reloadFeatureFlags = function (callback) {
+    return this.feature_flags.reloadFeatureFlags(callback)
+}
+
 /*
  * See if feature flags are available.
  *
@@ -1556,6 +1560,7 @@ PostHogLib.prototype['has_opted_out_capturing'] = PostHogLib.prototype.has_opted
 PostHogLib.prototype['has_opted_in_capturing'] = PostHogLib.prototype.has_opted_in_capturing
 PostHogLib.prototype['clear_opt_in_out_capturing'] = PostHogLib.prototype.clear_opt_in_out_capturing
 PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
+PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureFlags
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
 PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 
