@@ -1,5 +1,8 @@
+## 1.3.4 - 2020-07-16
+- Capture safe attributes (id, name and class) if the element is an input (#63)
+
 ## 1.3.3 - 2020-07-16
-- Add payload compression support (with lz-string)
+- Add payload compression support (with lz-string) (#48)
 
 ## 1.3.2 - 2020-07-16
 - Fix request batching when loading the library from npm and running `.init()` after DOM load.
