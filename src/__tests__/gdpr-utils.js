@@ -56,7 +56,7 @@ describe(`GDPR utils`, () => {
             it(`should set a cookie marking the user as opted-in for a given token`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
-                    console.log(token, persistenceType)
+                    // console.log(token, persistenceType)
                     assertPersistenceValue(persistenceType, token, 1)
                 })
             })
@@ -507,13 +507,14 @@ describe(`GDPR utils`, () => {
         const captureProperties = { '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞': `𝓿𝓪𝓵𝓾𝓮` }
         let getConfig, capture, postHogLib
 
-        function setupMocks(getConfigFunc, options) {
+        function setupMocks(getConfigFunc, silenceErrors = false) {
             getConfig = sinon.spy((name) => getConfigFunc()[name])
             capture = sinon.spy()
             postHogLib = {
                 get_config: getConfig,
-                capture: gdpr.addOptOutCheckPostHogLib(capture, options),
+                capture: undefined,
             }
+            postHogLib.capture = gdpr.addOptOutCheckPostHogLib(capture, silenceErrors).bind(postHogLib)
         }
 
         forPersistenceTypes(function (persistenceType) {
@@ -599,7 +600,7 @@ describe(`GDPR utils`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => {
                         throw new Error(`Unexpected error!`)
-                    })
+                    }, true)
 
                     gdpr.optIn(token, { persistenceType })
                     postHogLib.capture(captureEventName, captureProperties)
@@ -640,13 +641,14 @@ describe(`GDPR utils`, () => {
         const setPropertyValue = `𝓿𝓪𝓵𝓾𝓮`
         let getConfig, set, postHogPeople
 
-        function setupMocks(getConfigFunc, options) {
+        function setupMocks(getConfigFunc, silenceErrors = false) {
             getConfig = sinon.spy((name) => getConfigFunc()[name])
             set = sinon.spy()
             postHogPeople = {
                 _get_config: getConfig,
-                set: gdpr.addOptOutCheckPostHogPeople(set, options),
+                set: undefined,
             }
+            postHogPeople.set = gdpr.addOptOutCheckPostHogPeople(set, silenceErrors).bind(postHogPeople)
         }
 
         forPersistenceTypes(function (persistenceType) {
@@ -732,7 +734,7 @@ describe(`GDPR utils`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => {
                         throw new Error(`Unexpected error!`)
-                    })
+                    }, true)
 
                     gdpr.optIn(token, { persistenceType })
                     postHogPeople.set(setPropertyName, setPropertyValue)
