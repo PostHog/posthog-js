@@ -78,7 +78,7 @@ export function hasOptedIn(token, options) {
  * @param {Object} [options]
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
- * @param {boolean} [options.ignoreDnt] - flag to ignore browser DNT settings and always return false
+ * @param {boolean} [options.respectDnt] - flag to take browser DNT setting into account
  * @returns {boolean} whether the user has opted out of the given opt type
  */
 export function hasOptedOut(token, options) {
@@ -179,31 +179,29 @@ function _getStorageValue(token, options) {
  * Check whether the user has set the DNT/doNotTrack setting to true in their browser
  * @param {Object} [options]
  * @param {string} [options.window] - alternate window object to check; used to force various DNT settings in browser tests
- * @param {boolean} [options.ignoreDnt] - flag to ignore browser DNT settings and always return false
+ * @param {boolean} [options.respectDnt] - flag to take browser DNT setting into account
  * @returns {boolean} whether the DNT setting is true
  */
 function _hasDoNotTrackFlagOn(options) {
-    if (options && options.ignoreDnt) {
-        return false
-    }
-    var win = (options && options.window) || window
-    var nav = win['navigator'] || {}
-    var hasDntOn = false
-
-    _.each(
-        [
-            nav['doNotTrack'], // standard
-            nav['msDoNotTrack'],
-            win['doNotTrack'],
-        ],
-        function (dntValue) {
-            if (_.includes([true, 1, '1', 'yes'], dntValue)) {
-                hasDntOn = true
+    if (options && options.respectDnt) {
+        var win = (options && options.window) || window
+        var nav = win['navigator'] || {}
+        var hasDntOn = false
+        _.each(
+            [
+                nav['doNotTrack'], // standard
+                nav['msDoNotTrack'],
+                win['doNotTrack'],
+            ],
+            function (dntValue) {
+                if (_.includes([true, 1, '1', 'yes'], dntValue)) {
+                    hasDntOn = true
+                }
             }
-        }
-    )
-
-    return hasDntOn
+        )
+        return hasDntOn
+    }
+    return false
 }
 
 /**
@@ -261,7 +259,7 @@ function _addOptOutCheck(method, getConfigValue, silenceErrors) {
 
         try {
             var token = getConfigValue.call(this, 'token')
-            var ignoreDnt = getConfigValue.call(this, 'ignore_dnt')
+            var respectDnt = getConfigValue.call(this, 'respect_dnt')
             var persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type')
             var persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix')
             var win = getConfigValue.call(this, 'window') // used to override window during browser tests
@@ -269,9 +267,9 @@ function _addOptOutCheck(method, getConfigValue, silenceErrors) {
             if (token) {
                 // if there was an issue getting the token, continue method execution as normal
                 optedOut = hasOptedOut(token, {
-                    ignoreDnt: ignoreDnt,
-                    persistenceType: persistenceType,
-                    persistencePrefix: persistencePrefix,
+                    respectDnt,
+                    persistenceType,
+                    persistencePrefix,
                     window: win,
                 })
             }

@@ -541,7 +541,7 @@ declare namespace posthog {
         opt_out_persistence_by_default?: boolean
         opt_out_capturing_persistence_type?: 'localStorage' | 'cookie'
         opt_out_capturing_cookie_prefix?: string | null
-        ignore_dnt?: boolean
+        respect_dnt?: boolean
         property_blacklist?: string[]
         xhr_headers?: { [header_name: string]: string }
         inapp_protocol?: string
