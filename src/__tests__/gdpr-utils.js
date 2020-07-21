@@ -356,40 +356,6 @@ describe(`GDPR utils`, () => {
                     ).toBe(false)
                 })
             })
-
-            it(`should return 'true' if the user has navigator.doNotTrack flag set`, () => {
-                const falseyValues = [false, 0, `0`, `no`, `unspecified`]
-                const truthyValues = [true, 1, `1`, `yes`]
-                const setters = [
-                    (value) => (navigator.doNotTrack = value),
-                    (value) => (navigator.msDoNotTrack = value),
-                    (value) => (window.doNotTrack = value),
-                ]
-
-                TOKENS.forEach((token) => {
-                    gdpr.optIn(token, { persistenceType })
-                    expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
-
-                    falseyValues.forEach((value) =>
-                        setters.forEach((set) => {
-                            set(value)
-                            expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
-                        })
-                    )
-
-                    truthyValues.forEach((value) =>
-                        setters.forEach((set) => {
-                            set(value)
-                            expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(true)
-                        })
-                    )
-
-                    // cleanup
-                    delete navigator.doNotTrack
-                    delete navigator.msDoNotTrack
-                    delete window.doNotTrack
-                })
-            })
         })
     })
 
