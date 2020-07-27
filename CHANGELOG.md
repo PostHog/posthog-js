@@ -1,3 +1,9 @@
+## 1.3.6 - 2020-07-27
+- Fix a parameter in the type definition
+
+## 1.3.5 - 2020-07-20
+- Add flag to respect Do Not Track setting
+
 ## 1.3.4 - 2020-07-16
 - Capture safe attributes (id, name and class) if the element is an input (#63)
 
