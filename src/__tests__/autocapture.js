@@ -885,7 +885,7 @@ describe('Autocapture system', () => {
             lib = {}
 
         beforeEach(() => {
-            window.sessionStorage.clear()
+            window.localStorage.clear()
 
             testContext.clock = sinon.useFakeTimers()
 
@@ -930,7 +930,7 @@ describe('Autocapture system', () => {
             autocapture._maybeLoadEditor(lib)
             expect(autocapture._loadEditor.calledOnce).toBe(true)
             expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
+            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
         })
 
         it('should initialize the visual editor when the hash state contains action "ph_authorize"', () => {
@@ -950,15 +950,15 @@ describe('Autocapture system', () => {
             autocapture._maybeLoadEditor(lib)
             expect(autocapture._loadEditor.calledOnce).toBe(true)
             expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
+            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
         })
 
         it('should initialize the visual editor when there are editor params in the session', () => {
-            window.sessionStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams))
+            window.localStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams))
             autocapture._maybeLoadEditor(lib)
             expect(autocapture._loadEditor.calledOnce).toBe(true)
             expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
+            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
         })
 
         it('should NOT initialize the visual editor when the activation query param does not exist', () => {
@@ -994,7 +994,7 @@ describe('Autocapture system', () => {
             autocapture._maybeLoadEditor(lib)
             expect(autocapture._loadEditor.calledOnce).toBe(true)
             expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.sessionStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
+            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
         })
     })
 

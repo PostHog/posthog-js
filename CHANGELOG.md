@@ -1,3 +1,6 @@
+## 1.3.7 - 2020-07-28
+- Store toolbar session in localStorage (instead of sessionStorage) so you don't need to authorize in every tab you have open
+
 ## 1.3.6 - 2020-07-27
 - Fix a parameter in the type definition
 
