@@ -9,8 +9,8 @@ import {
     shouldCaptureElement,
     shouldCaptureValue,
     usefulElements,
-    isSensitiveElement
-} from './autocapture-utils';
+    isSensitiveElement,
+} from './autocapture-utils'
 
 var autocapture = {
     _initializedTokens: [],
@@ -52,7 +52,7 @@ var autocapture = {
 
         _.each(elem.attributes, function (attr) {
             // Only capture attributes we know are safe
-            if(isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return;
+            if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
             if (shouldCaptureValue(attr.value)) {
                 props['attr__' + attr.name] = attr.value
             }
@@ -318,7 +318,7 @@ var autocapture = {
                 editorParams = state
 
                 if (editorParams && Object.keys(editorParams).length > 0) {
-                    window.sessionStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams))
+                    window.localStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams))
 
                     if (state['desiredHash']) {
                         // hash that was in the url before the redirect
@@ -330,8 +330,8 @@ var autocapture = {
                     }
                 }
             } else {
-                // get credentials from sessionStorage from a previous initialzation
-                editorParams = JSON.parse(window.sessionStorage.getItem('_postHogEditorParams') || '{}')
+                // get credentials from localStorage from a previous initialzation
+                editorParams = JSON.parse(window.localStorage.getItem('_postHogEditorParams') || '{}')
 
                 // delete "add-action" or other intent from editorParams, otherwise we'll have the same intent
                 // every time we open the page (e.g. you just visiting your own site an hour later)
