@@ -78,7 +78,7 @@ var DEFAULT_CONFIG = {
     upgrade: false,
     disable_persistence: false,
     disable_cookie: false,
-    secure_cookie: false,
+    secure_cookie: window.location.protocol === 'https:',
     ip: true,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
