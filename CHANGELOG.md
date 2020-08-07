@@ -1,3 +1,6 @@
+## 1.3.8 - 2020-08-07
+- Set `secure_cookie` config to `true` if the page is running over https 
+
 ## 1.3.7 - 2020-07-28
 - Store toolbar session in localStorage (instead of sessionStorage) so you don't need to authorize in every tab you have open
 
