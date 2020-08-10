@@ -944,7 +944,7 @@ PostHogLib.prototype.reloadFeatureFlags = function (callback) {
  * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
-    return this.feature_flags.onFeatureFlags(callback)
+    return this.persistence.addFeatureFlagsHandler(callback)
 }
 
 /**
@@ -1016,6 +1016,8 @@ PostHogLib.prototype.identify = function (new_distinct_id, _set_callback, _set_o
     if (new_distinct_id !== previous_distinct_id) {
         this.capture('$identify', { distinct_id: new_distinct_id, $anon_distinct_id: previous_distinct_id })
     }
+
+    this.reloadFeatureFlags()
 }
 
 /**

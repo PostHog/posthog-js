@@ -22,13 +22,11 @@ PostHogFeatureFlags.prototype.getFlags = function () {
     return this._posthog.persistence.props['$active_feature_flags']
 }
 
-PostHogFeatureFlags.prototype.reloadFeatureFlags = function (callback) {
+PostHogFeatureFlags.prototype.reloadFeatureFlags = function () {
     var posthog = this._posthog
     var parseDecideResponse = _.bind(function (response) {
         if (response['featureFlags']) {
             posthog.persistence && posthog.persistence.register({ $active_feature_flags: response['featureFlags'] })
-
-            callback && callback(response['featureFlags'])
         } else {
             posthog.persistence && posthog.persistence.unregister('$active_feature_flags')
         }

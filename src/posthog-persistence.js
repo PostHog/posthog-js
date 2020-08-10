@@ -40,6 +40,7 @@ import { _, console } from './utils'
 var PostHogPersistence = function (config) {
     this['props'] = {}
     this.campaign_params_saved = false
+    this['featureFlagEventHandlers'] = []
 
     if (config['persistence_name']) {
         this.name = 'ph_' + config['persistence_name']
@@ -63,6 +64,15 @@ var PostHogPersistence = function (config) {
     this.update_config(config)
     this.upgrade(config)
     this.save()
+}
+
+PostHogPersistence.prototype.addFeatureFlagsHandler = function (handler) {
+    this.featureFlagEventHandlers.push(handler)
+    return true
+}
+
+PostHogPersistence.prototype.receivedFeatureFlags = function (flags) {
+    this.featureFlagEventHandlers.forEach((handler) => handler(flags))
 }
 
 PostHogPersistence.prototype.properties = function () {
@@ -171,6 +181,9 @@ PostHogPersistence.prototype.register_once = function (props, default_value, day
             default_value = 'None'
         }
         this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
+        if (props?.$active_feature_flags) {
+            this.receivedFeatureFlags(props?.$active_feature_flags)
+        }
 
         _.each(
             props,
@@ -196,6 +209,9 @@ PostHogPersistence.prototype.register_once = function (props, default_value, day
 PostHogPersistence.prototype.register = function (props, days) {
     if (_.isObject(props)) {
         this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
+        if (props?.$active_feature_flags) {
+            this.receivedFeatureFlags(props.$active_feature_flags)
+        }
 
         _.extend(this['props'], props)
 
@@ -210,6 +226,10 @@ PostHogPersistence.prototype.unregister = function (prop) {
     if (prop in this['props']) {
         delete this['props'][prop]
         this.save()
+
+        if (prop === '$active_feature_flags') {
+            this.receivedFeatureFlags([])
+        }
     }
 }
 
