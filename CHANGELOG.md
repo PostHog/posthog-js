@@ -1,3 +1,6 @@
+## Unreleased - 2020-08-10
+- Add option `.reloadFeatureFlags()`. Pass it a callback to get the flags array upon reload.
+
 ## 1.3.8 - 2020-08-07
 - Set `secure_cookie` config to `true` if the page is running over https 
 

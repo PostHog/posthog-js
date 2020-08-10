@@ -22,6 +22,30 @@ PostHogFeatureFlags.prototype.getFlags = function () {
     return this._posthog.persistence.props['$active_feature_flags']
 }
 
+PostHogFeatureFlags.prototype.reloadFeatureFlags = function () {
+    var posthog = this._posthog
+    var parseDecideResponse = _.bind(function (response) {
+        if (response['featureFlags']) {
+            posthog.persistence && posthog.persistence.register({ $active_feature_flags: response['featureFlags'] })
+        } else {
+            posthog.persistence && posthog.persistence.unregister('$active_feature_flags')
+        }
+    })
+
+    var token = posthog.config.token
+    var json_data = _.JSONEncode({
+        token: token,
+        distinct_id: posthog.get_distinct_id(),
+    })
+    var encoded_data = _.base64Encode(json_data)
+    posthog._send_request(
+        posthog.get_config('api_host') + '/decide/',
+        { data: encoded_data },
+        { method: 'POST' },
+        posthog._prepare_callback(parseDecideResponse)
+    )
+}
+
 /*
  * See if feature flag is enabled for user.
  *
@@ -40,29 +64,6 @@ PostHogFeatureFlags.prototype.isFeatureEnabled = function (key) {
 }
 
 /*
- * See if feature flags are available.
- *
- * ### Usage:
- *
- *     posthog.onFeatureFlags(function(featureFlags) { // do something })
- *
- * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
- */
-PostHogFeatureFlags.prototype.onFeatureFlags = function (callback) {
-    if (!this.getFlags()) {
-        setTimeout(
-            _.bind(function () {
-                this._posthog.feature_flags.onFeatureFlags(callback)
-            }, this),
-            100
-        )
-        return false
-    }
-    callback(this.getFlags())
-}
-export { PostHogFeatureFlags }
-
-/*
  * Override feature flags for debugging.
  *
  * ### Usage:
@@ -75,3 +76,5 @@ PostHogFeatureFlags.prototype.override = function (flags) {
     if (flags === false) return this._posthog.persistence.unregister('$override_feature_flags')
     this._posthog.persistence.register('$override_feature_flags', flags)
 }
+
+export { PostHogFeatureFlags }

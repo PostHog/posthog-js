@@ -269,7 +269,7 @@ var autocapture = {
                 instance['__autocapture_enabled'] = false
             }
 
-            if (response['featureFlags'] && response['featureFlags'].length > 0) {
+            if (response['featureFlags']) {
                 instance.persistence &&
                     instance.persistence.register({ $active_feature_flags: response['featureFlags'] })
             } else {

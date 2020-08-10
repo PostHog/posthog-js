@@ -9,11 +9,6 @@ import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 
-// ==ClosureCompiler==
-// @compilation_level ADVANCED_OPTIMIZATIONS
-// @output_file_name posthog-2.8.min.js
-// ==/ClosureCompiler==
-
 /*
 SIMPLE STYLE GUIDE:
 
@@ -56,11 +51,10 @@ if (sendBeacon) {
  * Module-level globals
  */
 var DEFAULT_CONFIG = {
-    api_host: 'https://t.posthog.com',
+    api_host: 'https://app.posthog.com',
     api_method: 'POST',
     api_transport: 'XHR',
     autocapture: true,
-    cdn: 'https://cdn.posthog.com',
     cross_subdomain_cookie: document.location.hostname.indexOf('herokuapp.com') === -1,
     persistence: 'cookie',
     persistence_name: '',
@@ -745,8 +739,8 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     }
 
     var sanitize_properties = this.get_config('sanitize_properties')
-    if(sanitize_properties) {
-        properties = sanitize_properties(properties,event_name)
+    if (sanitize_properties) {
+        properties = sanitize_properties(properties, event_name)
     }
 
     var data = {
@@ -936,17 +930,28 @@ PostHogLib.prototype.isFeatureEnabled = function (key) {
     return this.feature_flags.isFeatureEnabled(key)
 }
 
+PostHogLib.prototype.reloadFeatureFlags = function (callback) {
+    return this.feature_flags.reloadFeatureFlags(callback)
+}
+
 /*
- * See if feature flags are available.
+ * Register an event listener that runs when feature flags become available or when they change.
+ * If there are flags, the listener is called immediately in addition to being called on future changes.
  *
  * ### Usage:
  *
  *     posthog.onFeatureFlags(function(featureFlags) { // do something })
  *
- * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
+ * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
+ *                              It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
-    return this.feature_flags.onFeatureFlags(callback)
+    this.persistence.addFeatureFlagsHandler(callback)
+
+    const flags = this.feature_flags.getFlags()
+    if (flags) {
+        callback(flags)
+    }
 }
 
 /**
@@ -1018,6 +1023,8 @@ PostHogLib.prototype.identify = function (new_distinct_id, _set_callback, _set_o
     if (new_distinct_id !== previous_distinct_id) {
         this.capture('$identify', { distinct_id: new_distinct_id, $anon_distinct_id: previous_distinct_id })
     }
+
+    this.reloadFeatureFlags()
 }
 
 /**
@@ -1562,6 +1569,7 @@ PostHogLib.prototype['has_opted_out_capturing'] = PostHogLib.prototype.has_opted
 PostHogLib.prototype['has_opted_in_capturing'] = PostHogLib.prototype.has_opted_in_capturing
 PostHogLib.prototype['clear_opt_in_out_capturing'] = PostHogLib.prototype.clear_opt_in_out_capturing
 PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
+PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureFlags
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
 PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 
