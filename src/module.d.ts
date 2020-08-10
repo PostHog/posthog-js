@@ -547,6 +547,7 @@ declare namespace posthog {
         inapp_protocol?: string
         inapp_link_new_window?: boolean
         request_batching?: boolean
+        sanitize_properties?: (properties: Record<string, any>, event_name: string) => Record<string, any>
     }
 
     interface OptInOutCapturingOptions {
