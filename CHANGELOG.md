@@ -1,6 +1,11 @@
+## 1.4.1 - 2020-08-10
+- Remove unused parameter for `.reloadFeatureFlags()` 
+
 ## 1.4.0 - 2020-08-10
-- Add option `.reloadFeatureFlags()`. Pass it a callback to get the flags array upon reload. (See [#71](https://github.com/PostHog/posthog-js/pull/71))
-- Add config option `sanitize_properties` that accepts a function which sanitizes your params (See [#75](https://github.com/PostHog/posthog-js/issues/75))
+- Have `.onFeatureFlags(callback)` register multiple callbacks, which get called when feature flags are loaded or updated
+- Update feature flags when `identify` is called. 
+- Add option `.reloadFeatureFlags()`. Call it to trigger a reload of feature flags. (See [#71](https://github.com/PostHog/posthog-js/pull/71))
+- Add config option `sanitize_properties` that accepts a function which sanitizes parameters of events (See [#75](https://github.com/PostHog/posthog-js/issues/75))
 
 ## 1.3.8 - 2020-08-07
 - Set `secure_cookie` config to `true` if the page is running over https 

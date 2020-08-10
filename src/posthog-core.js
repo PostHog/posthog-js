@@ -930,8 +930,8 @@ PostHogLib.prototype.isFeatureEnabled = function (key) {
     return this.feature_flags.isFeatureEnabled(key)
 }
 
-PostHogLib.prototype.reloadFeatureFlags = function (callback) {
-    return this.feature_flags.reloadFeatureFlags(callback)
+PostHogLib.prototype.reloadFeatureFlags = function () {
+    return this.feature_flags.reloadFeatureFlags()
 }
 
 /*

@@ -682,7 +682,7 @@ declare namespace posthog {
     export class feature_flags {
         static getFlags(): string[]
 
-        static reloadFeatureFlags(callback: (flags: string[]) => any): void
+        static reloadFeatureFlags(): void
 
         /*
          * See if feature flag is enabled for user.
