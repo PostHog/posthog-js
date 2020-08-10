@@ -936,6 +936,7 @@ PostHogLib.prototype.reloadFeatureFlags = function (callback) {
 
 /*
  * Register an event listener that runs when feature flags become available or when they change.
+ * If there are flags, the listener is called immediately in addition to being called on future changes.
  *
  * ### Usage:
  *
@@ -945,7 +946,12 @@ PostHogLib.prototype.reloadFeatureFlags = function (callback) {
  *                              It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
-    return this.persistence.addFeatureFlagsHandler(callback)
+    this.persistence.addFeatureFlagsHandler(callback)
+
+    const flags = this.feature_flags.getFlags()
+    if (flags) {
+        callback(flags)
+    }
 }
 
 /**
