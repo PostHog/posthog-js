@@ -85,6 +85,7 @@ var DEFAULT_CONFIG = {
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     property_blacklist: [],
+    sanitize_properties: null,
     xhr_headers: {}, // { header: value, header2: value }
     inapp_protocol: '//',
     inapp_link_new_window: false,
@@ -741,6 +742,11 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         })
     } else {
         console.error('Invalid value for property_blacklist config: ' + property_blacklist)
+    }
+
+    var sanitize_properties = this.get_config('sanitize_properties')
+    if(sanitize_properties) {
+        properties = sanitize_properties(properties,event_name)
     }
 
     var data = {
