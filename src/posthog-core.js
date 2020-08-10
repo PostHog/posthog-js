@@ -745,8 +745,8 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     }
 
     var sanitize_properties = this.get_config('sanitize_properties')
-    if(sanitize_properties) {
-        properties = sanitize_properties(properties,event_name)
+    if (sanitize_properties) {
+        properties = sanitize_properties(properties, event_name)
     }
 
     var data = {
