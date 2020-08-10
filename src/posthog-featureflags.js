@@ -64,29 +64,6 @@ PostHogFeatureFlags.prototype.isFeatureEnabled = function (key) {
 }
 
 /*
- * See if feature flags are available.
- *
- * ### Usage:
- *
- *     posthog.onFeatureFlags(function(featureFlags) { // do something })
- *
- * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
- */
-PostHogFeatureFlags.prototype.onFeatureFlags = function (callback) {
-    if (!this.getFlags()) {
-        setTimeout(
-            _.bind(function () {
-                this._posthog.feature_flags.onFeatureFlags(callback)
-            }, this),
-            100
-        )
-        return false
-    }
-    callback(this.getFlags())
-}
-export { PostHogFeatureFlags }
-
-/*
  * Override feature flags for debugging.
  *
  * ### Usage:
@@ -99,3 +76,5 @@ PostHogFeatureFlags.prototype.override = function (flags) {
     if (flags === false) return this._posthog.persistence.unregister('$override_feature_flags')
     this._posthog.persistence.register('$override_feature_flags', flags)
 }
+
+export { PostHogFeatureFlags }

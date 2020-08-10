@@ -9,11 +9,6 @@ import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 
-// ==ClosureCompiler==
-// @compilation_level ADVANCED_OPTIMIZATIONS
-// @output_file_name posthog-2.8.min.js
-// ==/ClosureCompiler==
-
 /*
 SIMPLE STYLE GUIDE:
 
@@ -56,11 +51,10 @@ if (sendBeacon) {
  * Module-level globals
  */
 var DEFAULT_CONFIG = {
-    api_host: 'https://t.posthog.com',
+    api_host: 'https://app.posthog.com',
     api_method: 'POST',
     api_transport: 'XHR',
     autocapture: true,
-    cdn: 'https://cdn.posthog.com',
     cross_subdomain_cookie: document.location.hostname.indexOf('herokuapp.com') === -1,
     persistence: 'cookie',
     persistence_name: '',
@@ -935,13 +929,14 @@ PostHogLib.prototype.reloadFeatureFlags = function (callback) {
 }
 
 /*
- * See if feature flags are available.
+ * Register an event listener that runs when feature flags become available or when they change.
  *
  * ### Usage:
  *
  *     posthog.onFeatureFlags(function(featureFlags) { // do something })
  *
- * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
+ * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
+ *                              It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
     return this.persistence.addFeatureFlagsHandler(callback)
