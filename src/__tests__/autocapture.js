@@ -900,7 +900,7 @@ describe('Autocapture system', () => {
                 flag_2: 1,
             }
             editorParams = {
-                action: 'mpeditor',
+                action: 'ph_authorize',
                 desiredHash: '#myhash',
                 projectId: 3,
                 projectOwnerId: 722725,
@@ -908,6 +908,7 @@ describe('Autocapture system', () => {
                 token: 'test_token',
                 userFlags,
                 userId: 12345,
+                apiURL: lib.get_config('api_host'),
             }
             const hashParams = {
                 access_token: 'test_access_token',

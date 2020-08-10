@@ -338,6 +338,8 @@ var autocapture = {
                 delete editorParams.userIntent
             }
 
+            editorParams['apiURL'] = instance.get_config('api_host')
+
             if (editorParams['token'] && instance.get_config('token') === editorParams['token']) {
                 this._loadEditor(instance, editorParams)
                 return true
