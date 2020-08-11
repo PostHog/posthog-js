@@ -1,3 +1,6 @@
+## 1.4.3 - 2020-08-11
+- Remove "?." to support older browsers 
+
 ## 1.4.2 - 2020-08-11
 - Capture actions even if toolbar is in used 
 
