@@ -227,7 +227,7 @@ var autocapture = {
 
     _customProperties: {},
     init: function (instance) {
-        if (this._maybeLoadEditor(instance)) return // don't autocapture actions when the editor is enabled
+        this._maybeLoadEditor(instance)
 
         var token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
