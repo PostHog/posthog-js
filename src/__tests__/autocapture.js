@@ -822,12 +822,6 @@ describe('Autocapture system', () => {
             expect(autocapture._addDomEventHandlers.called).toBe(false)
         })
 
-        it('should NOT call _addDomEventHandlders when loading editor', () => {
-            _maybeLoadEditorStub.returns(true)
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.calledOnce).toBe(false)
-        })
-
         it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', () => {
             lib._send_request = sandbox.spy((url, params, options, callback) =>
                 callback({ config: { enable_collect_everything: false } })
