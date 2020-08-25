@@ -717,6 +717,23 @@ describe('Autocapture system', () => {
             expect(props['$event_type']).toBe('click')
         })
 
+        it('should capture a click event inside a shadowroot', () => {
+            var main_el = document.createElement('some-element')
+            var shadowRoot = main_el.attachShadow({ mode: 'open' })
+            var button = document.createElement('a')
+            button.innerHTML = 'bla'
+            shadowRoot.appendChild(button)
+            const e = {
+                target: main_el,
+                path: [button, main_el],
+                type: 'click',
+            }
+            autocapture._captureEvent(e, lib)
+            expect(lib.capture.calledOnce).toBe(true)
+            const props = getCapturedProps(lib.capture)
+            expect(props['$event_type']).toBe('click')
+        })
+
         it('should never capture an element with `ph-no-capture` class', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')

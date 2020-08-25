@@ -131,6 +131,9 @@ var autocapture = {
         if (typeof e.target === 'undefined') {
             return e.srcElement
         } else {
+            if (e.target.shadowRoot) {
+                return e.path[0]
+            }
             return e.target
         }
     },
@@ -147,6 +150,11 @@ var autocapture = {
             var targetElementList = [target]
             var curEl = target
             while (curEl.parentNode && !isTag(curEl, 'body')) {
+                if (curEl.parentNode.nodeType === 11) {
+                    targetElementList.push(curEl.parentNode.host)
+                    curEl = curEl.parentNode.host
+                    continue
+                }
                 targetElementList.push(curEl.parentNode)
                 curEl = curEl.parentNode
             }
