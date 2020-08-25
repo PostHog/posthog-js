@@ -14,7 +14,7 @@
         "lint": "eslint src tests --fix",
         "integration-test": "echo 'Browse to localhost:3000/tests' && node testServer.js",
         "prepublish": "yarn test && yarn build && yarn build-module && yarn process-types",
-        "test": "jest",
+        "test": "nodemon --ext js --exec 'yarn jest'",
         "unit-test": "BABEL_ENV=test mocha --require babel-core/register tests/unit/*.js"
     },
     "main": "dist/module.js",
@@ -38,6 +38,7 @@
         "jsdom-global": "3.0.2",
         "lint-staged": "^10.2.11",
         "localStorage": "1.0.4",
+        "nodemon": "^2.0.4",
         "parcel": "^1.12.4",
         "prettier": "^2.0.5",
         "rollup": "^2.18.2",

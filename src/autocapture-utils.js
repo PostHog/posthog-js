@@ -96,19 +96,28 @@ export function shouldCaptureDomEvent(el, event) {
 
     var parentIsUsefulElement = false
     var targetElementList = [el]
+    var parentNode = true
     var curEl = el
     while (curEl.parentNode && !isTag(curEl, 'body')) {
-        if (usefulElements.indexOf(curEl.parentNode.tagName.toLowerCase()) > -1) {
+        // If element is a shadow root, we skip it
+        if (curEl.parentNode.nodeType === 11) {
+            targetElementList.push(curEl.parentNode.host)
+            curEl = curEl.parentNode.host
+            continue
+        }
+        parentNode = curEl.parentNode
+        if (!parentNode) break
+        if (usefulElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
         } else {
-            let compStyles = window.getComputedStyle(curEl.parentNode)
+            let compStyles = window.getComputedStyle(parentNode)
             if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
                 parentIsUsefulElement = true
             }
         }
 
-        targetElementList.push(curEl.parentNode)
-        curEl = curEl.parentNode
+        targetElementList.push(parentNode)
+        curEl = parentNode
     }
 
     let compStyles = window.getComputedStyle(el)

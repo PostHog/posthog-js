@@ -23,9 +23,16 @@
     <div class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
         <a href='https://posthog.com'>Here's a link to the outside world</a>
     </div>
+    <div id="shadow" ></div>
 
     <div style="padding: 2rem;background:green;display:none;color:white" id="feature"><h2>Look, a new beta feature</h2></div>
     <script>
+        const header = document.createElement('header');
+        const shadowRoot = header.attachShadow({mode: 'open'});
+        shadowRoot.innerHTML = '<h2>shadowroot</h2><button>bla</button>'
+        document.body.appendChild(header)
+
+
         console.log(posthog.isFeatureEnabled('beta-feature'))
         posthog.onFeatureFlags(function(featureFlags) {
             console.log(featureFlags)
