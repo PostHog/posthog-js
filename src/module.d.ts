@@ -522,7 +522,7 @@ declare namespace posthog {
         persistence?: 'localStorage' | 'cookie'
         persistence_name?: string
         cookie_name?: string
-        loaded?: (posthog_instance: posthog) => void
+        loaded?: (posthog_instance: typeof posthog) => void
         store_google?: boolean
         save_referrer?: boolean
         test?: boolean
