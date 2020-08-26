@@ -1,3 +1,7 @@
+## 1.4.4 - 2020-08-26
+- Fix clicks within shadowroot not being captured
+- Fix type definition of loaded
+
 ## 1.4.3 - 2020-08-11
 - Remove "?." to support older browsers 
 
