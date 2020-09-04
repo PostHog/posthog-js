@@ -17,7 +17,8 @@ var ArrayProto = Array.prototype,
     document = window.document,
     windowOpera = window.opera,
     screen = window.screen,
-    userAgent = navigator.userAgent
+    userAgent = navigator.userAgent,
+    disabledStorage = {}
 
 var nativeBind = FuncProto.bind,
     nativeForEach = ArrayProto.forEach,
@@ -1130,6 +1131,29 @@ _.localStorage = {
         } catch (err) {
             _.localStorage.error(err)
         }
+    },
+}
+
+// Storage that only lasts the length of the pageview if we don't want to use cookies
+_.storageDisabled = {
+    is_supported: function () {
+        return true
+    },
+
+    error: function (msg) {
+        console.error('localStorage error: ' + msg)
+    },
+
+    parse: function (name) {
+        return disabledStorage[name] || null
+    },
+
+    set: function (name, value) {
+        disabledStorage[name] = value
+    },
+
+    remove: function (name) {
+        delete disabledStorage[name]
     },
 }
 

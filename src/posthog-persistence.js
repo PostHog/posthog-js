@@ -52,7 +52,7 @@ var PostHogPersistence = function (config) {
     }
 
     var storage_type = config['persistence']
-    if (storage_type !== 'cookie' && storage_type !== 'localStorage') {
+    if (storage_type !== 'cookie' && storage_type !== 'localStorage' && storage_type !== 'disabled') {
         console.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
     }
@@ -61,6 +61,9 @@ var PostHogPersistence = function (config) {
         this.storage = _.localStorage
     } else {
         this.storage = _.cookie
+    }
+    if (storage_type === 'disabled') {
+        this.storage = _.storageDisabled
     }
 
     this.load()
