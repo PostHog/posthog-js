@@ -1,3 +1,6 @@
+## 1.4.5 - 2020-09-08
+- Fix clicks in shadowroot for Firefox and Safari
+
 ## 1.4.4 - 2020-08-26
 - Fix clicks within shadowroot not being captured
 - Fix type definition of loaded
