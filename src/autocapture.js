@@ -132,7 +132,7 @@ var autocapture = {
             return e.srcElement
         } else {
             if (e.target.shadowRoot) {
-                return e.path[0]
+                return e.composedPath()[0]
             }
             return e.target
         }
