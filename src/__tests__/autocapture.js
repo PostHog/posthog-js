@@ -725,7 +725,7 @@ describe('Autocapture system', () => {
             shadowRoot.appendChild(button)
             const e = {
                 target: main_el,
-                path: [button, main_el],
+                composedPath: () => [button, main_el],
                 type: 'click',
             }
             autocapture._captureEvent(e, lib)
