@@ -60,8 +60,9 @@ PostHogFeatureFlags.prototype.isFeatureEnabled = function (key) {
         console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
         return false
     }
-    this._posthog.capture('$feature_flag_called', { $feature_flag: key })
-    return this.getFlags().indexOf(key) > -1
+    let response = this.getFlags().indexOf(key) > -1
+    this._posthog.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: response })
+    return response
 }
 
 /*
