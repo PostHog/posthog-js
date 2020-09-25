@@ -303,6 +303,9 @@ declare class posthog {
      *       // should we capture a page view on page load
      *       capture_pageview: true
      *
+     *       // how long the user has to be on the page for the $pageview event to fire
+     *       pageview_bounce_threshold_ms: 0
+     *
      *       // if you set upgrade to be true, the library will check for
      *       // a cookie from our old js library and import super
      *       // properties from it, then the old cookie is deleted
@@ -548,6 +551,7 @@ declare namespace posthog {
         inapp_link_new_window?: boolean
         request_batching?: boolean
         sanitize_properties?: (properties: Record<string, any>, event_name: string) => Record<string, any>
+        pageview_bounce_threshold_ms?: number
     }
 
     interface OptInOutCapturingOptions {

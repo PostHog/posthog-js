@@ -66,6 +66,7 @@ var DEFAULT_CONFIG = {
     verbose: false,
     img: false,
     capture_pageview: true,
+    pageview_bounce_threshold_ms: 0,
     debug: false,
     capture_links_timeout: 300,
     cookie_expiration: 365,
@@ -258,8 +259,7 @@ PostHogLib.prototype._loaded = function () {
 
     this._start_queue_if_opted_in()
 
-    // this happens after so a user can call identify in
-    // the loaded callback
+    // this happens after so a user can call identify in the loaded callback
     if (this.get_config('capture_pageview')) {
         this.capture_pageview()
     }
@@ -787,10 +787,18 @@ PostHogLib.prototype._remove_group_from_cache = function (group_key, group_id) {
  * @api private
  */
 PostHogLib.prototype.capture_pageview = function (page) {
+    clearTimeout(this.pageview_bounce_timeout)
     if (_.isUndefined(page)) {
         page = document.location.href
     }
-    this.capture('$pageview')
+    const pageview_bounce_threshold_ms = this.get_config('pageview_bounce_threshold_ms')
+    if (pageview_bounce_threshold_ms > 0) {
+        this.pageview_bounce_timeout = setTimeout(() => {
+            this.capture('$pageview')
+        }, pageview_bounce_threshold_ms)
+    } else {
+        this.capture('$pageview')
+    }
 }
 
 /**
@@ -1184,6 +1192,9 @@ PostHogLib.prototype.alias = function (alias, original) {
  *
  *       // should we capture a page view on page load
  *       capture_pageview: true
+ *
+ *       // how long user has to be on the page for the $pageview event to fire
+ *       pageview_bounce_threshold_ms: 0
  *
  *       // if you set upgrade to be true, the library will check for
  *       // a cookie from our old js library and import super
