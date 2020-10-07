@@ -3,6 +3,7 @@ import { LZString } from './lz-string'
 import Config from './config'
 import { _, console, userAgent, window, document, navigator } from './utils'
 import { autocapture } from './autocapture'
+import { PosthogSessionRecording } from './posthog-sessionrecording'
 import { LinkCapture } from './dom-capture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -145,6 +146,11 @@ var create_mplib = function (token, config, name) {
         } else {
             autocapture.init(instance)
         }
+    }
+
+    if (instance.get_config('sessionrecording')) {
+        instance['sessionrecording'] = new PosthogSessionRecording(instance)
+        instance['sessionrecording'].init()
     }
 
     // if target is not defined, we called init after the lib already
