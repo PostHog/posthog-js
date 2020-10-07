@@ -1541,6 +1541,7 @@ PostHogLib.prototype.sentry_integration = function (_posthog) {
         addGlobalEventProcessor((event) => {
             if (event.level === 'error')
                 _posthog.capture('$exception', { $sentry_event_id: event.event_id, $sentry_exception: event.exception })
+            return event
         })
     }
 }
