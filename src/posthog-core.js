@@ -1527,6 +1527,24 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
     this.clear_opt_in_out_capturing(options)
 }
 
+PostHogLib.prototype.sentry_integration = function (_posthog) {
+    this.setupOnce = function (addGlobalEventProcessor) {
+        // Poll for PostHog to load
+        function poll() {
+            if (!_posthog.__loaded) {
+                setTimeout(poll, 200)
+            } else {
+                Sentry.setTag('PostHog URL', _posthog.config.api_host + '/person/' + _posthog.get_distinct_id())
+            }
+        }
+        poll()
+        addGlobalEventProcessor((event) => {
+            if (event.level === 'error')
+                _posthog.capture('$exception', { $sentry_event_id: event.event_id, $sentry_exception: event.exception })
+        })
+    }
+}
+
 function deprecate_warning(method) {
     window.console.warn(
         'WARNING! posthog.' +
@@ -1572,6 +1590,7 @@ PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
 PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureFlags
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
 PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
+PostHogLib.prototype['SentryIntegration'] = PostHogLib.prototype.sentry_integration
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties'] = PostHogPersistence.prototype.properties
