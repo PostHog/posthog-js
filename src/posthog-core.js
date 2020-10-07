@@ -1527,7 +1527,23 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
     this.clear_opt_in_out_capturing(options)
 }
 
-PostHogLib.prototype.sentry_integration = function (_posthog) {
+/**
+ * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
+ *
+ * ### Usage
+ *
+ *     Sentry.init({
+ *          dsn: 'https://example',
+ *          integrations: [
+ *              new posthog.SentryIntegration(posthog)
+ *          ]
+ *     })
+ *
+ * @param {Object} [posthog] The posthog object
+ * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
+ * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
+ */
+PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId) {
     this.setupOnce = function (addGlobalEventProcessor) {
         // Poll for PostHog to load
         function poll() {
@@ -1539,8 +1555,20 @@ PostHogLib.prototype.sentry_integration = function (_posthog) {
         }
         poll()
         addGlobalEventProcessor((event) => {
-            if (event.level === 'error')
-                _posthog.capture('$exception', { $sentry_event_id: event.event_id, $sentry_exception: event.exception })
+            if (event.level !== 'error') return event
+            let data = {
+                $sentry_event_id: event.event_id,
+                $sentry_exception: event.exception,
+            }
+            if (organization && projectId)
+                data['$sentry_url'] =
+                    'https://sentry.io/organizations/' +
+                    organization +
+                    '/issues/?project=' +
+                    projectId +
+                    '&query=' +
+                    event.event_id
+            _posthog.capture('$exception', data)
             return event
         })
     }
