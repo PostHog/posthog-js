@@ -12,6 +12,7 @@ import {
     shouldCaptureValue,
     usefulElements,
 } from './autocapture-utils'
+import { PosthogSessionRecording } from './posthog-sessionrecording'
 
 var autocapture = {
     _initializedTokens: [],
@@ -279,6 +280,11 @@ var autocapture = {
                 instance['compression'] = compression
             } else {
                 instance['compression'] = {}
+            }
+
+            if (response['sessionRecording']) {
+                instance['session_recording'] = new PosthogSessionRecording(instance)
+                instance['session_recording'].init()
             }
         }, this)
 
