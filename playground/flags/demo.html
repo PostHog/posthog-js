@@ -1,6 +1,6 @@
 <script src="../../dist/array.js"></script>
 <script>
-    posthog.init('sTMFPsFhdP1Ssg', {api_host: 'http://127.0.0.1:8000', debug: true})
+    posthog.init('sTMFPsFhdP1Ssg', {api_host: 'http://127.0.0.1:8000', debug: true, persistence: 'disabled', loaded: function(posthog) { posthog.identify('test')}})
 </script>
 <h2>Demo site</h2>
 <button>Here's a button you could click if you want to</button><br /><br />

@@ -1527,6 +1527,54 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
     this.clear_opt_in_out_capturing(options)
 }
 
+/**
+ * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
+ *
+ * ### Usage
+ *
+ *     Sentry.init({
+ *          dsn: 'https://example',
+ *          integrations: [
+ *              new posthog.SentryIntegration(posthog)
+ *          ]
+ *     })
+ *
+ * @param {Object} [posthog] The posthog object
+ * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
+ * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
+ */
+PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId) {
+    // setupOnce gets called by Sentry when it intializes the plugin
+    this.setupOnce = function (addGlobalEventProcessor) {
+        // Poll for PostHog to load
+        function poll() {
+            if (!_posthog.__loaded) {
+                setTimeout(poll, 200)
+            } else {
+                Sentry.setTag('PostHog URL', _posthog.config.api_host + '/person/' + _posthog.get_distinct_id())
+            }
+        }
+        poll()
+        addGlobalEventProcessor((event) => {
+            if (event.level !== 'error') return event
+            let data = {
+                $sentry_event_id: event.event_id,
+                $sentry_exception: event.exception,
+            }
+            if (organization && projectId)
+                data['$sentry_url'] =
+                    'https://sentry.io/organizations/' +
+                    organization +
+                    '/issues/?project=' +
+                    projectId +
+                    '&query=' +
+                    event.event_id
+            _posthog.capture('$exception', data)
+            return event
+        })
+    }
+}
+
 function deprecate_warning(method) {
     window.console.warn(
         'WARNING! posthog.' +
@@ -1572,6 +1620,7 @@ PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
 PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureFlags
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
 PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
+PostHogLib.prototype['SentryIntegration'] = PostHogLib.prototype.sentry_integration
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties'] = PostHogPersistence.prototype.properties
