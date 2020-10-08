@@ -237,3 +237,17 @@ export function shouldCaptureValue(value) {
 
     return true
 }
+
+export function loadScript(scriptUrlToLoad, callback) {
+    var scriptTag = document.createElement('script')
+    scriptTag.type = 'text/javascript'
+    scriptTag.src = scriptUrlToLoad
+    scriptTag.onload = callback
+
+    var scripts = document.getElementsByTagName('script')
+    if (scripts.length > 0) {
+        scripts[0].parentNode.insertBefore(scriptTag, scripts[0])
+    } else {
+        document.body.appendChild(scriptTag)
+    }
+}

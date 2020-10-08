@@ -3,14 +3,16 @@ import {
     getClassName,
     getSafeText,
     isElementNode,
+    isSensitiveElement,
     isTag,
     isTextNode,
+    loadScript,
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureValue,
     usefulElements,
-    isSensitiveElement,
 } from './autocapture-utils'
+import { PosthogSessionRecording } from './posthog-sessionrecording'
 
 var autocapture = {
     _initializedTokens: [],
@@ -23,20 +25,6 @@ var autocapture = {
                 el = el.previousSibling
             } while (el && !isElementNode(el))
             return el
-        }
-    },
-
-    _loadScript: function (scriptUrlToLoad, callback) {
-        var scriptTag = document.createElement('script')
-        scriptTag.type = 'text/javascript'
-        scriptTag.src = scriptUrlToLoad
-        scriptTag.onload = callback
-
-        var scripts = document.getElementsByTagName('script')
-        if (scripts.length > 0) {
-            scripts[0].parentNode.insertBefore(scriptTag, scripts[0])
-        } else {
-            document.body.appendChild(scriptTag)
         }
     },
 
@@ -293,6 +281,11 @@ var autocapture = {
             } else {
                 instance['compression'] = {}
             }
+
+            if (response['sessionRecording']) {
+                instance['session_recording'] = new PosthogSessionRecording(instance)
+                instance['session_recording'].init()
+            }
         }, this)
 
         var json_data = _.JSONEncode({
@@ -371,7 +364,7 @@ var autocapture = {
                     : 'editor.js'
             var editorUrl =
                 host + (host.endsWith('/') ? '' : '/') + 'static/' + toolbarScript + '?_ts=' + new Date().getTime()
-            this._loadScript(editorUrl, function () {
+            loadScript(editorUrl, function () {
                 window['ph_load_editor'](editorParams)
             })
             // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar

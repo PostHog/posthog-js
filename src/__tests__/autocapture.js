@@ -3,6 +3,7 @@ import sinon from 'sinon'
 import { autocapture } from '../autocapture'
 
 import { _ } from '../utils'
+import * as utils from '../autocapture-utils'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
@@ -158,33 +159,6 @@ describe('Autocapture system', () => {
             div.appendChild(document.createTextNode('some text'))
             div.appendChild(child)
             expect(autocapture._previousElementSibling(child)).toBeNull()
-        })
-    })
-
-    describe('_loadScript', () => {
-        it('should insert the given script before the one already on the page', () => {
-            document.body.appendChild(document.createElement('script'))
-            const callback = (_) => _
-            autocapture._loadScript('https://fake_url', callback)
-            const scripts = document.getElementsByTagName('script')
-            const new_script = scripts[0]
-
-            expect(scripts.length).toBe(2)
-            expect(new_script.type).toBe('text/javascript')
-            expect(new_script.src).toBe('https://fake_url/')
-            expect(new_script.onload).toBe(callback)
-        })
-
-        it("should add the script to the page when there aren't any preexisting scripts on the page", () => {
-            const callback = (_) => _
-            autocapture._loadScript('https://fake_url', callback)
-            const scripts = document.getElementsByTagName('script')
-            const new_script = scripts[0]
-
-            expect(scripts.length).toBe(1)
-            expect(new_script.type).toBe('text/javascript')
-            expect(new_script.src).toBe('https://fake_url/')
-            expect(new_script.onload).toBe(callback)
         })
     })
 
@@ -1017,7 +991,7 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             autocapture._editorLoaded = false
             sandbox = sinon.createSandbox()
-            sandbox.stub(autocapture, '_loadScript').callsFake((path, callback) => callback())
+            sandbox.stub(utils, 'loadScript').callsFake((path, callback) => callback())
             lib.get_config = sandbox.stub()
             lib.get_config.withArgs('app_host').returns('example.com')
             lib.get_config.withArgs('token').returns('token')
