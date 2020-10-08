@@ -1544,6 +1544,7 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
  * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
  */
 PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId) {
+    // setupOnce gets called by Sentry when it intializes the plugin
     this.setupOnce = function (addGlobalEventProcessor) {
         // Poll for PostHog to load
         function poll() {
