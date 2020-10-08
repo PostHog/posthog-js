@@ -12,7 +12,7 @@ export class PosthogSessionRecording {
     _onScriptLoaded() {
         window.rrweb.record({
             emit(data) {
-                posthog.capture('$snapshot', { data })
+                posthog.capture('$snapshot', { $snapshot_data: data })
             },
         })
     }
