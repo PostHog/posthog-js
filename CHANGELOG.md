@@ -1,3 +1,8 @@
+## 1.5.0-beta - 2020-09-08
+- Add beta functionality to do session recording
+- Add $feature_flag_called event
+- Add beta Sentry integration
+
 ## 1.4.5 - 2020-09-08
 - Fix clicks in shadowroot for Firefox and Safari
 
