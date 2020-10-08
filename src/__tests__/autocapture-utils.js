@@ -6,9 +6,14 @@ import {
     shouldCaptureElement,
     isSensitiveElement,
     shouldCaptureValue,
+    loadScript,
 } from '../autocapture-utils'
 
 describe(`Autocapture utility functions`, () => {
+    afterEach(() => {
+        document.getElementsByTagName('html')[0].innerHTML = ''
+    })
+
     describe(`getSafeText`, () => {
         it(`should collect and normalize text from elements`, () => {
             const el = document.createElement(`div`)
@@ -322,6 +327,33 @@ describe(`Autocapture utility functions`, () => {
 
         it(`should not include values that look like social security numbers`, () => {
             expect(shouldCaptureValue(`123-45-6789`)).toBe(false)
+        })
+    })
+
+    describe('loadScript', () => {
+        it('should insert the given script before the one already on the page', () => {
+            document.body.appendChild(document.createElement('script'))
+            const callback = (_) => _
+            loadScript('https://fake_url', callback)
+            const scripts = document.getElementsByTagName('script')
+            const new_script = scripts[0]
+
+            expect(scripts.length).toBe(2)
+            expect(new_script.type).toBe('text/javascript')
+            expect(new_script.src).toBe('https://fake_url/')
+            expect(new_script.onload).toBe(callback)
+        })
+
+        it("should add the script to the page when there aren't any preexisting scripts on the page", () => {
+            const callback = (_) => _
+            loadScript('https://fake_url', callback)
+            const scripts = document.getElementsByTagName('script')
+            const new_script = scripts[0]
+
+            expect(scripts.length).toBe(1)
+            expect(new_script.type).toBe('text/javascript')
+            expect(new_script.src).toBe('https://fake_url/')
+            expect(new_script.onload).toBe(callback)
         })
     })
 })
