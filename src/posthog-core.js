@@ -1546,17 +1546,10 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
 PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId) {
     // setupOnce gets called by Sentry when it intializes the plugin
     this.setupOnce = function (addGlobalEventProcessor) {
-        // Poll for PostHog to load
-        function poll() {
-            if (!_posthog.__loaded) {
-                setTimeout(poll, 200)
-            } else {
-                Sentry.setTag('PostHog URL', _posthog.config.api_host + '/person/' + _posthog.get_distinct_id())
-            }
-        }
-        poll()
         addGlobalEventProcessor((event) => {
-            if (event.level !== 'error') return event
+            if (event.level !== 'error' || !_posthog.__loaded) return event
+            if (!event.tags) event.tags = {}
+            event.tags['PostHog URL'] = _posthog.config.api_host + '/person/' + _posthog.get_distinct_id()
             let data = {
                 $sentry_event_id: event.event_id,
                 $sentry_exception: event.exception,
