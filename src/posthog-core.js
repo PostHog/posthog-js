@@ -1118,6 +1118,9 @@ PostHogLib.prototype.alias = function (alias, original) {
  * The default config is:
  *
  *     {
+ *       // Posthog host
+ *       api_host: 'https://app.posthog.com',
+ *
  *       // HTTP method for capturing requests
  *       api_method: 'POST'
  *
