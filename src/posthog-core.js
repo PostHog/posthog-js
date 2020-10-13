@@ -7,6 +7,7 @@ import { LinkCapture } from './dom-capture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
+import { PosthogSessionRecording } from './posthog-sessionrecording'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 
 /*
@@ -70,6 +71,7 @@ var DEFAULT_CONFIG = {
     capture_links_timeout: 300,
     cookie_expiration: 365,
     upgrade: false,
+    disable_session_recording: false,
     disable_persistence: false,
     disable_cookie: false,
     secure_cookie: window.location.protocol === 'https:',
@@ -127,6 +129,9 @@ var create_mplib = function (token, config, name) {
 
     instance['feature_flags'] = new PostHogFeatureFlags()
     instance['feature_flags']._init(instance)
+
+    instance['session_recording'] = new PosthogSessionRecording(instance)
+    instance['session_recording']._init(instance)
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true
@@ -1194,6 +1199,9 @@ PostHogLib.prototype.alias = function (alias, original) {
  *       // The upgrade config option only works in the initialization,
  *       // so make sure you set it when you create the library.
  *       upgrade: false
+ *
+ *       // if this is true, session recording is always disabled.
+ *       disable_session_recording: false,
  *
  *       // extra HTTP request headers to set for each API request, in
  *       // the format {'Header-Name': value}
