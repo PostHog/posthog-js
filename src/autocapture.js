@@ -358,10 +358,7 @@ var autocapture = {
             // only load the codeless event editor once, even if there are multiple instances of PostHogLib
             window['_postHogToolbarLoaded'] = true
             var host = editorParams['jsURL'] || editorParams['apiURL'] || instance.get_config('api_host')
-            var toolbarScript =
-                editorParams['toolbarVersion'] && editorParams['toolbarVersion'].indexOf('toolbar') === 0
-                    ? 'toolbar.js'
-                    : 'editor.js'
+            var toolbarScript = 'toolbar.js'
             var editorUrl =
                 host + (host.endsWith('/') ? '' : '/') + 'static/' + toolbarScript + '?_ts=' + new Date().getTime()
             loadScript(editorUrl, function () {
