@@ -6,7 +6,6 @@ import { PosthogSessionRecording } from '../posthog-sessionrecording'
 
 describe('Session recording system', () => {
     let _emit
-    let sandbox
 
     given('sessionRecording', () => new PosthogSessionRecording(given.posthog))
     given('posthog', () => ({
@@ -18,6 +17,7 @@ describe('Session recording system', () => {
 
     given('disabled', () => false)
     given('$session_recording_enabled', () => true)
+    given('sandbox', () => sinon.createSandbox())
 
     beforeEach(() => {
         window.rrweb = {
@@ -25,12 +25,11 @@ describe('Session recording system', () => {
                 _emit = emit
             },
         }
-        sandbox = sinon.createSandbox()
-        sandbox.stub(utils, 'loadScript').callsFake((path, callback) => callback())
+        given.sandbox.stub(utils, 'loadScript').callsFake((path, callback) => callback())
     })
 
     afterEach(() => {
-        sandbox.restore()
+        given.sandbox.restore()
     })
 
     it('records events emitted before and after starting recording', () => {
