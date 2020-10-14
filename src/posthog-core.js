@@ -94,7 +94,7 @@ var DOM_LOADED = false
  * PostHog Library Object
  * @constructor
  */
-var PostHogLib = function () {}
+export const PostHogLib = function () {}
 
 /**
  * create_mplib(token:string, config:object, name:string)
@@ -706,16 +706,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         return
     }
 
-    // set defaults
-    properties = properties || {}
-    properties['token'] = this.get_config('token')
-
-    // set $duration if time_event was previously called for this event
-    var start_timestamp = this['persistence'].remove_event_timer(event_name)
-    if (!_.isUndefined(start_timestamp)) {
-        var duration_in_ms = new Date().getTime() - start_timestamp
-        properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
-    }
+    const start_timestamp = this['persistence'].remove_event_timer(event_name)
 
     // update persistence
     this['persistence'].update_search_keyword(document.referrer)
@@ -727,30 +718,9 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         this['persistence'].update_referrer_info(document.referrer)
     }
 
-    // note: extend writes to the first object, so lets make sure we
-    // don't write to the persistence properties object and info
-    // properties object by passing in a new object
-
-    // update properties with pageview info and super-properties
-    properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
-
-    var property_blacklist = this.get_config('property_blacklist')
-    if (_.isArray(property_blacklist)) {
-        _.each(property_blacklist, function (blacklisted_prop) {
-            delete properties[blacklisted_prop]
-        })
-    } else {
-        console.error('Invalid value for property_blacklist config: ' + property_blacklist)
-    }
-
-    var sanitize_properties = this.get_config('sanitize_properties')
-    if (sanitize_properties) {
-        properties = sanitize_properties(properties, event_name)
-    }
-
     var data = {
         event: event_name,
-        properties: properties,
+        properties: this._calculate_event_properties(event_name, properties, start_timestamp),
     }
 
     var truncated_data = _.truncate(data, 255)
@@ -774,6 +744,41 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
 
     return truncated_data
 })
+
+PostHogLib.prototype._calculate_event_properties = function (event_name, event_properties, start_timestamp) {
+    // set defaults
+    let properties = event_properties || {}
+    properties['token'] = this.get_config('token')
+
+    // set $duration if time_event was previously called for this event
+    if (!_.isUndefined(start_timestamp)) {
+        var duration_in_ms = new Date().getTime() - start_timestamp
+        properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+    }
+
+    // note: extend writes to the first object, so lets make sure we
+    // don't write to the persistence properties object and info
+    // properties object by passing in a new object
+
+    // update properties with pageview info and super-properties
+    properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
+
+    var property_blacklist = this.get_config('property_blacklist')
+    if (_.isArray(property_blacklist)) {
+        _.each(property_blacklist, function (blacklisted_prop) {
+            delete properties[blacklisted_prop]
+        })
+    } else {
+        console.error('Invalid value for property_blacklist config: ' + property_blacklist)
+    }
+
+    var sanitize_properties = this.get_config('sanitize_properties')
+    if (sanitize_properties) {
+        properties = sanitize_properties(properties, event_name)
+    }
+
+    return properties
+}
 
 PostHogLib.prototype._create_map_key = function (group_key, group_id) {
     return group_key + '_' + JSON.stringify(group_id)
