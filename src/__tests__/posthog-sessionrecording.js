@@ -1,8 +1,7 @@
-import 'given2/setup'
-import sinon from 'sinon'
-
-import * as utils from '../autocapture-utils'
+import { loadScript } from '../autocapture-utils'
 import { PosthogSessionRecording } from '../posthog-sessionrecording'
+
+jest.mock('../autocapture-utils')
 
 describe('Session recording system', () => {
     let _emit
@@ -12,12 +11,11 @@ describe('Session recording system', () => {
         disable_session_recording: given.disabled,
         persistence: { props: { $session_recording_enabled: given.$session_recording_enabled } },
         get_config: () => 'posthog.example.com',
-        capture: sinon.spy(),
+        capture: jest.fn(),
     }))
 
     given('disabled', () => false)
     given('$session_recording_enabled', () => true)
-    given('sandbox', () => sinon.createSandbox())
 
     beforeEach(() => {
         window.rrweb = {
@@ -25,43 +23,40 @@ describe('Session recording system', () => {
                 _emit = emit
             },
         }
-        given.sandbox.stub(utils, 'loadScript').callsFake((path, callback) => callback())
-    })
 
-    afterEach(() => {
-        given.sandbox.restore()
+        loadScript.mockImplementation((path, callback) => callback())
     })
 
     it('records events emitted before and after starting recording', () => {
         given.sessionRecording._init()
-        expect(utils.loadScript.calledOnce).toBe(true)
+        expect(loadScript).toHaveBeenCalled()
 
         _emit({ event: 1 })
-        expect(given.posthog.capture.notCalled).toBe(true)
+        expect(given.posthog.capture).not.toHaveBeenCalled()
 
         given.sessionRecording.recordAndSubmit()
         _emit({ event: 2 })
 
-        expect(given.posthog.capture.calledTwice).toBe(true)
-        expect(given.posthog.capture.calledWith('$snapshot', { $snapshot_data: { event: 1 } })).toBe(true)
-        expect(given.posthog.capture.calledWith('$snapshot', { $snapshot_data: { event: 2 } })).toBe(true)
+        expect(given.posthog.capture).toHaveBeenCalledTimes(2)
+        expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', { $snapshot_data: { event: 1 } })
+        expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', { $snapshot_data: { event: 2 } })
     })
 
     it('loads recording script from right place', () => {
         given.sessionRecording._init()
 
-        expect(utils.loadScript.calledWith('posthog.example.com/static/recorder.js')).toBe(true)
+        expect(loadScript).toHaveBeenCalledWith('posthog.example.com/static/recorder.js', expect.anything())
     })
 
     it('loads script after `recordAndSubmit` if not previously loaded', () => {
         given('$session_recording_enabled', () => false)
 
         given.sessionRecording._init()
-        expect(utils.loadScript.notCalled).toBe(true)
+        expect(loadScript).not.toHaveBeenCalled()
 
         given.sessionRecording.recordAndSubmit()
 
-        expect(utils.loadScript.called).toBe(true)
+        expect(loadScript).toHaveBeenCalled()
     })
 
     it('does not load script if disable_session_recording passed', () => {
@@ -70,6 +65,6 @@ describe('Session recording system', () => {
         given.sessionRecording._init()
         given.sessionRecording.recordAndSubmit()
 
-        expect(utils.loadScript.notCalled).toBe(true)
+        expect(loadScript).not.toHaveBeenCalled()
     })
 })

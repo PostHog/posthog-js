@@ -57,5 +57,11 @@
             "eslint -c .eslintrc.ts.js --fix",
             "tsc"
         ]
+    },
+    "jest": {
+        "setupFilesAfterEnv": [
+            "given2/setup"
+        ],
+        "clearMocks": true
     }
 }
