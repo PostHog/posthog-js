@@ -750,6 +750,10 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     let properties = event_properties || {}
     properties['token'] = this.get_config('token')
 
+    if (event_name === '$snapshot') {
+        return properties
+    }
+
     // set $duration if time_event was previously called for this event
     if (!_.isUndefined(start_timestamp)) {
         var duration_in_ms = new Date().getTime() - start_timestamp

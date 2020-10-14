@@ -51,4 +51,14 @@ describe('_calculate_event_properties()', () => {
             token: 'testtoken',
         })
     })
+
+    it('saves $snapshot data and token for $snapshot events', () => {
+        given('event_name', () => '$snapshot')
+        given('properties', () => ({ $snapshot_data: {} }))
+
+        expect(given.subject).toEqual({
+            token: 'testtoken',
+            $snapshot_data: {},
+        })
+    })
 })
