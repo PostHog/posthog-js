@@ -19,6 +19,7 @@ import { _, console } from './utils'
 /** @const */ var ALIAS_ID_KEY = '__alias'
 /** @const */ var CAMPAIGN_IDS_KEY = '__cmpns'
 /** @const */ var EVENT_TIMERS_KEY = '__timers'
+/** @const */ var SESSION_RECORDING_ENABLED = '$session_recording_enabled'
 /** @const */ var RESERVED_PROPERTIES = [
     SET_QUEUE_KEY,
     SET_ONCE_QUEUE_KEY,
@@ -31,6 +32,7 @@ import { _, console } from './utils'
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,
     EVENT_TIMERS_KEY,
+    SESSION_RECORDING_ENABLED,
 ]
 
 /**
@@ -409,4 +411,5 @@ export {
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,
     EVENT_TIMERS_KEY,
+    SESSION_RECORDING_ENABLED,
 }

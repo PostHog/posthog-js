@@ -1,5 +1,6 @@
 import { loadScript } from './autocapture-utils'
 import { _ } from './utils'
+import { SESSION_RECORDING_ENABLED } from './posthog-persistence'
 
 export class PosthogSessionRecording {
     constructor(instance) {
@@ -10,7 +11,7 @@ export class PosthogSessionRecording {
     }
 
     _init() {
-        if (this.instance.persistence.props['$session_recording_enabled']) {
+        if (this.instance.persistence.props[SESSION_RECORDING_ENABLED]) {
             this._startCapture()
         }
     }

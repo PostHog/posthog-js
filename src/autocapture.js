@@ -12,6 +12,7 @@ import {
     shouldCaptureValue,
     usefulElements,
 } from './autocapture-utils'
+import { SESSION_RECORDING_ENABLED } from './posthog-persistence'
 
 var autocapture = {
     _initializedTokens: [],
@@ -282,7 +283,7 @@ var autocapture = {
             }
 
             instance.persistence &&
-                instance.persistence.register({ $session_recording_enabled: response['sessionRecording'] })
+                instance.persistence.register({ [SESSION_RECORDING_ENABLED]: response['sessionRecording'] })
 
             if (response['sessionRecording']) {
                 instance['session_recording'].recordAndSubmit()
