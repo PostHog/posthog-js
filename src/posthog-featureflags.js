@@ -10,16 +10,16 @@ PostHogFeatureFlags.prototype._init = function (posthog_instance) {
 }
 
 PostHogFeatureFlags.prototype.getFlags = function () {
-    if (this._posthog.persistence.props['$override_feature_flags']) {
+    if (this._posthog.get_property('$override_feature_flags')) {
         if (!this._override_warning)
             console.warn(
                 '[PostHog] Overriding feature flags! Feature flags from server were: ' +
-                    JSON.stringify(this._posthog.persistence.props['$active_feature_flags'])
+                    JSON.stringify(this._posthog.get_property('$active_feature_flags'))
             )
         this._override_warning = true
-        return this._posthog.persistence.props['$override_feature_flags']
+        return this._posthog.get_property('$override_feature_flags')
     }
-    return this._posthog.persistence.props['$active_feature_flags']
+    return this._posthog.get_property('$active_feature_flags')
 }
 
 PostHogFeatureFlags.prototype.reloadFeatureFlags = function () {
