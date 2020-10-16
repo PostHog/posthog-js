@@ -127,8 +127,7 @@ var create_mplib = function (token, config, name) {
     instance['people'] = new PostHogPeople()
     instance['people']._init(instance)
 
-    instance['feature_flags'] = new PostHogFeatureFlags()
-    instance['feature_flags']._init(instance)
+    instance['feature_flags'] = new PostHogFeatureFlags(instance)
 
     instance['session_recording'] = new PosthogSessionRecording(instance)
     instance['session_recording']._init(instance)
