@@ -11,7 +11,7 @@ export class PosthogSessionRecording {
     }
 
     _init() {
-        if (this.instance.persistence.props[SESSION_RECORDING_ENABLED]) {
+        if (this.instance.get_property(SESSION_RECORDING_ENABLED)) {
             this._startCapture()
         }
     }

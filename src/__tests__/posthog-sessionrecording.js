@@ -9,7 +9,7 @@ describe('Session recording system', () => {
     given('sessionRecording', () => new PosthogSessionRecording(given.posthog))
     given('posthog', () => ({
         disable_session_recording: given.disabled,
-        persistence: { props: { $session_recording_enabled: given.$session_recording_enabled } },
+        get_property: () => given.$session_recording_enabled,
         get_config: () => 'posthog.example.com',
         capture: jest.fn(),
     }))
