@@ -28,7 +28,7 @@ describe('Session recording system', () => {
     })
 
     it('records events emitted before and after starting recording', () => {
-        given.sessionRecording._init()
+        given.sessionRecording.startRecordingIfEnabled()
         expect(loadScript).toHaveBeenCalled()
 
         _emit({ event: 1 })
@@ -43,7 +43,7 @@ describe('Session recording system', () => {
     })
 
     it('loads recording script from right place', () => {
-        given.sessionRecording._init()
+        given.sessionRecording.startRecordingIfEnabled()
 
         expect(loadScript).toHaveBeenCalledWith('posthog.example.com/static/recorder.js', expect.anything())
     })
@@ -51,7 +51,7 @@ describe('Session recording system', () => {
     it('loads script after `recordAndSubmit` if not previously loaded', () => {
         given('$session_recording_enabled', () => false)
 
-        given.sessionRecording._init()
+        given.sessionRecording.startRecordingIfEnabled()
         expect(loadScript).not.toHaveBeenCalled()
 
         given.sessionRecording.recordAndSubmit()
@@ -62,7 +62,7 @@ describe('Session recording system', () => {
     it('does not load script if disable_session_recording passed', () => {
         given('disabled', () => true)
 
-        given.sessionRecording._init()
+        given.sessionRecording.startRecordingIfEnabled()
         given.sessionRecording.recordAndSubmit()
 
         expect(loadScript).not.toHaveBeenCalled()

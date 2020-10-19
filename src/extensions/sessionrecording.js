@@ -10,7 +10,7 @@ export class SessionRecording {
         this.emit = false
     }
 
-    _init() {
+    startRecordingIfEnabled() {
         if (this.instance.get_property(SESSION_RECORDING_ENABLED)) {
             this._startCapture()
         }

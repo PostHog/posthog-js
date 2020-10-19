@@ -135,7 +135,7 @@ var create_mplib = function (token, config, name) {
     instance.toolbar = new Toolbar(instance)
 
     instance.sessionRecording = new SessionRecording(instance)
-    instance.sessionRecording._init(instance)
+    instance.sessionRecording.startRecordingIfEnabled()
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true
