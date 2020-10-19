@@ -3,7 +3,6 @@ import sinon from 'sinon'
 import { autocapture } from '../autocapture'
 
 import { _ } from '../utils'
-import * as utils from '../autocapture-utils'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
@@ -19,10 +18,7 @@ const simulateClick = function (el) {
 }
 
 describe('Autocapture system', () => {
-    let testContext = {}
-
     afterEach(() => {
-        testContext = {}
         document.getElementsByTagName('html')[0].innerHTML = ''
     })
 
@@ -858,165 +854,6 @@ describe('Autocapture system', () => {
             given.subject()
 
             expect(given.lib.toolbar.maybeLoadEditor).toHaveBeenCalled()
-        })
-    })
-
-    describe('_maybeLoadEditor', () => {
-        let hash,
-            editorParams,
-            sandbox,
-            lib = {}
-
-        beforeEach(() => {
-            window.localStorage.clear()
-
-            testContext.clock = sinon.useFakeTimers()
-
-            sandbox = sinon.createSandbox()
-            sandbox.stub(autocapture, '_loadEditor')
-            lib.get_config = sandbox.stub()
-            lib.get_config.withArgs('token').returns('test_token')
-            lib.get_config.withArgs('app_host').returns('test_app_host')
-
-            const userFlags = {
-                flag_1: 0,
-                flag_2: 1,
-            }
-            editorParams = {
-                action: 'ph_authorize',
-                desiredHash: '#myhash',
-                projectId: 3,
-                projectOwnerId: 722725,
-                readOnly: false,
-                token: 'test_token',
-                userFlags,
-                userId: 12345,
-                apiURL: lib.get_config('api_host'),
-            }
-            const hashParams = {
-                access_token: 'test_access_token',
-                state: encodeURIComponent(JSON.stringify(editorParams)),
-                expires_in: 3600,
-            }
-
-            hash = Object.keys(hashParams)
-                .map((k) => `${k}=${hashParams[k]}`)
-                .join('&')
-        })
-
-        afterEach(() => {
-            sandbox.restore()
-            testContext.clock.restore()
-        })
-
-        it('should initialize the visual editor when the hash state contains action "mpeditor"', () => {
-            window.location.hash = `#${hash}`
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
-        })
-
-        it('should initialize the visual editor when the hash state contains action "ph_authorize"', () => {
-            editorParams = {
-                ...editorParams,
-                action: 'ph_authorize',
-            }
-            const hashParams = {
-                state: encodeURIComponent(JSON.stringify(editorParams)),
-            }
-
-            hash = Object.keys(hashParams)
-                .map((k) => `${k}=${hashParams[k]}`)
-                .join('&')
-
-            window.location.hash = `#${hash}`
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
-        })
-
-        it('should initialize the visual editor when there are editor params in the session', () => {
-            window.localStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams))
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
-        })
-
-        it('should NOT initialize the visual editor when the activation query param does not exist', () => {
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(false)
-        })
-
-        it('should return false when parsing invalid JSON from fragment state', () => {
-            const hashParams = {
-                access_token: 'test_access_token',
-                state: 'literally',
-                expires_in: 3600,
-            }
-            hash = Object.keys(hashParams)
-                .map((k) => `${k}=${hashParams[k]}`)
-                .join('&')
-            window.location.hash = `#${hash}`
-            var spy = sinon.spy(autocapture, '_maybeLoadEditor')
-            spy(lib)
-            expect(spy.returned(false)).toBe(true)
-        })
-
-        it('should work if calling editor params `__posthog`', () => {
-            const hashParams = {
-                access_token: 'test_access_token',
-                __posthog: encodeURIComponent(JSON.stringify(editorParams)),
-                expires_in: 3600,
-            }
-            hash = Object.keys(hashParams)
-                .map((k) => `${k}=${hashParams[k]}`)
-                .join('&')
-            window.location.hash = `#${hash}`
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
-        })
-    })
-
-    describe('load and close editor', () => {
-        const lib = {}
-        let sandbox
-
-        beforeEach(() => {
-            autocapture._editorLoaded = false
-            sandbox = sinon.createSandbox()
-            sandbox.stub(utils, 'loadScript').callsFake((path, callback) => callback())
-            lib.get_config = sandbox.stub()
-            lib.get_config.withArgs('app_host').returns('example.com')
-            lib.get_config.withArgs('token').returns('token')
-            window.ph_load_editor = sandbox.spy()
-        })
-
-        afterEach(() => {
-            sandbox.restore()
-        })
-
-        it('should load if not previously loaded', () => {
-            const editorParams = {
-                accessToken: 'accessToken',
-                expiresAt: 'expiresAt',
-                apiKey: 'apiKey',
-                apiURL: 'http://localhost:8000',
-            }
-            const loaded = autocapture._loadEditor(lib, editorParams)
-            expect(window.ph_load_editor.calledOnce).toBe(true)
-            expect(window.ph_load_editor.calledWithExactly(editorParams)).toBe(true)
-            expect(loaded).toBe(true)
-        })
-
-        it('should NOT load if previously loaded', () => {
-            autocapture._loadEditor(lib, 'accessToken')
-            const loaded = autocapture._loadEditor(lib, 'accessToken')
-            expect(loaded).toBe(false)
         })
     })
 })
