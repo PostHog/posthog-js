@@ -403,6 +403,9 @@ describe('Autocapture system', () => {
                     maybeLoadEditor: jest.fn(),
                     afterDecideResponse: jest.fn(),
                 },
+                sessionRecording: {
+                    afterDecideResponse: jest.fn(),
+                },
             }
             autocapture.init(lib)
 
@@ -782,6 +785,9 @@ describe('Autocapture system', () => {
 
             toolbar: {
                 maybeLoadEditor: jest.fn(),
+                afterDecideResponse: jest.fn(),
+            },
+            sessionRecording: {
                 afterDecideResponse: jest.fn(),
             },
         }))

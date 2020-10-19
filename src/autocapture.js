@@ -241,6 +241,7 @@ var autocapture = {
             }
 
             instance.toolbar.afterDecideResponse(response)
+            instance.sessionRecording.afterDecideResponse(response)
 
             if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
                 if (response['custom_properties']) {
@@ -266,13 +267,6 @@ var autocapture = {
                 instance['compression'] = compression
             } else {
                 instance['compression'] = {}
-            }
-
-            instance.persistence &&
-                instance.persistence.register({ [SESSION_RECORDING_ENABLED]: response['sessionRecording'] })
-
-            if (response['sessionRecording']) {
-                instance.sessionRecording.recordAndSubmit()
             }
         }, this)
 

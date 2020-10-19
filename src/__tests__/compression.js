@@ -40,6 +40,9 @@ describe('Payload Compression', () => {
                     maybeLoadEditor: jest.fn(),
                     afterDecideResponse: jest.fn(),
                 },
+                sessionRecording: {
+                    afterDecideResponse: jest.fn(),
+                },
             }
         })
 

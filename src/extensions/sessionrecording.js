@@ -16,7 +16,17 @@ export class SessionRecording {
         }
     }
 
-    recordAndSubmit() {
+    afterDecideResponse(response) {
+        if (this.instance.persistence) {
+            this.instance.persistence.register({ [SESSION_RECORDING_ENABLED]: !!response['sessionRecording'] })
+        }
+
+        if (response['sessionRecording']) {
+            this.submitRecordings()
+        }
+    }
+
+    submitRecordings() {
         this.emit = true
         this._startCapture()
         this.snapshots.forEach((data) => {
