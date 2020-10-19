@@ -1,8 +1,8 @@
 import sessionIdGenerator from '../../extensions/sessionid'
 import { SESSION_ID } from '../../posthog-persistence'
-import { nanoid } from 'nanoid'
+import { _ } from '../../utils'
 
-jest.mock('nanoid')
+jest.mock('../../utils')
 
 describe('Session ID generation', () => {
     given('subject', () => sessionIdGenerator(given.persistence, given.timestamp))
@@ -15,7 +15,7 @@ describe('Session ID generation', () => {
     }))
 
     beforeEach(() => {
-        nanoid.mockReturnValue('newSessionId')
+        _.UUID.mockReturnValue('newSessionId')
     })
 
     describe('no stored session data', () => {
