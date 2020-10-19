@@ -751,6 +751,8 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     properties['token'] = this.get_config('token')
 
     if (event_name === '$snapshot') {
+        const persistenceProps = this.persistence.properties()
+        properties['distinct_id'] = persistenceProps.distinct_id
         return properties
     }
 
