@@ -1,6 +1,7 @@
 import { loadScript } from '../autocapture-utils'
 import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
+import sessionIdGenerator from './sessionid'
 
 export class SessionRecording {
     constructor(instance) {
@@ -29,8 +30,8 @@ export class SessionRecording {
     submitRecordings() {
         this.emit = true
         this._startCapture()
-        this.snapshots.forEach((data) => {
-            this.instance.capture('$snapshot', { $snapshot_data: data })
+        this.snapshots.forEach((properties) => {
+            this.instance.capture('$snapshot', properties)
         })
     }
 
@@ -44,10 +45,15 @@ export class SessionRecording {
     _onScriptLoaded() {
         window.rrweb.record({
             emit: (data) => {
+                const properties = {
+                    $snapshot_data: data,
+                    $session_id: sessionIdGenerator(this.instance.persistence, data.timestamp),
+                }
+
                 if (this.emit) {
-                    this.instance.capture('$snapshot', { $snapshot_data: data })
+                    this.instance.capture('$snapshot', properties)
                 } else {
-                    this.snapshots.push(data)
+                    this.snapshots.push(properties)
                 }
             },
         })

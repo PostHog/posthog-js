@@ -1,8 +1,10 @@
 import { loadScript } from '../../autocapture-utils'
 import { SessionRecording } from '../../extensions/sessionrecording'
 import { SESSION_RECORDING_ENABLED } from '../../posthog-persistence'
+import sessionIdGenerator from '../../extensions/sessionid'
 
 jest.mock('../../autocapture-utils')
+jest.mock('../../extensions/sessionid')
 
 describe('SessionRecording', () => {
     let _emit
@@ -54,6 +56,7 @@ describe('SessionRecording', () => {
             }
 
             loadScript.mockImplementation((path, callback) => callback())
+            sessionIdGenerator.mockReturnValue('sid')
         })
 
         it('records events emitted before and after starting recording', () => {
@@ -67,8 +70,14 @@ describe('SessionRecording', () => {
             _emit({ event: 2 })
 
             expect(given.posthog.capture).toHaveBeenCalledTimes(2)
-            expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', { $snapshot_data: { event: 1 } })
-            expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', { $snapshot_data: { event: 2 } })
+            expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', {
+                $session_id: 'sid',
+                $snapshot_data: { event: 1 },
+            })
+            expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', {
+                $session_id: 'sid',
+                $snapshot_data: { event: 2 },
+            })
         })
 
         it('loads recording script from right place', () => {
