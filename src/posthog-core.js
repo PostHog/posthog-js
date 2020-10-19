@@ -128,12 +128,12 @@ var create_mplib = function (token, config, name) {
     instance['people'] = new PostHogPeople()
     instance['people']._init(instance)
 
-    instance['feature_flags'] = new PostHogFeatureFlags(instance)
+    instance.feature_flags = new PostHogFeatureFlags(instance)
 
-    instance['toolbar'] = new Toolbar(instance)
+    instance.toolbar = new Toolbar(instance)
 
-    instance['session_recording'] = new PosthogSessionRecording(instance)
-    instance['session_recording']._init(instance)
+    instance.sessionRecording = new PosthogSessionRecording(instance)
+    instance.sessionRecording._init(instance)
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true

@@ -273,7 +273,7 @@ var autocapture = {
                 instance.persistence.register({ [SESSION_RECORDING_ENABLED]: response['sessionRecording'] })
 
             if (response['sessionRecording']) {
-                instance['session_recording'].recordAndSubmit()
+                instance.sessionRecording.recordAndSubmit()
             }
         }, this)
 
