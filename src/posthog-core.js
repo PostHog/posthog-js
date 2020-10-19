@@ -8,6 +8,7 @@ import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
 import { PosthogSessionRecording } from './posthog-sessionrecording'
+import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 
 /*
@@ -128,6 +129,8 @@ var create_mplib = function (token, config, name) {
     instance['people']._init(instance)
 
     instance['feature_flags'] = new PostHogFeatureFlags(instance)
+
+    instance['toolbar'] = new Toolbar(instance)
 
     instance['session_recording'] = new PosthogSessionRecording(instance)
     instance['session_recording']._init(instance)
