@@ -1,12 +1,12 @@
-import { loadScript } from '../autocapture-utils'
-import { PosthogSessionRecording } from '../posthog-sessionrecording'
+import { loadScript } from '../../autocapture-utils'
+import { SessionRecording } from '../sessionrecording'
 
-jest.mock('../autocapture-utils')
+jest.mock('../../autocapture-utils')
 
 describe('Session recording system', () => {
     let _emit
 
-    given('sessionRecording', () => new PosthogSessionRecording(given.posthog))
+    given('sessionRecording', () => new SessionRecording(given.posthog))
     given('posthog', () => ({
         disable_session_recording: given.disabled,
         get_property: () => given.$session_recording_enabled,

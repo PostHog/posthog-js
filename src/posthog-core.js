@@ -7,7 +7,7 @@ import { LinkCapture } from './dom-capture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
-import { PosthogSessionRecording } from './posthog-sessionrecording'
+import { SessionRecording } from './extensions/sessionrecording'
 import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 
@@ -134,7 +134,7 @@ var create_mplib = function (token, config, name) {
 
     instance.toolbar = new Toolbar(instance)
 
-    instance.sessionRecording = new PosthogSessionRecording(instance)
+    instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording._init(instance)
 
     // if any instance on the page has debug = true, we set the

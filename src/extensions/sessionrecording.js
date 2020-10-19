@@ -1,8 +1,8 @@
-import { loadScript } from './autocapture-utils'
-import { _ } from './utils'
-import { SESSION_RECORDING_ENABLED } from './posthog-persistence'
+import { loadScript } from '../autocapture-utils'
+import { _ } from '../utils'
+import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
 
-export class PosthogSessionRecording {
+export class SessionRecording {
     constructor(instance) {
         this.instance = instance
         this.captureStarted = false
