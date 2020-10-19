@@ -1,5 +1,5 @@
 import { loadScript } from '../../autocapture-utils'
-import { SessionRecording } from '../sessionrecording'
+import { SessionRecording } from '../../extensions/sessionrecording'
 
 jest.mock('../../autocapture-utils')
 
