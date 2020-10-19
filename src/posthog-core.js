@@ -128,7 +128,9 @@ var create_mplib = function (token, config, name) {
     instance['people'] = new PostHogPeople()
     instance['people']._init(instance)
 
-    instance.feature_flags = new PostHogFeatureFlags(instance)
+    instance.featureFlags = new PostHogFeatureFlags(instance)
+    // This key is deprecated
+    instance.feature_flags = instance.featureFlags
 
     instance.toolbar = new Toolbar(instance)
 
