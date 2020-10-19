@@ -6,7 +6,6 @@ import {
     isSensitiveElement,
     isTag,
     isTextNode,
-    loadScript,
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureValue,

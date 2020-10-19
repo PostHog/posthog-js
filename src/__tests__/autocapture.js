@@ -403,6 +403,10 @@ describe('Autocapture system', () => {
                 get_distinct_id() {
                     return 'distinctid'
                 },
+                toolbar: {
+                    maybeLoadEditor: jest.fn(),
+                    afterDecideResponse: jest.fn(),
+                },
             }
             autocapture.init(lib)
 
@@ -767,99 +771,93 @@ describe('Autocapture system', () => {
     })
 
     describe('init', () => {
-        let lib, sandbox, _maybeLoadEditorStub
+        given('subject', () => () => autocapture.init(given.lib))
+
+        given('lib', () => ({
+            _prepare_callback: jest.fn().mockImplementation((callback) => callback),
+            _send_request: jest
+                .fn()
+                .mockImplementation((url, params, options, callback) => callback({ config: given.decideResponse })),
+
+            get_config: jest.fn().mockImplementation((key) => given.config[key]),
+            token: 'testtoken',
+            capture: jest.fn(),
+            get_distinct_id: () => 'distinctid',
+
+            toolbar: {
+                maybeLoadEditor: jest.fn(),
+                afterDecideResponse: jest.fn(),
+            },
+        }))
+
+        given('config', () => ({
+            api_host: 'https://test.com',
+            token: 'testtoken',
+        }))
+
+        given('decideResponse', () => ({ enable_collect_everything: true }))
 
         beforeEach(() => {
             document.title = 'test page'
-            sandbox = sinon.createSandbox()
-            sandbox.spy(autocapture, '_addDomEventHandlers')
             autocapture._initializedTokens = []
-            _maybeLoadEditorStub = sandbox.stub(autocapture, '_maybeLoadEditor').returns(false)
-            lib = {
-                _prepare_callback: sandbox.spy((callback) => callback),
-                _send_request: sandbox.spy((url, params, options, callback) =>
-                    callback({ config: { enable_collect_everything: true } })
-                ),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                    }
-                }),
-                token: 'testtoken',
-                capture: sandbox.spy(),
-                get_distinct_id() {
-                    return 'distinctid'
-                },
-            }
-        })
 
-        afterEach(() => {
-            sandbox.restore()
+            jest.spyOn(autocapture, '_addDomEventHandlers')
         })
 
         it('should call _addDomEventHandlders', () => {
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.calledOnce).toBe(true)
+            given.subject()
+
+            expect(autocapture._addDomEventHandlers).toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders if the decide request fails', () => {
-            lib._send_request = sandbox.spy((url, params, options, callback) =>
-                callback({ status: 0, error: 'Bad HTTP status: 400 Bad Request' })
-            )
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.called).toBe(false)
+            given('decideResponse', () => ({ status: 0, error: 'Bad HTTP status: 400 Bad Request' }))
+
+            given.subject()
+            expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', () => {
-            lib._send_request = sandbox.spy((url, params, options, callback) =>
-                callback({ config: { enable_collect_everything: false } })
-            )
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.calledOnce).toBe(false)
+            given('decideResponse', () => ({ enable_collect_everything: false }))
+
+            given.subject()
+            expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
-            var lib2 = Object.assign({}, lib)
-            var lib3 = Object.assign({ token: 'anotherproject' }, lib)
-            lib3.get_config = sandbox.spy(function (key) {
-                switch (key) {
-                    case 'api_host':
-                        return 'https://test.com'
-                    case 'token':
-                        return 'anotherproject'
-                }
-            })
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.callCount).toBe(1)
-            autocapture.init(lib2)
-            expect(autocapture._addDomEventHandlers.callCount).toBe(1)
-            autocapture.init(lib3)
-            expect(autocapture._addDomEventHandlers.callCount).toBe(2)
+            autocapture.init(given.lib)
+            expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
+
+            autocapture.init(given.lib)
+            expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
+
+            given('config', () => ({ api_host: 'https://test.com', token: 'anotherproject' }))
+            autocapture.init(given.lib)
+            expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
         })
 
         it('should call instance._send_request', () => {
-            autocapture.init(lib)
-            expect(lib._send_request.calledOnce).toBe(true)
-            expect(lib._send_request.firstCall.args[0]).toBe('https://test.com/decide/')
-            expect(lib._send_request.firstCall.args[1]).toEqual({
-                data: _.base64Encode(
-                    _.JSONEncode({
-                        token: 'testtoken',
-                        distinct_id: 'distinctid',
-                    })
-                ),
-            })
-            expect(lib._send_request.firstCall.args[2]).toEqual({ method: 'POST' })
-            expect(typeof lib._send_request.firstCall.args[3]).toBe('function')
+            given.subject()
+
+            expect(given.lib._send_request).toHaveBeenCalledWith(
+                'https://test.com/decide/',
+                {
+                    data: _.base64Encode(
+                        _.JSONEncode({
+                            token: 'testtoken',
+                            distinct_id: 'distinctid',
+                        })
+                    ),
+                },
+                { method: 'POST' },
+                expect.any(Function)
+            )
         })
 
         it('should check whether to load the editor', () => {
-            autocapture.init(lib)
-            expect(autocapture._maybeLoadEditor.calledOnce).toBe(true)
-            expect(autocapture._maybeLoadEditor.calledWith(lib)).toBe(true)
+            given.subject()
+
+            expect(given.lib.toolbar.maybeLoadEditor).toHaveBeenCalled()
         })
     })
 
