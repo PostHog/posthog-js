@@ -31,10 +31,10 @@ export class Toolbar {
      */
     maybeLoadEditor(location = window.location, localStorage = window.localStorage, history = window.history) {
         try {
-            var stateHash = _.getHashParam(location.hash, '__posthog') || _.getHashParam(location.hash, 'state')
-            var state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
-            var parseFromUrl = state && (state['action'] === 'mpeditor' || state['action'] === 'ph_authorize')
-            var editorParams
+            const stateHash = _.getHashParam(location.hash, '__posthog') || _.getHashParam(location.hash, 'state')
+            const state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
+            const parseFromUrl = state && (state['action'] === 'mpeditor' || state['action'] === 'ph_authorize')
+            let editorParams
 
             if (parseFromUrl) {
                 // happens if they are initializing the editor using an old snippet
@@ -75,21 +75,20 @@ export class Toolbar {
     }
 
     _loadEditor(editorParams) {
-        var _this = this
         if (!window['_postHogToolbarLoaded']) {
             // only load the codeless event editor once, even if there are multiple instances of PostHogLib
             window['_postHogToolbarLoaded'] = true
-            var host = editorParams['jsURL'] || editorParams['apiURL'] || _this.instance.get_config('api_host')
-            var toolbarScript = 'toolbar.js'
-            var editorUrl =
+            const host = editorParams['jsURL'] || editorParams['apiURL'] || this.instance.get_config('api_host')
+            const toolbarScript = 'toolbar.js'
+            const editorUrl =
                 host + (host.endsWith('/') ? '' : '/') + 'static/' + toolbarScript + '?_ts=' + new Date().getTime()
-            loadScript(editorUrl, function () {
+            loadScript(editorUrl, () => {
                 window['ph_load_editor'](editorParams)
             })
             // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
-            _.register_event(window, 'turbolinks:load', function () {
+            _.register_event(window, 'turbolinks:load', () => {
                 window['_postHogToolbarLoaded'] = false
-                _this._loadEditor(editorParams)
+                this._loadEditor(editorParams)
             })
             return true
         }
