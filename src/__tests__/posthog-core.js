@@ -22,7 +22,7 @@ describe('_calculate_event_properties()', () => {
         given.posthog.get_config = (key) => given.config[key]
 
         given.posthog.persistence = {}
-        given.posthog.persistence.properties = () => ({ persistent: 'prop' })
+        given.posthog.persistence.properties = () => ({ distinct_id: 'abc', persistent: 'prop' })
     })
 
     it('returns calculated properties', () => {
@@ -30,6 +30,7 @@ describe('_calculate_event_properties()', () => {
             token: 'testtoken',
             event: 'prop',
             $lib: 'web',
+            distinct_id: 'abc',
             persistent: 'prop',
         })
     })
@@ -40,6 +41,7 @@ describe('_calculate_event_properties()', () => {
         expect(given.subject).toEqual({
             token: 'testtoken',
             event: 'prop',
+            distinct_id: 'abc',
         })
     })
 
@@ -59,6 +61,7 @@ describe('_calculate_event_properties()', () => {
         expect(given.subject).toEqual({
             token: 'testtoken',
             $snapshot_data: {},
+            distinct_id: 'abc',
         })
     })
 })
