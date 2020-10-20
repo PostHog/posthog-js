@@ -7,7 +7,8 @@ import { LinkCapture } from './dom-capture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
-import { PosthogSessionRecording } from './posthog-sessionrecording'
+import { SessionRecording } from './extensions/sessionrecording'
+import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 
 /*
@@ -127,11 +128,14 @@ var create_mplib = function (token, config, name) {
     instance['people'] = new PostHogPeople()
     instance['people']._init(instance)
 
-    instance['feature_flags'] = new PostHogFeatureFlags()
-    instance['feature_flags']._init(instance)
+    instance.featureFlags = new PostHogFeatureFlags(instance)
+    // This key is deprecated
+    instance.feature_flags = instance.featureFlags
 
-    instance['session_recording'] = new PosthogSessionRecording(instance)
-    instance['session_recording']._init(instance)
+    instance.toolbar = new Toolbar(instance)
+
+    instance.sessionRecording = new SessionRecording(instance)
+    instance.sessionRecording.startRecordingIfEnabled()
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true

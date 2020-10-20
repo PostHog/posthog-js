@@ -1,8 +1,8 @@
-import { loadScript } from './autocapture-utils'
-import { _ } from './utils'
-import { SESSION_RECORDING_ENABLED } from './posthog-persistence'
+import { loadScript } from '../autocapture-utils'
+import { _ } from '../utils'
+import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
 
-export class PosthogSessionRecording {
+export class SessionRecording {
     constructor(instance) {
         this.instance = instance
         this.captureStarted = false
@@ -10,13 +10,23 @@ export class PosthogSessionRecording {
         this.emit = false
     }
 
-    _init() {
-        if (this.instance.persistence.props[SESSION_RECORDING_ENABLED]) {
+    startRecordingIfEnabled() {
+        if (this.instance.get_property(SESSION_RECORDING_ENABLED)) {
             this._startCapture()
         }
     }
 
-    recordAndSubmit() {
+    afterDecideResponse(response) {
+        if (this.instance.persistence) {
+            this.instance.persistence.register({ [SESSION_RECORDING_ENABLED]: !!response['sessionRecording'] })
+        }
+
+        if (response['sessionRecording']) {
+            this.submitRecordings()
+        }
+    }
+
+    submitRecordings() {
         this.emit = true
         this._startCapture()
         this.snapshots.forEach((data) => {

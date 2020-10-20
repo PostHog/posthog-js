@@ -679,7 +679,7 @@ declare namespace posthog {
         static toString(): string
     }
 
-    export class feature_flags {
+    export class featureFlags {
         static getFlags(): string[]
 
         static reloadFeatureFlags(): void
@@ -706,6 +706,8 @@ declare namespace posthog {
          */
         static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
     }
+
+    export class feature_flags extends featureFlags {}
 }
 
 export default posthog
