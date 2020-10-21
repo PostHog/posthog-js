@@ -35,6 +35,14 @@ describe('Payload Compression', () => {
                 get_distinct_id() {
                     return 'distinctid'
                 },
+
+                toolbar: {
+                    maybeLoadEditor: jest.fn(),
+                    afterDecideResponse: jest.fn(),
+                },
+                sessionRecording: {
+                    afterDecideResponse: jest.fn(),
+                },
             }
         })
 

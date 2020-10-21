@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.5.0-beta.0",
+    "version": "1.5.1-beta.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -33,6 +33,7 @@
         "babel-jest": "^26.1.0",
         "eslint": "^7.3.1",
         "eslint-plugin-prettier": "^3.1.4",
+        "given2": "^2.1.7",
         "husky": "^4.2.5",
         "jest": "^26.1.0",
         "jsdom": "16.2.2",
@@ -56,5 +57,11 @@
             "eslint -c .eslintrc.ts.js --fix",
             "tsc"
         ]
+    },
+    "jest": {
+        "setupFilesAfterEnv": [
+            "given2/setup"
+        ],
+        "clearMocks": true
     }
 }

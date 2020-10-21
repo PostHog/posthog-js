@@ -3,7 +3,6 @@ import sinon from 'sinon'
 import { autocapture } from '../autocapture'
 
 import { _ } from '../utils'
-import * as utils from '../autocapture-utils'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
@@ -19,10 +18,7 @@ const simulateClick = function (el) {
 }
 
 describe('Autocapture system', () => {
-    let testContext = {}
-
     afterEach(() => {
-        testContext = {}
         document.getElementsByTagName('html')[0].innerHTML = ''
     })
 
@@ -403,6 +399,13 @@ describe('Autocapture system', () => {
                 get_distinct_id() {
                     return 'distinctid'
                 },
+                toolbar: {
+                    maybeLoadEditor: jest.fn(),
+                    afterDecideResponse: jest.fn(),
+                },
+                sessionRecording: {
+                    afterDecideResponse: jest.fn(),
+                },
             }
             autocapture.init(lib)
 
@@ -767,258 +770,96 @@ describe('Autocapture system', () => {
     })
 
     describe('init', () => {
-        let lib, sandbox, _maybeLoadEditorStub
+        given('subject', () => () => autocapture.init(given.lib))
+
+        given('lib', () => ({
+            _prepare_callback: jest.fn().mockImplementation((callback) => callback),
+            _send_request: jest
+                .fn()
+                .mockImplementation((url, params, options, callback) => callback({ config: given.decideResponse })),
+
+            get_config: jest.fn().mockImplementation((key) => given.config[key]),
+            token: 'testtoken',
+            capture: jest.fn(),
+            get_distinct_id: () => 'distinctid',
+
+            toolbar: {
+                maybeLoadEditor: jest.fn(),
+                afterDecideResponse: jest.fn(),
+            },
+            sessionRecording: {
+                afterDecideResponse: jest.fn(),
+            },
+        }))
+
+        given('config', () => ({
+            api_host: 'https://test.com',
+            token: 'testtoken',
+        }))
+
+        given('decideResponse', () => ({ enable_collect_everything: true }))
 
         beforeEach(() => {
             document.title = 'test page'
-            sandbox = sinon.createSandbox()
-            sandbox.spy(autocapture, '_addDomEventHandlers')
             autocapture._initializedTokens = []
-            _maybeLoadEditorStub = sandbox.stub(autocapture, '_maybeLoadEditor').returns(false)
-            lib = {
-                _prepare_callback: sandbox.spy((callback) => callback),
-                _send_request: sandbox.spy((url, params, options, callback) =>
-                    callback({ config: { enable_collect_everything: true } })
-                ),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                    }
-                }),
-                token: 'testtoken',
-                capture: sandbox.spy(),
-                get_distinct_id() {
-                    return 'distinctid'
-                },
-            }
-        })
 
-        afterEach(() => {
-            sandbox.restore()
+            jest.spyOn(autocapture, '_addDomEventHandlers')
         })
 
         it('should call _addDomEventHandlders', () => {
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.calledOnce).toBe(true)
+            given.subject()
+
+            expect(autocapture._addDomEventHandlers).toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders if the decide request fails', () => {
-            lib._send_request = sandbox.spy((url, params, options, callback) =>
-                callback({ status: 0, error: 'Bad HTTP status: 400 Bad Request' })
-            )
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.called).toBe(false)
+            given('decideResponse', () => ({ status: 0, error: 'Bad HTTP status: 400 Bad Request' }))
+
+            given.subject()
+            expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', () => {
-            lib._send_request = sandbox.spy((url, params, options, callback) =>
-                callback({ config: { enable_collect_everything: false } })
-            )
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.calledOnce).toBe(false)
+            given('decideResponse', () => ({ enable_collect_everything: false }))
+
+            given.subject()
+            expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
-            var lib2 = Object.assign({}, lib)
-            var lib3 = Object.assign({ token: 'anotherproject' }, lib)
-            lib3.get_config = sandbox.spy(function (key) {
-                switch (key) {
-                    case 'api_host':
-                        return 'https://test.com'
-                    case 'token':
-                        return 'anotherproject'
-                }
-            })
-            autocapture.init(lib)
-            expect(autocapture._addDomEventHandlers.callCount).toBe(1)
-            autocapture.init(lib2)
-            expect(autocapture._addDomEventHandlers.callCount).toBe(1)
-            autocapture.init(lib3)
-            expect(autocapture._addDomEventHandlers.callCount).toBe(2)
+            autocapture.init(given.lib)
+            expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
+
+            autocapture.init(given.lib)
+            expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
+
+            given('config', () => ({ api_host: 'https://test.com', token: 'anotherproject' }))
+            autocapture.init(given.lib)
+            expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
         })
 
         it('should call instance._send_request', () => {
-            autocapture.init(lib)
-            expect(lib._send_request.calledOnce).toBe(true)
-            expect(lib._send_request.firstCall.args[0]).toBe('https://test.com/decide/')
-            expect(lib._send_request.firstCall.args[1]).toEqual({
-                data: _.base64Encode(
-                    _.JSONEncode({
-                        token: 'testtoken',
-                        distinct_id: 'distinctid',
-                    })
-                ),
-            })
-            expect(lib._send_request.firstCall.args[2]).toEqual({ method: 'POST' })
-            expect(typeof lib._send_request.firstCall.args[3]).toBe('function')
+            given.subject()
+
+            expect(given.lib._send_request).toHaveBeenCalledWith(
+                'https://test.com/decide/',
+                {
+                    data: _.base64Encode(
+                        _.JSONEncode({
+                            token: 'testtoken',
+                            distinct_id: 'distinctid',
+                        })
+                    ),
+                },
+                { method: 'POST' },
+                expect.any(Function)
+            )
         })
 
         it('should check whether to load the editor', () => {
-            autocapture.init(lib)
-            expect(autocapture._maybeLoadEditor.calledOnce).toBe(true)
-            expect(autocapture._maybeLoadEditor.calledWith(lib)).toBe(true)
-        })
-    })
+            given.subject()
 
-    describe('_maybeLoadEditor', () => {
-        let hash,
-            editorParams,
-            sandbox,
-            lib = {}
-
-        beforeEach(() => {
-            window.localStorage.clear()
-
-            testContext.clock = sinon.useFakeTimers()
-
-            sandbox = sinon.createSandbox()
-            sandbox.stub(autocapture, '_loadEditor')
-            lib.get_config = sandbox.stub()
-            lib.get_config.withArgs('token').returns('test_token')
-            lib.get_config.withArgs('app_host').returns('test_app_host')
-
-            const userFlags = {
-                flag_1: 0,
-                flag_2: 1,
-            }
-            editorParams = {
-                action: 'ph_authorize',
-                desiredHash: '#myhash',
-                projectId: 3,
-                projectOwnerId: 722725,
-                readOnly: false,
-                token: 'test_token',
-                userFlags,
-                userId: 12345,
-                apiURL: lib.get_config('api_host'),
-            }
-            const hashParams = {
-                access_token: 'test_access_token',
-                state: encodeURIComponent(JSON.stringify(editorParams)),
-                expires_in: 3600,
-            }
-
-            hash = Object.keys(hashParams)
-                .map((k) => `${k}=${hashParams[k]}`)
-                .join('&')
-        })
-
-        afterEach(() => {
-            sandbox.restore()
-            testContext.clock.restore()
-        })
-
-        it('should initialize the visual editor when the hash state contains action "mpeditor"', () => {
-            window.location.hash = `#${hash}`
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
-        })
-
-        it('should initialize the visual editor when the hash state contains action "ph_authorize"', () => {
-            editorParams = {
-                ...editorParams,
-                action: 'ph_authorize',
-            }
-            const hashParams = {
-                state: encodeURIComponent(JSON.stringify(editorParams)),
-            }
-
-            hash = Object.keys(hashParams)
-                .map((k) => `${k}=${hashParams[k]}`)
-                .join('&')
-
-            window.location.hash = `#${hash}`
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
-        })
-
-        it('should initialize the visual editor when there are editor params in the session', () => {
-            window.localStorage.setItem('_postHogEditorParams', JSON.stringify(editorParams))
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
-        })
-
-        it('should NOT initialize the visual editor when the activation query param does not exist', () => {
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(false)
-        })
-
-        it('should return false when parsing invalid JSON from fragment state', () => {
-            const hashParams = {
-                access_token: 'test_access_token',
-                state: 'literally',
-                expires_in: 3600,
-            }
-            hash = Object.keys(hashParams)
-                .map((k) => `${k}=${hashParams[k]}`)
-                .join('&')
-            window.location.hash = `#${hash}`
-            var spy = sinon.spy(autocapture, '_maybeLoadEditor')
-            spy(lib)
-            expect(spy.returned(false)).toBe(true)
-        })
-
-        it('should work if calling editor params `__posthog`', () => {
-            const hashParams = {
-                access_token: 'test_access_token',
-                __posthog: encodeURIComponent(JSON.stringify(editorParams)),
-                expires_in: 3600,
-            }
-            hash = Object.keys(hashParams)
-                .map((k) => `${k}=${hashParams[k]}`)
-                .join('&')
-            window.location.hash = `#${hash}`
-            autocapture._maybeLoadEditor(lib)
-            expect(autocapture._loadEditor.calledOnce).toBe(true)
-            expect(autocapture._loadEditor.calledWith(lib, editorParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogEditorParams'))).toEqual(editorParams)
-        })
-    })
-
-    describe('load and close editor', () => {
-        const lib = {}
-        let sandbox
-
-        beforeEach(() => {
-            autocapture._editorLoaded = false
-            sandbox = sinon.createSandbox()
-            sandbox.stub(utils, 'loadScript').callsFake((path, callback) => callback())
-            lib.get_config = sandbox.stub()
-            lib.get_config.withArgs('app_host').returns('example.com')
-            lib.get_config.withArgs('token').returns('token')
-            window.ph_load_editor = sandbox.spy()
-        })
-
-        afterEach(() => {
-            sandbox.restore()
-        })
-
-        it('should load if not previously loaded', () => {
-            const editorParams = {
-                accessToken: 'accessToken',
-                expiresAt: 'expiresAt',
-                apiKey: 'apiKey',
-                apiURL: 'http://localhost:8000',
-            }
-            const loaded = autocapture._loadEditor(lib, editorParams)
-            expect(window.ph_load_editor.calledOnce).toBe(true)
-            expect(window.ph_load_editor.calledWithExactly(editorParams)).toBe(true)
-            expect(loaded).toBe(true)
-        })
-
-        it('should NOT load if previously loaded', () => {
-            autocapture._loadEditor(lib, 'accessToken')
-            const loaded = autocapture._loadEditor(lib, 'accessToken')
-            expect(loaded).toBe(false)
+            expect(given.lib.toolbar.maybeLoadEditor).toHaveBeenCalled()
         })
     })
 })

@@ -7,6 +7,8 @@ import { LinkCapture } from './dom-capture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
+import { SessionRecording } from './extensions/sessionrecording'
+import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 
 /*
@@ -70,6 +72,7 @@ var DEFAULT_CONFIG = {
     capture_links_timeout: 300,
     cookie_expiration: 365,
     upgrade: false,
+    disable_session_recording: false,
     disable_persistence: false,
     disable_cookie: false,
     secure_cookie: window.location.protocol === 'https:',
@@ -92,7 +95,7 @@ var DOM_LOADED = false
  * PostHog Library Object
  * @constructor
  */
-var PostHogLib = function () {}
+export const PostHogLib = function () {}
 
 /**
  * create_mplib(token:string, config:object, name:string)
@@ -125,8 +128,14 @@ var create_mplib = function (token, config, name) {
     instance['people'] = new PostHogPeople()
     instance['people']._init(instance)
 
-    instance['feature_flags'] = new PostHogFeatureFlags()
-    instance['feature_flags']._init(instance)
+    instance.featureFlags = new PostHogFeatureFlags(instance)
+    // This key is deprecated
+    instance.feature_flags = instance.featureFlags
+
+    instance.toolbar = new Toolbar(instance)
+
+    instance.sessionRecording = new SessionRecording(instance)
+    instance.sessionRecording.startRecordingIfEnabled()
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true
@@ -701,16 +710,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         return
     }
 
-    // set defaults
-    properties = properties || {}
-    properties['token'] = this.get_config('token')
-
-    // set $duration if time_event was previously called for this event
-    var start_timestamp = this['persistence'].remove_event_timer(event_name)
-    if (!_.isUndefined(start_timestamp)) {
-        var duration_in_ms = new Date().getTime() - start_timestamp
-        properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
-    }
+    const start_timestamp = this['persistence'].remove_event_timer(event_name)
 
     // update persistence
     this['persistence'].update_search_keyword(document.referrer)
@@ -722,30 +722,9 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         this['persistence'].update_referrer_info(document.referrer)
     }
 
-    // note: extend writes to the first object, so lets make sure we
-    // don't write to the persistence properties object and info
-    // properties object by passing in a new object
-
-    // update properties with pageview info and super-properties
-    properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
-
-    var property_blacklist = this.get_config('property_blacklist')
-    if (_.isArray(property_blacklist)) {
-        _.each(property_blacklist, function (blacklisted_prop) {
-            delete properties[blacklisted_prop]
-        })
-    } else {
-        console.error('Invalid value for property_blacklist config: ' + property_blacklist)
-    }
-
-    var sanitize_properties = this.get_config('sanitize_properties')
-    if (sanitize_properties) {
-        properties = sanitize_properties(properties, event_name)
-    }
-
     var data = {
         event: event_name,
-        properties: properties,
+        properties: this._calculate_event_properties(event_name, properties, start_timestamp),
     }
 
     var truncated_data = _.truncate(data, 255)
@@ -769,6 +748,47 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
 
     return truncated_data
 })
+
+PostHogLib.prototype._calculate_event_properties = function (event_name, event_properties, start_timestamp) {
+    // set defaults
+    let properties = event_properties || {}
+    properties['token'] = this.get_config('token')
+
+    if (event_name === '$snapshot') {
+        const persistenceProps = this.persistence.properties()
+        properties['distinct_id'] = persistenceProps.distinct_id
+        return properties
+    }
+
+    // set $duration if time_event was previously called for this event
+    if (!_.isUndefined(start_timestamp)) {
+        var duration_in_ms = new Date().getTime() - start_timestamp
+        properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+    }
+
+    // note: extend writes to the first object, so lets make sure we
+    // don't write to the persistence properties object and info
+    // properties object by passing in a new object
+
+    // update properties with pageview info and super-properties
+    properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
+
+    var property_blacklist = this.get_config('property_blacklist')
+    if (_.isArray(property_blacklist)) {
+        _.each(property_blacklist, function (blacklisted_prop) {
+            delete properties[blacklisted_prop]
+        })
+    } else {
+        console.error('Invalid value for property_blacklist config: ' + property_blacklist)
+    }
+
+    var sanitize_properties = this.get_config('sanitize_properties')
+    if (sanitize_properties) {
+        properties = sanitize_properties(properties, event_name)
+    }
+
+    return properties
+}
 
 PostHogLib.prototype._create_map_key = function (group_key, group_id) {
     return group_key + '_' + JSON.stringify(group_id)
@@ -1118,6 +1138,9 @@ PostHogLib.prototype.alias = function (alias, original) {
  * The default config is:
  *
  *     {
+ *       // Posthog host
+ *       api_host: 'https://app.posthog.com',
+ *
  *       // HTTP method for capturing requests
  *       api_method: 'POST'
  *
@@ -1191,6 +1214,9 @@ PostHogLib.prototype.alias = function (alias, original) {
  *       // The upgrade config option only works in the initialization,
  *       // so make sure you set it when you create the library.
  *       upgrade: false
+ *
+ *       // if this is true, session recording is always disabled.
+ *       disable_session_recording: false,
  *
  *       // extra HTTP request headers to set for each API request, in
  *       // the format {'Header-Name': value}
@@ -1546,17 +1572,10 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
 PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId) {
     // setupOnce gets called by Sentry when it intializes the plugin
     this.setupOnce = function (addGlobalEventProcessor) {
-        // Poll for PostHog to load
-        function poll() {
-            if (!_posthog.__loaded) {
-                setTimeout(poll, 200)
-            } else {
-                Sentry.setTag('PostHog URL', _posthog.config.api_host + '/person/' + _posthog.get_distinct_id())
-            }
-        }
-        poll()
         addGlobalEventProcessor((event) => {
-            if (event.level !== 'error') return event
+            if (event.level !== 'error' || !_posthog.__loaded) return event
+            if (!event.tags) event.tags = {}
+            event.tags['PostHog URL'] = _posthog.config.api_host + '/person/' + _posthog.get_distinct_id()
             let data = {
                 $sentry_event_id: event.event_id,
                 $sentry_exception: event.exception,
