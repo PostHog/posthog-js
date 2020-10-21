@@ -394,7 +394,7 @@ declare class posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    static opt_out_capturing(options: posthog.OptInOutCapturingOptions): void
+    static opt_out_capturing(options?: posthog.OptInOutCapturingOptions): void
 
     /**
      * Opt the user in to data capturing and cookies/localstorage for this PostHog instance
@@ -425,14 +425,14 @@ declare class posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    static opt_in_capturing(options: posthog.OptInOutCapturingOptions): void
+    static opt_in_capturing(options?: posthog.OptInOutCapturingOptions): void
 
     /**
      * Check whether the user has opted out of data capturing and cookies/localstorage for this PostHog instance
      *
      * ### Usage
      *
-     *     var has_opted_out = posthog.has_opted_out_capturing();
+     *     const has_opted_out = posthog.has_opted_out_capturing();
      *     // use has_opted_out value
      *
      * @param {Object} [options] A dictionary of config options to override
@@ -440,14 +440,14 @@ declare class posthog {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-out status
      */
-    static has_opted_out_capturing(options: posthog.HasOptedInOutCapturingOptions): boolean
+    static has_opted_out_capturing(options?: posthog.HasOptedInOutCapturingOptions): boolean
 
     /**
      * Check whether the user has opted in to data capturing and cookies/localstorage for this PostHog instance
      *
      * ### Usage
      *
-     *     var has_opted_in = posthog.has_opted_in_capturing();
+     *     const has_opted_in = posthog.has_opted_in_capturing();
      *     // use has_opted_in value
      *
      * @param {Object} [options] A dictionary of config options to override
@@ -455,7 +455,7 @@ declare class posthog {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-in status
      */
-    static has_opted_in_capturing(options: posthog.HasOptedInOutCapturingOptions): boolean
+    static has_opted_in_capturing(options?: posthog.HasOptedInOutCapturingOptions): boolean
 
     /**
      * Clear the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance
@@ -480,7 +480,7 @@ declare class posthog {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    static clear_opt_in_out_capturing(options: posthog.ClearOptInOutCapturingOptions): void
+    static clear_opt_in_out_capturing(options?: posthog.ClearOptInOutCapturingOptions): void
 
     /*
      * See if feature flag is enabled for user.
