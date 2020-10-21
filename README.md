@@ -4,7 +4,11 @@ Please see the main [PostHog docs](https://posthog.com/docs).
 
 Specifically, the [JS integration](https://posthog.com/docs/integrations/js-integration) details.
 
-## [Internal] Releasing a new version
+## Testing
+
+Run `yarn test`
+
+## Releasing a new version
 
 To release a new version, make sure you're logged in to NPM (`npm login`)
 

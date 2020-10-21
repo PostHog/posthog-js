@@ -35,7 +35,10 @@ var autocapture = {
         if (usefulElements.indexOf(tag_name) > -1) props['$el_text'] = getSafeText(elem)
 
         var classes = getClassName(elem)
-        if (classes.length > 0) props['classes'] = classes.split(' ')
+        if (classes.length > 0)
+            props['classes'] = classes.split(' ').filter(function (c) {
+                return c !== ''
+            })
 
         _.each(elem.attributes, function (attr) {
             // Only capture attributes we know are safe

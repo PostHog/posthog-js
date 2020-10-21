@@ -26,7 +26,7 @@ describe('Autocapture system', () => {
         let div, div2, input, sensitiveInput, hidden, password
         beforeEach(() => {
             div = document.createElement('div')
-            div.className = 'class1 class2 class3'
+            div.className = 'class1 class2 class3          ' // Lots of spaces might mess things up
             div.innerHTML = 'my <span>sweet <i>inner</i></span> text'
 
             input = document.createElement('input')
