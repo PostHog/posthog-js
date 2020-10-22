@@ -125,29 +125,6 @@ PostHogPeople.prototype._identify_called = function () {
     return this._posthog._flags.identify_called === true
 }
 
-PostHogPeople.prototype._flush_one_queue = function (action, action_method) {
-    var _this = this
-    var queued_data = _.extend({}, this._posthog['persistence']._get_queue(action))
-    var action_params = queued_data
-
-    if (!_.isUndefined(queued_data) && _.isObject(queued_data) && !_.isEmptyObject(queued_data)) {
-        _this._posthog['persistence']._pop_from_people_queue(action, queued_data)
-        action_method.call(_this, action_params, function (response) {
-            // on bad response, we want to add it back to the queue
-            if (response === 0) {
-                _this._posthog['persistence']._add_to_people_queue(action, queued_data)
-            }
-        })
-    }
-}
-
-// Flush queued engage operations - order does not matter,
-// and there are network level race conditions anyway
-PostHogPeople.prototype._flush = function () {
-    this._flush_one_queue(SET_ACTION, this.set)
-    this._flush_one_queue(SET_ONCE_ACTION, this.set_once)
-}
-
 PostHogPeople.prototype._is_reserved_property = function (prop) {
     return (
         prop === '$distinct_id' ||

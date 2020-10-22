@@ -17,7 +17,6 @@ describe('identify()', () => {
         get_property: jest.fn(),
         people: {
             set: jest.fn(),
-            _flush: jest.fn(),
         },
         _flags: {},
         reloadFeatureFlags: jest.fn(),
@@ -90,7 +89,6 @@ describe('identify()', () => {
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
             expect(given.overrides.register).not.toHaveBeenCalled()
-            expect(given.overrides.people._flush).not.toHaveBeenCalled()
         })
     })
 })

@@ -1044,9 +1044,6 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
     }
     this._flags.identify_called = true
 
-    // Flush any queued up people requests
-    this['people']._flush()
-
     // send an $identify event any time the distinct_id is changing - logic on the server
     // will determine whether or not to do anything with it.
     if (new_distinct_id !== previous_distinct_id) {
