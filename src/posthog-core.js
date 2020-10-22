@@ -231,7 +231,6 @@ PostHogLib.prototype._init = function (token, config, name) {
     this.__dom_loaded_queue = []
     this.__request_queue = []
     this._flags = {
-        disable_all_events: false,
         identify_called: false,
     }
 
@@ -700,7 +699,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         return
     }
 
-    if (this._event_is_disabled()) {
+    if (_.isBlockedUA(userAgent)) {
         callback(0)
         return
     }
@@ -1293,10 +1292,6 @@ PostHogLib.prototype.toString = function () {
         name = PRIMARY_INSTANCE_NAME + '.' + name
     }
     return name
-}
-
-PostHogLib.prototype._event_is_disabled = function () {
-    return _.isBlockedUA(userAgent) || this._flags.disable_all_events
 }
 
 // perform some housekeeping around GDPR opt-in/out state
