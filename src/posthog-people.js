@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 import { addOptOutCheckPostHogPeople } from './gdpr-utils'
-import { SET_ACTION, SET_ONCE_ACTION, apiActions } from './api-actions'
-import { _, console } from './utils'
+import { SET_ACTION, apiActions } from './api-actions'
+import { _ } from './utils'
 
 /**
  * PostHog People Object
