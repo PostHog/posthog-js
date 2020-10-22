@@ -230,7 +230,6 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this.__dom_loaded_queue = []
     this.__request_queue = []
-    this.__disabled_events = []
     this._flags = {
         disable_all_events: false,
         identify_called: false,
@@ -701,7 +700,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         return
     }
 
-    if (this._event_is_disabled(event_name)) {
+    if (this._event_is_disabled()) {
         callback(0)
         return
     }
@@ -1296,8 +1295,8 @@ PostHogLib.prototype.toString = function () {
     return name
 }
 
-PostHogLib.prototype._event_is_disabled = function (event_name) {
-    return _.isBlockedUA(userAgent) || this._flags.disable_all_events || _.include(this.__disabled_events, event_name)
+PostHogLib.prototype._event_is_disabled = function () {
+    return _.isBlockedUA(userAgent) || this._flags.disable_all_events
 }
 
 // perform some housekeeping around GDPR opt-in/out state
