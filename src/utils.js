@@ -1,25 +1,6 @@
 /* eslint camelcase: "off", eqeqeq: "off" */
 import Config from './config'
 
-// since es6 imports are static and we run unit tests from the console, window won't be defined when importing this file
-var win
-if (typeof window === 'undefined') {
-    var loc = {
-        hostname: '',
-    }
-    win = {
-        navigator: { userAgent: '' },
-        document: {
-            location: loc,
-            referrer: '',
-        },
-        screen: { width: 0, height: 0 },
-        location: loc,
-    }
-} else {
-    win = window
-}
-
 /*
  * Saved references to long variable names, so that closure compiler can
  * minimize file size.
@@ -31,11 +12,11 @@ var ArrayProto = Array.prototype,
     slice = ArrayProto.slice,
     toString = ObjProto.toString,
     hasOwnProperty = ObjProto.hasOwnProperty,
-    windowConsole = win.console,
-    navigator = win.navigator,
-    document = win.document,
-    windowOpera = win.opera,
-    screen = win.screen,
+    windowConsole = window.console,
+    navigator = window.navigator,
+    document = window.document,
+    windowOpera = window.opera,
+    screen = window.screen,
     userAgent = navigator.userAgent
 
 var nativeBind = FuncProto.bind,
@@ -1623,9 +1604,9 @@ _.info = {
                 $device: _.info.device(userAgent),
             }),
             {
-                $current_url: win.location.href,
-                $host: win.location.host,
-                $pathname: win.location.pathname,
+                $current_url: window.location.href,
+                $host: window.location.host,
+                $pathname: window.location.pathname,
                 $browser_version: _.info.browserVersion(userAgent, navigator.vendor, windowOpera),
                 $screen_height: screen.height,
                 $screen_width: screen.width,
@@ -1663,4 +1644,5 @@ _['info']['browser'] = _.info.browser
 _['info']['browserVersion'] = _.info.browserVersion
 _['info']['properties'] = _.info.properties
 
-export { _, userAgent, console, win as window, document, navigator }
+const win = window
+export { win as window, _, userAgent, console, document, navigator }
