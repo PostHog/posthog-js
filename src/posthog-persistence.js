@@ -332,42 +332,6 @@ PostHogPersistence.prototype.set_secure = function (secure) {
     }
 }
 
-PostHogPersistence.prototype._add_to_people_queue = function (queue, data) {
-    var q_key = this._get_queue_key(queue),
-        q_data = data[queue],
-        set_q = this._get_or_create_queue(SET_ACTION),
-        set_once_q = this._get_or_create_queue(SET_ONCE_ACTION)
-
-    if (q_key === SET_QUEUE_KEY) {
-        // Update the set queue - we can override any existing values
-        _.extend(set_q, q_data)
-    } else if (q_key === SET_ONCE_QUEUE_KEY) {
-        // only queue the data if there is not already a set_once call for it.
-        _.each(q_data, function (v, k) {
-            if (!(k in set_once_q)) {
-                set_once_q[k] = v
-            }
-        })
-    }
-
-    this.save()
-}
-
-PostHogPersistence.prototype._pop_from_people_queue = function (queue, data) {
-    var q = this._get_queue(queue)
-    if (!_.isUndefined(q)) {
-        _.each(
-            data,
-            function (v, k) {
-                delete q[k]
-            },
-            this
-        )
-
-        this.save()
-    }
-}
-
 PostHogPersistence.prototype._get_queue_key = function (queue) {
     if (queue === SET_ACTION) {
         return SET_QUEUE_KEY
