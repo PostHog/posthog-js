@@ -1,6 +1,5 @@
 /* eslint camelcase: "off" */
 
-import { SET_ACTION, SET_ONCE_ACTION } from './api-actions'
 import Config from './config'
 import { _, console } from './utils'
 
