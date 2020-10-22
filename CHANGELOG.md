@@ -1,4 +1,11 @@
-## 1.5.0-beta - 2020-09-08
+## 1.5.1 - 2020-10-22
+- Autocapture bugfix: Ignore extra spaces in classnames #99
+- Improve typing of posthog.js #97 (thanks @stonesthatwhisper)
+- Improve session recording, generate $session_id fields #91 #96
+- Fix a bug with session recording events not being saved #95
+- Improve test coverage #94
+
+## 1.5.0 - 2020-09-08
 - Add beta functionality to do session recording
 - Add $feature_flag_called event
 - Add beta Sentry integration
@@ -11,22 +18,22 @@
 - Fix type definition of loaded
 
 ## 1.4.3 - 2020-08-11
-- Remove "?." to support older browsers 
+- Remove "?." to support older browsers
 
 ## 1.4.2 - 2020-08-11
-- Capture actions even if toolbar is in used 
+- Capture actions even if toolbar is in used
 
 ## 1.4.1 - 2020-08-10
-- Remove unused parameter for `.reloadFeatureFlags()` 
+- Remove unused parameter for `.reloadFeatureFlags()`
 
 ## 1.4.0 - 2020-08-10
 - Have `.onFeatureFlags(callback)` register multiple callbacks, which get called when feature flags are loaded or updated
-- Update feature flags when `identify` is called. 
+- Update feature flags when `identify` is called.
 - Add option `.reloadFeatureFlags()`. Call it to trigger a reload of feature flags. (See [#71](https://github.com/PostHog/posthog-js/pull/71))
 - Add config option `sanitize_properties` that accepts a function which sanitizes parameters of events (See [#75](https://github.com/PostHog/posthog-js/issues/75))
 
 ## 1.3.8 - 2020-08-07
-- Set `secure_cookie` config to `true` if the page is running over https 
+- Set `secure_cookie` config to `true` if the page is running over https
 
 ## 1.3.7 - 2020-07-28
 - Store toolbar session in localStorage (instead of sessionStorage) so you don't need to authorize in every tab you have open
