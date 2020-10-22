@@ -23,7 +23,7 @@ declare class posthog {
      * Clears super properties and generates a new random distinct_id for this instance.
      * Useful for clearing data when a user logs out.
      */
-    static reset(reset_device_id: boolean): void
+    static reset(reset_device_id?: boolean): void
 
     /**
      * Capture an event. This is the most important and
@@ -709,5 +709,7 @@ declare namespace posthog {
 
     export class feature_flags extends featureFlags {}
 }
+
+export type PostHog = typeof posthog
 
 export default posthog
