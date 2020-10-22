@@ -87,7 +87,7 @@ export var usefulElements = ['a', 'button', 'form', 'input', 'select', 'textarea
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
- * @returns {boolean} whether the event should be captureed
+ * @returns {boolean} whether the event should be captured
  */
 export function shouldCaptureDomEvent(el, event) {
     if (!el || isTag(el, 'html') || !isElementNode(el)) {
@@ -146,10 +146,10 @@ export function shouldCaptureDomEvent(el, event) {
 }
 
 /*
- * Check whether a DOM element should be "captureed" or if it may contain sentitive data
+ * Check whether a DOM element should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
- * @returns {boolean} whether the element should be captureed
+ * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureElement(el) {
     for (var curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode) {
@@ -191,7 +191,7 @@ export function shouldCaptureElement(el) {
 /*
  * Check whether a DOM element is 'sensitive' and we should only capture limited data
  * @param {Element} el - element to check
- * @returns {boolean} whether the element should be captureed
+ * @returns {boolean} whether the element should be captured
  */
 export function isSensitiveElement(el) {
     // don't send data from inputs or similar elements since there will always be
@@ -208,10 +208,10 @@ export function isSensitiveElement(el) {
 }
 
 /*
- * Check whether a string value should be "captureed" or if it may contain sentitive data
+ * Check whether a string value should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
  * @param {string} value - string value to check
- * @returns {boolean} whether the element should be captureed
+ * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureValue(value) {
     if (value === null || _.isUndefined(value)) {
