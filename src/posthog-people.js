@@ -143,7 +143,7 @@ PostHogPeople.prototype._flush_one_queue = function (action, action_method) {
 
     if (!_.isUndefined(queued_data) && _.isObject(queued_data) && !_.isEmptyObject(queued_data)) {
         _this._posthog['persistence']._pop_from_people_queue(action, queued_data)
-        action_method.call(_this, action_params, function (response, data) {
+        action_method.call(_this, action_params, function (response) {
             // on bad response, we want to add it back to the queue
             if (response === 0) {
                 _this._posthog['persistence']._add_to_people_queue(action, queued_data)
