@@ -18,9 +18,11 @@ We tend to follow the following steps:
 2. Release changes as a beta version
     - `npm version 1.x.x-beta.0`
     - `npm publish --tag beta`
+    - `git push --tags`
 3. Create a PR linking to this version [in the main repo](https://github.com/posthog/posthog)
 4. Once deployed and tested, write up CHANGELOG.md, and commit.
 5. Release a new version
     - `npm version 1.x.x`
     - `npm publish`
+    - `git push --tags`
 6. Create a PR linking to this version [in the main repo](https://github.com/posthog/posthog)
