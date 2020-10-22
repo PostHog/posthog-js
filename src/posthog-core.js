@@ -121,7 +121,6 @@ var create_mplib = function (token, config, name) {
 
     instance._cached_groups = {} // cache groups in a pool
     instance._user_decide_check_complete = false
-    instance._events_captured_before_user_decide_check_complete = []
 
     instance._init(token, config, name)
 
