@@ -50,4 +50,4 @@ var apiActions = {
     },
 }
 
-export { SET_ACTION, SET_ONCE_ACTION, apiActions }
+export { SET_ACTION, apiActions }
