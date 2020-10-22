@@ -1,5 +1,8 @@
-## 1.5.1 - 2020-10-22
+## 1.5.2 - 2020-10-22
 - Autocapture bugfix: Ignore extra spaces in classnames #99
+- Improve typing of posthog-js (#103)
+
+## 1.5.1 - 2020-10-22
 - Improve typing of posthog.js #97 (thanks @stonesthatwhisper)
 - Improve session recording, generate $session_id fields #91 #96
 - Fix a bug with session recording events not being saved #95
