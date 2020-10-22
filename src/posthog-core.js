@@ -727,6 +727,10 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         properties: this._calculate_event_properties(event_name, properties, start_timestamp),
     }
 
+    if (event_name === '$identify' && options.$set) {
+        data['$set'] = options['$set']
+    }
+
     var truncated_data = _.truncate(data, 255)
     var json_data = _.JSONEncode(truncated_data)
 
@@ -980,6 +984,13 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
  * then unique visitors will be identified by a UUID generated
  * the first time they visit the site.
  *
+ * If user properties are passed, they are also sent to posthog.
+ *
+ * ### Usage:
+ *
+ *      posthog.identify('[user unique id]')
+ *      posthog.identify('[user unique id]', { email: 'john@example.com' })
+ *
  * ### Notes:
  *
  * You can call this function to overwrite a previously set
@@ -1000,8 +1011,9 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
  * right after you've aliased it.
  *
  * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
+ * @param {Object} [userProperties] Optional: An associative array of properties to store about the user
  */
-PostHogLib.prototype.identify = function (new_distinct_id) {
+PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
     //if the new_distinct_id has not been set ignore the identify event
     if (!new_distinct_id) {
         console.error('Unique user id has not been set in posthog.identify')
@@ -1031,13 +1043,23 @@ PostHogLib.prototype.identify = function (new_distinct_id) {
         this.register({ distinct_id: new_distinct_id })
     }
     this._flags.identify_called = true
+
     // Flush any queued up people requests
     this['people']._flush()
 
     // send an $identify event any time the distinct_id is changing - logic on the server
     // will determine whether or not to do anything with it.
     if (new_distinct_id !== previous_distinct_id) {
-        this.capture('$identify', { distinct_id: new_distinct_id, $anon_distinct_id: previous_distinct_id })
+        this.capture(
+            '$identify',
+            {
+                distinct_id: new_distinct_id,
+                $anon_distinct_id: previous_distinct_id,
+            },
+            { $set: userProperties || {} }
+        )
+    } else if (userProperties) {
+        this['people'].set(userProperties)
     }
 
     this.reloadFeatureFlags()
