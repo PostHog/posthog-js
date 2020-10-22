@@ -1001,11 +1001,7 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
  *
  * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
  */
-PostHogLib.prototype.identify = function (new_distinct_id, _set_callback, _set_once_callback) {
-    // Optional Parameters
-    //  _set_callback:function  A callback to be run if and when the People set queue is flushed
-    //  _set_once_callback:function  A callback to be run if and when the People set_once queue is flushed
-
+PostHogLib.prototype.identify = function (new_distinct_id) {
     //if the new_distinct_id has not been set ignore the identify event
     if (!new_distinct_id) {
         console.error('Unique user id has not been set in posthog.identify')
@@ -1036,7 +1032,7 @@ PostHogLib.prototype.identify = function (new_distinct_id, _set_callback, _set_o
     }
     this._flags.identify_called = true
     // Flush any queued up people requests
-    this['people']._flush(_set_callback, _set_once_callback)
+    this['people']._flush()
 
     // send an $identify event any time the distinct_id is changing - logic on the server
     // will determine whether or not to do anything with it.
