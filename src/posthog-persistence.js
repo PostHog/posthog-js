@@ -332,26 +332,6 @@ PostHogPersistence.prototype.set_secure = function (secure) {
     }
 }
 
-PostHogPersistence.prototype._get_queue_key = function (queue) {
-    if (queue === SET_ACTION) {
-        return SET_QUEUE_KEY
-    } else if (queue === SET_ONCE_ACTION) {
-        return SET_ONCE_QUEUE_KEY
-    } else {
-        console.error('Invalid queue:', queue)
-    }
-}
-
-PostHogPersistence.prototype._get_queue = function (queue) {
-    return this['props'][this._get_queue_key(queue)]
-}
-PostHogPersistence.prototype._get_or_create_queue = function (queue, default_val) {
-    var key = this._get_queue_key(queue)
-    default_val = _.isUndefined(default_val) ? {} : default_val
-
-    return this['props'][key] || (this['props'][key] = default_val)
-}
-
 PostHogPersistence.prototype.set_event_timer = function (event_name, timestamp) {
     var timers = this['props'][EVENT_TIMERS_KEY] || {}
     timers[event_name] = timestamp
