@@ -710,4 +710,6 @@ declare namespace posthog {
     export class feature_flags extends featureFlags {}
 }
 
+export type PostHog = typeof posthog
+
 export default posthog
