@@ -119,9 +119,6 @@ var create_mplib = function (token, config, name) {
         instance = new PostHogLib()
     }
 
-    instance._cached_groups = {} // cache groups in a pool
-    instance._user_decide_check_complete = false
-
     instance._init(token, config, name)
 
     instance['people'] = new PostHogPeople()
@@ -795,10 +792,6 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
 
 PostHogLib.prototype._create_map_key = function (group_key, group_id) {
     return group_key + '_' + JSON.stringify(group_id)
-}
-
-PostHogLib.prototype._remove_group_from_cache = function (group_key, group_id) {
-    delete this._cached_groups[this._create_map_key(group_key, group_id)]
 }
 
 /**
