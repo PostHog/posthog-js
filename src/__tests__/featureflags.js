@@ -1,13 +1,13 @@
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 fdescribe('featureflags', () => {
+    given('properties', () => ({ $override_feature_flags: false, $active_feature_flags: ['beta-feature'] }))
+
     given('instance', () => ({
-        get_property: (key) => {
-            if (key === '$override_feature_flags') return false
-            if (key === '$active_feature_flags') return ['beta-feature']
-        },
+        get_property: (key) => given.properties[key],
         capture: () => {},
     }))
+
     given('feature_flags', () => new PostHogFeatureFlags(given.instance))
 
     beforeEach(() => {
@@ -22,7 +22,7 @@ fdescribe('featureflags', () => {
     })
 
     it('should return the right feature flag and not call capture', () => {
-        expect(given.feature_flags.isFeatureEnabled('beta-feature', false)).toEqual(true)
+        expect(given.feature_flags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
         expect(given.instance.capture).not.toHaveBeenCalled()
     })
 })

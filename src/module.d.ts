@@ -490,8 +490,9 @@ declare class posthog {
      *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
      *
      * @param {Object|String} prop Key of the feature flag.
+     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    static isFeatureEnabled(key: string): boolean
+    static isFeatureEnabled(key: string, options: posthog.isFeatureEnabledOptions): boolean
 
     /*
      * See if feature flags are available.
@@ -572,6 +573,10 @@ declare namespace posthog {
         cookie_expiration: number
         cross_subdomain_cookie: boolean
         secure_cookie: boolean
+    }
+
+    interface isFeatureEnabledOptions {
+        send_event: boolean
     }
 
     export class persistence {
@@ -692,8 +697,9 @@ declare namespace posthog {
          *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
          *
          * @param {Object|String} prop Key of the feature flag.
+         * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
          */
-        static isFeatureEnabled(key: string): boolean
+        static isFeatureEnabled(key: string, options: posthog.isFeatureEnabledOptions): boolean
 
         /*
          * See if feature flags are available.
