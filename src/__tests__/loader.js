@@ -26,7 +26,6 @@ describe(`Module-based loader in Node env`, () => {
         expect(posthog.capture.calledOnce).toBe(true)
         const captureArgs = posthog.capture.args[0]
         const event = captureArgs[0]
-        const props = captureArgs[1]
         expect(event).toBe('$pageview')
         expect(loaded).toBe(true)
 
