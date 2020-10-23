@@ -136,23 +136,17 @@ PostHogPeople.prototype._enqueue = function (data) {
     }
 }
 
-PostHogPeople.prototype._flush_one_queue = function (action, action_method, callback, queue_to_params_fn) {
+PostHogPeople.prototype._flush_one_queue = function (action, action_method) {
     var _this = this
     var queued_data = _.extend({}, this._posthog['persistence']._get_queue(action))
     var action_params = queued_data
 
     if (!_.isUndefined(queued_data) && _.isObject(queued_data) && !_.isEmptyObject(queued_data)) {
         _this._posthog['persistence']._pop_from_people_queue(action, queued_data)
-        if (queue_to_params_fn) {
-            action_params = queue_to_params_fn(queued_data)
-        }
-        action_method.call(_this, action_params, function (response, data) {
+        action_method.call(_this, action_params, function (response) {
             // on bad response, we want to add it back to the queue
             if (response === 0) {
                 _this._posthog['persistence']._add_to_people_queue(action, queued_data)
-            }
-            if (!_.isUndefined(callback)) {
-                callback(response, data)
             }
         })
     }
@@ -160,9 +154,9 @@ PostHogPeople.prototype._flush_one_queue = function (action, action_method, call
 
 // Flush queued engage operations - order does not matter,
 // and there are network level race conditions anyway
-PostHogPeople.prototype._flush = function (_set_callback, _set_once_callback) {
-    this._flush_one_queue(SET_ACTION, this.set, _set_callback)
-    this._flush_one_queue(SET_ONCE_ACTION, this.set_once, _set_once_callback)
+PostHogPeople.prototype._flush = function () {
+    this._flush_one_queue(SET_ACTION, this.set)
+    this._flush_one_queue(SET_ONCE_ACTION, this.set_once)
 }
 
 PostHogPeople.prototype._is_reserved_property = function (prop) {

@@ -184,6 +184,13 @@ declare class posthog {
      * then unique visitors will be identified by a UUID generated
      * the first time they visit the site.
      *
+     * If user properties are passed, they are also sent to posthog.
+     *
+     * ### Usage:
+     *
+     *      posthog.identify('[user unique id]')
+     *      posthog.identify('[user unique id]', { email: 'john@example.com' })
+     *
      * ### Notes:
      *
      * You can call this function to overwrite a previously set
@@ -204,8 +211,9 @@ declare class posthog {
      * right after you've aliased it.
      *
      * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
+     * @param {Object} [userProperties] Optional: An associative array of properties to store about the user
      */
-    static identify(unique_id?: string): void
+    static identify(unique_id?: string, userProperties?: posthog.Properties): void
 
     /**
      * Create an alias, which PostHog will use to link two distinct_ids going forward (not retroactively).
