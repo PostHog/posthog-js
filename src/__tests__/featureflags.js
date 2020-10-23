@@ -1,5 +1,4 @@
 import { PostHogFeatureFlags } from '../posthog-featureflags'
-import { _ } from '../utils'
 
 fdescribe('featureflags', () => {
     given('instance', () => ({
