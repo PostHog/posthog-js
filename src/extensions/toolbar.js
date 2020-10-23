@@ -15,11 +15,10 @@ export class Toolbar {
             editorParams['toolbarVersion'] &&
             editorParams['toolbarVersion'].indexOf('toolbar') === 0
         ) {
-            this._loadEditor(
-                Object.assign({}, editorParams, {
-                    apiURL: this.instance.get_config('api_host'),
-                })
-            )
+            this._loadEditor({
+                ...editorParams,
+                apiURL: this.instance.get_config('api_host'),
+            })
             this.instance.set_config({ debug: true })
         }
     }
