@@ -5,7 +5,7 @@ import { _ } from './utils'
 /** @const */ var SET_ACTION = '$set'
 /** @const */ var SET_ONCE_ACTION = '$set_once'
 
-// Common internal methods for posthog.people and posthog.group APIs.
+// Internal methods for posthog.people API.
 // These methods shouldn't involve network I/O.
 var apiActions = {
     set_action: function (prop, to) {
@@ -50,4 +50,4 @@ var apiActions = {
     },
 }
 
-export { SET_ACTION, SET_ONCE_ACTION, apiActions }
+export { SET_ACTION, apiActions }

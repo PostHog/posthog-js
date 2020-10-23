@@ -9,6 +9,10 @@ import posthog from '../loader-module'
 import sinon from 'sinon'
 
 describe(`Module-based loader in Node env`, () => {
+    beforeEach(() => {
+        jest.spyOn(posthog, '_send_request').mockReturnValue()
+    })
+
     it('should load and capture the pageview event', () => {
         const sandbox = sinon.createSandbox()
         let loaded = false
@@ -34,10 +38,10 @@ describe(`Module-based loader in Node env`, () => {
     })
 
     it(`supports identify()`, () => {
-        posthog.identify(`Pat`)
+        expect(() => posthog.identify(`Pat`)).not.toThrow()
     })
 
     it(`supports capture()`, () => {
-        posthog.capture(`Did stuff`)
+        expect(() => posthog.capture(`Pat`)).not.toThrow()
     })
 })

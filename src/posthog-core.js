@@ -119,10 +119,6 @@ var create_mplib = function (token, config, name) {
         instance = new PostHogLib()
     }
 
-    instance._cached_groups = {} // cache groups in a pool
-    instance._user_decide_check_complete = false
-    instance._events_captureed_before_user_decide_check_complete = []
-
     instance._init(token, config, name)
 
     instance['people'] = new PostHogPeople()
@@ -234,9 +230,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this.__dom_loaded_queue = []
     this.__request_queue = []
-    this.__disabled_events = []
     this._flags = {
-        disable_all_events: false,
         identify_called: false,
     }
 
@@ -705,7 +699,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         return
     }
 
-    if (this._event_is_disabled(event_name)) {
+    if (_.isBlockedUA(userAgent)) {
         callback(0)
         return
     }
@@ -798,10 +792,6 @@ PostHogLib.prototype._create_map_key = function (group_key, group_id) {
     return group_key + '_' + JSON.stringify(group_id)
 }
 
-PostHogLib.prototype._remove_group_from_cache = function (group_key, group_id) {
-    delete this._cached_groups[this._create_map_key(group_key, group_id)]
-}
-
 /**
  * Capture a page view event, which is currently ignored by the server.
  * This function is called by default on page load unless the
@@ -831,7 +821,7 @@ PostHogLib.prototype.capture_pageview = function (page) {
  * This function will wait up to 300 ms for the PostHog
  * servers to respond. If they have not responded by that time
  * it will head to the link without ensuring that your event
- * has been captureed.  To configure this timeout please see the
+ * has been captured.  To configure this timeout please see the
  * set_config() documentation below.
  *
  * If you pass a function in as the properties argument, the
@@ -862,7 +852,7 @@ PostHogLib.prototype.capture_links = function () {
  * This function will wait up to 300 ms for the posthog
  * servers to respond, if they have not responded by that time
  * it will head to the link without ensuring that your event
- * has been captureed.  To configure this timeout please see the
+ * has been captured.  To configure this timeout please see the
  * set_config() documentation below.
  *
  * If you pass a function in as the properties argument, the
@@ -1043,9 +1033,6 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
         this.register({ distinct_id: new_distinct_id })
     }
     this._flags.identify_called = true
-
-    // Flush any queued up people requests
-    this['people']._flush()
 
     // send an $identify event any time the distinct_id is changing - logic on the server
     // will determine whether or not to do anything with it.
@@ -1307,10 +1294,6 @@ PostHogLib.prototype.toString = function () {
     return name
 }
 
-PostHogLib.prototype._event_is_disabled = function (event_name) {
-    return _.isBlockedUA(userAgent) || this._flags.disable_all_events || _.include(this.__disabled_events, event_name)
-}
-
 // perform some housekeeping around GDPR opt-in/out state
 PostHogLib.prototype._gdpr_init = function () {
     var is_localStorage_requested = this.get_config('opt_out_capturing_persistence_type') === 'localStorage'
@@ -1420,7 +1403,7 @@ PostHogLib.prototype._gdpr_call_func = function (func, options) {
  * @param {Object} [options] A dictionary of config options to override
  * @param {function} [options.capture] Function used for capturing a PostHog event to record the opt-in action (default is this PostHog instance's capture method)
  * @param {string} [options.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action
- * @param {Object} [options.capture_properties] Set of properties to be captureed along with the opt-in action
+ * @param {Object} [options.capture_properties] Set of properties to be captured along with the opt-in action
  * @param {boolean} [options.enable_persistence=true] If true, will re-enable sdk persistence
  * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
  * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name

@@ -66,7 +66,7 @@ declare class posthog {
      * This function will wait up to 300 ms for the PostHog
      * servers to respond. If they have not responded by that time
      * it will head to the link without ensuring that your event
-     * has been captureed.  To configure this timeout please see the
+     * has been captured.  To configure this timeout please see the
      * set_config() documentation below.
      *
      * If you pass a function in as the properties argument, the
@@ -99,7 +99,7 @@ declare class posthog {
      * This function will wait up to 300 ms for the posthog
      * servers to respond, if they have not responded by that time
      * it will head to the link without ensuring that your event
-     * has been captureed.  To configure this timeout please see the
+     * has been captured.  To configure this timeout please see the
      * set_config() documentation below.
      *
      * If you pass a function in as the properties argument, the
@@ -425,7 +425,7 @@ declare class posthog {
      * @param {Object} [options] A dictionary of config options to override
      * @param {function} [options.capture] Function used for capturing a PostHog event to record the opt-in action (default is this PostHog instance's capture method)
      * @param {string} [options.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action
-     * @param {Object} [options.capture_properties] Set of properties to be captureed along with the opt-in action
+     * @param {Object} [options.capture_properties] Set of properties to be captured along with the opt-in action
      * @param {boolean} [options.enable_persistence=true] If true, will re-enable sdk persistence
      * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
