@@ -11,7 +11,6 @@ import {
     shouldCaptureValue,
     usefulElements,
 } from './autocapture-utils'
-import { SESSION_RECORDING_ENABLED } from './posthog-persistence'
 
 var autocapture = {
     _initializedTokens: [],
@@ -183,15 +182,6 @@ var autocapture = {
 
             if (explicitNoCapture) {
                 return false
-            }
-
-            // only populate text content from target element (not parents)
-            // to prevent text within a sensitive element from being collected
-            // as part of a parent's el.textContent
-            var elementText
-            var safeElementText = getSafeText(target)
-            if (safeElementText && safeElementText.length) {
-                elementText = safeElementText
             }
 
             var props = _.extend(

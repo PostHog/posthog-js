@@ -349,9 +349,7 @@ describe('Autocapture system', () => {
 
         const getCapturedProps = function (captureSpy) {
             const captureArgs = captureSpy.args[0]
-            const event = captureArgs[0]
-            const props = captureArgs[1]
-            return props
+            return captureArgs[1]
         }
 
         beforeEach(() => {
@@ -581,7 +579,6 @@ describe('Autocapture system', () => {
             document.body.innerHTML = dom
             const span1 = document.getElementById('span1')
             const span2 = document.getElementById('span2')
-            const img1 = document.getElementById('img1')
             const img2 = document.getElementById('img2')
 
             const e1 = {
