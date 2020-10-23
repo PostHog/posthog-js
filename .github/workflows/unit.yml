@@ -19,5 +19,5 @@ jobs:
       # Install your dependencies
       - run: yarn install
 
-      # Run Test
+      - run: yarn lint
       - run: yarn test
