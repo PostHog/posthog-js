@@ -51,14 +51,17 @@ export class PostHogFeatureFlags {
      *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
      *
      * @param {Object|String} prop Key of the feature flag.
+     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key) {
+    isFeatureEnabled(key, options = {}) {
         if (!this.getFlags()) {
             console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
         }
         let response = this.getFlags().indexOf(key) > -1
-        this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: response })
+        if (options.send_event || !('send_event' in options)) {
+            this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: response })
+        }
         return response
     }
 

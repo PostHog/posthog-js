@@ -939,9 +939,10 @@ PostHogLib.prototype._register_single = function (prop, value) {
  *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
  *
  * @param {Object|String} prop Key of the feature flag.
+ * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
  */
-PostHogLib.prototype.isFeatureEnabled = function (key) {
-    return this.feature_flags.isFeatureEnabled(key)
+PostHogLib.prototype.isFeatureEnabled = function (key, options = {}) {
+    return this.feature_flags.isFeatureEnabled(key, options)
 }
 
 PostHogLib.prototype.reloadFeatureFlags = function () {
