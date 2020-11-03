@@ -28,7 +28,7 @@ describe('Event capture', () => {
         cy.setupPosthog(given.options)
     }
 
-    xit('captures pageviews, custom events', () => {
+    it('captures pageviews, custom events', () => {
         start()
 
         cy.phCaptures('event').should('deep.equal', ['$pageview'])
@@ -41,7 +41,7 @@ describe('Event capture', () => {
     describe('session recording enabled from API', () => {
         given('sessionRecording', () => true)
 
-        xit('captures $snapshot events', () => {
+        it('captures $snapshot events', () => {
             start()
 
             cy.phCaptures('event').should('include', '$snapshot')
