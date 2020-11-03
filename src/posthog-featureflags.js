@@ -60,7 +60,7 @@ export class PostHogFeatureFlags {
         }
         const flagEnabled = this.getFlags().indexOf(key) > -1
         if (options.send_event || !('send_event' in options)) {
-            this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: response })
+            this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagEnabled })
         }
         return flagEnabled
     }
