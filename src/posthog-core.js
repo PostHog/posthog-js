@@ -417,12 +417,16 @@ PostHogLib.prototype._event_queue_poll = function () {
 
 PostHogLib.prototype._handle_unload = function () {
     if (!this.get_config('request_batching')) {
-        this.capture('$pageleave', null, { transport: 'sendbeacon' })
+        if (this.get_config('capture_pageview')) {
+            this.capture('$pageleave', null, { transport: 'sendbeacon' })
+        }
         return
     }
 
     clearInterval(this._poller)
-    this.capture('$pageleave')
+    if (this.get_config('capture_pageview')) {
+        this.capture('$pageleave')
+    }
     let data = {}
     if (this._event_queue.length > 0) {
         data = this._format_event_queue_data()

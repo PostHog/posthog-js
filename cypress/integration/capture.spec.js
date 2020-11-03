@@ -85,13 +85,12 @@ describe('Event capture', () => {
     describe('opting out of pageviews', () => {
         given('options', () => ({ capture_pageview: false }))
 
-        xit('captures autocapture, custom events', () => {
+        it('captures autocapture, custom events', () => {
             start()
 
             cy.get('[data-cy-custom-event-button]').click()
             cy.reload()
 
-            // :TODO: Issue 92
             cy.phCaptures('event').should('deep.equal', ['$autocapture', 'custom-event'])
         })
     })
