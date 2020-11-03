@@ -16,7 +16,8 @@
         "prepublish": "yarn lint && yarn test && yarn build && yarn build-module && yarn process-types",
         "test": "jest src",
         "test-watch": "jest --watch",
-        "unit-test": "BABEL_ENV=test mocha --require babel-core/register tests/unit/*.js"
+        "unit-test": "BABEL_ENV=test mocha --require babel-core/register tests/unit/*.js",
+        "copy-scripts": "mkdir -p static; cp dist/array.js* static; cp node_modules/rrweb/dist/rrweb.min.js static/recorder.js"
     },
     "main": "dist/module.js",
     "types": "dist/module.d.ts",
@@ -44,6 +45,7 @@
         "parcel": "^1.12.4",
         "prettier": "^2.0.5",
         "rollup": "^2.18.2",
+        "rrweb": "^0.9.9",
         "sinon": "9.0.2",
         "typescript": "^3.9.6"
     },

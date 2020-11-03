@@ -32,14 +32,10 @@ Cypress.Commands.add('setupPosthog', (options) => {
     $captures = []
 
     return cy.window().then(($window) => {
-        $window.posthog.init('9_4O00TnKeSQ9iGYF0NznPBx3gFAbu6TL5U6QrPojyI', {
-            api_host: 'http://127.0.0.1:8000',
+        $window.posthog.init('test_token', {
+            api_host: location.origin,
             debug: true,
             _onCapture: (data) => {
-                // const el = $window.document.createElement('pre')
-                // el.innerHTML = JSON.stringify(data, null, 2)
-                // $window.document.querySelector('[data-cy-captures]').appendChild(el)
-
                 $captures.push(data)
             },
             ...options,
