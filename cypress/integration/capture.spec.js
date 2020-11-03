@@ -9,7 +9,7 @@ describe('Event capture', () => {
     })
 
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
-    const start = () => {
+    const start = ({ waitForDecide = true } = {}) => {
         cy.route({
             method: 'POST',
             url: '**/decide/*',
@@ -26,13 +26,16 @@ describe('Event capture', () => {
 
         cy.visit('./playground/cypress')
         cy.setupPosthog(given.options)
+        if (waitForDecide) {
+            cy.wait('@decide')
+        }
     }
 
-    it('captures pageviews, custom events', () => {
+    it('captures pageviews, autocapture, custom events', () => {
         start()
 
-        cy.phCaptures('event').should('deep.equal', ['$pageview'])
-        cy.get('[data-cy-custom-event-buttom]').click()
+        cy.get('[data-cy-custom-event-button]').click()
+        cy.phCaptures('event').should('deep.equal', ['$pageview', '$autocapture', 'custom-event'])
 
         cy.reload()
         cy.phCaptures('event').should('deep.equal', ['$pageview', '$autocapture', 'custom-event', '$pageleave'])
@@ -57,6 +60,56 @@ describe('Event capture', () => {
 
                 cy.phCaptures('event').should('not.include', '$snapshot')
             })
+        })
+    })
+
+    describe('opting out of autocapture', () => {
+        given('options', () => ({ autocapture: false }))
+
+        it('captures pageviews, custom events', () => {
+            start({ waitForDecide: false })
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures('event').should('deep.equal', ['$pageview', 'custom-event'])
+        })
+    })
+
+    describe('opting out of pageviews', () => {
+        given('options', () => ({ capture_pageview: false }))
+
+        xit('captures autocapture, custom events', () => {
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.reload()
+
+            // :TODO: Issue 92
+            cy.phCaptures('event').should('deep.equal', ['$autocapture', 'custom-event'])
+        })
+    })
+
+    describe('user opts out after start', () => {
+        it('does not send any autocapture/custom events after that', () => {
+            start()
+
+            cy.posthog().invoke('opt_out_capturing')
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.reload()
+
+            cy.phCaptures('event').should('deep.equal', ['$pageview'])
+        })
+
+        it('does not send session recording events', () => {
+            given('sessionRecording', () => true)
+
+            start()
+
+            cy.posthog().invoke('opt_out_capturing')
+            cy.resetPhCaptures()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures('event').should('deep.equal', [])
         })
     })
 })

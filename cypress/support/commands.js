@@ -26,10 +26,12 @@
 
 let $captures
 
+Cypress.Commands.add('posthog', () => cy.window().then(($window) => $window.posthog))
+
 Cypress.Commands.add('setupPosthog', (options) => {
     $captures = []
 
-    cy.window().then(($window) => {
+    return cy.window().then(($window) => {
         $window.posthog.init('9_4O00TnKeSQ9iGYF0NznPBx3gFAbu6TL5U6QrPojyI', {
             api_host: 'http://127.0.0.1:8000',
             debug: true,
@@ -48,7 +50,6 @@ Cypress.Commands.add('setupPosthog', (options) => {
 Cypress.Commands.add('phCaptures', (attribute = null, options = {}) => {
     function resolve() {
         const values = $captures.map((event) => event[attribute])
-        console.log('phCaptures', values)
 
         return cy.verifyUpcomingAssertions(values, options, {
             onRetry: resolve,
@@ -56,4 +57,8 @@ Cypress.Commands.add('phCaptures', (attribute = null, options = {}) => {
     }
 
     return resolve()
+})
+
+Cypress.Commands.add('resetPhCaptures', () => {
+    $captures = []
 })
