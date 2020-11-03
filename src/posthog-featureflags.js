@@ -20,14 +20,14 @@ export class PostHogFeatureFlags {
     }
 
     reloadFeatureFlags() {
-        const parseDecideResponse = _.bind(function (response) {
+        const parseDecideResponse = (response) => {
             if (response['featureFlags']) {
                 this.instance.persistence &&
                     this.instance.persistence.register({ $active_feature_flags: response['featureFlags'] })
             } else {
                 this.instance.persistence && this.instance.persistence.unregister('$active_feature_flags')
             }
-        }, this)
+        }
 
         const token = this.instance.get_config('token')
         const json_data = _.JSONEncode({
