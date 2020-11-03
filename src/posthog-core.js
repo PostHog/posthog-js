@@ -397,7 +397,7 @@ PostHogLib.prototype._event_queue_poll = function () {
 
         /**
          * _empty_queue_count will increment each time the queue is polled
-         *  and it is empty. To avoid emtpy polling (user went idle, stepped away from comp)
+         *  and it is empty. To avoid empty polling (user went idle, stepped away from comp)
          *  we can turn it off with the _should_poll flag.
          *
          * Polling will be re enabled when the next time PostHogLib.capture is called with
