@@ -12,11 +12,9 @@
         "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
         "process-types": "eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
         "lint": "eslint src --fix",
-        "integration-test": "echo 'Browse to localhost:3000/tests' && node testServer.js",
         "prepublish": "yarn lint && yarn test && yarn build && yarn build-module && yarn process-types",
         "test": "jest src",
         "test-watch": "jest --watch",
-        "unit-test": "BABEL_ENV=test mocha --require babel-core/register tests/unit/*.js",
         "copy-scripts": "mkdir -p static; cp dist/array.js* static; cp node_modules/rrweb/dist/rrweb.min.js static/recorder.js"
     },
     "main": "dist/module.js",
