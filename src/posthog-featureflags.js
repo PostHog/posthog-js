@@ -58,11 +58,11 @@ export class PostHogFeatureFlags {
             console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
         }
-        let response = this.getFlags().indexOf(key) > -1
+        const flagEnabled = this.getFlags().indexOf(key) > -1
         if (options.send_event || !('send_event' in options)) {
             this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: response })
         }
-        return response
+        return flagEnabled
     }
 
     /*
