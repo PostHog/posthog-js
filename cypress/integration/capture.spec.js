@@ -41,6 +41,14 @@ describe('Event capture', () => {
         cy.phCaptures('event').should('deep.equal', ['$pageview', '$autocapture', 'custom-event', '$pageleave'])
     })
 
+    it('captures $feature_flag_called', () => {
+        start()
+
+        cy.get('[data-cy-feature-flag-button]').click()
+
+        cy.phCaptures('event').should('include', '$feature_flag_called')
+    })
+
     describe('session recording enabled from API', () => {
         given('sessionRecording', () => true)
 
@@ -56,7 +64,7 @@ describe('Event capture', () => {
             it('does not capture $snapshot events', () => {
                 start()
 
-                cy.wait(2000)
+                cy.wait(1000)
 
                 cy.phCaptures('event').should('not.include', '$snapshot')
             })
@@ -95,6 +103,7 @@ describe('Event capture', () => {
             cy.posthog().invoke('opt_out_capturing')
 
             cy.get('[data-cy-custom-event-button]').click()
+            cy.get('[data-cy-feature-flag-button]').click()
             cy.reload()
 
             cy.phCaptures('event').should('deep.equal', ['$pageview'])

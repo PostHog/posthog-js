@@ -11,8 +11,14 @@
 
     <br />
 
-    <button data-cy-custom-event-button onclick="posthog && posthog.capture('custom-event', { foo: 2 })">
+    <button data-cy-custom-event-button onclick="posthog.capture('custom-event', { foo: 2 })">
         Send custom event
+    </button>
+
+    <br />
+
+    <button data-cy-feature-flag-button onclick="console.log(posthog.isFeatureEnabled('some-feature'))">
+        Test a feature flag
     </button>
 
     <br />
