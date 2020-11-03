@@ -801,7 +801,7 @@ PostHogLib.prototype._create_map_key = function (group_key, group_id) {
 }
 
 /**
- * Capture a page view event, which is currently ignored by the server.
+ * Capture a page view event.
  * This function is called by default on page load unless the
  * capture_pageview configuration variable is false.
  *
