@@ -14,7 +14,7 @@
         "lint": "eslint src --fix",
         "integration-test": "echo 'Browse to localhost:3000/tests' && node testServer.js",
         "prepublish": "yarn lint && yarn test && yarn build && yarn build-module && yarn process-types",
-        "test": "jest",
+        "test": "jest src",
         "test-watch": "jest --watch",
         "unit-test": "BABEL_ENV=test mocha --require babel-core/register tests/unit/*.js"
     },
@@ -31,6 +31,7 @@
         "@typescript-eslint/parser": "^3.5.0",
         "babel-eslint": "^10.1.0",
         "babel-jest": "^26.1.0",
+        "cypress": "^5.5.0",
         "eslint": "^7.3.1",
         "eslint-plugin-prettier": "^3.1.4",
         "given2": "^2.1.7",

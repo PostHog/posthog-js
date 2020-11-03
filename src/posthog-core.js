@@ -87,6 +87,8 @@ var DEFAULT_CONFIG = {
     inapp_protocol: '//',
     inapp_link_new_window: false,
     request_batching: true,
+    // Used for internal testing
+    _onCapture: () => {},
 }
 
 var DOM_LOADED = false
@@ -743,6 +745,8 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         data['timestamp'] = new Date()
         this._event_enqueue(url, data, options, cb)
     }
+
+    this.config._onCapture(data)
 
     return truncated_data
 })
