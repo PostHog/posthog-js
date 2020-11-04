@@ -28,18 +28,16 @@ let $captures
 
 Cypress.Commands.add('posthog', () => cy.window().then(($window) => $window.posthog))
 
-Cypress.Commands.add('setupPosthog', (options) => {
+Cypress.Commands.add('posthogInit', (options) => {
     $captures = []
 
-    return cy.window().then(($window) => {
-        $window.posthog.init('test_token', {
-            api_host: location.origin,
-            debug: true,
-            _onCapture: (data) => {
-                $captures.push(data)
-            },
-            ...options,
-        })
+    cy.posthog().invoke('init', 'test_token', {
+        api_host: location.origin,
+        debug: true,
+        _onCapture: (data) => {
+            $captures.push(data)
+        },
+        ...options,
     })
 })
 

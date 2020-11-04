@@ -25,7 +25,7 @@ describe('Event capture', () => {
         cy.route('POST', '**/e/*').as('capture')
 
         cy.visit('./playground/cypress')
-        cy.setupPosthog(given.options)
+        cy.posthogInit(given.options)
         if (waitForDecide) {
             cy.wait('@decide')
         }
