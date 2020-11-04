@@ -17,16 +17,13 @@ var ArrayProto = Array.prototype,
     document = window.document,
     windowOpera = window.opera,
     screen = window.screen,
-    userAgent = navigator.userAgent,
-    disabledStorage = {}
+    userAgent = navigator.userAgent
 
 var nativeBind = FuncProto.bind,
     nativeForEach = ArrayProto.forEach,
     nativeIndexOf = ArrayProto.indexOf,
     nativeIsArray = Array.isArray,
     breaker = {}
-
-var DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
 
 var _ = {
     trim: function (str) {

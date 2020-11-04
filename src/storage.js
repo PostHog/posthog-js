@@ -1,5 +1,7 @@
 import { _, console } from './utils'
 
+var DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
+
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore = {
     get: function (name) {
@@ -163,6 +165,8 @@ export const localStore = {
         }
     },
 }
+
+const disabledStorage = {}
 
 // Storage that only lasts the length of the pageview if we don't want to use cookies
 export const memoryStore = {
