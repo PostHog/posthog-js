@@ -235,7 +235,7 @@ PostHogLib.prototype._init = function (token, config, name) {
         identify_called: false,
     }
 
-    this['persistence'] = this['cookie'] = new PostHogPersistence(this['config'])
+    this['persistence'] = new PostHogPersistence(this['config'])
     this._gdpr_init()
 
     var uuid = _.UUID()
