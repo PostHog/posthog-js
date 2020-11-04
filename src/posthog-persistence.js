@@ -53,14 +53,14 @@ var PostHogPersistence = function (config) {
     }
 
     var storage_type = config['persistence']
-    if (storage_type !== 'cookie' && storage_type !== 'localStorage' && storage_type !== 'disabled') {
+    if (storage_type !== 'cookie' && storage_type !== 'localStorage' && storage_type !== 'memory') {
         console.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
     }
 
     if (storage_type === 'localStorage' && localStore.is_supported()) {
         this.storage = localStore
-    } else if (storage_type === 'disabled') {
+    } else if (storage_type === 'memory') {
         this.storage = memoryStore
     } else {
         this.storage = cookieStore
@@ -143,7 +143,7 @@ PostHogPersistence.prototype.upgrade = function (config) {
         }
     }
 
-    if (this.storage === localStore) {
+    if (this.storage !== cookieStore) {
         old_cookie = cookieStore.parse(this.name)
 
         cookieStore.remove(this.name)

@@ -1368,7 +1368,7 @@ PostHogLib.prototype._gdpr_call_func = function (func, options) {
     )
 
     // check if localStorage can be used for recording opt out status, fall back to cookie if not
-    if (!localStore.is_supported()) {
+    if (!localStore.is_supported() && options['persistence_type'] === 'localStorage') {
         options['persistence_type'] = 'cookie'
     }
 
