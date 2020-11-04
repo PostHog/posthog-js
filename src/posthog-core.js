@@ -10,6 +10,7 @@ import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './post
 import { SessionRecording } from './extensions/sessionrecording'
 import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
+import { cookieStore, localStore } from './storage'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -1300,7 +1301,7 @@ PostHogLib.prototype._gdpr_init = function () {
     var is_localStorage_requested = this.get_config('opt_out_capturing_persistence_type') === 'localStorage'
 
     // try to convert opt-in/out cookies to localStorage if possible
-    if (is_localStorage_requested && _.localStorage.is_supported()) {
+    if (is_localStorage_requested && localStore.is_supported()) {
         if (!this.has_opted_in_capturing() && this.has_opted_in_capturing({ persistence_type: 'cookie' })) {
             this.opt_in_capturing({ enable_persistence: false })
         }
@@ -1322,9 +1323,9 @@ PostHogLib.prototype._gdpr_init = function () {
         //       used as an initial state while GDPR information is being collected
     } else if (
         !this.has_opted_in_capturing() &&
-        (this.get_config('opt_out_capturing_by_default') || _.cookie.get('ph_optout'))
+        (this.get_config('opt_out_capturing_by_default') || cookieStore.get('ph_optout'))
     ) {
-        _.cookie.remove('ph_optout')
+        cookieStore.remove('ph_optout')
         this.opt_out_capturing({
             clear_persistence: this.get_config('opt_out_persistence_by_default'),
         })
@@ -1367,7 +1368,7 @@ PostHogLib.prototype._gdpr_call_func = function (func, options) {
     )
 
     // check if localStorage can be used for recording opt out status, fall back to cookie if not
-    if (!_.localStorage.is_supported()) {
+    if (!localStore.is_supported()) {
         options['persistence_type'] = 'cookie'
     }
 
