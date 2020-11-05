@@ -31,35 +31,6 @@ export const cookieStore = {
         return cookie
     },
 
-    set_seconds: function (name, value, seconds, cross_subdomain, is_secure) {
-        try {
-            var cdomain = '',
-                expires = '',
-                secure = ''
-
-            if (cross_subdomain) {
-                var matches = document.location.hostname.match(DOMAIN_MATCH_REGEX),
-                    domain = matches ? matches[0] : ''
-
-                cdomain = domain ? '; domain=.' + domain : ''
-            }
-
-            if (seconds) {
-                var date = new Date()
-                date.setTime(date.getTime() + seconds * 1000)
-                expires = '; expires=' + date.toGMTString()
-            }
-
-            if (is_secure) {
-                secure = '; secure'
-            }
-
-            document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/' + cdomain + secure
-        } catch (err) {
-            return
-        }
-    },
-
     set: function (name, value, days, cross_subdomain, is_secure) {
         try {
             var cdomain = '',
@@ -166,7 +137,7 @@ export const localStore = {
     },
 }
 
-const disabledStorage = {}
+const memoryStorage = {}
 
 // Storage that only lasts the length of the pageview if we don't want to use cookies
 export const memoryStore = {
@@ -179,14 +150,14 @@ export const memoryStore = {
     },
 
     parse: function (name) {
-        return disabledStorage[name] || null
+        return memoryStorage[name] || null
     },
 
     set: function (name, value) {
-        disabledStorage[name] = value
+        memoryStorage[name] = value
     },
 
     remove: function (name) {
-        delete disabledStorage[name]
+        delete memoryStorage[name]
     },
 }
