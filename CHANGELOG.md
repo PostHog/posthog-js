@@ -1,3 +1,10 @@
+## 1.6.0 - 2020-11-05
+- Allow updating user properties when calling `posthog.identify('identity, { some: 'value' })` (#105)
+- Allow disabling $feature_flag_called event: `posthog.isFeatureEnabled('flag', { send_event: false }) (#100)
+- Make cookieless analytics possible by passing `persistence: 'memory'` to posthog.init (#82)
+- Avoid sending $pageleave events when `capture_pageview: false` passed to posthog.init (#109)
+- Code cleanup, bug fixes, integration test suite and more tech debt work
+
 ## 1.5.2 - 2020-10-22
 - Autocapture bugfix: Ignore extra spaces in classnames #99
 - Improve typing of posthog-js (#103)
