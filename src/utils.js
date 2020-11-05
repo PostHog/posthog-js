@@ -51,7 +51,7 @@ var console = {
     /** @type {function(...*)} */
     error: function () {
         if (Config.DEBUG && !_.isUndefined(windowConsole) && windowConsole) {
-            var args = ['PostHog error:'].concat(_.toArray(arguments))
+            var args = ['PostHog error:', ...arguments]
             try {
                 windowConsole.error.apply(windowConsole, args)
             } catch (err) {
@@ -64,7 +64,7 @@ var console = {
     /** @type {function(...*)} */
     critical: function () {
         if (!_.isUndefined(windowConsole) && windowConsole) {
-            var args = ['PostHog error:'].concat(_.toArray(arguments))
+            var args = ['PostHog error:', ...arguments]
             try {
                 windowConsole.error.apply(windowConsole, args)
             } catch (err) {
@@ -140,19 +140,6 @@ _.each = function (obj, iterator, context) {
     }
 }
 
-_.escapeHTML = function (s) {
-    var escaped = s
-    if (escaped && _.isString(escaped)) {
-        escaped = escaped
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;')
-    }
-    return escaped
-}
-
 _.extend = function (obj) {
     _.each(slice.call(arguments, 1), function (source) {
         for (var prop in source) {
@@ -179,52 +166,6 @@ _.isFunction = function (f) {
     } catch (x) {
         return false
     }
-}
-
-_.isArguments = function (obj) {
-    return !!(obj && hasOwnProperty.call(obj, 'callee'))
-}
-
-_.toArray = function (iterable) {
-    if (!iterable) {
-        return []
-    }
-    if (iterable.toArray) {
-        return iterable.toArray()
-    }
-    if (_.isArray(iterable)) {
-        return slice.call(iterable)
-    }
-    if (_.isArguments(iterable)) {
-        return slice.call(iterable)
-    }
-    return _.values(iterable)
-}
-
-_.keys = function (obj) {
-    var results = []
-    if (obj === null) {
-        return results
-    }
-    _.each(obj, function (value, key) {
-        results[results.length] = key
-    })
-    return results
-}
-
-_.values = function (obj) {
-    var results = []
-    if (obj === null) {
-        return results
-    }
-    _.each(obj, function (value) {
-        results[results.length] = value
-    })
-    return results
-}
-
-_.identity = function (value) {
-    return value
 }
 
 _.include = function (obj, target) {
@@ -1632,7 +1573,6 @@ _.info = {
 }
 
 // EXPORTS (for closure compiler)
-_['toArray'] = _.toArray
 _['isObject'] = _.isObject
 _['JSONEncode'] = _.JSONEncode
 _['JSONDecode'] = _.JSONDecode
