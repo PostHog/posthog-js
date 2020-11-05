@@ -36,7 +36,7 @@ export class SessionRecording {
     }
 
     _startCapture() {
-        if (!this.captureStarted && !this.instance.disable_session_recording) {
+        if (!this.captureStarted && !this.instance.get_config('disable_session_recording')) {
             this.captureStarted = true
             loadScript(this.instance.get_config('api_host') + '/static/recorder.js', _.bind(this._onScriptLoaded, this))
         }

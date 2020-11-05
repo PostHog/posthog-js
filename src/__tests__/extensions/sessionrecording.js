@@ -11,12 +11,12 @@ describe('SessionRecording', () => {
 
     given('sessionRecording', () => new SessionRecording(given.posthog))
     given('posthog', () => ({
-        disable_session_recording: given.disabled,
         get_property: () => given.$session_recording_enabled,
-        get_config: () => 'posthog.example.com',
+        get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
     }))
+    given('config', () => ({ api_host: 'https://test.com', disable_session_recording: given.disabled }))
 
     describe('afterDecideResponse()', () => {
         given('subject', () => () => given.sessionRecording.afterDecideResponse(given.response))
@@ -83,7 +83,7 @@ describe('SessionRecording', () => {
         it('loads recording script from right place', () => {
             given.sessionRecording.startRecordingIfEnabled()
 
-            expect(loadScript).toHaveBeenCalledWith('posthog.example.com/static/recorder.js', expect.anything())
+            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js', expect.anything())
         })
 
         it('loads script after `submitRecordings` if not previously loaded', () => {

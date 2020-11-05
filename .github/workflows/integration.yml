@@ -1,11 +1,11 @@
-name: Unit Tests
+name: Integration
 
 on:
   - pull_request
 
 jobs:
-  build:
-    name: Mocha
+  cypress:
+    name: Cypress
     runs-on: ubuntu-latest
     steps:
       # Check out the repository
@@ -18,6 +18,7 @@ jobs:
 
       # Install your dependencies
       - run: yarn install
+      - run: yarn build; yarn copy-scripts
 
-      - run: yarn lint
-      - run: yarn test
+      - name: Cypress run
+        uses: cypress-io/github-action@v2

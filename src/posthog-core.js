@@ -87,6 +87,8 @@ var DEFAULT_CONFIG = {
     inapp_protocol: '//',
     inapp_link_new_window: false,
     request_batching: true,
+    // Used for internal testing
+    _onCapture: () => {},
 }
 
 var DOM_LOADED = false
@@ -397,7 +399,7 @@ PostHogLib.prototype._event_queue_poll = function () {
 
         /**
          * _empty_queue_count will increment each time the queue is polled
-         *  and it is empty. To avoid emtpy polling (user went idle, stepped away from comp)
+         *  and it is empty. To avoid empty polling (user went idle, stepped away from comp)
          *  we can turn it off with the _should_poll flag.
          *
          * Polling will be re enabled when the next time PostHogLib.capture is called with
@@ -415,12 +417,16 @@ PostHogLib.prototype._event_queue_poll = function () {
 
 PostHogLib.prototype._handle_unload = function () {
     if (!this.get_config('request_batching')) {
-        this.capture('$pageleave', null, { transport: 'sendbeacon' })
+        if (this.get_config('capture_pageview')) {
+            this.capture('$pageleave', null, { transport: 'sendbeacon' })
+        }
         return
     }
 
     clearInterval(this._poller)
-    this.capture('$pageleave')
+    if (this.get_config('capture_pageview')) {
+        this.capture('$pageleave')
+    }
     let data = {}
     if (this._event_queue.length > 0) {
         data = this._format_event_queue_data()
@@ -744,6 +750,8 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         this._event_enqueue(url, data, options, cb)
     }
 
+    this.config._onCapture(data)
+
     return truncated_data
 })
 
@@ -793,7 +801,7 @@ PostHogLib.prototype._create_map_key = function (group_key, group_id) {
 }
 
 /**
- * Capture a page view event, which is currently ignored by the server.
+ * Capture a page view event.
  * This function is called by default on page load unless the
  * capture_pageview configuration variable is false.
  *

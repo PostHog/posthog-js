@@ -158,3 +158,70 @@ describe('_calculate_event_properties()', () => {
         })
     })
 })
+
+describe('_handle_unload()', () => {
+    given('subject', () => () => given.lib._handle_unload())
+
+    given('overrides', () => ({
+        get_config: (key) => given.config[key],
+        capture: jest.fn(),
+        compression: {},
+        _event_queue: given.eventQueue,
+        _send_request: jest.fn(),
+    }))
+
+    given('config', () => ({
+        capture_pageview: given.capturePageviews,
+        request_batching: given.batching,
+    }))
+
+    given('capturePageviews', () => true)
+    given('batching', () => true)
+    given('eventQueue', () => [{ url: 'http://localhost:8001/e', data: { event: 'some-event' } }])
+
+    it('captures $pageleave', () => {
+        given.subject()
+
+        expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave')
+    })
+
+    it('does not capture $pageleave when capture_pageview=false', () => {
+        given('capturePageviews', () => false)
+
+        given.subject()
+
+        expect(given.overrides.capture).not.toHaveBeenCalled()
+    })
+
+    it('sends requests for all events in queue', () => {
+        given.subject()
+
+        expect(given.overrides._send_request).toHaveBeenCalledTimes(1)
+        expect(given.overrides._send_request).toHaveBeenCalledWith(
+            'http://localhost:8001/e',
+            {
+                data: expect.anything(),
+            },
+            { transport: 'sendbeacon' },
+            expect.any(Function)
+        )
+    })
+
+    describe('without batching', () => {
+        given('batching', () => false)
+
+        it('captures $pageleave', () => {
+            given.subject()
+
+            expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendbeacon' })
+        })
+
+        it('does not capture $pageleave when capture_pageview=false', () => {
+            given('capturePageviews', () => false)
+
+            given.subject()
+
+            expect(given.overrides.capture).not.toHaveBeenCalled()
+        })
+    })
+})
