@@ -1573,7 +1573,6 @@ _.info = {
 }
 
 // EXPORTS (for closure compiler)
-_['toArray'] = _.toArray
 _['isObject'] = _.isObject
 _['JSONEncode'] = _.JSONEncode
 _['JSONDecode'] = _.JSONDecode
