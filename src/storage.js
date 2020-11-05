@@ -146,7 +146,7 @@ export const memoryStore = {
     },
 
     error: function (msg) {
-        console.error('localStorage error: ' + msg)
+        console.error('memoryStorage error: ' + msg)
     },
 
     parse: function (name) {
