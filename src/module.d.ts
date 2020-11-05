@@ -528,7 +528,7 @@ declare namespace posthog {
         autocapture?: boolean
         cdn?: string
         cross_subdomain_cookie?: boolean
-        persistence?: 'localStorage' | 'cookie'
+        persistence?: 'localStorage' | 'cookie' | 'memory'
         persistence_name?: string
         cookie_name?: string
         loaded?: (posthog_instance: typeof posthog) => void

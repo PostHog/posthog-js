@@ -12,6 +12,7 @@
  */
 
 import { _, window } from './utils'
+import { cookieStore, localStore } from './storage'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)
@@ -145,11 +146,11 @@ export function clearOptInOut(token, options) {
  * Get storage util
  * @param {Object} [options]
  * @param {string} [options.persistenceType]
- * @returns {object} either _.cookie or _.localstorage
+ * @returns {object} either cookieStore or localStore
  */
 function _getStorage(options) {
     options = options || {}
-    return options.persistenceType === 'localStorage' ? _.localStorage : _.cookie
+    return options.persistenceType === 'localStorage' ? localStore : cookieStore
 }
 
 /**

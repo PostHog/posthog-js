@@ -2,6 +2,7 @@
 
 import Config from './config'
 import { _, console } from './utils'
+import { cookieStore, localStore, memoryStore } from './storage'
 
 /*
  * Constants
@@ -52,15 +53,17 @@ var PostHogPersistence = function (config) {
     }
 
     var storage_type = config['persistence']
-    if (storage_type !== 'cookie' && storage_type !== 'localStorage') {
+    if (storage_type !== 'cookie' && storage_type !== 'localStorage' && storage_type !== 'memory') {
         console.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
     }
 
-    if (storage_type === 'localStorage' && _.localStorage.is_supported()) {
-        this.storage = _.localStorage
+    if (storage_type === 'localStorage' && localStore.is_supported()) {
+        this.storage = localStore
+    } else if (storage_type === 'memory') {
+        this.storage = memoryStore
     } else {
-        this.storage = _.cookie
+        this.storage = cookieStore
     }
 
     this.load()
@@ -140,11 +143,11 @@ PostHogPersistence.prototype.upgrade = function (config) {
         }
     }
 
-    if (this.storage === _.localStorage) {
-        old_cookie = _.cookie.parse(this.name)
+    if (this.storage !== cookieStore) {
+        old_cookie = cookieStore.parse(this.name)
 
-        _.cookie.remove(this.name)
-        _.cookie.remove(this.name, true)
+        cookieStore.remove(this.name)
+        cookieStore.remove(this.name, true)
 
         if (old_cookie) {
             this.register_once(old_cookie)
