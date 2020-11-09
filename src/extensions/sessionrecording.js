@@ -43,6 +43,7 @@ export class SessionRecording {
     }
 
     _onScriptLoaded() {
+        // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
         window.rrweb.record({
             emit: (data) => {
                 const properties = {
@@ -56,6 +57,8 @@ export class SessionRecording {
                     this.snapshots.push(properties)
                 }
             },
+            blockClass: 'ph-no-capture', // Does not capture the element at all
+            ignoreClass: 'ph-ignore-input', // Ignores content of input but still records the input element
         })
     }
 }
