@@ -4,10 +4,6 @@ describe('Event capture', () => {
     given('options', () => ({}))
     given('sessionRecording', () => false)
 
-    beforeEach(() => {
-        cy.server()
-    })
-
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     const start = ({ waitForDecide = true } = {}) => {
         cy.route({
@@ -22,7 +18,6 @@ describe('Event capture', () => {
                 supportedCompression: ['gzip', 'lz64'],
             },
         }).as('decide')
-        cy.route('POST', '**/e/*').as('capture')
 
         cy.visit('./playground/cypress')
         cy.posthogInit(given.options)

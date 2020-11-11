@@ -394,7 +394,6 @@ declare class posthog {
      *     });
      *
      * @param {Object} [options] A dictionary of config options to override
-     * @param {boolean} [options.delete_user=true] If true, will delete the currently identified user's profile and clear all charges after opting the user out
      * @param {boolean} [options.clear_persistence=true] If true, will delete all data stored by the sdk in persistence
      * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
@@ -560,7 +559,6 @@ declare namespace posthog {
     }
 
     interface OptInOutCapturingOptions {
-        delete_user: boolean
         clear_persistence: boolean
         persistence_type: string
         cookie_prefix: string
