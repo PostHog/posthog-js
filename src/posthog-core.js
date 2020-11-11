@@ -233,9 +233,6 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this.__dom_loaded_queue = []
     this.__request_queue = []
-    this._flags = {
-        identify_called: false,
-    }
 
     this['persistence'] = new PostHogPersistence(this['config'])
     this._gdpr_init()
@@ -1042,7 +1039,6 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
         this.unregister(ALIAS_ID_KEY)
         this.register({ distinct_id: new_distinct_id })
     }
-    this._flags.identify_called = true
 
     // send an $identify event any time the distinct_id is changing - logic on the server
     // will determine whether or not to do anything with it.
@@ -1069,7 +1065,6 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
 PostHogLib.prototype.reset = function (reset_device_id) {
     let device_id = this.get_property('$device_id')
     this['persistence'].clear()
-    this._flags.identify_called = false
     var uuid = _.UUID()
     this.register_once(
         {

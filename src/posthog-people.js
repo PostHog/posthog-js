@@ -121,10 +121,6 @@ PostHogPeople.prototype._get_config = function (conf_var) {
     return this._posthog.get_config(conf_var)
 }
 
-PostHogPeople.prototype._identify_called = function () {
-    return this._posthog._flags.identify_called === true
-}
-
 PostHogPeople.prototype._is_reserved_property = function (prop) {
     return (
         prop === '$distinct_id' ||
