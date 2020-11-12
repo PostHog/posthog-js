@@ -233,9 +233,6 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this.__dom_loaded_queue = []
     this.__request_queue = []
-    this._flags = {
-        identify_called: false,
-    }
 
     this['persistence'] = new PostHogPersistence(this['config'])
     this._gdpr_init()
@@ -1042,7 +1039,6 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
         this.unregister(ALIAS_ID_KEY)
         this.register({ distinct_id: new_distinct_id })
     }
-    this._flags.identify_called = true
 
     // send an $identify event any time the distinct_id is changing - logic on the server
     // will determine whether or not to do anything with it.
@@ -1069,7 +1065,6 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
 PostHogLib.prototype.reset = function (reset_device_id) {
     let device_id = this.get_property('$device_id')
     this['persistence'].clear()
-    this._flags.identify_called = false
     var uuid = _.UUID()
     this.register_once(
         {
@@ -1452,7 +1447,6 @@ PostHogLib.prototype.opt_in_captureing = function (options) {
  *     });
  *
  * @param {Object} [options] A dictionary of config options to override
- * @param {boolean} [options.delete_user=true] If true, will delete the currently identified user's profile and clear all charges after opting the user out
  * @param {boolean} [options.clear_persistence=true] If true, will delete all data stored by the sdk in persistence
  * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
  * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
@@ -1464,16 +1458,9 @@ PostHogLib.prototype.opt_out_capturing = function (options) {
     options = _.extend(
         {
             clear_persistence: true,
-            delete_user: true,
         },
         options
     )
-
-    // delete use and clear charges since these methods may be disabled by opt-out
-    if (options['delete_user'] && this['people'] && this['people']._identify_called()) {
-        this['people'].delete_user()
-        this['people'].clear_charges()
-    }
 
     this._gdpr_call_func(optOut, options)
     this._gdpr_update_persistence(options)

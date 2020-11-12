@@ -19,3 +19,10 @@ import 'given2/setup'
 
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
+
+beforeEach(() => {
+    cy.server()
+
+    cy.route('POST', '**/decide/*').as('decide')
+    cy.route('POST', '**/e/*').as('capture')
+})
