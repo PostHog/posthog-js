@@ -1,6 +1,7 @@
+import { PostHogLib } from '../posthog-core'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 
-fdescribe('featureflags', () => {
+describe('featureflags', () => {
     given('properties', () => ({ $override_feature_flags: false, $active_feature_flags: ['beta-feature'] }))
 
     given('instance', () => ({
@@ -24,5 +25,10 @@ fdescribe('featureflags', () => {
     it('should return the right feature flag and not call capture', () => {
         expect(given.feature_flags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
         expect(given.instance.capture).not.toHaveBeenCalled()
+    })
+
+    it('should fail gracefully if instance not yet initialised', () => {
+        const ff = new PostHogLib()
+        ff.onFeatureFlags(() => {})
     })
 })

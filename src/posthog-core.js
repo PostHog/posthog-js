@@ -970,8 +970,12 @@ PostHogLib.prototype.reloadFeatureFlags = function () {
  *                              It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
-    this.persistence.addFeatureFlagsHandler(callback)
-
+    if (!this.persistence) {
+        console.error(
+            "WARNING: posthog.init was not called when posthog.onFeatureFlags was called. Try calling it inside of the loader callback, for example: posthog.init('token', {loader: (posthog) => { posthog.onFeatureFlags(callback)}})"
+        )
+        return
+    }
     const flags = this.feature_flags.getFlags()
     if (flags) {
         callback(flags)
