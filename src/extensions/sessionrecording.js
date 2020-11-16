@@ -9,6 +9,7 @@ export class SessionRecording {
         this.captureStarted = false
         this.snapshots = []
         this.emit = false
+        this.endpoint = '/e/'
     }
 
     startRecordingIfEnabled() {
@@ -23,6 +24,9 @@ export class SessionRecording {
         }
 
         if (response['sessionRecording']) {
+            if (response['sessionRecording'].endpoint) {
+                this.endpoint = response['sessionRecording'].endpoint
+            }
             this.submitRecordings()
         }
     }
@@ -61,7 +65,7 @@ export class SessionRecording {
     }
 
     _captureSnapshot(properties) {
-        // :TRICKY: Make sure we don't batch these requests
-        this.instance.capture('$snapshot', properties, { transport: 'XHR', method: 'POST' })
+        // :TRICKY: Make sure we don't batch these requests and use a custom endpoint
+        this.instance.capture('$snapshot', properties, { transport: 'XHR', method: 'POST', endpoint: this.endpoint })
     }
 }
