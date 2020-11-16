@@ -226,7 +226,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this.__eventQueue = new EventQueue(this._handle_queued_event)
+    this.__eventQueue = new EventQueue(_.bind(this._handle_queued_event, this))
     this.__dom_loaded_queue = []
     this.__request_queue = []
 
