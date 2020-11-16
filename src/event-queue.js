@@ -16,7 +16,7 @@ export class EventQueue {
 
         if (!this._should_poll) {
             this._should_poll = true
-            this._event_queue_poll()
+            this.poll()
         }
     }
 
