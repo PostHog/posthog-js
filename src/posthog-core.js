@@ -672,7 +672,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         }
     } else {
         data['timestamp'] = new Date()
-        this.__eventQueue.enqueue(url, data, options, cb)
+        this.__eventQueue.enqueue(url, data)
     }
 
     this.config._onCapture(data)

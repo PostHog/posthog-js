@@ -11,8 +11,8 @@ export class EventQueue {
         this._poller = function () {} // to become interval for reference to clear later
     }
 
-    enqueue(url, data, options, callback) {
-        this._event_queue.push({ url, data, options, callback })
+    enqueue(url, data) {
+        this._event_queue.push({ url, data })
 
         if (!this._should_poll) {
             this._should_poll = true
