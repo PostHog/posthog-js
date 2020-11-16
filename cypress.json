@@ -1,4 +1,5 @@
 {
     "defaultCommandTimeout": 2000,
-    "numTestsKeptInMemory": 0
+    "numTestsKeptInMemory": 0,
+    "experimentalNetworkStubbing": true
 }

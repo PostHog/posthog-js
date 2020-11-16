@@ -15,8 +15,7 @@
         "prepublish": "yarn lint && yarn test && yarn build && yarn build-module && yarn process-types",
         "test": "jest src",
         "test-watch": "jest --watch",
-        "cypress": "yarn run copy-scripts && cypress open",
-        "copy-scripts": "mkdir -p static; cp dist/array.js* static; cp node_modules/rrweb/dist/rrweb.min.js static/recorder.js"
+        "cypress": "cypress open"
     },
     "main": "dist/module.js",
     "types": "dist/module.d.ts",
