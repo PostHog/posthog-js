@@ -1565,6 +1565,7 @@ PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureF
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
 PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 PostHogLib.prototype['SentryIntegration'] = PostHogLib.prototype.sentry_integration
+PostHogLib.prototype['LIB_VERSION'] = Config.LIB_VERSION
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties'] = PostHogPersistence.prototype.properties
