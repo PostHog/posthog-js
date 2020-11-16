@@ -360,7 +360,7 @@ PostHogLib.prototype._handle_unload = function () {
     this.__eventQueue.unload()
 }
 
-PostHogLib.prototype._handle_queued_event = function (data, { unload = false } = {}) {
+PostHogLib.prototype._handle_queued_event = function (url, data, { unload = false } = {}) {
     const jsonData = _.JSONEncode(data)
     const options = unload ? { transport: 'sendbeacon' } : __NOOPTIONS
     if (this.compression['lz64']) {
