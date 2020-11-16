@@ -42,13 +42,13 @@ declare class posthog {
      * @param {String} event_name The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', 'Item Purchased', etc.
      * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
      * @param {Object} [options] Optional configuration for this capture request.
-     * @param {String} [options.transport] Transport method for network request ('xhr' or 'sendBeacon').
+     * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Function} [callback] If provided, the callback function will be called after capturing the event.
      */
     static capture(
         event_name: string,
         properties?: posthog.Properties,
-        options?: { transport: 'xhr' | 'sendBeacon' },
+        options?: { transport: 'XHR' | 'sendBeacon' },
         callback?: posthog.CaptureCallback
     ): posthog.CaptureResult
 
