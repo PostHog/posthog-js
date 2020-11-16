@@ -70,14 +70,22 @@ describe('SessionRecording', () => {
             _emit({ event: 2 })
 
             expect(given.posthog.capture).toHaveBeenCalledTimes(2)
-            expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', {
-                $session_id: 'sid',
-                $snapshot_data: { event: 1 },
-            })
-            expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', {
-                $session_id: 'sid',
-                $snapshot_data: { event: 2 },
-            })
+            expect(given.posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $session_id: 'sid',
+                    $snapshot_data: { event: 1 },
+                },
+                { method: 'POST', transport: 'XHR' }
+            )
+            expect(given.posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $session_id: 'sid',
+                    $snapshot_data: { event: 2 },
+                },
+                { method: 'POST', transport: 'XHR' }
+            )
         })
 
         it('loads recording script from right place', () => {

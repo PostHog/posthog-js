@@ -30,9 +30,7 @@ export class SessionRecording {
     submitRecordings() {
         this.emit = true
         this._startCapture()
-        this.snapshots.forEach((properties) => {
-            this.instance.capture('$snapshot', properties)
-        })
+        this.snapshots.forEach((properties) => this._captureSnapshot(properties))
     }
 
     _startCapture() {
@@ -52,7 +50,7 @@ export class SessionRecording {
                 }
 
                 if (this.emit) {
-                    this.instance.capture('$snapshot', properties)
+                    this._captureSnapshot(properties)
                 } else {
                     this.snapshots.push(properties)
                 }
@@ -60,5 +58,10 @@ export class SessionRecording {
             blockClass: 'ph-no-capture', // Does not capture the element at all
             ignoreClass: 'ph-ignore-input', // Ignores content of input but still records the input element
         })
+    }
+
+    _captureSnapshot(properties) {
+        // :TRICKY: Make sure we don't batch these requests
+        this.instance.capture('$snapshot', properties, { transport: 'XHR', method: 'POST' })
     }
 }
