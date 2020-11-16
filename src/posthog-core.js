@@ -226,7 +226,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this.__eventQueue = new EventQueue(this)
+    this.__eventQueue = new EventQueue(this._handle_queued_event)
     this.__dom_loaded_queue = []
     this.__request_queue = []
 
@@ -358,6 +358,16 @@ PostHogLib.prototype._handle_unload = function () {
         this.capture('$pageleave')
     }
     this.__eventQueue.unload()
+}
+
+PostHogLib.prototype._handle_queued_event = function (data, { unload = false } = {}) {
+    const jsonData = _.JSONEncode(data)
+    const options = unload ? { transport: 'sendbeacon' } : __NOOPTIONS
+    if (this.compression['lz64']) {
+        this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, __NOOP)
+    } else {
+        this._send_request(url, { data: _.base64Encode(jsonData) }, options, __NOOP)
+    }
 }
 
 PostHogLib.prototype._send_request = function (url, data, options, callback) {
@@ -662,7 +672,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         }
     } else {
         data['timestamp'] = new Date()
-        this.this.__eventQueue.enqueue(url, data, options, cb)
+        this.__eventQueue.enqueue(url, data, options, cb)
     }
 
     this.config._onCapture(data)

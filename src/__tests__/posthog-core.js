@@ -166,8 +166,9 @@ describe('_handle_unload()', () => {
         get_config: (key) => given.config[key],
         capture: jest.fn(),
         compression: {},
-        _event_queue: given.eventQueue,
-        _send_request: jest.fn(),
+        __eventQueue: {
+            unload: jest.fn(),
+        },
     }))
 
     given('config', () => ({
@@ -177,7 +178,6 @@ describe('_handle_unload()', () => {
 
     given('capturePageviews', () => true)
     given('batching', () => true)
-    given('eventQueue', () => [{ url: 'http://localhost:8001/e', data: { event: 'some-event' } }])
 
     it('captures $pageleave', () => {
         given.subject()
@@ -193,18 +193,10 @@ describe('_handle_unload()', () => {
         expect(given.overrides.capture).not.toHaveBeenCalled()
     })
 
-    it('sends requests for all events in queue', () => {
+    it('calls eventQueue unload', () => {
         given.subject()
 
-        expect(given.overrides._send_request).toHaveBeenCalledTimes(1)
-        expect(given.overrides._send_request).toHaveBeenCalledWith(
-            'http://localhost:8001/e',
-            {
-                data: expect.anything(),
-            },
-            { transport: 'sendbeacon' },
-            expect.any(Function)
-        )
+        expect(given.overrides.__eventQueue.unload).toHaveBeenCalledTimes(1)
     })
 
     describe('without batching', () => {

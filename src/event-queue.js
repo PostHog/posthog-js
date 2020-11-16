@@ -1,13 +1,10 @@
 import { _ } from './utils'
 
 const POLL_INTERVAL = 3000
-// :TODO: Reference comparisons here might fail!
-const __NOOP = function () {}
-const __NOOPTIONS = {}
 
 export class EventQueue {
-    constructor(instance) {
-        this.instance = instance
+    constructor(handlePollRequest) {
+        this.handlePollRequest = handlePollRequest
         this._event_queue = []
         this._empty_queue_count = 0 // to track empty polls
         this._should_poll = true // flag to continue to recursively poll or not
@@ -34,19 +31,7 @@ export class EventQueue {
                         data[key]['offset'] = Math.abs(data[key]['timestamp'] - new Date())
                         delete data[key]['timestamp']
                     })
-                    var json_data = _.JSONEncode(data)
-                    if (this.instance.compression['lz64']) {
-                        var encoded_data = LZString.compressToBase64(json_data)
-                        this.instance._send_request(
-                            url,
-                            { data: encoded_data, compression: 'lz64' },
-                            __NOOPTIONS,
-                            __NOOP
-                        )
-                    } else {
-                        var encoded_data = _.base64Encode(json_data)
-                        this.instance._send_request(url, { data: encoded_data }, __NOOPTIONS, __NOOP)
-                    }
+                    this.handlePollRequest(data)
                 }
                 this._event_queue.length = 0 // flush the _event_queue
             } else {
@@ -73,26 +58,13 @@ export class EventQueue {
 
     unload() {
         clearInterval(this._poller)
-        let data = {}
+        let requests = {}
         if (this._event_queue.length > 0) {
-            data = this._format_event_queue_data()
+            requests = this._format_event_queue_data()
         }
         this._event_queue.length = 0
-        for (let url in data) {
-            // sendbeacon has some hard requirments and cant be treated
-            // like a normal post request. Because of that it needs to be encoded
-            if (this.instance.compression['lz64']) {
-                const encoded_data = LZString.compressToBase64(_.JSONEncode(data[url]))
-                this.instance._send_request(
-                    url,
-                    { data: encoded_data, compression: 'lz64' },
-                    { transport: 'sendbeacon' },
-                    __NOOP
-                )
-            } else {
-                const encoded_data = _.base64Encode(_.JSONEncode(data[url]))
-                this.instance._send_request(url, { data: encoded_data }, { transport: 'sendbeacon' }, __NOOP)
-            }
+        for (let url in requests) {
+            this.handleRequest(requests[url], { unload: true })
         }
     }
 
