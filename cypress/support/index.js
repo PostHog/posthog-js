@@ -25,12 +25,13 @@ beforeEach(() => {
 
     cy.route('POST', '**/decide/*').as('decide')
     cy.route('POST', '**/e/*').as('capture')
+    cy.route('POST', '**/ses/*').as('session-recording')
 
     cy.readFile('dist/array.js').then((body) => {
         cy.route2('**/static/array.js', { body })
     })
 
     cy.readFile('node_modules/rrweb/dist/rrweb.min.js').then((body) => {
-        cy.route2('**/static/recorder.js', { body })
+        cy.route2('**/static/recorder.js', { body }).as('recorder')
     })
 })

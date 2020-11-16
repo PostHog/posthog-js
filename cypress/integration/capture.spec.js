@@ -45,7 +45,9 @@ describe('Event capture', () => {
     })
 
     describe('session recording enabled from API', () => {
-        given('sessionRecording', () => true)
+        given('sessionRecording', () => ({
+            endpoint: '/ses/',
+        }))
 
         it('captures $snapshot events', () => {
             start()
