@@ -1,3 +1,4 @@
 {
-    "defaultCommandTimeout": 2000
+    "defaultCommandTimeout": 2000,
+    "numTestsKeptInMemory": 0
 }
