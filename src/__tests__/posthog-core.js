@@ -93,6 +93,31 @@ describe('identify()', () => {
     })
 })
 
+describe('capture()', () => {
+    given('subject', () => () => given.lib.capture('$event', given.eventProperties, given.options, given.callback))
+
+    given('overrides', () => ({
+        get_config: jest.fn(),
+        persistence: {
+            remove_event_timer: jest.fn(),
+            update_search_keyword: jest.fn(),
+            update_campaign_params: jest.fn(),
+            properties: jest.fn(),
+        },
+    }))
+
+    // :TODO: handle recursive event properties (issue #117)
+    xit('handles recursive objects', () => {
+        given('eventProperties', () => {
+            const props = {}
+            props.recurse = props
+            return props
+        })
+
+        expect(() => given.subject()).not.toThrow()
+    })
+})
+
 describe('_calculate_event_properties()', () => {
     given('subject', () =>
         given.lib._calculate_event_properties(given.event_name, given.properties, given.start_timestamp)
