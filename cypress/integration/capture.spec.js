@@ -72,6 +72,7 @@ describe('Event capture', () => {
         it('captures pageviews, custom events', () => {
             start({ waitForDecide: false })
 
+            cy.wait(50)
             cy.get('[data-cy-custom-event-button]').click()
             cy.phCaptures('event').should('deep.equal', ['$pageview', 'custom-event'])
         })
