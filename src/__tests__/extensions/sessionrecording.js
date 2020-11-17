@@ -34,6 +34,16 @@ describe('SessionRecording', () => {
             expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: true })
         })
 
+        it('starts session recording, saves setting and endpoint when enabled', () => {
+            given('response', () => ({ sessionRecording: { endpoint: '/ses/' } }))
+
+            given.subject()
+
+            expect(given.sessionRecording.submitRecordings).toHaveBeenCalled()
+            expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: true })
+            expect(given.sessionRecording.endpoint).toEqual('/ses/')
+        })
+
         it('does not start recording if not allowed', () => {
             given('response', () => ({}))
 
@@ -70,14 +80,22 @@ describe('SessionRecording', () => {
             _emit({ event: 2 })
 
             expect(given.posthog.capture).toHaveBeenCalledTimes(2)
-            expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', {
-                $session_id: 'sid',
-                $snapshot_data: { event: 1 },
-            })
-            expect(given.posthog.capture).toHaveBeenCalledWith('$snapshot', {
-                $session_id: 'sid',
-                $snapshot_data: { event: 2 },
-            })
+            expect(given.posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $session_id: 'sid',
+                    $snapshot_data: { event: 1 },
+                },
+                { method: 'POST', transport: 'XHR', endpoint: '/e/' }
+            )
+            expect(given.posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $session_id: 'sid',
+                    $snapshot_data: { event: 2 },
+                },
+                { method: 'POST', transport: 'XHR', endpoint: '/e/' }
+            )
         })
 
         it('loads recording script from right place', () => {

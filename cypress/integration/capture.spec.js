@@ -45,7 +45,9 @@ describe('Event capture', () => {
     })
 
     describe('session recording enabled from API', () => {
-        given('sessionRecording', () => true)
+        given('sessionRecording', () => ({
+            endpoint: '/ses/',
+        }))
 
         it('captures $snapshot events', () => {
             start()
@@ -72,6 +74,7 @@ describe('Event capture', () => {
         it('captures pageviews, custom events', () => {
             start({ waitForDecide: false })
 
+            cy.wait(50)
             cy.get('[data-cy-custom-event-button]').click()
             cy.phCaptures('event').should('deep.equal', ['$pageview', 'custom-event'])
         })

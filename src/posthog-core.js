@@ -11,6 +11,7 @@ import { SessionRecording } from './extensions/sessionrecording'
 import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
+import { RequestQueue } from './request-queue'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -225,12 +226,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    // batching requests variabls
-    this._event_queue = []
-    this._empty_queue_count = 0 // to track empty polls
-    this._should_poll = true // flag to continue to recursively poll or not
-    this._poller = function () {} // to become interval for reference to clear later
-
+    this.__requestQueue = new RequestQueue(_.bind(this._handle_queued_event, this))
     this.__dom_loaded_queue = []
     this.__request_queue = []
 
@@ -271,7 +267,7 @@ PostHogLib.prototype._loaded = function () {
 PostHogLib.prototype._start_queue_if_opted_in = function () {
     if (!this.has_opted_out_capturing()) {
         if (this.get_config('request_batching')) {
-            this._event_queue_poll()
+            this.__requestQueue.poll()
         }
     }
 }
@@ -350,69 +346,6 @@ PostHogLib.prototype._prepare_callback = function (callback, data) {
     }
 }
 
-PostHogLib.prototype._event_enqueue = function (url, data, options, callback) {
-    this._event_queue.push({ url, data, options, callback })
-
-    if (!this._should_poll) {
-        this._should_poll = true
-        this._event_queue_poll()
-    }
-}
-
-PostHogLib.prototype._format_event_queue_data = function () {
-    const requests = {}
-    _.each(this._event_queue, (request) => {
-        const { url, data } = request
-        if (requests[url] === undefined) requests[url] = []
-        requests[url].push(data)
-    })
-    return requests
-}
-
-PostHogLib.prototype._event_queue_poll = function () {
-    const POLL_INTERVAL = 3000
-    clearInterval(this._poller)
-    this._poller = setTimeout(() => {
-        if (this._event_queue.length > 0) {
-            const requests = this._format_event_queue_data()
-            for (let url in requests) {
-                let data = requests[url]
-                _.each(data, function (value, key) {
-                    data[key]['offset'] = Math.abs(data[key]['timestamp'] - new Date())
-                    delete data[key]['timestamp']
-                })
-                var json_data = _.JSONEncode(data)
-                if (this.compression['lz64']) {
-                    var encoded_data = LZString.compressToBase64(json_data)
-                    this._send_request(url, { data: encoded_data, compression: 'lz64' }, __NOOPTIONS, __NOOP)
-                } else {
-                    var encoded_data = _.base64Encode(json_data)
-                    this._send_request(url, { data: encoded_data }, __NOOPTIONS, __NOOP)
-                }
-            }
-            this._event_queue.length = 0 // flush the _event_queue
-        } else {
-            this._empty_queue_count++
-        }
-
-        /**
-         * _empty_queue_count will increment each time the queue is polled
-         *  and it is empty. To avoid empty polling (user went idle, stepped away from comp)
-         *  we can turn it off with the _should_poll flag.
-         *
-         * Polling will be re enabled when the next time PostHogLib.capture is called with
-         *  an event that should be added to the event queue.
-         */
-        if (this._empty_queue_count > 4) {
-            this._should_poll = false
-            this._empty_queue_count = 0
-        }
-        if (this._should_poll) {
-            this._event_queue_poll()
-        }
-    }, POLL_INTERVAL)
-}
-
 PostHogLib.prototype._handle_unload = function () {
     if (!this.get_config('request_batching')) {
         if (this.get_config('capture_pageview')) {
@@ -421,25 +354,19 @@ PostHogLib.prototype._handle_unload = function () {
         return
     }
 
-    clearInterval(this._poller)
     if (this.get_config('capture_pageview')) {
         this.capture('$pageleave')
     }
-    let data = {}
-    if (this._event_queue.length > 0) {
-        data = this._format_event_queue_data()
-    }
-    this._event_queue.length = 0
-    for (let url in data) {
-        // sendbeacon has some hard requirments and cant be treated
-        // like a normal post request. Because of that it needs to be encoded
-        if (this.compression['lz64']) {
-            const encoded_data = LZString.compressToBase64(_.JSONEncode(data[url]))
-            this._send_request(url, { data: encoded_data, compression: 'lz64' }, { transport: 'sendbeacon' }, __NOOP)
-        } else {
-            const encoded_data = _.base64Encode(_.JSONEncode(data[url]))
-            this._send_request(url, { data: encoded_data }, { transport: 'sendbeacon' }, __NOOP)
-        }
+    this.__requestQueue.unload()
+}
+
+PostHogLib.prototype._handle_queued_event = function (url, data, { unload = false } = {}) {
+    const jsonData = _.JSONEncode(data)
+    const options = unload ? { transport: 'sendbeacon' } : __NOOPTIONS
+    if (this.compression['lz64']) {
+        this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, __NOOP)
+    } else {
+        this._send_request(url, { data: _.base64Encode(jsonData) }, options, __NOOP)
     }
 }
 
@@ -681,7 +608,7 @@ PostHogLib.prototype.push = function (item) {
  * @param {String} event_name The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', 'Item Purchased', etc.
  * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
  * @param {Object} [options] Optional configuration for this capture request.
- * @param {String} [options.transport] Transport method for network request ('xhr' or 'sendBeacon').
+ * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
  * @param {Function} [callback] If provided, the callback function will be called after capturing the event.
  */
 PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options, callback) {
@@ -732,7 +659,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     var truncated_data = _.truncate(data, 255)
     var json_data = _.JSONEncode(truncated_data)
 
-    const url = this.get_config('api_host') + '/e/'
+    const url = this.get_config('api_host') + (options.endpoint || '/e/')
     const cb = this._prepare_callback(callback, truncated_data)
 
     const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
@@ -745,7 +672,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         }
     } else {
         data['timestamp'] = new Date()
-        this._event_enqueue(url, data, options, cb)
+        this.__requestQueue.enqueue(url, data)
     }
 
     this.config._onCapture(data)

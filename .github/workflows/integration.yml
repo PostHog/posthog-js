@@ -18,7 +18,7 @@ jobs:
 
       # Install your dependencies
       - run: yarn install
-      - run: yarn build; yarn copy-scripts
+      - run: yarn build
 
       - name: Cypress run
         uses: cypress-io/github-action@v2
