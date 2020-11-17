@@ -11,7 +11,7 @@ import { SessionRecording } from './extensions/sessionrecording'
 import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
-import { EventQueue } from './event-queue'
+import { RequestQueue } from './request-queue'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -226,7 +226,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this.__eventQueue = new EventQueue(_.bind(this._handle_queued_event, this))
+    this.__requestQueue = new RequestQueue(_.bind(this._handle_queued_event, this))
     this.__dom_loaded_queue = []
     this.__request_queue = []
 
@@ -267,7 +267,7 @@ PostHogLib.prototype._loaded = function () {
 PostHogLib.prototype._start_queue_if_opted_in = function () {
     if (!this.has_opted_out_capturing()) {
         if (this.get_config('request_batching')) {
-            this.__eventQueue.poll()
+            this.__requestQueue.poll()
         }
     }
 }
@@ -357,7 +357,7 @@ PostHogLib.prototype._handle_unload = function () {
     if (this.get_config('capture_pageview')) {
         this.capture('$pageleave')
     }
-    this.__eventQueue.unload()
+    this.__requestQueue.unload()
 }
 
 PostHogLib.prototype._handle_queued_event = function (url, data, { unload = false } = {}) {
@@ -672,7 +672,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         }
     } else {
         data['timestamp'] = new Date()
-        this.__eventQueue.enqueue(url, data)
+        this.__requestQueue.enqueue(url, data)
     }
 
     this.config._onCapture(data)

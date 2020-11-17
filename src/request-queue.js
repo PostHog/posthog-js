@@ -2,7 +2,7 @@ import { _ } from './utils'
 
 const POLL_INTERVAL = 3000
 
-export class EventQueue {
+export class RequestQueue {
     constructor(handlePollRequest) {
         this.handlePollRequest = handlePollRequest
         this.isPolling = true // flag to continue to recursively poll or not

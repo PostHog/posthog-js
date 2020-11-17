@@ -191,7 +191,7 @@ describe('_handle_unload()', () => {
         get_config: (key) => given.config[key],
         capture: jest.fn(),
         compression: {},
-        __eventQueue: {
+        __requestQueue: {
             unload: jest.fn(),
         },
     }))
@@ -218,10 +218,10 @@ describe('_handle_unload()', () => {
         expect(given.overrides.capture).not.toHaveBeenCalled()
     })
 
-    it('calls eventQueue unload', () => {
+    it('calls requestQueue unload', () => {
         given.subject()
 
-        expect(given.overrides.__eventQueue.unload).toHaveBeenCalledTimes(1)
+        expect(given.overrides.__requestQueue.unload).toHaveBeenCalledTimes(1)
     })
 
     describe('without batching', () => {

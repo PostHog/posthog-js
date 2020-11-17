@@ -1,9 +1,9 @@
-import { EventQueue } from '../event-queue'
+import { RequestQueue } from '../request-queue'
 
 const EPOCH = 1_600_000_000
 
-describe('EventQueue', () => {
-    given('queue', () => new EventQueue(given.handlePollRequest))
+describe('RequestQueue', () => {
+    given('queue', () => new RequestQueue(given.handlePollRequest))
     given('handlePollRequest', () => jest.fn())
 
     beforeEach(() => {
