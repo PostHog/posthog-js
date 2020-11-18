@@ -15,3 +15,18 @@ describe(`utils.js`, () => {
         expect(properties['$pathname']).toBeDefined()
     })
 })
+
+describe('JSONEncode/JSONDecode', () => {
+    let tests = [{ some: { nested: 1, [1]: 5 } }, {}, '', 5, { [5]: 999.31145 }, null]
+
+    tests.forEach((object) => {
+        it(`stringifies ${JSON.stringify(object)} correctly`, () => {
+            expect(_.JSONDecode(_.JSONEncode(object))).toEqual(object)
+            expect(_.JSONEncode(object).replace(/: /g, ':')).toEqual(JSON.stringify(object))
+        })
+    })
+
+    it('fails to decode invalid values', () => {
+        expect(() => _.JSONDecode('{invalid')).toThrow()
+    })
+})
