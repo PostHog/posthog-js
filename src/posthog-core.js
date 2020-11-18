@@ -656,11 +656,13 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         data['$set'] = options['$set']
     }
 
-    var truncated_data = _.truncate(data, 255)
-    var json_data = _.JSONEncode(truncated_data)
+    if (!options._noTruncate) {
+        data = _.truncate(data, 255)
+    }
+    var json_data = _.JSONEncode(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
-    const cb = this._prepare_callback(callback, truncated_data)
+    const cb = this._prepare_callback(callback, data)
 
     const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
 
@@ -677,7 +679,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
 
     this.config._onCapture(data)
 
-    return truncated_data
+    return data
 })
 
 PostHogLib.prototype._calculate_event_properties = function (event_name, event_properties, start_timestamp) {

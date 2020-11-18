@@ -86,7 +86,7 @@ describe('SessionRecording', () => {
                     $session_id: 'sid',
                     $snapshot_data: { event: 1 },
                 },
-                { method: 'POST', transport: 'XHR', endpoint: '/e/' }
+                { method: 'POST', transport: 'XHR', endpoint: '/e/', _noTruncate: true }
             )
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
@@ -94,7 +94,7 @@ describe('SessionRecording', () => {
                     $session_id: 'sid',
                     $snapshot_data: { event: 2 },
                 },
-                { method: 'POST', transport: 'XHR', endpoint: '/e/' }
+                { method: 'POST', transport: 'XHR', endpoint: '/e/', _noTruncate: true }
             )
         })
 
