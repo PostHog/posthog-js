@@ -363,10 +363,14 @@ PostHogLib.prototype._handle_unload = function () {
 PostHogLib.prototype._handle_queued_event = function (url, data, { unload = false } = {}) {
     const jsonData = JSON.stringify(data)
     const options = unload ? { transport: 'sendbeacon' } : __NOOPTIONS
+    this.__compress_and_send_json_request(url, jsonData, options, __NOOP)
+}
+
+PostHogLib.prototype.__compress_and_send_json_request = (url, jsonData, options, callback) => {
     if (this.compression['lz64']) {
-        this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, __NOOP)
+        this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
-        this._send_request(url, { data: _.base64Encode(jsonData) }, options, __NOOP)
+        this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
     }
 }
 
@@ -659,7 +663,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     if (!options._noTruncate) {
         data = _.truncate(data, 255)
     }
-    var json_data = JSON.stringify(data)
+    const jsonData = JSON.stringify(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
     const cb = this._prepare_callback(callback, data)
@@ -667,11 +671,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
 
     if (!this.get_config('request_batching') || has_unique_traits) {
-        if (this.compression['lz64']) {
-            this._send_request(url, { data: LZString.compressToBase64(json_data), compression: 'lz64' }, options, cb)
-        } else {
-            this._send_request(url, { data: _.base64Encode(json_data) }, options, cb)
-        }
+        this.__compress_and_send_json_request(url, jsonData, options, cb)
     } else {
         data['timestamp'] = new Date()
         this.__requestQueue.enqueue(url, data)
