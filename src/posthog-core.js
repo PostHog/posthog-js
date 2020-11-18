@@ -361,7 +361,7 @@ PostHogLib.prototype._handle_unload = function () {
 }
 
 PostHogLib.prototype._handle_queued_event = function (url, data, { unload = false } = {}) {
-    const jsonData = _.JSONEncode(data)
+    const jsonData = JSON.stringify(data)
     const options = unload ? { transport: 'sendbeacon' } : __NOOPTIONS
     if (this.compression['lz64']) {
         this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, __NOOP)
@@ -475,7 +475,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                         if (callback) {
                             var response
                             try {
-                                response = _.JSONDecode(req.responseText)
+                                response = JSON.parse(req.responseText)
                             } catch (e) {
                                 console.error(e)
                                 return
@@ -659,7 +659,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     if (!options._noTruncate) {
         data = _.truncate(data, 255)
     }
-    var json_data = _.JSONEncode(data)
+    var json_data = JSON.stringify(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
     const cb = this._prepare_callback(callback, data)
