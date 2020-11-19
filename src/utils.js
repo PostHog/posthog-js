@@ -307,40 +307,37 @@ _.strip_empty_properties = function (p) {
     return ret
 }
 
+// Deep copies an object.
+// It handles cycles by replacing all references to them with `undefined`
+// Also supports customizing native values
 function deepCircularCopy(value, customizer) {
-    const gdcc = '__getDeepCircularCopy__'
+    const gdcc = '__deepCircularCopyInProgress__'
     if (value !== Object(value)) return customizer ? customizer(value) : value // primitive value
 
     const set = gdcc in value
-    const cache = value[gdcc]
-    if (set && typeof cache == 'function') return cache()
+    if (set) return undefined
 
+    value[gdcc] = true
     let result
-    value[gdcc] = () => result
-    if (value instanceof Array) {
+
+    if (_.isArray(value)) {
         result = []
-        for (let i = 0; i < value.length; i++) {
-            result[i] = deepCircularCopy(value[i], customizer)
-        }
+        _.each(value, (it) => {
+            result.push(deepCircularCopy(it, customizer))
+        })
     } else {
         result = {}
-        for (let prop in value)
-            if (prop != gdcc) {
-                result[prop] = deepCircularCopy(value[prop], customizer)
-            } else if (set) {
-                result[prop] = deepCircularCopy(cache, customizer)
+        _.each(value, (val, key) => {
+            if (key !== gdcc) {
+                result[key] = deepCircularCopy(val, customizer)
             }
+        })
     }
-    if (set) {
-        // reset
-        value[gdcc] = cache
-    } else {
-        delete value[gdcc] // unset again
-    }
+    delete value[gdcc]
     return result
 }
 
-_.truncate = (object, maxStringLength) =>
+_.copyAndTruncateStrings = (object, maxStringLength) =>
     deepCircularCopy(
         object,
         (value) => {

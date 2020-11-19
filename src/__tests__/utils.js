@@ -16,8 +16,8 @@ describe(`utils.js`, () => {
     })
 })
 
-describe('_.truncate', () => {
-    given('subject', () => _.truncate(given.target, given.maxStringLength))
+describe('_.copyAndTruncateStrings', () => {
+    given('subject', () => _.copyAndTruncateStrings(given.target, given.maxStringLength))
 
     given('target', () => ({
         key: 'value',
@@ -54,14 +54,12 @@ describe('_.truncate', () => {
 
     it('handles recursive objects', () => {
         given('target', () => {
-            const object = { key: 'vaaaaalue' }
+            const object = { key: 'vaaaaalue', values: ['fooobar'] }
+            object.values.push(object)
             object.ref = object
             return object
         })
 
-        const expected = { key: 'vaaaa' }
-        expected.ref = expected
-
-        expect(given.subject).toEqual(expected)
+        expect(given.subject).toEqual({ key: 'vaaaa', values: ['fooob', undefined] })
     })
 })

@@ -366,7 +366,7 @@ PostHogLib.prototype._handle_queued_event = function (url, data, { unload = fals
     this.__compress_and_send_json_request(url, jsonData, options, __NOOP)
 }
 
-PostHogLib.prototype.__compress_and_send_json_request = (url, jsonData, options, callback) => {
+PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
     if (this.compression['lz64']) {
         this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
@@ -660,9 +660,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         data['$set'] = options['$set']
     }
 
-    if (!options._noTruncate) {
-        data = _.truncate(data, 255)
-    }
+    data = _.copyAndTruncateStrings(data, options._noTruncate ? null : 255)
     const jsonData = JSON.stringify(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
