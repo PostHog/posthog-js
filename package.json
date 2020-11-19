@@ -25,6 +25,7 @@
     "devDependencies": {
         "@babel/core": "^7.0.0",
         "@babel/preset-env": "^7.0.0",
+        "@rollup/plugin-json": "^4.1.0",
         "@rollup/plugin-node-resolve": "^8.1.0",
         "@typescript-eslint/eslint-plugin": "^3.5.0",
         "@typescript-eslint/parser": "^3.5.0",
@@ -60,6 +61,10 @@
         ]
     },
     "jest": {
+        "moduleFileExtensions": [
+            "js",
+            "json"
+        ],
         "setupFilesAfterEnv": [
             "given2/setup"
         ],
