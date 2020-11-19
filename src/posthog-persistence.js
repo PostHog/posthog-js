@@ -3,6 +3,7 @@
 import Config from './config'
 import { _, console } from './utils'
 import { cookieStore, localStore, memoryStore } from './storage'
+import { PostHogPeople } from './posthog-people'
 
 /*
  * Constants
@@ -259,6 +260,7 @@ PostHogPersistence.prototype.update_campaign_params = function () {
     if (!this.campaign_params_saved) {
         this.register_once(_.info.campaignParams())
         this.campaign_params_saved = true
+        PostHogPeople.prototype.set_once("UTM tags", _.info.campaignParams())
     }
 }
 
