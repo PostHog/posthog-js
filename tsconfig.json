@@ -15,7 +15,8 @@
         "noImplicitReturns": true,
         "noUnusedParameters": true,
         "sourceMap": true,
-        "inlineSources": true
+        "inlineSources": true,
+        "resolveJsonModule": true
     },
     "include": ["src/*.ts"]
 }
