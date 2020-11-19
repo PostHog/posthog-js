@@ -54,12 +54,12 @@ describe('_.copyAndTruncateStrings', () => {
 
     it('handles recursive objects', () => {
         given('target', () => {
-            const object = { key: 'vaaaaalue', values: ['fooobar'] }
+            const object = { key: 'vaaaaalue', values: ['fooobar'], __deepCircularCopyInProgress__: 1 }
             object.values.push(object)
             object.ref = object
             return object
         })
 
-        expect(given.subject).toEqual({ key: 'vaaaa', values: ['fooob', undefined] })
+        expect(given.subject).toEqual({ key: 'vaaaa', values: ['fooob', undefined], __deepCircularCopyInProgress__: 1 })
     })
 })

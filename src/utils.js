@@ -310,14 +310,14 @@ _.strip_empty_properties = function (p) {
 // Deep copies an object.
 // It handles cycles by replacing all references to them with `undefined`
 // Also supports customizing native values
+const COPY_IN_PROGRESS_ATTRIBUTE = Symbol ? Symbol('__deepCircularCopyInProgress__') : '__deepCircularCopyInProgress__'
+
 function deepCircularCopy(value, customizer) {
-    const gdcc = '__deepCircularCopyInProgress__'
     if (value !== Object(value)) return customizer ? customizer(value) : value // primitive value
 
-    const set = gdcc in value
-    if (set) return undefined
+    if (COPY_IN_PROGRESS_ATTRIBUTE in value) return undefined
 
-    value[gdcc] = true
+    value[COPY_IN_PROGRESS_ATTRIBUTE] = true
     let result
 
     if (_.isArray(value)) {
@@ -328,12 +328,12 @@ function deepCircularCopy(value, customizer) {
     } else {
         result = {}
         _.each(value, (val, key) => {
-            if (key !== gdcc) {
+            if (key !== COPY_IN_PROGRESS_ATTRIBUTE) {
                 result[key] = deepCircularCopy(val, customizer)
             }
         })
     }
-    delete value[gdcc]
+    delete value[COPY_IN_PROGRESS_ATTRIBUTE]
     return result
 }
 
