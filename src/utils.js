@@ -307,32 +307,50 @@ _.strip_empty_properties = function (p) {
     return ret
 }
 
-/*
- * this function returns a copy of object after truncating it.  If
- * passed an Array or Object it will iterate through obj and
- * truncate all the values recursively.
- */
-_.truncate = function (obj, length) {
-    var ret
+function deepCircularCopy(value, customizer) {
+    const gdcc = '__getDeepCircularCopy__'
+    if (value !== Object(value)) return customizer ? customizer(value) : value // primitive value
 
-    if (typeof obj === 'string') {
-        ret = obj.slice(0, length)
-    } else if (_.isArray(obj)) {
-        ret = []
-        _.each(obj, function (val) {
-            ret.push(_.truncate(val, length))
-        })
-    } else if (_.isObject(obj)) {
-        ret = {}
-        _.each(obj, function (val, key) {
-            ret[key] = _.truncate(val, length)
-        })
+    const set = gdcc in value
+    const cache = value[gdcc]
+    if (set && typeof cache == 'function') return cache()
+
+    let result
+    value[gdcc] = () => result
+    if (value instanceof Array) {
+        result = []
+        for (let i = 0; i < value.length; i++) {
+            result[i] = deepCircularCopy(value[i], customizer)
+        }
     } else {
-        ret = obj
+        result = {}
+        for (let prop in value)
+            if (prop != gdcc) {
+                result[prop] = deepCircularCopy(value[prop], customizer)
+            } else if (set) {
+                result[prop] = deepCircularCopy(cache, customizer)
+            }
     }
-
-    return ret
+    if (set) {
+        // reset
+        value[gdcc] = cache
+    } else {
+        delete value[gdcc] // unset again
+    }
+    return result
 }
+
+_.truncate = (object, maxStringLength) =>
+    deepCircularCopy(
+        object,
+        (value) => {
+            if (typeof value === 'string' && maxStringLength !== null) {
+                value = value.slice(0, maxStringLength)
+            }
+            return value
+        },
+        {}
+    )
 
 _.base64Encode = function (data) {
     var b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
