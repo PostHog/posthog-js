@@ -263,7 +263,7 @@ var autocapture = {
             }
         }, this)
 
-        var json_data = _.JSONEncode({
+        var json_data = JSON.stringify({
             token: token,
             distinct_id: instance.get_distinct_id(),
         })

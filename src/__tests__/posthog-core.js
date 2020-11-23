@@ -98,16 +98,19 @@ describe('capture()', () => {
 
     given('overrides', () => ({
         get_config: jest.fn(),
+        config: {
+            _onCapture: jest.fn(),
+        },
         persistence: {
             remove_event_timer: jest.fn(),
             update_search_keyword: jest.fn(),
             update_campaign_params: jest.fn(),
             properties: jest.fn(),
         },
+        compression: {},
     }))
 
-    // :TODO: handle recursive event properties (issue #117)
-    xit('handles recursive objects', () => {
+    it('handles recursive objects', () => {
         given('eventProperties', () => {
             const props = {}
             props.recurse = props

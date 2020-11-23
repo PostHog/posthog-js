@@ -30,7 +30,7 @@ export class PostHogFeatureFlags {
         }
 
         const token = this.instance.get_config('token')
-        const json_data = _.JSONEncode({
+        const json_data = JSON.stringify({
             token: token,
             distinct_id: this.instance.get_distinct_id(),
         })
