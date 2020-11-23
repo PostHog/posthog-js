@@ -160,7 +160,7 @@ PostHogPersistence.prototype.save = function () {
         return
     }
     this._expire_notification_campaigns()
-    this.storage.set(this.name, _.JSONEncode(this['props']), this.expire_days, this.cross_subdomain, this.secure)
+    this.storage.set(this.name, JSON.stringify(this['props']), this.expire_days, this.cross_subdomain, this.secure)
 }
 
 PostHogPersistence.prototype.remove = function () {

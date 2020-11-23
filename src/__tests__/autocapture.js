@@ -842,7 +842,7 @@ describe('Autocapture system', () => {
                 'https://test.com/decide/',
                 {
                     data: _.base64Encode(
-                        _.JSONEncode({
+                        JSON.stringify({
                             token: 'testtoken',
                             distinct_id: 'distinctid',
                         })

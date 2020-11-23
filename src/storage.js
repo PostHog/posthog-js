@@ -1,4 +1,4 @@
-import { _, console } from './utils'
+import { console } from './utils'
 
 var DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
 
@@ -24,7 +24,7 @@ export const cookieStore = {
     parse: function (name) {
         var cookie
         try {
-            cookie = _.JSONDecode(cookieStore.get(name)) || {}
+            cookie = JSON.parse(cookieStore.get(name)) || {}
         } catch (err) {
             // noop
         }
@@ -113,7 +113,7 @@ export const localStore = {
 
     parse: function (name) {
         try {
-            return _.JSONDecode(localStore.get(name)) || {}
+            return JSON.parse(localStore.get(name)) || {}
         } catch (err) {
             // noop
         }
