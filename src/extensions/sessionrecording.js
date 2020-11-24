@@ -75,8 +75,7 @@ export class SessionRecording {
             method: 'POST',
             endpoint: this.endpoint,
             _noTruncate: true,
-            // Allow batching session recordings only on newer versions of posthog to respect other properties
-            _batchWithOptions: this.endpoint !== BASE_ENDPOINT,
+            _batchKey: 'sessionRecording',
         })
     }
 }

@@ -33,11 +33,11 @@ export class RequestQueue {
         this._poller = setTimeout(() => {
             if (this._event_queue.length > 0) {
                 const requests = this.formatQueue()
-                for (let url in requests) {
-                    let { data, options } = requests[url]
-                    _.each(data, (_, key) => {
-                        data[key]['offset'] = Math.abs(data[key]['timestamp'] - this.getTime())
-                        delete data[key]['timestamp']
+                for (let key in requests) {
+                    let { url, data, options } = requests[key]
+                    _.each(data, (_, dataKey) => {
+                        data[dataKey]['offset'] = Math.abs(data[dataKey]['timestamp'] - this.getTime())
+                        delete data[dataKey]['timestamp']
                     })
                     this.handlePollRequest(url, data, options)
                 }
@@ -78,8 +78,9 @@ export class RequestQueue {
         const requests = {}
         _.each(this._event_queue, (request) => {
             const { url, data, options } = request
-            if (requests[url] === undefined) requests[url] = { data: [], options }
-            requests[url].data.push(data)
+            const key = options?._batchKey || url
+            if (requests[key] === undefined) requests[key] = { data: [], url, options }
+            requests[key].data.push(data)
         })
         return requests
     }

@@ -16,6 +16,7 @@ describe('RequestQueue', () => {
         given.queue.enqueue('/e', { event: 'foo', timestamp: EPOCH - 3000 }, { transport: 'XHR' })
         given.queue.enqueue('/identify', { event: '$identify', timestamp: EPOCH - 2000 })
         given.queue.enqueue('/e', { event: 'bar', timestamp: EPOCH - 1000 })
+        given.queue.enqueue('/e', { event: 'zeta', timestamp: EPOCH }, { _batchKey: 'sessionRecording' })
 
         given.queue.poll()
 
@@ -23,7 +24,7 @@ describe('RequestQueue', () => {
 
         jest.runOnlyPendingTimers()
 
-        expect(given.handlePollRequest).toHaveBeenCalledTimes(2)
+        expect(given.handlePollRequest).toHaveBeenCalledTimes(3)
         expect(given.handlePollRequest).toHaveBeenCalledWith(
             '/e',
             [
@@ -37,6 +38,9 @@ describe('RequestQueue', () => {
             [{ event: '$identify', offset: 2000 }],
             undefined
         )
+        expect(given.handlePollRequest).toHaveBeenCalledWith('/e', [{ event: 'zeta', offset: 0 }], {
+            _batchKey: 'sessionRecording',
+        })
     })
 
     it('clears polling flag after 4 empty iterations', () => {

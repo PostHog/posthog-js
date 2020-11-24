@@ -90,7 +90,13 @@ describe('SessionRecording', () => {
                     $session_id: 'sid',
                     $snapshot_data: { event: 1 },
                 },
-                { method: 'POST', transport: 'XHR', endpoint: '/e/', _noTruncate: true, _batchWithOptions: false }
+                {
+                    method: 'POST',
+                    transport: 'XHR',
+                    endpoint: '/e/',
+                    _noTruncate: true,
+                    _batchKey: 'sessionRecording',
+                }
             )
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
@@ -98,26 +104,13 @@ describe('SessionRecording', () => {
                     $session_id: 'sid',
                     $snapshot_data: { event: 2 },
                 },
-                { method: 'POST', transport: 'XHR', endpoint: '/e/', _noTruncate: true, _batchWithOptions: false }
-            )
-        })
-
-        it('sends as batches when different endpoint', () => {
-            given.sessionRecording.endpoint = '/s/'
-
-            given.sessionRecording.startRecordingIfEnabled()
-
-            _emit({ event: 1 })
-
-            given.sessionRecording.submitRecordings()
-
-            expect(given.posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
                 {
-                    $session_id: 'sid',
-                    $snapshot_data: { event: 1 },
-                },
-                { method: 'POST', transport: 'XHR', endpoint: '/s/', _noTruncate: true, _batchWithOptions: true }
+                    method: 'POST',
+                    transport: 'XHR',
+                    endpoint: '/e/',
+                    _noTruncate: true,
+                    _batchKey: 'sessionRecording',
+                }
             )
         })
 
