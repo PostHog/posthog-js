@@ -35,6 +35,8 @@ export class SessionRecording {
         this.emit = true
         this._startCapture()
         this.snapshots.forEach((properties) => this._captureSnapshot(properties))
+        // If session recording is enabled, we send events to server more frequently
+        this.instance._requestQueue.setPollInterval(300)
     }
 
     _startCapture() {

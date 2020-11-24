@@ -222,7 +222,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this.__requestQueue = new RequestQueue(_.bind(this._handle_queued_event, this))
+    this._requestQueue = new RequestQueue(_.bind(this._handle_queued_event, this))
     this.__request_queue = []
 
     this['persistence'] = new PostHogPersistence(this['config'])
@@ -262,7 +262,7 @@ PostHogLib.prototype._loaded = function () {
 PostHogLib.prototype._start_queue_if_opted_in = function () {
     if (!this.has_opted_out_capturing()) {
         if (this.get_config('request_batching')) {
-            this.__requestQueue.poll()
+            this._requestQueue.poll()
         }
     }
 }
@@ -328,7 +328,7 @@ PostHogLib.prototype._handle_unload = function () {
     if (this.get_config('capture_pageview')) {
         this.capture('$pageleave')
     }
-    this.__requestQueue.unload()
+    this._requestQueue.unload()
 }
 
 PostHogLib.prototype._handle_queued_event = function (url, data, { unload = false } = {}) {
@@ -643,7 +643,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         this.__compress_and_send_json_request(url, jsonData, options, cb)
     } else {
         data['timestamp'] = new Date()
-        this.__requestQueue.enqueue(url, data)
+        this._requestQueue.enqueue(url, data)
     }
 
     this.config._onCapture(data)
