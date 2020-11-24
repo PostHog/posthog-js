@@ -691,10 +691,6 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     return properties
 }
 
-PostHogLib.prototype._create_map_key = function (group_key, group_id) {
-    return group_key + '_' + JSON.stringify(group_id)
-}
-
 /**
  * Capture a page view event.
  * This function is called by default on page load unless the
