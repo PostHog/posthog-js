@@ -19,8 +19,8 @@ export class RequestQueue {
         }
     }
 
-    enqueue(url, data) {
-        this._event_queue.push({ url, data })
+    enqueue(url, data, options) {
+        this._event_queue.push({ url, data, options })
 
         if (!this.isPolling) {
             this.isPolling = true
@@ -34,12 +34,12 @@ export class RequestQueue {
             if (this._event_queue.length > 0) {
                 const requests = this.formatQueue()
                 for (let url in requests) {
-                    let data = requests[url]
+                    let { data, options } = requests[url]
                     _.each(data, (_, key) => {
                         data[key]['offset'] = Math.abs(data[key]['timestamp'] - this.getTime())
                         delete data[key]['timestamp']
                     })
-                    this.handlePollRequest(url, data)
+                    this.handlePollRequest(url, data, options)
                 }
                 this._event_queue.length = 0 // flush the _event_queue
             } else {
@@ -69,16 +69,17 @@ export class RequestQueue {
         const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
         this._event_queue.length = 0
         for (let url in requests) {
-            this.handlePollRequest(url, requests[url], { unload: true })
+            const { data, options } = requests[url]
+            this.handlePollRequest(url, data, { ...options, transport: 'sendbeacon' })
         }
     }
 
     formatQueue() {
         const requests = {}
         _.each(this._event_queue, (request) => {
-            const { url, data } = request
-            if (requests[url] === undefined) requests[url] = []
-            requests[url].push(data)
+            const { url, data, options } = request
+            if (requests[url] === undefined) requests[url] = { data: [], options }
+            requests[url].data.push(data)
         })
         return requests
     }

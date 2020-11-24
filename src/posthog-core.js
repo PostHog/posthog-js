@@ -331,10 +331,9 @@ PostHogLib.prototype._handle_unload = function () {
     this._requestQueue.unload()
 }
 
-PostHogLib.prototype._handle_queued_event = function (url, data, { unload = false } = {}) {
+PostHogLib.prototype._handle_queued_event = function (url, data, options) {
     const jsonData = JSON.stringify(data)
-    const options = unload ? { transport: 'sendbeacon' } : __NOOPTIONS
-    this.__compress_and_send_json_request(url, jsonData, options, __NOOP)
+    this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
@@ -643,7 +642,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         this.__compress_and_send_json_request(url, jsonData, options, cb)
     } else {
         data['timestamp'] = new Date()
-        this._requestQueue.enqueue(url, data)
+        this._requestQueue.enqueue(url, data, options)
     }
 
     this.config._onCapture(data)
