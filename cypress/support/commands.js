@@ -41,11 +41,9 @@ Cypress.Commands.add('posthogInit', (options) => {
     })
 })
 
-Cypress.Commands.add('phCaptures', (attribute = null, options = {}) => {
+Cypress.Commands.add('phCaptures', (options = {}) => {
     function resolve() {
-        const values = $captures.map((event) => event[attribute])
-
-        return cy.verifyUpcomingAssertions(values, options, {
+        return cy.verifyUpcomingAssertions($captures, options, {
             onRetry: resolve,
         })
     }

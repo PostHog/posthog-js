@@ -66,6 +66,14 @@ export class SessionRecording {
             blockClass: 'ph-no-capture', // Does not capture the element at all
             ignoreClass: 'ph-ignore-input', // Ignores content of input but still records the input element
         })
+
+        // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
+        //   Dropping the initial event is fine (it's always captured by rrweb).
+        this.instance._addCaptureHook((eventName) => {
+            if (eventName === '$pageview') {
+                window.rrweb.record.addCustomEvent('$pageview', { href: window.location.href })
+            }
+        })
     }
 
     _captureSnapshot(properties) {

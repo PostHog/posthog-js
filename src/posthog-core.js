@@ -223,6 +223,7 @@ PostHogLib.prototype._init = function (token, config, name) {
     this['_jsc'] = function () {}
 
     this._requestQueue = new RequestQueue(_.bind(this._handle_queued_event, this))
+    this.__captureHooks = []
     this.__request_queue = []
 
     this['persistence'] = new PostHogPersistence(this['config'])
@@ -645,10 +646,19 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         this.__compress_and_send_json_request(url, jsonData, options, cb)
     }
 
-    this.config._onCapture(data)
+    this._invokeCaptureHooks(event_name)
 
     return data
 })
+
+PostHogLib.prototype._addCaptureHook = function (callback) {
+    this.__captureHooks.push(callback)
+}
+
+PostHogLib.prototype._invokeCaptureHooks = function (eventName) {
+    this.config._onCapture(eventName)
+    _.each(this.__captureHooks, (callback) => callback(eventName))
+}
 
 PostHogLib.prototype._calculate_event_properties = function (event_name, event_properties, start_timestamp) {
     // set defaults
