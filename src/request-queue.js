@@ -6,7 +6,6 @@ export class RequestQueue {
         this.isPolling = true // flag to continue to recursively poll or not
         this._event_queue = []
         this._empty_queue_count = 0 // to track empty polls
-        this.pollInterval = pollInterval
         this._poller = function () {} // to become interval for reference to clear later
         this._pollInterval = pollInterval
     }
@@ -78,7 +77,7 @@ export class RequestQueue {
         const requests = {}
         _.each(this._event_queue, (request) => {
             const { url, data, options } = request
-            const key = options?._batchKey || url
+            const key = (options ? options._batchKey : null) || url
             if (requests[key] === undefined) requests[key] = { data: [], url, options }
             requests[key].data.push(data)
         })
