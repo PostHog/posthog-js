@@ -3,7 +3,6 @@
 describe('Session recording', () => {
     given('options', () => ({}))
 
-    // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     beforeEach(() => {
         cy.route({
             method: 'POST',
