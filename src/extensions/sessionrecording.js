@@ -3,13 +3,15 @@ import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
 import sessionIdGenerator from './sessionid'
 
+const BASE_ENDPOINT = '/e/'
+
 export class SessionRecording {
     constructor(instance) {
         this.instance = instance
         this.captureStarted = false
         this.snapshots = []
         this.emit = false
-        this.endpoint = '/e/'
+        this.endpoint = BASE_ENDPOINT
     }
 
     startRecordingIfEnabled() {
@@ -67,12 +69,14 @@ export class SessionRecording {
     }
 
     _captureSnapshot(properties) {
-        // :TRICKY: Make sure we don't batch these requests, use a custom endpoint and don't truncate the strings.
+        // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
             _noTruncate: true,
+            // Allow batching session recordings only on newer versions of posthog to respect other properties
+            _batchWithOptions: this.endpoint !== BASE_ENDPOINT,
         })
     }
 }
