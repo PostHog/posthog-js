@@ -21,7 +21,7 @@ export class RequestQueue {
     }
 
     poll() {
-        clearInterval(this._poller)
+        clearTimeout(this._poller)
         this._poller = setTimeout(() => {
             if (this._event_queue.length > 0) {
                 const requests = this.formatQueue()
@@ -57,7 +57,7 @@ export class RequestQueue {
     }
 
     unload() {
-        clearInterval(this._poller)
+        clearTimeout(this._poller)
         const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
         this._event_queue.length = 0
         for (let url in requests) {
