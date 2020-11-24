@@ -32,7 +32,7 @@ describe('Session recording', () => {
             .type('hello posthog!')
             .then(() => {
                 const requests = cy.state('requests').filter(({ alias }) => alias === 'session-recording')
-                expect(requests.length).to.be.above(2).and.to.be.below(50)
+                expect(requests.length).to.be.above(1).and.to.be.below(8)
             })
     })
 })
