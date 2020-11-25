@@ -30,10 +30,10 @@ describe('Event capture', () => {
         start()
 
         cy.get('[data-cy-custom-event-button]').click()
-        cy.phCaptures('event').should('deep.equal', ['$pageview', '$autocapture', 'custom-event'])
+        cy.phCaptures().should('deep.equal', ['$pageview', '$autocapture', 'custom-event'])
 
         cy.reload()
-        cy.phCaptures('event').should('deep.equal', ['$pageview', '$autocapture', 'custom-event', '$pageleave'])
+        cy.phCaptures().should('deep.equal', ['$pageview', '$autocapture', 'custom-event', '$pageleave'])
     })
 
     it('captures $feature_flag_called', () => {
@@ -41,7 +41,7 @@ describe('Event capture', () => {
 
         cy.get('[data-cy-feature-flag-button]').click()
 
-        cy.phCaptures('event').should('include', '$feature_flag_called')
+        cy.phCaptures().should('include', '$feature_flag_called')
     })
 
     describe('session recording enabled from API', () => {
@@ -52,7 +52,7 @@ describe('Event capture', () => {
         it('captures $snapshot events', () => {
             start()
 
-            cy.phCaptures('event').should('include', '$snapshot')
+            cy.phCaptures().should('include', '$snapshot')
         })
 
         describe('but disabled from config', () => {
@@ -63,7 +63,7 @@ describe('Event capture', () => {
 
                 cy.wait(1000)
 
-                cy.phCaptures('event').should('not.include', '$snapshot')
+                cy.phCaptures().should('not.include', '$snapshot')
             })
         })
     })
@@ -76,7 +76,7 @@ describe('Event capture', () => {
 
             cy.wait(50)
             cy.get('[data-cy-custom-event-button]').click()
-            cy.phCaptures('event').should('deep.equal', ['$pageview', 'custom-event'])
+            cy.phCaptures().should('deep.equal', ['$pageview', 'custom-event'])
         })
     })
 
@@ -89,7 +89,7 @@ describe('Event capture', () => {
             cy.get('[data-cy-custom-event-button]').click()
             cy.reload()
 
-            cy.phCaptures('event').should('deep.equal', ['$autocapture', 'custom-event'])
+            cy.phCaptures().should('deep.equal', ['$autocapture', 'custom-event'])
         })
     })
 
@@ -103,7 +103,7 @@ describe('Event capture', () => {
             cy.get('[data-cy-feature-flag-button]').click()
             cy.reload()
 
-            cy.phCaptures('event').should('deep.equal', ['$pageview'])
+            cy.phCaptures().should('deep.equal', ['$pageview'])
         })
 
         it('does not send session recording events', () => {
@@ -115,7 +115,7 @@ describe('Event capture', () => {
             cy.resetPhCaptures()
 
             cy.get('[data-cy-custom-event-button]').click()
-            cy.phCaptures('event').should('deep.equal', [])
+            cy.phCaptures().should('deep.equal', [])
         })
     })
 })

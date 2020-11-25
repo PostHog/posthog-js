@@ -108,6 +108,7 @@ describe('capture()', () => {
             properties: jest.fn(),
         },
         compression: {},
+        __captureHooks: [],
     }))
 
     it('handles recursive objects', () => {
@@ -118,6 +119,16 @@ describe('capture()', () => {
         })
 
         expect(() => given.subject()).not.toThrow()
+    })
+
+    it('calls callbacks added via _addCaptureHook', () => {
+        const hook = jest.fn()
+
+        given.lib._addCaptureHook(hook)
+
+        given.subject()
+
+        expect(hook).toHaveBeenCalledWith('$event')
     })
 })
 
