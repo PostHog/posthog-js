@@ -3,7 +3,6 @@ import { LZString } from './lz-string'
 import Config from './config'
 import { _, console, userAgent, window, document, navigator } from './utils'
 import { autocapture } from './autocapture'
-import { LinkCapture } from './dom-capture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
@@ -71,7 +70,6 @@ var DEFAULT_CONFIG = {
     img: false,
     capture_pageview: true,
     debug: false,
-    capture_links_timeout: 300,
     cookie_expiration: 365,
     upgrade: false,
     disable_session_recording: false,
@@ -92,8 +90,6 @@ var DEFAULT_CONFIG = {
     // Used for internal testing
     _onCapture: () => {},
 }
-
-var DOM_LOADED = false
 
 /**
  * PostHog Library Object
@@ -227,7 +223,6 @@ PostHogLib.prototype._init = function (token, config, name) {
     this['_jsc'] = function () {}
 
     this.__requestQueue = new RequestQueue(_.bind(this._handle_queued_event, this))
-    this.__dom_loaded_queue = []
     this.__request_queue = []
 
     this['persistence'] = new PostHogPersistence(this['config'])
@@ -273,14 +268,6 @@ PostHogLib.prototype._start_queue_if_opted_in = function () {
 }
 
 PostHogLib.prototype._dom_loaded = function () {
-    _.each(
-        this.__dom_loaded_queue,
-        function (item) {
-            this._capture_dom.apply(this, item)
-        },
-        this
-    )
-
     if (!this.has_opted_out_capturing()) {
         _.each(
             this.__request_queue,
@@ -291,25 +278,9 @@ PostHogLib.prototype._dom_loaded = function () {
         )
     }
 
-    delete this.__dom_loaded_queue
     delete this.__request_queue
 
     this._start_queue_if_opted_in()
-}
-
-PostHogLib.prototype._capture_dom = function (DomClass, args) {
-    if (this.get_config('img')) {
-        console.error("You can't use DOM capturing functions with img = true.")
-        return false
-    }
-
-    if (!DOM_LOADED) {
-        this.__dom_loaded_queue.push([DomClass, args])
-        return false
-    }
-
-    var dt = new DomClass().init(this)
-    return dt.capture.apply(dt, args)
 }
 
 /**
@@ -607,8 +578,6 @@ PostHogLib.prototype.push = function (item) {
  *     // capture an event using navigator.sendBeacon
  *     posthog.capture('Left page', {'duration_seconds': 35}, {transport: 'sendBeacon'});
  *
- * To capture link clicks or form submissions, see capture_links() or capture_forms().
- *
  * @param {String} event_name The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', 'Item Purchased', etc.
  * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
  * @param {Object} [options] Optional configuration for this capture request.
@@ -738,69 +707,6 @@ PostHogLib.prototype.capture_pageview = function (page) {
         page = document.location.href
     }
     this.capture('$pageview')
-}
-
-/**
- * Capture clicks on a set of document elements. Selector must be a
- * valid query. Elements must exist on the page at the time capture_links is called.
- *
- * ### Usage:
- *
- *     // capture click for link id #nav
- *     posthog.capture_links('#nav', 'Clicked Nav Link');
- *
- * ### Notes:
- *
- * This function will wait up to 300 ms for the PostHog
- * servers to respond. If they have not responded by that time
- * it will head to the link without ensuring that your event
- * has been captured.  To configure this timeout please see the
- * set_config() documentation below.
- *
- * If you pass a function in as the properties argument, the
- * function will receive the DOMElement that triggered the
- * event as an argument.  You are expected to return an object
- * from the function; any properties defined on this object
- * will be sent to posthog as event properties.
- *
- * @type {Function}
- * @param {Object|String} query A valid DOM query, element or jQuery-esque list
- * @param {String} event_name The name of the event to capture
- * @param {Object|Function} [properties] A properties object or function that returns a dictionary of properties when passed a DOMElement
- */
-PostHogLib.prototype.capture_links = function () {
-    return this._capture_dom.call(this, LinkCapture, arguments)
-}
-
-/**
- * Capture form submissions. Selector must be a valid query.
- *
- * ### Usage:
- *
- *     // capture submission for form id 'register'
- *     posthog.capture_forms('#register', 'Created Account');
- *
- * ### Notes:
- *
- * This function will wait up to 300 ms for the posthog
- * servers to respond, if they have not responded by that time
- * it will head to the link without ensuring that your event
- * has been captured.  To configure this timeout please see the
- * set_config() documentation below.
- *
- * If you pass a function in as the properties argument, the
- * function will receive the DOMElement that triggered the
- * event as an argument.  You are expected to return an object
- * from the function; any properties defined on this object
- * will be sent to posthog as event properties.
- *
- * @type {Function}
- * @param {Object|String} query A valid DOM query, element or jQuery-esque list
- * @param {String} event_name The name of the event to capture
- * @param {Object|Function} [properties] This can be a set of properties, or a function that returns a set of properties after being passed a DOMElement
- */
-PostHogLib.prototype.capture_forms = function () {
-    return this._capture_dom.call(this, FormCaptureer, arguments)
 }
 
 /**
@@ -1137,10 +1043,6 @@ PostHogLib.prototype.alias = function (alias, original) {
  *       // if this is true, posthog cookies will be marked as
  *       // secure, meaning they will only be transmitted over https
  *       secure_cookie: false
- *
- *       // the amount of time capture_links will
- *       // wait for PostHog's servers to respond
- *       capture_links_timeout: 300
  *
  *       // should we capture a page view on page load
  *       capture_pageview: true
@@ -1537,8 +1439,6 @@ PostHogLib.prototype.decodeLZ64 = LZString.decompressFromBase64
 PostHogLib.prototype['init'] = PostHogLib.prototype.init
 PostHogLib.prototype['reset'] = PostHogLib.prototype.reset
 PostHogLib.prototype['capture'] = PostHogLib.prototype.capture
-PostHogLib.prototype['capture_links'] = PostHogLib.prototype.capture_links
-PostHogLib.prototype['capture_forms'] = PostHogLib.prototype.capture_forms
 PostHogLib.prototype['capture_pageview'] = PostHogLib.prototype.capture_pageview
 PostHogLib.prototype['register'] = PostHogLib.prototype.register
 PostHogLib.prototype['register_once'] = PostHogLib.prototype.register_once
@@ -1631,7 +1531,6 @@ var add_dom_loaded_handler = function () {
         }
         dom_loaded_handler.done = true
 
-        DOM_LOADED = true
         ENQUEUE_REQUESTS = false
 
         _.each(instances, function (inst) {

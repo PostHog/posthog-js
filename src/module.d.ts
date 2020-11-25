@@ -37,8 +37,6 @@ declare class posthog {
      *     // capture an event using navigator.sendBeacon
      *     posthog.capture('Left page', {'duration_seconds': 35}, {transport: 'sendBeacon'});
      *
-     * To capture link clicks or form submissions, see capture_links() or capture_forms().
-     *
      * @param {String} event_name The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', 'Item Purchased', etc.
      * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
      * @param {Object} [options] Optional configuration for this capture request.
@@ -51,73 +49,6 @@ declare class posthog {
         options?: { transport: 'XHR' | 'sendBeacon' },
         callback?: posthog.CaptureCallback
     ): posthog.CaptureResult
-
-    /**
-     * Capture clicks on a set of document elements. Selector must be a
-     * valid query. Elements must exist on the page at the time capture_links is called.
-     *
-     * ### Usage:
-     *
-     *     // capture click for link id #nav
-     *     posthog.capture_links('#nav', 'Clicked Nav Link');
-     *
-     * ### Notes:
-     *
-     * This function will wait up to 300 ms for the PostHog
-     * servers to respond. If they have not responded by that time
-     * it will head to the link without ensuring that your event
-     * has been captured.  To configure this timeout please see the
-     * set_config() documentation below.
-     *
-     * If you pass a function in as the properties argument, the
-     * function will receive the DOMElement that triggered the
-     * event as an argument.  You are expected to return an object
-     * from the function; any properties defined on this object
-     * will be sent to posthog as event properties.
-     *
-     * @type {Function}
-     * @param {Object|String} query A valid DOM query, element or jQuery-esque list
-     * @param {String} event_name The name of the event to capture
-     * @param {Object|Function} [properties] A properties object or function that returns a dictionary of properties when passed a DOMElement
-     */
-    static capture_links(
-        query: any,
-        event_name: string,
-        properties?: posthog.Properties | ((element: Element) => posthog.Properties)
-    ): any
-
-    /**
-     * Capture form submissions. Selector must be a valid query.
-     *
-     * ### Usage:
-     *
-     *     // capture submission for form id 'register'
-     *     posthog.capture_forms('#register', 'Created Account');
-     *
-     * ### Notes:
-     *
-     * This function will wait up to 300 ms for the posthog
-     * servers to respond, if they have not responded by that time
-     * it will head to the link without ensuring that your event
-     * has been captured.  To configure this timeout please see the
-     * set_config() documentation below.
-     *
-     * If you pass a function in as the properties argument, the
-     * function will receive the DOMElement that triggered the
-     * event as an argument.  You are expected to return an object
-     * from the function; any properties defined on this object
-     * will be sent to posthog as event properties.
-     *
-     * @type {Function}
-     * @param {Object|String} query A valid DOM query, element or jQuery-esque list
-     * @param {String} event_name The name of the event to capture
-     * @param {Object|Function} [properties] This can be a set of properties, or a function that returns a set of properties after being passed a DOMElement
-     */
-    static capture_forms(
-        query: any,
-        event_name: string,
-        properties?: posthog.Properties | ((element: Element) => posthog.Properties)
-    ): any
 
     /**
      * Capture a page view event, which is currently ignored by the server.
@@ -303,10 +234,6 @@ declare class posthog {
      *       // if this is true, posthog cookies will be marked as
      *       // secure, meaning they will only be transmitted over https
      *       secure_cookie: false
-     *
-     *       // the amount of time capture_links will
-     *       // wait for PostHog's servers to respond
-     *       capture_links_timeout: 300
      *
      *       // should we capture a page view on page load
      *       capture_pageview: true
@@ -538,7 +465,6 @@ declare namespace posthog {
         img?: boolean
         capture_pageview?: boolean
         debug?: boolean
-        capture_links_timeout?: number
         cookie_expiration?: number
         upgrade?: boolean
         disable_persistence?: boolean
