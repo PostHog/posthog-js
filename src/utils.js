@@ -6,7 +6,7 @@ import Config from './config'
  * minimize file size.
  */
 
-var ArrayProto = Array.prototype,
+const ArrayProto = Array.prototype,
     FuncProto = Function.prototype,
     ObjProto = Object.prototype,
     slice = ArrayProto.slice,
@@ -19,7 +19,7 @@ var ArrayProto = Array.prototype,
     screen = window.screen,
     userAgent = navigator.userAgent
 
-var nativeBind = FuncProto.bind,
+const nativeBind = FuncProto.bind,
     nativeForEach = ArrayProto.forEach,
     nativeIndexOf = ArrayProto.indexOf,
     nativeIsArray = Array.isArray,
