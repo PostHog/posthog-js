@@ -13,9 +13,10 @@ describe('RequestQueue', () => {
     })
 
     it('handles poll after enqueueing requests', () => {
-        given.queue.enqueue('/e', { event: 'foo', timestamp: EPOCH - 3000 })
+        given.queue.enqueue('/e', { event: 'foo', timestamp: EPOCH - 3000 }, { transport: 'XHR' })
         given.queue.enqueue('/identify', { event: '$identify', timestamp: EPOCH - 2000 })
         given.queue.enqueue('/e', { event: 'bar', timestamp: EPOCH - 1000 })
+        given.queue.enqueue('/e', { event: 'zeta', timestamp: EPOCH }, { _batchKey: 'sessionRecording' })
 
         given.queue.poll()
 
@@ -23,12 +24,23 @@ describe('RequestQueue', () => {
 
         jest.runOnlyPendingTimers()
 
-        expect(given.handlePollRequest).toHaveBeenCalledTimes(2)
-        expect(given.handlePollRequest).toHaveBeenCalledWith('/e', [
-            { event: 'foo', offset: 3000 },
-            { event: 'bar', offset: 1000 },
-        ])
-        expect(given.handlePollRequest).toHaveBeenCalledWith('/identify', [{ event: '$identify', offset: 2000 }])
+        expect(given.handlePollRequest).toHaveBeenCalledTimes(3)
+        expect(given.handlePollRequest).toHaveBeenCalledWith(
+            '/e',
+            [
+                { event: 'foo', offset: 3000 },
+                { event: 'bar', offset: 1000 },
+            ],
+            { transport: 'XHR' }
+        )
+        expect(given.handlePollRequest).toHaveBeenCalledWith(
+            '/identify',
+            [{ event: '$identify', offset: 2000 }],
+            undefined
+        )
+        expect(given.handlePollRequest).toHaveBeenCalledWith('/e', [{ event: 'zeta', offset: 0 }], {
+            _batchKey: 'sessionRecording',
+        })
     })
 
     it('clears polling flag after 4 empty iterations', () => {
@@ -61,12 +73,12 @@ describe('RequestQueue', () => {
                 { event: 'foo', timestamp: 1_610_000_000 },
                 { event: 'bar', timestamp: 1_630_000_000 },
             ],
-            { unload: true }
+            { transport: 'sendbeacon' }
         )
         expect(given.handlePollRequest).toHaveBeenCalledWith(
             '/identify',
             [{ event: '$identify', timestamp: 1_620_000_000 }],
-            { unload: true }
+            { transport: 'sendbeacon' }
         )
     })
 })

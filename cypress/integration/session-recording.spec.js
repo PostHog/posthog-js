@@ -3,7 +3,6 @@
 describe('Session recording', () => {
     given('options', () => ({}))
 
-    // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     beforeEach(() => {
         cy.route({
             method: 'POST',
@@ -33,7 +32,7 @@ describe('Session recording', () => {
             .type('hello posthog!')
             .then(() => {
                 const requests = cy.state('requests').filter(({ alias }) => alias === 'session-recording')
-                expect(requests.length).to.be.above(2).and.to.be.below(50)
+                expect(requests.length).to.be.above(1).and.to.be.below(8)
             })
     })
 })

@@ -3,13 +3,15 @@ import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
 import sessionIdGenerator from './sessionid'
 
+const BASE_ENDPOINT = '/e/'
+
 export class SessionRecording {
     constructor(instance) {
         this.instance = instance
         this.captureStarted = false
         this.snapshots = []
         this.emit = false
-        this.endpoint = '/e/'
+        this.endpoint = BASE_ENDPOINT
     }
 
     startRecordingIfEnabled() {
@@ -35,6 +37,8 @@ export class SessionRecording {
         this.emit = true
         this._startCapture()
         this.snapshots.forEach((properties) => this._captureSnapshot(properties))
+        // If session recording is enabled, we send events to server more frequently
+        this.instance._requestQueue.setPollInterval(300)
     }
 
     _startCapture() {
@@ -65,12 +69,13 @@ export class SessionRecording {
     }
 
     _captureSnapshot(properties) {
-        // :TRICKY: Make sure we don't batch these requests, use a custom endpoint and don't truncate the strings.
+        // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
             _noTruncate: true,
+            _batchKey: 'sessionRecording',
         })
     }
 }
