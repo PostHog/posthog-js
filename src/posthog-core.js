@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
 import Config from './config'
-import { _, console, userAgent, window, document, navigator } from './utils'
+import { _, console, userAgent, window, document } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'

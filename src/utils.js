@@ -12,11 +12,9 @@ const ArrayProto = Array.prototype,
     slice = ArrayProto.slice,
     toString = ObjProto.toString,
     hasOwnProperty = ObjProto.hasOwnProperty,
-    windowConsole = window.console,
-    navigator = window.navigator,
-    document = window.document,
-    windowOpera = window.opera,
-    screen = window.screen,
+    win = typeof window !== 'undefined' ? window : {},
+    navigator = win.navigator || { userAgent: '' },
+    document = win.document || {},
     userAgent = navigator.userAgent
 
 const nativeBind = FuncProto.bind,
@@ -36,38 +34,38 @@ var _ = {
 var console = {
     /** @type {function(...*)} */
     log: function () {
-        if (Config.DEBUG && !_.isUndefined(windowConsole) && windowConsole) {
+        if (Config.DEBUG && !_.isUndefined(window.console) && window.console) {
             try {
-                windowConsole.log.apply(windowConsole, arguments)
+                window.console.log.apply(window.console, arguments)
             } catch (err) {
                 _.each(arguments, function (arg) {
-                    windowConsole.log(arg)
+                    window.console.log(arg)
                 })
             }
         }
     },
     /** @type {function(...*)} */
     error: function () {
-        if (Config.DEBUG && !_.isUndefined(windowConsole) && windowConsole) {
+        if (Config.DEBUG && !_.isUndefined(window.console) && window.console) {
             var args = ['PostHog error:', ...arguments]
             try {
-                windowConsole.error.apply(windowConsole, args)
+                window.console.error.apply(window.console, args)
             } catch (err) {
                 _.each(args, function (arg) {
-                    windowConsole.error(arg)
+                    window.console.error(arg)
                 })
             }
         }
     },
     /** @type {function(...*)} */
     critical: function () {
-        if (!_.isUndefined(windowConsole) && windowConsole) {
+        if (!_.isUndefined(window.console) && window.console) {
             var args = ['PostHog error:', ...arguments]
             try {
-                windowConsole.error.apply(windowConsole, args)
+                window.console.error.apply(window.console, args)
             } catch (err) {
                 _.each(args, function (arg) {
-                    windowConsole.error(arg)
+                    window.console.error(arg)
                 })
             }
         }
@@ -488,7 +486,7 @@ _.UUID = (function () {
     }
 
     return function () {
-        var se = (screen.height * screen.width).toString(16)
+        var se = (window.screen.height * window.screen.width).toString(16)
         return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
     }
 })()
@@ -815,7 +813,7 @@ _.info = {
         return _.extend(
             _.strip_empty_properties({
                 $os: _.info.os(),
-                $browser: _.info.browser(userAgent, navigator.vendor, windowOpera),
+                $browser: _.info.browser(userAgent, navigator.vendor, window.opera),
                 $referrer: document.referrer,
                 $referring_domain: _.info.referringDomain(document.referrer),
                 $device: _.info.device(userAgent),
@@ -824,9 +822,9 @@ _.info = {
                 $current_url: window.location.href,
                 $host: window.location.host,
                 $pathname: window.location.pathname,
-                $browser_version: _.info.browserVersion(userAgent, navigator.vendor, windowOpera),
-                $screen_height: screen.height,
-                $screen_width: screen.width,
+                $browser_version: _.info.browserVersion(userAgent, navigator.vendor, window.opera),
+                $screen_height: window.screen.height,
+                $screen_width: window.screen.width,
                 $lib: 'web',
                 $lib_version: Config.LIB_VERSION,
                 $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
@@ -839,10 +837,10 @@ _.info = {
         return _.extend(
             _.strip_empty_properties({
                 $os: _.info.os(),
-                $browser: _.info.browser(userAgent, navigator.vendor, windowOpera),
+                $browser: _.info.browser(userAgent, navigator.vendor, window.opera),
             }),
             {
-                $browser_version: _.info.browserVersion(userAgent, navigator.vendor, windowOpera),
+                $browser_version: _.info.browserVersion(userAgent, navigator.vendor, window.opera),
             }
         )
     },
@@ -858,5 +856,4 @@ _['info']['browser'] = _.info.browser
 _['info']['browserVersion'] = _.info.browserVersion
 _['info']['properties'] = _.info.properties
 
-const win = window
-export { win as window, _, userAgent, console, document, navigator }
+export { win as window, _, userAgent, console, document }
