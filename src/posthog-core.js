@@ -44,13 +44,7 @@ const USE_XHR = window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest
 // should only be true for Opera<12
 let ENQUEUE_REQUESTS = !USE_XHR && userAgent.indexOf('MSIE') === -1 && userAgent.indexOf('Mozilla') === -1
 
-// save reference to navigator.sendBeacon so it can be minified
-const sendBeacon = window.navigator['sendBeacon'] ? _.bind(sendBeacon, navigator) : null
-
-/*
- * Module-level globals
- */
-const DEFAULT_CONFIG = {
+const defaultConfig = () => ({
     api_host: 'https://app.posthog.com',
     api_method: 'POST',
     api_transport: 'XHR',
@@ -86,7 +80,7 @@ const DEFAULT_CONFIG = {
     request_batching: true,
     // Used for internal testing
     _onCapture: () => {},
-}
+})
 
 /**
  * PostHog Library Object
@@ -210,7 +204,7 @@ PostHogLib.prototype._init = function (token, config, name) {
     this['compression'] = {}
 
     this.set_config(
-        _.extend({}, DEFAULT_CONFIG, config, {
+        _.extend({}, defaultConfig(), config, {
             name: name,
             token: token,
             callback_fn: (name === PRIMARY_INSTANCE_NAME ? name : PRIMARY_INSTANCE_NAME + '.' + name) + '._jsc',
@@ -364,8 +358,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         options.method = 'GET'
     }
 
-    var use_sendBeacon = sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
-    var use_post = use_sendBeacon || options.method === 'POST'
+    var useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
+    var use_post = useSendBeacon || options.method === 'POST'
 
     // needed to correctly format responses
     var verbose_mode = this.get_config('verbose')
@@ -418,13 +412,13 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         var img = document.createElement('img')
         img.src = url
         document.body.appendChild(img)
-    } else if (use_sendBeacon) {
+    } else if (useSendBeacon) {
         // beacon documentation https://w3c.github.io/beacon/
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
         const body = new Blob([body_data], { type: 'application/x-www-form-urlencoded' })
-        sendBeacon(url, body)
+        window.navigator.sendBeacon(url, body)
     } else if (USE_XHR) {
         try {
             var req = new XMLHttpRequest()
