@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
 import Config from './config'
-import { _, console, userAgent, window, document, navigator } from './utils'
+import { _, console, userAgent, window, document } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -22,38 +22,29 @@ this.__x === private - only use within the class
 Globals should be all caps
 */
 
-var init_type // MODULE or SNIPPET loader
-var posthog_master // main posthog instance / object
-var INIT_MODULE = 0
-var INIT_SNIPPET = 1
+let init_type // MODULE or SNIPPET loader
+let posthog_master // main posthog instance / object
+const INIT_MODULE = 0
+const INIT_SNIPPET = 1
 // some globals for comparisons
-var __NOOP = function () {}
-var __NOOPTIONS = {}
+const __NOOP = function () {}
+const __NOOPTIONS = {}
 
-/** @const */ var PRIMARY_INSTANCE_NAME = 'posthog'
+const PRIMARY_INSTANCE_NAME = 'posthog'
 
 /*
  * Dynamic... constants? Is that an oxymoron?
  */
 // http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
 // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-var USE_XHR = window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
+const USE_XHR = window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
 
 // IE<10 does not support cross-origin XHR's but script tags
 // with defer won't block window.onload; ENQUEUE_REQUESTS
 // should only be true for Opera<12
-var ENQUEUE_REQUESTS = !USE_XHR && userAgent.indexOf('MSIE') === -1 && userAgent.indexOf('Mozilla') === -1
+let ENQUEUE_REQUESTS = !USE_XHR && userAgent.indexOf('MSIE') === -1 && userAgent.indexOf('Mozilla') === -1
 
-// save reference to navigator.sendBeacon so it can be minified
-var sendBeacon = window.navigator['sendBeacon']
-if (sendBeacon) {
-    sendBeacon = _.bind(sendBeacon, navigator)
-}
-
-/*
- * Module-level globals
- */
-var DEFAULT_CONFIG = {
+const defaultConfig = () => ({
     api_host: 'https://app.posthog.com',
     api_method: 'POST',
     api_transport: 'XHR',
@@ -89,7 +80,7 @@ var DEFAULT_CONFIG = {
     request_batching: true,
     // Used for internal testing
     _onCapture: () => {},
-}
+})
 
 /**
  * PostHog Library Object
@@ -213,7 +204,7 @@ PostHogLib.prototype._init = function (token, config, name) {
     this['compression'] = {}
 
     this.set_config(
-        _.extend({}, DEFAULT_CONFIG, config, {
+        _.extend({}, defaultConfig(), config, {
             name: name,
             token: token,
             callback_fn: (name === PRIMARY_INSTANCE_NAME ? name : PRIMARY_INSTANCE_NAME + '.' + name) + '._jsc',
@@ -367,8 +358,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         options.method = 'GET'
     }
 
-    var use_sendBeacon = sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
-    var use_post = use_sendBeacon || options.method === 'POST'
+    var useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
+    var use_post = useSendBeacon || options.method === 'POST'
 
     // needed to correctly format responses
     var verbose_mode = this.get_config('verbose')
@@ -421,13 +412,13 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         var img = document.createElement('img')
         img.src = url
         document.body.appendChild(img)
-    } else if (use_sendBeacon) {
+    } else if (useSendBeacon) {
         // beacon documentation https://w3c.github.io/beacon/
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
         const body = new Blob([body_data], { type: 'application/x-www-form-urlencoded' })
-        sendBeacon(url, body)
+        window.navigator.sendBeacon(url, body)
     } else if (USE_XHR) {
         try {
             var req = new XMLHttpRequest()

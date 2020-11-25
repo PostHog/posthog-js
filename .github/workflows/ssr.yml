@@ -1,10 +1,10 @@
-name: Integration
+name: Requiring module in SSR
 
 on:
   - pull_request
 
 jobs:
-  cypress:
+  ssr:
     name: Cypress
     runs-on: ubuntu-latest
     steps:
@@ -13,7 +13,7 @@ jobs:
         with:
           node-version: 14
 
-      - run: yarn install && yarn build
+      - run: yarn install && yarn build-module
 
-      - name: Cypress run
-        uses: cypress-io/github-action@v2
+      - name: Require module via node
+        run: cd dist; node -e "require('./module')"
