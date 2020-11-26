@@ -1,3 +1,18 @@
+## 1.7.0 - 2020-11-26
+- Send session recording events to posthog in (short) batches, separate from rest of events to make sure we drop fewer events (#126)
+- Send session recording events to a separate endpoint for newer versions of posthog (#118)
+- Send correct LIB_VERSION to posthog with captures (#119)
+- Handle capturing self-referential objects (#123)
+- Make the library smaller by dropping unneeded code (#123, #128)
+- Update request batching logic (#118, #126)
+- Notify rrweb when $pageview events happen (#127)
+- Fix 'this.people.delete_user is undefined' (issue #39, #113)
+- Update rrweb block class to use `ph-no-capture` and `ph-ignore-input` (#112)
+- Deprecate calling posthog.capture with a callback (#129)
+- Attempted to re-add support for including posthog-js in server-side rendering. (#131)
+- Bugfix: Don't truncate session recording data (#121)
+- Bugfix: Kill `posthog.capture_links()` and `posthog.capture_forms()`. They were broken since initial release - you can use autocapture instead. (#128)
+
 ## 1.6.0 - 2020-11-05
 - Allow updating user properties when calling `posthog.identify('identity, { some: 'value' })` (#105)
 - Allow disabling $feature_flag_called event: `posthog.isFeatureEnabled('flag', { send_event: false }) (#100)
