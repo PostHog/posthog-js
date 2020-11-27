@@ -1,8 +1,8 @@
-import pkg from '../package.json'
+import { version } from '../package.json'
 
 var Config = {
     DEBUG: false,
-    LIB_VERSION: pkg.version,
+    LIB_VERSION: version,
 }
 
 export default Config
