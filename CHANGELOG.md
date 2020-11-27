@@ -1,3 +1,7 @@
+## 1.7.1 - 2020-11-27
+- Force session recording to use lz64 compression (https://github.com/PostHog/posthog-js/pull/134)
+- Bundle module.js in es5 (https://github.com/PostHog/posthog-js/pull/132)
+
 ## 1.7.0 - 2020-11-26
 - Send session recording events to posthog in (short) batches, separate from rest of events to make sure we drop fewer events (#126)
 - Send session recording events to a separate endpoint for newer versions of posthog (#118)
