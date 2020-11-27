@@ -9,7 +9,7 @@
         "start": "parcel watch src/loader-globals.js --out-file dist/array.js",
         "serve": "parcel serve src/loader-globals.js --port 3001 --out-file dist/array.js",
         "build": "parcel build src/loader-globals.js --out-file dist/array.js --no-source-maps",
-        "build-module": "./node_modules/.bin/rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
+        "build-module": "rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
         "process-types": "mkdir -p dist; eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
         "lint": "eslint src --fix",
         "prepublishOnly": "yarn lint && yarn test && yarn build && yarn build-module && yarn process-types",
@@ -25,6 +25,7 @@
     "devDependencies": {
         "@babel/core": "^7.0.0",
         "@babel/preset-env": "^7.0.0",
+        "@rollup/plugin-babel": "^5.2.1",
         "@rollup/plugin-json": "^4.1.0",
         "@rollup/plugin-node-resolve": "^8.1.0",
         "@typescript-eslint/eslint-plugin": "^3.5.0",
