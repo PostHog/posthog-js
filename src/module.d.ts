@@ -100,7 +100,7 @@ declare class posthog {
      * @param {*} [default_value] Value to override if already set in super properties (ex: 'False') Default: 'None'
      * @param {Number} [days] How many days since the users last visit to store the super properties
      */
-    static register_once(properties: posthog.Properties, default_value?: any, days?: number): void
+    static register_once(properties: posthog.Properties, default_value?: posthog.Property, days?: number): void
 
     /**
      * Delete a super property stored with the current user.
@@ -266,7 +266,7 @@ declare class posthog {
     /**
      * returns the current config object for the library.
      */
-    static get_config(prop_name: string): any
+    static get_config<T extends keyof posthog.Config>(prop_name: T): posthog.Config[T]
 
     /**
      * Returns the value of the super property named property_name. If no such
@@ -286,7 +286,7 @@ declare class posthog {
      *
      * @param {String} property_name The name of the super property you want to retrieve
      */
-    static get_property(property_name: string): any
+    static get_property(property_name: string): posthog.Property | undefined
 
     /**
      * Returns the current distinct id of the user. This is either the id automatically
@@ -443,9 +443,12 @@ declare class posthog {
 }
 
 declare namespace posthog {
-    type Properties = { [key: string]: any }
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    type Property = any
+    type Properties = { [key: string]: Property }
     type CaptureResult = { event: string; properties: Properties } | undefined
     type CaptureCallback = (response: any, data: any) => void
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     interface Config {
         api_host?: string
@@ -481,7 +484,7 @@ declare namespace posthog {
         inapp_protocol?: string
         inapp_link_new_window?: boolean
         request_batching?: boolean
-        sanitize_properties?: (properties: Record<string, any>, event_name: string) => Record<string, any>
+        sanitize_properties?: (properties: posthog.Properties, event_name: string) => posthog.Properties
     }
 
     interface OptInOutCapturingOptions {
@@ -529,7 +532,7 @@ declare namespace posthog {
          * @param {*=} default_value
          * @param {number=} days
          */
-        static register_once(props: Properties, default_value?: any, days?: number): boolean
+        static register_once(props: Properties, default_value?: Property, days?: number): boolean
 
         /**
          * @param {Object} props
@@ -584,7 +587,11 @@ declare namespace posthog {
          * @param {*} [to] A value to set on the given property name
          * @param {Function} [callback] If provided, the callback will be called after captureing the event.
          */
-        static set(prop: posthog.Properties | string, to?: any, callback?: posthog.CaptureCallback): posthog.Properties
+        static set(
+            prop: posthog.Properties | string,
+            to?: posthog.Property,
+            callback?: posthog.CaptureCallback
+        ): posthog.Properties
 
         /*
          * Set properties on a user record, only if they do not yet exist.
@@ -609,7 +616,7 @@ declare namespace posthog {
          */
         static set_once(
             prop: posthog.Properties | string,
-            to?: any,
+            to?: posthog.Property,
             callback?: posthog.CaptureCallback
         ): posthog.Properties
 
