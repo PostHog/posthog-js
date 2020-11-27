@@ -95,6 +95,7 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
+                    compression: 'lz64',
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                 }
@@ -109,6 +110,7 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
+                    compression: 'lz64',
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                 }

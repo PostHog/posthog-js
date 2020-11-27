@@ -82,6 +82,7 @@ export class SessionRecording {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
+            compression: 'lz64', // Force lz64 even if /decide endpoint has not yet responded
             _noTruncate: true,
             _batchKey: 'sessionRecording',
         })

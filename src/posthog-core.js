@@ -329,7 +329,7 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
-    if (this.compression['lz64']) {
+    if (this.compression['lz64'] || (options.compression && options.compression === 'lz64')) {
         this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
         this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
@@ -391,6 +391,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var args = {}
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()
+    const compression = data['compression'] || 'base64'
 
     if (use_post) {
         if (Array.isArray(data)) {
@@ -426,6 +427,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
             var headers = this.get_config('xhr_headers')
             if (use_post) {
                 headers['Content-Type'] = 'application/x-www-form-urlencoded'
+                headers['PosthogJs'] = Config.LIB_VERSION
+                headers['PosthogCompression'] = compression
             }
             _.each(headers, function (headerValue, headerName) {
                 req.setRequestHeader(headerName, headerValue)
