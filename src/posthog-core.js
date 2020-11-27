@@ -329,7 +329,7 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
-    if (this.compression['lz64']) {
+    if (this.compression['lz64'] || (options.compression && options.compression === 'lz64')) {
         this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
         this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
