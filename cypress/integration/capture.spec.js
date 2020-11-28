@@ -131,8 +131,6 @@ describe('Event capture', () => {
 
             cy.wait('@capture').its('request.headers').should('deep.equal', {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                PosthogJs: version,
-                PosthogCompression: 'lz64',
             })
 
             cy.get('@capture').should(({ request }) => {

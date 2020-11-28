@@ -427,8 +427,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
             var headers = this.get_config('xhr_headers')
             if (use_post) {
                 headers['Content-Type'] = 'application/x-www-form-urlencoded'
-                headers['PosthogJs'] = Config.LIB_VERSION
-                headers['PosthogCompression'] = compression
             }
             _.each(headers, function (headerValue, headerName) {
                 req.setRequestHeader(headerName, headerValue)
