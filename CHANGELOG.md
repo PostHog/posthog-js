@@ -1,3 +1,7 @@
+## 1.7.2 - 2020-11-28
+
+- Fix issues with incorrect headers being set on decide
+
 ## 1.7.1 - 2020-11-27
 - Force session recording to use lz64 compression (https://github.com/PostHog/posthog-js/pull/134)
 - Bundle module.js in es5 (https://github.com/PostHog/posthog-js/pull/132)
