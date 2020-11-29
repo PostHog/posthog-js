@@ -391,7 +391,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var args = {}
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()
-    const compression = data['compression'] || 'base64'
 
     if (use_post) {
         if (Array.isArray(data)) {
