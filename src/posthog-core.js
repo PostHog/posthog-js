@@ -368,8 +368,10 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
     var use_post = useSendBeacon || options.method === 'POST'
 
+    const classifier = data.length > 1000 ? 'large' : 'small'
     this._captureMetrics.incr('_send_request')
     this._captureMetrics.incr(`_send_request_${options.transport}`)
+    this._captureMetrics.incr(`_send_request_${classifier}`)
 
     // needed to correctly format responses
     var verbose_mode = this.get_config('verbose')
@@ -448,6 +450,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                 if (req.readyState === 4) {
                     this._captureMetrics.incr(`xhr-response`)
                     this._captureMetrics.incr(`xhr-response-${req.status}`)
+                    this._captureMetrics.incr(`xhr-done-${classifier}-${req.status}`)
                     // XMLHttpRequest.DONE == 4, except in safari 4
                     if (req.status === 200) {
                         if (callback) {
