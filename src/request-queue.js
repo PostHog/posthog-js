@@ -1,7 +1,8 @@
 import { _ } from './utils'
 
 export class RequestQueue {
-    constructor(handlePollRequest, pollInterval = 3000) {
+    constructor(captureMetrics, handlePollRequest, pollInterval = 3000) {
+        this.captureMetrics = captureMetrics
         this.handlePollRequest = handlePollRequest
         this.isPolling = true // flag to continue to recursively poll or not
         this._event_queue = []
@@ -19,6 +20,8 @@ export class RequestQueue {
     }
 
     enqueue(url, data, options) {
+        this.captureMetrics.incr('batch-enqueue')
+
         this._event_queue.push({ url, data, options })
 
         if (!this.isPolling) {
@@ -39,6 +42,11 @@ export class RequestQueue {
                         delete data[dataKey]['timestamp']
                     })
                     this.handlePollRequest(url, data, options)
+
+                    this.captureMetrics.incr('batch-requests')
+                    this.captureMetrics.incr(`batch-requests-${url.slice(url.length - 2)}`)
+                    this.captureMetrics.incr('batch-handle', data.length)
+                    this.captureMetrics.incr(`batch-handle-${url.slice(url.length - 2)}`, data.length)
                 }
                 this._event_queue.length = 0 // flush the _event_queue
             } else {
@@ -61,6 +69,18 @@ export class RequestQueue {
                 this.poll()
             }
         }, this._pollInterval)
+    }
+
+    updateUnloadMetrics() {
+        const requests = this.formatQueue()
+        for (let key in requests) {
+            let { url, data } = requests[key]
+
+            this.captureMetrics.incr('batch-unload-requests')
+            this.captureMetrics.incr(`batch-unload-requests-${url.slice(url.length - 2)}`)
+            this.captureMetrics.incr('batch-unload', data.length)
+            this.captureMetrics.incr(`batch-unload-${url.slice(url.length - 2)}`, data.length)
+        }
     }
 
     unload() {
