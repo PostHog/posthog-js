@@ -20,3 +20,6 @@ package-lock.json
 dist/*
 static/*
 .yalc
+yalc*
+cypress/videos
+coverage
