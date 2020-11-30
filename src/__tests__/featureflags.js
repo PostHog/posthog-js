@@ -1,6 +1,6 @@
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 
-fdescribe('featureflags', () => {
+describe('featureflags', () => {
     given('properties', () => ({ $override_feature_flags: false, $active_feature_flags: ['beta-feature'] }))
 
     given('instance', () => ({

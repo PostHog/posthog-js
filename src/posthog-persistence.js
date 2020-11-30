@@ -269,6 +269,7 @@ PostHogPersistence.prototype.update_search_keyword = function (referrer) {
 // EXPORTED METHOD, we test this directly.
 PostHogPersistence.prototype.update_referrer_info = function (referrer) {
     // If referrer doesn't exist, we want to note the fact that it was type-in traffic.
+    // Register once, so first touch
     this.register_once(
         {
             $initial_referrer: referrer || '$direct',
@@ -276,6 +277,11 @@ PostHogPersistence.prototype.update_referrer_info = function (referrer) {
         },
         ''
     )
+    // Register the current referrer but override if it's different, hence register
+    this.register({
+        $referrer: referrer || this['props']['$referrer'] || '$direct',
+        $referring_domain: _.info.referringDomain(referrer) || this['props']['$referring_domain'] || '$direct',
+    })
 }
 
 PostHogPersistence.prototype.get_referrer_info = function () {

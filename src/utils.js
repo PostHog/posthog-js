@@ -814,8 +814,6 @@ _.info = {
             _.strip_empty_properties({
                 $os: _.info.os(),
                 $browser: _.info.browser(userAgent, navigator.vendor, window.opera),
-                $referrer: document.referrer,
-                $referring_domain: _.info.referringDomain(document.referrer),
                 $device: _.info.device(userAgent),
             }),
             {
