@@ -5,7 +5,7 @@ export class CaptureMetrics {
     }
 
     incr(key, by = 1) {
-        key = `$phjs-${key}`
+        key = `phjs-${key}`
         if (this.capture) {
             this.metrics[key] = (this.metrics[key] || 0) + by
         }
