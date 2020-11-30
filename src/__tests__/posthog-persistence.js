@@ -1,8 +1,8 @@
 import { PostHogPersistence } from '../posthog-persistence'
 
-given('lib', () => Object.assign(new PostHogPersistence({ name: 'bla', persistence: 'cookie' }), given.overrides))
+given('lib', () => new PostHogPersistence({ name: 'bla', persistence: 'cookie' }))
 
-fdescribe('persistence', () => {
+describe('persistence', () => {
     it('should set referrer', () => {
         // Initial visit
         given.lib.update_referrer_info('https://www.google.com')
