@@ -19,6 +19,9 @@ describe('identify()', () => {
             set: jest.fn(),
         },
         _flags: {},
+        _captureMetrics: {
+            incr: jest.fn(),
+        },
         reloadFeatureFlags: jest.fn(),
     }))
 
@@ -108,6 +111,9 @@ describe('capture()', () => {
             properties: jest.fn(),
         },
         compression: {},
+        _captureMetrics: {
+            incr: jest.fn(),
+        },
         __captureHooks: [],
     }))
 

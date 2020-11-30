@@ -57,6 +57,9 @@ export class SessionRecording {
                     $session_id: sessionIdGenerator(this.instance.persistence, data.timestamp),
                 }
 
+                this.instance._captureMetrics.incr('rrweb-record')
+                this.instance._captureMetrics.incr(`rrweb-record-${data.type}`)
+
                 if (this.emit) {
                     this._captureSnapshot(properties)
                 } else {

@@ -1,10 +1,12 @@
+import { CaptureMetrics } from '../capture-metrics'
 import { RequestQueue } from '../request-queue'
 
 const EPOCH = 1_600_000_000
 
 describe('RequestQueue', () => {
-    given('queue', () => new RequestQueue(given.handlePollRequest))
+    given('queue', () => new RequestQueue(given.captureMetrics, given.handlePollRequest))
     given('handlePollRequest', () => jest.fn())
+    given('captureMetrics', () => new CaptureMetrics(true))
 
     beforeEach(() => {
         jest.useFakeTimers()

@@ -16,6 +16,7 @@ describe('SessionRecording', () => {
         capture: jest.fn(),
         persistence: { register: jest.fn() },
         _requestQueue: { setPollInterval: jest.fn() },
+        _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
     }))
     given('config', () => ({ api_host: 'https://test.com', disable_session_recording: given.disabled }))

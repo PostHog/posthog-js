@@ -11,6 +11,7 @@ import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
+import { CaptureMetrics } from './capture-metrics'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -80,6 +81,7 @@ const defaultConfig = () => ({
     request_batching: true,
     // Used for internal testing
     _onCapture: () => {},
+    _capture_metrics: false,
 })
 
 /**
@@ -213,7 +215,8 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this._requestQueue = new RequestQueue(_.bind(this._handle_queued_event, this))
+    this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
+    this._requestQueue = new RequestQueue(this._captureMetrics, _.bind(this._handle_queued_event, this))
     this.__captureHooks = []
     this.__request_queue = []
 
@@ -320,6 +323,10 @@ PostHogLib.prototype._handle_unload = function () {
     if (this.get_config('capture_pageview')) {
         this.capture('$pageleave')
     }
+    if (this.get_config('_capture_metrics')) {
+        this._requestQueue.updateUnloadMetrics()
+        this.capture('$capture_metrics', this._captureMetrics.metrics)
+    }
     this._requestQueue.unload()
 }
 
@@ -360,6 +367,11 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
 
     var useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
     var use_post = useSendBeacon || options.method === 'POST'
+
+    const classifier = data.length > 1000 ? 'large' : 'small'
+    this._captureMetrics.incr('_send_request')
+    this._captureMetrics.incr(`_send_request_${options.transport}`)
+    this._captureMetrics.incr(`_send_request_${classifier}`)
 
     // needed to correctly format responses
     var verbose_mode = this.get_config('verbose')
@@ -434,8 +446,11 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
             // send the ph_optout cookie
             // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
             req.withCredentials = true
-            req.onreadystatechange = function () {
+            req.onreadystatechange = () => {
                 if (req.readyState === 4) {
+                    this._captureMetrics.incr(`xhr-response`)
+                    this._captureMetrics.incr(`xhr-response-${req.status}`)
+                    this._captureMetrics.incr(`xhr-done-${classifier}-${req.status}`)
                     // XMLHttpRequest.DONE == 4, except in safari 4
                     if (req.status === 200) {
                         if (callback) {
@@ -576,6 +591,11 @@ PostHogLib.prototype.push = function (item) {
  * @param {Function} [callback] [Deprecated] If provided, the callback function will be called after capturing the event.
  */
 PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options, callback) {
+    this._captureMetrics.incr('capture')
+    if (event_name === '$snapshot') {
+        this._captureMetrics.incr('snapshot')
+    }
+
     if (!callback && typeof options === 'function') {
         callback = options
         options = null
@@ -847,6 +867,8 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
         console.error('Unique user id has not been set in posthog.identify')
         return
     }
+
+    this._captureMetrics.incr('identify')
 
     var previous_distinct_id = this.get_distinct_id()
     this.register({ $user_id: new_distinct_id })
