@@ -6,7 +6,12 @@ Specifically, the [JS integration](https://posthog.com/docs/integrations/js-inte
 
 ## Testing
 
-Run `yarn test`
+Unit tests: run `yarn test`
+Cypress: `yarn cypress`
+
+## Developing together with another repo
+
+Update dependency in package.json to e.g. `"posthog-js": "link:../posthog-js"`, `yarn` and run `yarn build && yarn build-module`
 
 ## Releasing a new version
 
