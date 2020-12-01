@@ -372,6 +372,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     this._captureMetrics.incr('_send_request')
     this._captureMetrics.incr(`_send_request_${options.transport}`)
     this._captureMetrics.incr(`_send_request_${classifier}`)
+    this._captureMetrics.incr('_send_request_inflight')
 
     // needed to correctly format responses
     var verbose_mode = this.get_config('verbose')
@@ -451,6 +452,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                     this._captureMetrics.incr(`xhr-response`)
                     this._captureMetrics.incr(`xhr-response-${req.status}`)
                     this._captureMetrics.incr(`xhr-done-${classifier}-${req.status}`)
+                    this._captureMetrics.decr('_send_request_inflight')
                     // XMLHttpRequest.DONE == 4, except in safari 4
                     if (req.status === 200) {
                         if (callback) {
