@@ -215,7 +215,8 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
+    this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'), _.bind(this.capture, this))
+
     this._requestQueue = new RequestQueue(this._captureMetrics, _.bind(this._handle_queued_event, this))
     this.__captureHooks = []
     this.__request_queue = []
@@ -326,6 +327,7 @@ PostHogLib.prototype._handle_unload = function () {
     if (this.get_config('_capture_metrics')) {
         this._requestQueue.updateUnloadMetrics()
         this.capture('$capture_metrics', this._captureMetrics.metrics)
+        this._captureMetrics.captureInProgressRequests()
     }
     this._requestQueue.unload()
 }
@@ -368,11 +370,10 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
     var use_post = useSendBeacon || options.method === 'POST'
 
-    const classifier = data.length > 1000 ? 'large' : 'small'
     this._captureMetrics.incr('_send_request')
-    this._captureMetrics.incr(`_send_request_${options.transport}`)
-    this._captureMetrics.incr(`_send_request_${classifier}`)
     this._captureMetrics.incr('_send_request_inflight')
+
+    const requestId = this._captureMetrics.startRequest({ size: data.length })
 
     // needed to correctly format responses
     var verbose_mode = this.get_config('verbose')
@@ -451,8 +452,10 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                 if (req.readyState === 4) {
                     this._captureMetrics.incr(`xhr-response`)
                     this._captureMetrics.incr(`xhr-response-${req.status}`)
-                    this._captureMetrics.incr(`xhr-done-${classifier}-${req.status}`)
                     this._captureMetrics.decr('_send_request_inflight')
+
+                    const data = this._captureMetrics.finishRequest(requestId)
+
                     // XMLHttpRequest.DONE == 4, except in safari 4
                     if (req.status === 200) {
                         if (callback) {
@@ -468,6 +471,9 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                     } else {
                         var error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
                         console.error(error)
+
+                        this._captureMetrics.markRequestFailed({ ...data, type: 'non_200', status: req.status })
+
                         if (callback) {
                             if (verbose_mode) {
                                 callback({ status: 0, error: error })

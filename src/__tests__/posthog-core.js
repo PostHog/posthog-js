@@ -1,4 +1,5 @@
 import { PostHogLib } from '../posthog-core'
+import { CaptureMetrics } from '../capture-metrics'
 import { _ } from '../utils'
 
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
@@ -111,9 +112,7 @@ describe('capture()', () => {
             properties: jest.fn(),
         },
         compression: {},
-        _captureMetrics: {
-            incr: jest.fn(),
-        },
+        _captureMetrics: new CaptureMetrics(),
         __captureHooks: [],
     }))
 
