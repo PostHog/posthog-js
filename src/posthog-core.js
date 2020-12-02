@@ -374,7 +374,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     this._captureMetrics.incr('_send_request_inflight')
 
     const requestId = this._captureMetrics.startRequest({
-        size: data.length,
+        data_size: data.data.length,
         endpoint: url.slice(url.length - 2),
         ...options._metrics,
     })
