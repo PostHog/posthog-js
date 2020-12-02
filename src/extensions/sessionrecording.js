@@ -66,6 +66,7 @@ export class SessionRecording {
                     this.snapshots.push(properties)
                 }
             },
+            inlineStylesheet: !this.instance.get_config('_capture_metrics'),
             blockClass: 'ph-no-capture', // Does not capture the element at all
             ignoreClass: 'ph-ignore-input', // Ignores content of input but still records the input element
         })
