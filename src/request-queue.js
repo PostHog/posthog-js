@@ -98,7 +98,14 @@ export class RequestQueue {
         _.each(this._event_queue, (request) => {
             const { url, data, options } = request
             const key = (options ? options._batchKey : null) || url
-            if (requests[key] === undefined) requests[key] = { data: [], url, options }
+            if (requests[key] === undefined) {
+                requests[key] = { data: [], url, options }
+            }
+
+            // :TRICKY: Metrics-only code
+            if (options && requests[key].options && requests[key].options._metrics) {
+                requests[key].options._metrics['rrweb_full_snapshot'] ||= options._metrics['rrweb_full_snapshot']
+            }
             requests[key].data.push(data)
         })
         return requests
