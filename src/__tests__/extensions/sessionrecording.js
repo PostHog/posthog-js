@@ -99,6 +99,7 @@ describe('SessionRecording', () => {
                     compression: 'lz64',
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
+                    _metrics: expect.anything(),
                 }
             )
             expect(given.posthog.capture).toHaveBeenCalledWith(
@@ -114,6 +115,7 @@ describe('SessionRecording', () => {
                     compression: 'lz64',
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
+                    _metrics: expect.anything(),
                 }
             )
         })
