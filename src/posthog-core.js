@@ -373,7 +373,11 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     this._captureMetrics.incr('_send_request')
     this._captureMetrics.incr('_send_request_inflight')
 
-    const requestId = this._captureMetrics.startRequest({ size: data.length })
+    const requestId = this._captureMetrics.startRequest({
+        size: data.length,
+        endpoint: url.slice(url.length - 2),
+        ...options._metrics,
+    })
 
     // needed to correctly format responses
     var verbose_mode = this.get_config('verbose')
@@ -472,7 +476,12 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                         var error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
                         console.error(error)
 
-                        this._captureMetrics.markRequestFailed({ ...data, type: 'non_200', status: req.status })
+                        this._captureMetrics.markRequestFailed({
+                            ...data,
+                            type: 'non_200',
+                            status: req.status,
+                            statusText: req.statusText,
+                        })
 
                         if (callback) {
                             if (verbose_mode) {

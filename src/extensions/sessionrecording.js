@@ -88,6 +88,9 @@ export class SessionRecording {
             compression: 'lz64', // Force lz64 even if /decide endpoint has not yet responded
             _noTruncate: true,
             _batchKey: 'sessionRecording',
+            _metrics: {
+                rrweb_full_snapshot: properties.$snapshot_data.type === 2,
+            },
         })
     }
 }
