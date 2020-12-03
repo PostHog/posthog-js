@@ -1,6 +1,6 @@
 import { _, console } from './utils'
 
-export const formEncodePostData = (data, options) => {
+export const encodePostData = (data, options) => {
     if (options.plainJSON) {
         return data
     } else if (options.method !== 'POST') {
@@ -25,7 +25,7 @@ export const xhr = (url, data, headers, options, captureMetrics, callback) => {
     const req = new XMLHttpRequest()
     req.open(options.method, url, true)
 
-    const body = formEncodePostData(data, options)
+    const body = encodePostData(data, options)
 
     captureMetrics.incr('_send_request')
     captureMetrics.incr('_send_request_inflight')

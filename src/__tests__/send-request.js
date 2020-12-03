@@ -1,7 +1,7 @@
-import { formEncodePostData } from '../send-request'
+import { encodePostData } from '../send-request'
 
-describe('formEncodePostData()', () => {
-    given('subject', () => formEncodePostData(given.data, given.options))
+describe('encodePostData()', () => {
+    given('subject', () => encodePostData(given.data, given.options))
 
     given('data', () => ({ data: 'content' }))
     given('options', () => ({ method: 'POST' }))
