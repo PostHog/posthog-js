@@ -1,6 +1,6 @@
 import { _, console } from './utils'
 
-export const encodePostDataBody = (data) => {
+export const formEncodePostData = (data) => {
     let body_data
     if (Array.isArray(data)) {
         body_data = 'data=' + encodeURIComponent(data)
@@ -15,26 +15,32 @@ export const encodePostDataBody = (data) => {
     return body_data
 }
 
-export const xhr = (url, method, data, headers, verbose, captureMetrics, callback) => {
-    const body = method === 'POST' ? encodePostDataBody(data) : null
+export const xhr = (url, data, headers, options, captureMetrics, callback) => {
+    const req = new XMLHttpRequest()
+    req.open(options.method, url, true)
 
-    this._captureMetrics.incr('_send_request')
-    this._captureMetrics.incr('_send_request_inflight')
+    let body = null
+    if (options.plainJSON) {
+        body = data
+    } else if (options.method === 'POST') {
+        body = formEncodePostData(data)
+    }
 
-    const requestId = this._captureMetrics.startRequest({
+    captureMetrics.incr('_send_request')
+    captureMetrics.incr('_send_request_inflight')
+
+    const requestId = captureMetrics.startRequest({
         data_size: body && body.length,
         endpoint: url.slice(url.length - 2),
         ...options._metrics,
     })
 
-    const req = new XMLHttpRequest()
-    req.open(method, url, true)
-    if (method === 'POST') {
-        headers['Content-Type'] = 'application/x-www-form-urlencoded'
-    }
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
+    if (options.method === 'POST' && !options.plainJSON) {
+        req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
+    }
 
     // send the ph_optout cookie
     // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
@@ -71,7 +77,7 @@ export const xhr = (url, method, data, headers, verbose, captureMetrics, callbac
                 })
 
                 if (callback) {
-                    if (verbose) {
+                    if (options.verbose) {
                         callback({ status: 0, error: error })
                     } else {
                         callback(0)

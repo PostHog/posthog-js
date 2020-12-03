@@ -1,7 +1,7 @@
-import { encodePostDataBody } from '../send-request'
+import { formEncodePostData } from '../send-request'
 
-describe('encodePostDataBody()', () => {
-    given('subject', () => encodePostDataBody(given.data))
+describe('formEncodePostData()', () => {
+    given('subject', () => formEncodePostData(given.data))
 
     it('handles arrays', () => {
         given('data', () => ['foo', 'bar'])

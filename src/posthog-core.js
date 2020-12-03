@@ -12,7 +12,7 @@ import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPo
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
-import { encodePostDataBody } from './send-request'
+import { xhr, formEncodePostData } from './send-request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -339,7 +339,9 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
-    if (this.compression['lz64'] || (options.compression && options.compression === 'lz64')) {
+    if (this.get_config('_capture_metrics')) {
+        this._send_request(url, jsonData, { ...options, plainJSON: true }, callback)
+    } else if (this.compression['lz64'] || (options.compression && options.compression === 'lz64')) {
         this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
         this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
@@ -355,6 +357,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var DEFAULT_OPTIONS = {
         method: this.get_config('api_method'),
         transport: this.get_config('api_transport'),
+        verbose: this.get_config('verbose') || data['verbose'],
     }
 
     if (!callback && (_.isFunction(options) || typeof options === 'string')) {
@@ -368,17 +371,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
 
     const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
 
-    // needed to correctly format responses
-    var verbose_mode = this.get_config('verbose')
-    if (data['verbose']) {
-        verbose_mode = true
-    }
-
     if (this.get_config('test')) {
         data['test'] = 1
-    }
-    if (verbose_mode) {
-        data['verbose'] = 1
     }
     if (this.get_config('img')) {
         data['img'] = 1
@@ -410,11 +404,11 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
-        const body = new Blob([encodePostDataBody(data)], { type: 'application/x-www-form-urlencoded' })
+        const body = new Blob([formEncodePostData(data)], { type: 'application/x-www-form-urlencoded' })
         window.navigator.sendBeacon(url, body)
     } else if (USE_XHR) {
         try {
-            xhr(url, options.method, data, this.get_config('xhr_headers'), verbose_mode, this._captureMetrics, callback)
+            xhr(url, data, this.get_config('xhr_headers'), options, this._captureMetrics, callback)
         } catch (e) {
             console.error(e)
         }
