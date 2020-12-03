@@ -12,6 +12,7 @@ import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPo
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
+import { encodePostDataBody } from './send-request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -356,8 +357,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         transport: this.get_config('api_transport'),
     }
 
-    var body_data = null
-
     if (!callback && (_.isFunction(options) || typeof options === 'string')) {
         callback = options
         options = null
@@ -410,20 +409,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()
 
-    if (use_post) {
-        if (Array.isArray(data)) {
-            body_data = 'data=' + encodeURIComponent(data)
-        } else {
-            body_data = 'data=' + encodeURIComponent(data['data'])
-        }
-        delete data['data']
-
-        if (data['compression']) {
-            body_data += '&compression=' + data['compression']
-            delete data['compression']
-        }
-    }
-
     url += '?' + _.HTTPBuildQuery(args)
 
     if ('img' in data) {
@@ -435,7 +420,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
-        const body = new Blob([body_data], { type: 'application/x-www-form-urlencoded' })
+        const body = new Blob([encodePostDataBody(data)], { type: 'application/x-www-form-urlencoded' })
         window.navigator.sendBeacon(url, body)
     } else if (USE_XHR) {
         try {
@@ -493,7 +478,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                     }
                 }
             }
-            req.send(body_data)
+            req.send(encodePostDataBody(data))
         } catch (e) {
             console.error(e)
         }
