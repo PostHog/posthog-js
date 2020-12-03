@@ -12,7 +12,7 @@ import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPo
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
-import { xhr, formEncodePostData } from './send-request'
+import { xhr, encodePostData } from './send-request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -404,7 +404,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
-        const body = new Blob([formEncodePostData(data)], { type: 'application/x-www-form-urlencoded' })
+        const headers = options.plainJSON ? {} : { type: 'application/x-www-form-urlencoded' }
+        const body = new Blob([encodePostData(data, options)], headers)
         window.navigator.sendBeacon(url, body)
     } else if (USE_XHR) {
         try {
