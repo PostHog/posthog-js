@@ -366,17 +366,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         options.method = 'GET'
     }
 
-    var useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
-    var use_post = useSendBeacon || options.method === 'POST'
-
-    this._captureMetrics.incr('_send_request')
-    this._captureMetrics.incr('_send_request_inflight')
-
-    const requestId = this._captureMetrics.startRequest({
-        data_size: data.data.length,
-        endpoint: url.slice(url.length - 2),
-        ...options._metrics,
-    })
+    const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
 
     // needed to correctly format responses
     var verbose_mode = this.get_config('verbose')
@@ -424,61 +414,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         window.navigator.sendBeacon(url, body)
     } else if (USE_XHR) {
         try {
-            var req = new XMLHttpRequest()
-            req.open(options.method, url, true)
-            var headers = this.get_config('xhr_headers')
-            if (use_post) {
-                headers['Content-Type'] = 'application/x-www-form-urlencoded'
-            }
-            _.each(headers, function (headerValue, headerName) {
-                req.setRequestHeader(headerName, headerValue)
-            })
-
-            // send the ph_optout cookie
-            // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
-            req.withCredentials = true
-            req.onreadystatechange = () => {
-                if (req.readyState === 4) {
-                    this._captureMetrics.incr(`xhr-response`)
-                    this._captureMetrics.incr(`xhr-response-${req.status}`)
-                    this._captureMetrics.decr('_send_request_inflight')
-
-                    const data = this._captureMetrics.finishRequest(requestId)
-
-                    // XMLHttpRequest.DONE == 4, except in safari 4
-                    if (req.status === 200) {
-                        if (callback) {
-                            var response
-                            try {
-                                response = JSON.parse(req.responseText)
-                            } catch (e) {
-                                console.error(e)
-                                return
-                            }
-                            callback(response)
-                        }
-                    } else {
-                        var error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
-                        console.error(error)
-
-                        this._captureMetrics.markRequestFailed({
-                            ...data,
-                            type: 'non_200',
-                            status: req.status,
-                            statusText: req.statusText,
-                        })
-
-                        if (callback) {
-                            if (verbose_mode) {
-                                callback({ status: 0, error: error })
-                            } else {
-                                callback(0)
-                            }
-                        }
-                    }
-                }
-            }
-            req.send(encodePostDataBody(data))
+            xhr(url, options.method, data, this.get_config('xhr_headers'), verbose_mode, this._captureMetrics, callback)
         } catch (e) {
             console.error(e)
         }
