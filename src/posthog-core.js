@@ -395,7 +395,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
 
     url += '?' + _.HTTPBuildQuery(args)
 
-    if ('img' in data) {
+    if (_.isObject(data) && 'img' in data) {
         var img = document.createElement('img')
         img.src = url
         document.body.appendChild(img)
