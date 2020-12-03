@@ -12,6 +12,7 @@ import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPo
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
+import { xhr, formEncodePostData } from './send-request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -338,7 +339,9 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
-    if (this.compression['lz64'] || (options.compression && options.compression === 'lz64')) {
+    if (this.get_config('_capture_metrics')) {
+        this._send_request(url, jsonData, { ...options, plainJSON: true }, callback)
+    } else if (this.compression['lz64'] || (options.compression && options.compression === 'lz64')) {
         this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
         this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
@@ -354,9 +357,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var DEFAULT_OPTIONS = {
         method: this.get_config('api_method'),
         transport: this.get_config('api_transport'),
+        verbose: this.get_config('verbose') || data['verbose'],
     }
-
-    var body_data = null
 
     if (!callback && (_.isFunction(options) || typeof options === 'string')) {
         callback = options
@@ -367,29 +369,10 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         options.method = 'GET'
     }
 
-    var useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
-    var use_post = useSendBeacon || options.method === 'POST'
-
-    this._captureMetrics.incr('_send_request')
-    this._captureMetrics.incr('_send_request_inflight')
-
-    const requestId = this._captureMetrics.startRequest({
-        data_size: data.data.length,
-        endpoint: url.slice(url.length - 2),
-        ...options._metrics,
-    })
-
-    // needed to correctly format responses
-    var verbose_mode = this.get_config('verbose')
-    if (data['verbose']) {
-        verbose_mode = true
-    }
+    const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
 
     if (this.get_config('test')) {
         data['test'] = 1
-    }
-    if (verbose_mode) {
-        data['verbose'] = 1
     }
     if (this.get_config('img')) {
         data['img'] = 1
@@ -410,23 +393,9 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()
 
-    if (use_post) {
-        if (Array.isArray(data)) {
-            body_data = 'data=' + encodeURIComponent(data)
-        } else {
-            body_data = 'data=' + encodeURIComponent(data['data'])
-        }
-        delete data['data']
-
-        if (data['compression']) {
-            body_data += '&compression=' + data['compression']
-            delete data['compression']
-        }
-    }
-
     url += '?' + _.HTTPBuildQuery(args)
 
-    if ('img' in data) {
+    if (_.isObject(data) && 'img' in data) {
         var img = document.createElement('img')
         img.src = url
         document.body.appendChild(img)
@@ -435,65 +404,11 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
-        const body = new Blob([body_data], { type: 'application/x-www-form-urlencoded' })
+        const body = new Blob([formEncodePostData(data)], { type: 'application/x-www-form-urlencoded' })
         window.navigator.sendBeacon(url, body)
     } else if (USE_XHR) {
         try {
-            var req = new XMLHttpRequest()
-            req.open(options.method, url, true)
-            var headers = this.get_config('xhr_headers')
-            if (use_post) {
-                headers['Content-Type'] = 'application/x-www-form-urlencoded'
-            }
-            _.each(headers, function (headerValue, headerName) {
-                req.setRequestHeader(headerName, headerValue)
-            })
-
-            // send the ph_optout cookie
-            // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
-            req.withCredentials = true
-            req.onreadystatechange = () => {
-                if (req.readyState === 4) {
-                    this._captureMetrics.incr(`xhr-response`)
-                    this._captureMetrics.incr(`xhr-response-${req.status}`)
-                    this._captureMetrics.decr('_send_request_inflight')
-
-                    const data = this._captureMetrics.finishRequest(requestId)
-
-                    // XMLHttpRequest.DONE == 4, except in safari 4
-                    if (req.status === 200) {
-                        if (callback) {
-                            var response
-                            try {
-                                response = JSON.parse(req.responseText)
-                            } catch (e) {
-                                console.error(e)
-                                return
-                            }
-                            callback(response)
-                        }
-                    } else {
-                        var error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
-                        console.error(error)
-
-                        this._captureMetrics.markRequestFailed({
-                            ...data,
-                            type: 'non_200',
-                            status: req.status,
-                            statusText: req.statusText,
-                        })
-
-                        if (callback) {
-                            if (verbose_mode) {
-                                callback({ status: 0, error: error })
-                            } else {
-                                callback(0)
-                            }
-                        }
-                    }
-                }
-            }
-            req.send(body_data)
+            xhr(url, data, this.get_config('xhr_headers'), options, this._captureMetrics, callback)
         } catch (e) {
             console.error(e)
         }

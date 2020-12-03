@@ -1,0 +1,7 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`formEncodePostData() handles arrays 1`] = `"data=foo%2Cbar"`;
+
+exports[`formEncodePostData() handles data with compression 1`] = `"data=content&compression=lz64"`;
+
+exports[`formEncodePostData() handles objects 1`] = `"data=content"`;
