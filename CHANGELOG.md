@@ -1,4 +1,4 @@
-## 1.7.2 - 2020-11-28
+## 1.7.2 - 2020-11-28
 
 - Fix issues with incorrect headers being set on decide
 
