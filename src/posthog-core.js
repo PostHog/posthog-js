@@ -1,5 +1,6 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
+import { deflate } from 'pako/dist/pako_deflate'
 import Config from './config'
 import { _, console, userAgent, window, document } from './utils'
 import { autocapture } from './autocapture'
@@ -335,6 +336,20 @@ PostHogLib.prototype._handle_unload = function () {
 
 PostHogLib.prototype._handle_queued_event = function (url, data, options) {
     const jsonData = JSON.stringify(data)
+
+    window.savings ||= {}
+    window.savings[url] ||= { lz64: 0, deflate: 0, normal: 0, requests: 0 }
+    window.savings[url].requests++
+    window.savings[url].normal += jsonData.length
+    window.savings[url].lz64 += LZString.compressToBase64(jsonData).length
+    window.savings[url].deflate += deflate(jsonData, { to: 'string' }).length
+
+    window.console.log('Savings: ', url, {
+        deflate: window.savings[url].deflate / window.savings[url].normal,
+        lz64: window.savings[url].lz64 / window.savings[url].normal,
+        raw: window.savings[url],
+    })
+
     this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
 }
 

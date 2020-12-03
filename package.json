@@ -70,5 +70,8 @@
             "given2/setup"
         ],
         "clearMocks": true
+    },
+    "dependencies": {
+        "pako": "^2.0.2"
     }
 }

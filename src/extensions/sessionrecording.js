@@ -53,12 +53,29 @@ export class SessionRecording {
         window.rrweb.record({
             emit: (data) => {
                 const properties = {
-                    $snapshot_data: data,
+                    $snapshot_data: data, //window.rrweb.pack ? window.rrweb.pack(data) : data,
                     $session_id: sessionIdGenerator(this.instance.persistence, data.timestamp),
                 }
 
                 this.instance._captureMetrics.incr('rrweb-record')
                 this.instance._captureMetrics.incr(`rrweb-record-${data.type}`)
+
+                const packed = window.rrweb.pack(data).length
+                const normal = JSON.stringify(data).length
+                // window.console.log(data.type, { ratio: packed / normal, packed, normal })
+
+                window.packed ||= 0
+                window.normal ||= 0
+                window.packed += packed
+                window.normal += normal
+                window.count = (window.count || 0) + 1
+
+                window.console.log('By individual events: ', {
+                    ratio: window.packed / window.normal,
+                    packed: window.packed,
+                    normal: window.normal,
+                    count: window.count,
+                })
 
                 if (this.emit) {
                     this._captureSnapshot(properties)
