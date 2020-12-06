@@ -32,6 +32,6 @@ beforeEach(() => {
     })
 
     cy.readFile('node_modules/rrweb/dist/rrweb.min.js').then((body) => {
-        cy.intercept('**/static/recorder.js', { body }).as('recorder')
+        cy.intercept('**/static/recorder.js*', { body }).as('recorder')
     })
 })
