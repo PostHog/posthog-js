@@ -1,5 +1,6 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
+import { strToU8, strFromU8, gzipSync } from 'fflate'
 import Config from './config'
 import { _, console, userAgent, window, document } from './utils'
 import { autocapture } from './autocapture'
@@ -339,7 +340,17 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
-    if (this.compression['lz64']) {
+    if (this.compression['gzip-js']) {
+        // :TRICKY: This is encoded as latin-1/iso-8859-1, needs to be decoded accordingly on the server.
+        const compressed = strFromU8(gzipSync(strToU8(jsonData)), true)
+
+        this._send_request(
+            url,
+            compressed,
+            { ...options, plain: true, urlQueryArgs: { compression: 'gzip-js' } },
+            callback
+        )
+    } else if (this.compression['lz64']) {
         this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
         this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
@@ -387,7 +398,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         }
     }
 
-    var args = {}
+    var args = options.urlQueryArgs || {}
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()
 
