@@ -1,7 +1,7 @@
 import { _, console } from './utils'
 
 export const encodePostData = (data, options) => {
-    if (options.plainJSON) {
+    if (options.plain) {
         return data
     } else if (options.method !== 'POST') {
         return null
@@ -39,7 +39,7 @@ export const xhr = (url, data, headers, options, captureMetrics, callback) => {
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
-    if (options.method === 'POST' && !options.plainJSON) {
+    if (options.method === 'POST' && !options.plain) {
         req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     }
 

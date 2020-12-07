@@ -340,7 +340,7 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
     if (this.get_config('_capture_metrics')) {
-        this._send_request(url, jsonData, { ...options, plainJSON: true }, callback)
+        this._send_request(url, jsonData, { ...options, plain: true }, callback)
     } else if (this.compression['lz64'] || (options.compression && options.compression === 'lz64')) {
         this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
@@ -404,7 +404,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
-        const headers = options.plainJSON ? { type: 'text/plain' } : { type: 'application/x-www-form-urlencoded' }
+        const headers = options.plain ? { type: 'text/plain' } : { type: 'application/x-www-form-urlencoded' }
         const body = new Blob([encodePostData(data, options)], headers)
         window.navigator.sendBeacon(url, body)
     } else if (USE_XHR) {

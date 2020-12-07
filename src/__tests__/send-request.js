@@ -28,8 +28,8 @@ describe('encodePostData()', () => {
         expect(given.subject).toEqual(null)
     })
 
-    it('handles plainJSON', () => {
-        given('options', () => ({ method: 'POST', plainJSON: true }))
+    it('handles plain', () => {
+        given('options', () => ({ method: 'POST', plain: true }))
 
         expect(given.subject).toMatchSnapshot()
     })
