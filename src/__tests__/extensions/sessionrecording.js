@@ -15,7 +15,6 @@ describe('SessionRecording', () => {
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
-        _requestQueue: { setPollInterval: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
     }))
@@ -35,7 +34,6 @@ describe('SessionRecording', () => {
 
             expect(given.sessionRecording.submitRecordings).toHaveBeenCalled()
             expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: true })
-            expect(given.posthog._requestQueue.setPollInterval).toHaveBeenCalledWith(300)
         })
 
         it('starts session recording, saves setting and endpoint when enabled', () => {
@@ -46,7 +44,6 @@ describe('SessionRecording', () => {
             expect(given.sessionRecording.submitRecordings).toHaveBeenCalled()
             expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: true })
             expect(given.sessionRecording.endpoint).toEqual('/ses/')
-            expect(given.posthog._requestQueue.setPollInterval).toHaveBeenCalledWith(300)
         })
 
         it('does not start recording if not allowed', () => {
@@ -56,7 +53,6 @@ describe('SessionRecording', () => {
 
             expect(given.sessionRecording.submitRecordings).not.toHaveBeenCalled()
             expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: false })
-            expect(given.posthog._requestQueue.setPollInterval).not.toHaveBeenCalled()
         })
     })
 
@@ -96,7 +92,6 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
-                    compression: 'lz64',
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                     _metrics: expect.anything(),
@@ -112,7 +107,6 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
-                    compression: 'lz64',
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                     _metrics: expect.anything(),

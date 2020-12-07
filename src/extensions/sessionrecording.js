@@ -37,8 +37,6 @@ export class SessionRecording {
         this.emit = true
         this._startCapture()
         this.snapshots.forEach((properties) => this._captureSnapshot(properties))
-        // If session recording is enabled, we send events to server more frequently
-        this.instance._requestQueue.setPollInterval(300)
     }
 
     _startCapture() {
@@ -85,7 +83,6 @@ export class SessionRecording {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
-            compression: 'lz64', // Force lz64 even if /decide endpoint has not yet responded
             _noTruncate: true,
             _batchKey: 'sessionRecording',
             _metrics: {
