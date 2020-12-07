@@ -10,17 +10,18 @@
         "serve": "parcel serve src/loader-globals.js --port 3001 --out-file dist/array.js",
         "build": "parcel build src/loader-globals.js --out-file dist/array.js --no-source-maps",
         "build-module": "rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
+        "build-react": "tsc -p react",
         "process-types": "mkdir -p dist; eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
         "lint": "eslint src --fix",
-        "prepublishOnly": "yarn lint && yarn test && yarn build && yarn build-module && yarn process-types",
+        "prepublishOnly": "yarn lint && yarn test && yarn build && yarn build-module && yarn build-react && yarn process-types",
         "test": "jest src",
         "test-watch": "jest --watch",
         "cypress": "cypress open"
     },
     "main": "dist/module.js",
-    "types": "dist/module.d.ts",
     "files": [
-        "dist/*"
+        "dist/*",
+        "hooks/dist/*"
     ],
     "devDependencies": {
         "@babel/core": "^7.0.0",
@@ -35,6 +36,7 @@
         "cypress": "^6.0.0",
         "eslint": "^7.3.1",
         "eslint-plugin-prettier": "^3.1.4",
+        "eslint-plugin-react": "^7.21.5",
         "given2": "^2.1.7",
         "husky": "^4.2.5",
         "jest": "^26.1.0",
@@ -55,10 +57,10 @@
         }
     },
     "lint-staged": {
-        "*.{ts,js,json}": "prettier --write",
-        "*.ts": [
+        "*.{ts,tsx,js,json}": "prettier --write",
+        "*.{ts,tsx}": [
             "eslint -c .eslintrc.ts.js --fix",
-            "tsc"
+            "tsc --noEmit --esModuleInterop --jsx react"
         ]
     },
     "jest": {

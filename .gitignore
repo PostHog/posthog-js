@@ -17,7 +17,7 @@ node_modules
 yarn.lock
 package-lock.json
 .idea
-dist/*
+dist
 static/*
 .yalc
 yalc*
