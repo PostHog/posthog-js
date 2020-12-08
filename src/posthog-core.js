@@ -380,12 +380,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
 
     const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
 
-    if (this.get_config('test')) {
-        data['test'] = 1
-    }
-    if (this.get_config('img')) {
-        data['img'] = 1
-    }
     if (!USE_XHR) {
         if (callback) {
             data['callback'] = callback
@@ -404,7 +398,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
 
     url += '?' + _.HTTPBuildQuery(args)
 
-    if (_.isObject(data) && 'img' in data) {
+    if (_.isObject(data) && this.get_config('img')) {
         var img = document.createElement('img')
         img.src = url
         document.body.appendChild(img)
