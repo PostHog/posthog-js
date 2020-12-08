@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
-import { strToU8, strFromU8, gzipSync } from 'fflate'
+import { strToU8, gzipSync } from 'fflate'
 import Config from './config'
 import { _, console, userAgent, window, document } from './utils'
 import { autocapture } from './autocapture'
@@ -341,13 +341,13 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
     if (this.compression['gzip-js']) {
-        // :TRICKY: This is encoded as latin-1/iso-8859-1, needs to be decoded accordingly on the server.
-        const compressed = strFromU8(gzipSync(strToU8(jsonData)), true)
+        // :TRICKY: This returns an UInt8Array. We don't encode this to a string - returning a blob will do this for us.
+        const compressedBlob = gzipSync(strToU8(jsonData), { mtime: 0 })
 
         this._send_request(
             url,
-            compressed,
-            { ...options, plain: true, urlQueryArgs: { compression: 'gzip-js' } },
+            compressedBlob,
+            { ...options, blob: true, urlQueryArgs: { compression: 'gzip-js' } },
             callback
         )
     } else if (this.compression['lz64']) {
@@ -413,9 +413,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
-        const headers = options.plain ? { type: 'text/plain' } : { type: 'application/x-www-form-urlencoded' }
-        const body = new Blob([encodePostData(data, options)], headers)
-        window.navigator.sendBeacon(url, body)
+        window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
     } else if (USE_XHR) {
         try {
             xhr(url, data, this.get_config('xhr_headers'), options, this._captureMetrics, callback)

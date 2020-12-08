@@ -2,12 +2,30 @@
 
 exports[`encodePostData() handles arrays 1`] = `"data=foo%2Cbar"`;
 
+exports[`encodePostData() handles blob 1`] = `
+Array [
+  "Blob",
+  Array [
+    "buffer",
+  ],
+  Object {
+    "type": "text/plain",
+  },
+]
+`;
+
 exports[`encodePostData() handles data with compression 1`] = `"data=content&compression=lz64"`;
 
 exports[`encodePostData() handles objects 1`] = `"data=content"`;
 
-exports[`encodePostData() handles plain 1`] = `
-Object {
-  "data": "content",
-}
+exports[`encodePostData() handles sendBeacon 1`] = `
+Array [
+  "Blob",
+  Array [
+    "data=content",
+  ],
+  Object {
+    "type": "application/x-www-form-urlencoded",
+  },
+]
 `;
