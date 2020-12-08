@@ -70,5 +70,8 @@
             "given2/setup"
         ],
         "clearMocks": true
+    },
+    "dependencies": {
+        "fflate": "^0.4.1"
     }
 }

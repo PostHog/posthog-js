@@ -30,9 +30,10 @@ describe('Session recording', () => {
         cy.wait(500)
         cy.get('[data-cy-input]')
             .type('hello posthog!')
+            .wait('@session-recording')
             .then(() => {
                 const requests = cy.state('requests').filter(({ alias }) => alias === 'session-recording')
-                expect(requests.length).to.be.above(1).and.to.be.below(8)
+                expect(requests.length).to.be.above(0).and.to.be.below(2)
             })
     })
 })

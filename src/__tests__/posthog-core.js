@@ -261,3 +261,40 @@ describe('_handle_unload()', () => {
         })
     })
 })
+
+describe('__compress_and_send_json_request', () => {
+    given('subject', () => () =>
+        given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
+    )
+
+    given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
+
+    given('overrides', () => ({
+        compression: given.compression,
+        _send_request: jest.fn(),
+    }))
+
+    it('handles base64 compression', () => {
+        given('compression', () => ({}))
+
+        given.subject()
+
+        expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
+    })
+
+    it('handles lz64 compression', () => {
+        given('compression', () => ({ lz64: true }))
+
+        given.subject()
+
+        expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
+    })
+
+    it('handles gzip-js compression', () => {
+        given('compression', () => ({ 'gzip-js': true }))
+
+        given.subject()
+
+        expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
+    })
+})
