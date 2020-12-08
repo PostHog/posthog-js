@@ -267,7 +267,7 @@ describe('__compress_and_send_json_request', () => {
         given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
     )
 
-    given('jsonData', () => JSON.stringify({ large_key: 'a' * 300 }))
+    given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
 
     given('overrides', () => ({
         compression: given.compression,
