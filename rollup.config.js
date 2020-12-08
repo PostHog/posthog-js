@@ -3,13 +3,6 @@ import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import { terser } from 'rollup-plugin-terser'
 
-const plugins = [
-    json(),
-    resolve({ browser: true, modulesOnly: true }),
-    babel({ babelHelpers: 'bundled', presets: ['@babel/preset-env'] }),
-    terser({ ecma: 5 }),
-]
-
 const configs = []
 configs.push({
     input: 'src/loader-globals.js',
@@ -17,7 +10,12 @@ configs.push({
         file: 'dist/array.js',
         format: 'esm',
     },
-    plugins,
+    plugins: [
+        json(),
+        resolve({ browser: true, modulesOnly: true }),
+        babel({ babelHelpers: 'bundled', presets: ['@babel/preset-env'] }),
+        terser({ ecma: 5 }),
+    ],
 })
 configs.push({
     input: 'src/loader-module.js',
@@ -25,7 +23,8 @@ configs.push({
         file: 'dist/module.js',
         format: 'esm',
     },
-    plugins,
+    plugins: [json(), babel({ babelHelpers: 'bundled', presets: ['@babel/preset-env'] }), terser({ ecma: 5 })],
+    external: ['fflate'],
 })
 
 export default configs
