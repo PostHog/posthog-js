@@ -5,6 +5,7 @@ import sessionIdGenerator from '../../extensions/sessionid'
 
 jest.mock('../../autocapture-utils')
 jest.mock('../../extensions/sessionid')
+jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
 
 describe('SessionRecording', () => {
     let _emit
@@ -117,7 +118,7 @@ describe('SessionRecording', () => {
         it('loads recording script from right place', () => {
             given.sessionRecording.startRecordingIfEnabled()
 
-            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js', expect.anything())
+            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js?v=v0.0.1', expect.anything())
         })
 
         it('loads script after `submitRecordings` if not previously loaded', () => {
