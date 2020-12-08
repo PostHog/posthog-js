@@ -282,14 +282,6 @@ describe('__compress_and_send_json_request', () => {
         expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
     })
 
-    it('handles lz64 compression', () => {
-        given('compression', () => ({ lz64: true }))
-
-        given.subject()
-
-        expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
-    })
-
     it('handles gzip-js compression', () => {
         given('compression', () => ({ 'gzip-js': true }))
 

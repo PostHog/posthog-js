@@ -1,5 +1,4 @@
 /* eslint camelcase: "off" */
-import { LZString } from './lz-string'
 import { strToU8, gzipSync } from 'fflate'
 import Config from './config'
 import { _, console, userAgent, window, document } from './utils'
@@ -350,8 +349,6 @@ PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData,
             { ...options, blob: true, urlQueryArgs: { compression: 'gzip-js' } },
             callback
         )
-    } else if (this.compression['lz64']) {
-        this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
     } else {
         this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
     }
@@ -1385,8 +1382,6 @@ function deprecate_warning(method) {
     )
 }
 
-PostHogLib.prototype.decodeLZ64 = LZString.decompressFromBase64
-
 // EXPORTS (for closure compiler)
 
 // PostHogLib Exports
@@ -1417,7 +1412,6 @@ PostHogLib.prototype['clear_opt_in_out_capturing'] = PostHogLib.prototype.clear_
 PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
 PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureFlags
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
-PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 PostHogLib.prototype['SentryIntegration'] = PostHogLib.prototype.sentry_integration
 PostHogLib.prototype['LIB_VERSION'] = Config.LIB_VERSION
 

@@ -21,7 +21,7 @@ describe('encodePostData()', () => {
     })
 
     it('handles data with compression', () => {
-        given('data', () => ({ data: 'content', compression: 'lz64' }))
+        given('data', () => ({ data: 'content', compression: 'base64' }))
 
         expect(given.subject).toMatchSnapshot()
     })

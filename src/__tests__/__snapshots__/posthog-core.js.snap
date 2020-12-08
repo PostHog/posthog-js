@@ -78,17 +78,3 @@ Array [
   ],
 ]
 `;
-
-exports[`__compress_and_send_json_request handles lz64 compression 1`] = `
-Array [
-  Array [
-    "/e/",
-    Object {
-      "compression": "lz64",
-      "data": "N4IgNghgTg5gpgfQNZwJ4gFwggIwMa4H6EnFlEWmXlW033WN1MPNusctfvec/99BvYQJFDRE8VLEzJs6XMULl81UrUr1WzTo17t+3QeNHTh8yYtnLN63asPbj+09cv3zz8xABfIA",
-    },
-    undefined,
-    [MockFunction],
-  ],
-]
-`;

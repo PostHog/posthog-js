@@ -18,7 +18,7 @@ describe('Payload Compression', () => {
                 _prepare_callback: sandbox.spy((callback) => callback),
                 _send_request: sandbox.spy((url, params, options, callback) => {
                     if (url === 'https://test.com/decide/') {
-                        callback({ config: { enable_collect_everything: true }, supportedCompression: ['lz64'] })
+                        callback({ config: { enable_collect_everything: true }, supportedCompression: ['gzip-js'] })
                     } else {
                         console.log('would be great to get here!')
                     }
@@ -52,7 +52,7 @@ describe('Payload Compression', () => {
 
         it('should save supported compression in instance', () => {
             autocapture.init(lib)
-            expect(lib.compression).toEqual({ lz64: true })
+            expect(lib.compression).toEqual({ 'gzip-js': true })
         })
     })
 })

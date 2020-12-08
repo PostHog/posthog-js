@@ -14,7 +14,7 @@ Array [
 ]
 `;
 
-exports[`encodePostData() handles data with compression 1`] = `"data=content&compression=lz64"`;
+exports[`encodePostData() handles data with compression 1`] = `"data=content&compression=base64"`;
 
 exports[`encodePostData() handles objects 1`] = `"data=content"`;
 
