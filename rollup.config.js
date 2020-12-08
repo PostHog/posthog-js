@@ -1,6 +1,7 @@
 import babel from '@rollup/plugin-babel'
 import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
+import analyze from 'rollup-plugin-analyzer'
 import { terser } from 'rollup-plugin-terser'
 
 const configs = []
@@ -15,6 +16,7 @@ configs.push({
         resolve({ browser: true, modulesOnly: true }),
         babel({ babelHelpers: 'bundled', presets: ['@babel/preset-env'] }),
         terser({ ecma: 5 }),
+        analyze(),
     ],
 })
 configs.push({

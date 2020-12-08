@@ -18,6 +18,8 @@
         "test-watch": "jest --watch",
         "cypress": "cypress open"
     },
+    "type": "module",
+    "module": "dist/module.js",
     "main": "dist/module.js",
     "files": [
         "dist/*",
@@ -48,6 +50,7 @@
         "parcel": "^1.12.4",
         "prettier": "^2.0.5",
         "rollup": "^2.18.2",
+        "rollup-plugin-analyzer": "^3.3.0",
         "rollup-plugin-terser": "^7.0.2",
         "rrweb": "^0.9.9",
         "sinon": "9.0.2",
