@@ -34,7 +34,7 @@ export const xhr = (url, data, headers, options, captureMetrics, callback) => {
     captureMetrics.incr('_send_request_inflight')
 
     const requestId = captureMetrics.startRequest({
-        data_size: body && body.length,
+        data_size: _.isString(data) ? data.length : body.length,
         endpoint: url.slice(url.length - 2),
         ...options._metrics,
     })
