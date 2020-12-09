@@ -369,10 +369,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         verbose: this.get_config('verbose') || data['verbose'],
     }
 
-    if (!callback && (_.isFunction(options) || typeof options === 'string')) {
-        callback = options
-        options = null
-    }
     options = _.extend(DEFAULT_OPTIONS, options || {})
     if (!USE_XHR) {
         options.method = 'GET'
