@@ -1,18 +1,13 @@
 import { useEffect, useCallback } from 'react'
 import { usePostHogContext, FeatureFlags } from '../context'
 
-interface UseFeatureFlagsProps {
-    refreshInterval: number
-    sendEvent: boolean
-}
-
 /**
  * A hook that fetches active feature flags and determines which flags are enabled for the user.
- * @param {number} props.refreshInterval - How often to refresh the feature flags, in seconds.
- * @param {boolean} props.sendEvent - A flag that controls whether an event will be sent on flag refresh.
- * @returns {FeatureFlags['enabled']} An object containing flags that are enabled for the user.
+ * @param props.refreshInterval - How often to refresh the feature flags, in seconds.
+ * @param props.sendEvent - A flag that controls whether an event will be sent on flag refresh.
+ * @returns An object containing flags that are enabled for the user.
  */
-export function useFeatureFlags(props: UseFeatureFlagsProps): FeatureFlags['enabled'] {
+export function useFeatureFlags(props: { refreshInterval: number; sendEvent: boolean }): FeatureFlags['enabled'] {
     const { refreshInterval = 0, sendEvent = true } = props || {}
     const { client: posthog, featureFlags, setFeatureFlags } = usePostHogContext()
 
