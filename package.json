@@ -20,8 +20,7 @@
     },
     "main": "dist/module.js",
     "files": [
-        "dist/*",
-        "hooks/dist/*"
+        "dist/*"
     ],
     "devDependencies": {
         "@babel/core": "^7.0.0",
