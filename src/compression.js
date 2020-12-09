@@ -1,0 +1,29 @@
+import { LZString } from './lz-string'
+import { strToU8, gzipSync } from 'fflate'
+import { _ } from './utils'
+
+export function decideCompression(compressionSupport, forceGzip, forceCompression) {
+    if (forceGzip) {
+        return 'gzip-js'
+    } else if (compressionSupport['lz64'] || forceCompression) {
+        return 'lz64'
+    } else if (compressionSupport['gzip-js'] || forceCompression) {
+        return 'gzip-js'
+    } else {
+        return 'base64'
+    }
+}
+
+export function compressData(compression, jsonData, options) {
+    if (compression === 'lz64') {
+        return [{ data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options]
+    } else if (compression === 'gzip-js') {
+        // :TRICKY: This returns an UInt8Array. We don't encode this to a string - returning a blob will do this for us.
+        return [
+            gzipSync(strToU8(jsonData), { mtime: 0 }),
+            { ...options, blob: true, urlQueryArgs: { compression: 'gzip-js' } },
+        ]
+    } else {
+        return [{ data: _.base64Encode(jsonData) }, options]
+    }
+}

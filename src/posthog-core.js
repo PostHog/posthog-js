@@ -1,6 +1,5 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
-import { strToU8, gzipSync } from 'fflate'
 import Config from './config'
 import { _, console, userAgent, window, document } from './utils'
 import { autocapture } from './autocapture'
@@ -13,6 +12,7 @@ import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPo
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
+import { compressData, decideCompression } from './compression'
 import { xhr, encodePostData } from './send-request'
 
 /*
@@ -340,21 +340,13 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
-    if (this.compression['gzip-js']) {
-        // :TRICKY: This returns an UInt8Array. We don't encode this to a string - returning a blob will do this for us.
-        const compressedBlob = gzipSync(strToU8(jsonData), { mtime: 0 })
-
-        this._send_request(
-            url,
-            compressedBlob,
-            { ...options, blob: true, urlQueryArgs: { compression: 'gzip-js' } },
-            callback
-        )
-    } else if (this.compression['lz64']) {
-        this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
-    } else {
-        this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
-    }
+    const compression = decideCompression(
+        this.compression,
+        this.get_config('_capture_metrics'),
+        options && options._forceCompression
+    )
+    const [data, _options] = compressData(compression, jsonData, options)
+    this._send_request(url, data, _options, callback)
 }
 
 PostHogLib.prototype._send_request = function (url, data, options, callback) {

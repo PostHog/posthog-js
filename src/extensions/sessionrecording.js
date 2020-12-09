@@ -87,6 +87,7 @@ export class SessionRecording {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
+            _forceCompression: true,
             _noTruncate: true,
             _batchKey: 'sessionRecording',
             _metrics: {
