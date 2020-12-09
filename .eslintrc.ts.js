@@ -13,6 +13,10 @@ module.exports = {
     rules: {
         'prettier/prettier': 'error',
         'no-unused-vars': ['error', { ignoreRestSiblings: true }],
-        'react/jsx-uses-vars': 1,
+    },
+    settings: {
+        react: {
+            version: '17.0',
+        },
     },
 }
