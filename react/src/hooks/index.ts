@@ -1,1 +1,1 @@
-export * from './usePostHogExample'
+export * from './useFeatureFlags'
