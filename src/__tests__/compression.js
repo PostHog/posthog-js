@@ -15,12 +15,6 @@ describe('decideCompression()', () => {
 
         expect(given.subject).toEqual('gzip-js')
     })
-
-    it('returns lz64 if supported', () => {
-        given('compressionSupport', () => ({ lz64: true, 'gzip-js': true }))
-
-        expect(given.subject).toEqual('gzip-js')
-    })
 })
 
 describe('compressData()', () => {
@@ -31,12 +25,6 @@ describe('compressData()', () => {
 
     it('handles base64', () => {
         given('compression', () => 'base64')
-
-        expect(given.subject).toMatchSnapshot()
-    })
-
-    it('handles lz64', () => {
-        given('compression', () => 'lz64')
 
         expect(given.subject).toMatchSnapshot()
     })

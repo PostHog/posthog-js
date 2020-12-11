@@ -1,5 +1,4 @@
 /* eslint camelcase: "off" */
-import { LZString } from './lz-string'
 import Config from './config'
 import { _, console, userAgent, window, document } from './utils'
 import { autocapture } from './autocapture'
@@ -1367,8 +1366,6 @@ function deprecate_warning(method) {
             ' instead (without the "e")!'
     )
 }
-
-PostHogLib.prototype.decodeLZ64 = LZString.decompressFromBase64
 
 // EXPORTS (for closure compiler)
 
