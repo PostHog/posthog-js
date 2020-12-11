@@ -12,7 +12,7 @@
         "build-array": "parcel build src/loader-globals.js --out-file dist/array.js --no-source-maps",
         "build-module": "rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
         "build-es-module": "rollup -i src/loader-module.js -f es -o dist/es.js -c rollup.config.js",
-        "build-react": "tsc -p react",
+        "build-react": "cd react; yarn; cd ..; tsc -p react",
         "process-types": "mkdir -p dist; eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
         "lint": "eslint src --fix",
         "prepublishOnly": "yarn lint && yarn test && yarn build",
