@@ -275,7 +275,7 @@ describe('__compress_and_send_json_request', () => {
         get_config: () => false,
     }))
 
-    it('handles base64 compression', () => {
+    it('handles compression', () => {
         given('compression', () => ({}))
 
         given.subject()
