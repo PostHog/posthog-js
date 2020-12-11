@@ -1,6 +1,11 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`encodePostData() handles arrays 1`] = `"data=foo%2Cbar"`;
+exports[`encodePostData() handles arrays 1`] = `
+Array [
+  "foo",
+  "bar",
+]
+`;
 
 exports[`encodePostData() handles blob 1`] = `
 Array [
@@ -14,9 +19,11 @@ Array [
 ]
 `;
 
-exports[`encodePostData() handles data with compression 1`] = `"data=content&compression=lz64"`;
-
-exports[`encodePostData() handles objects 1`] = `"data=content"`;
+exports[`encodePostData() handles objects 1`] = `
+Object {
+  "data": "content",
+}
+`;
 
 exports[`encodePostData() handles plaintext post 1`] = `
 Object {
@@ -28,10 +35,12 @@ exports[`encodePostData() handles sendBeacon 1`] = `
 Array [
   "Blob",
   Array [
-    "data=content",
+    Object {
+      "data": "content",
+    },
   ],
   Object {
-    "type": "application/x-www-form-urlencoded",
+    "type": "text/plain",
   },
 ]
 `;

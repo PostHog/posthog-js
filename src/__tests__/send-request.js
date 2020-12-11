@@ -20,12 +20,6 @@ describe('encodePostData()', () => {
         expect(given.subject).toMatchSnapshot()
     })
 
-    it('handles data with compression', () => {
-        given('data', () => ({ data: 'content', compression: 'lz64' }))
-
-        expect(given.subject).toMatchSnapshot()
-    })
-
     it('handles GET requests', () => {
         given('options', () => ({ method: 'GET' }))
 

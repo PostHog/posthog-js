@@ -5,25 +5,12 @@ export const encodePostData = (data, options) => {
         return new Blob([data.buffer], { type: 'text/plain' })
     } else if (options.sendBeacon) {
         const body = encodePostData(data, { method: 'POST' })
-        return new Blob([body], { type: 'application/x-www-form-urlencoded' })
+        return new Blob([body], { type: 'text/plain' })
     } else if (options.method !== 'POST') {
         return null
-    } else if (options.plainText) {
-        return data
     }
 
-    let body_data
-    if (Array.isArray(data)) {
-        body_data = 'data=' + encodeURIComponent(data)
-    } else {
-        body_data = 'data=' + encodeURIComponent(data['data'])
-    }
-
-    if (data['compression']) {
-        body_data += '&compression=' + data['compression']
-    }
-
-    return body_data
+    return data
 }
 
 export const xhr = (url, data, options, captureMetrics, callback) => {
@@ -40,10 +27,6 @@ export const xhr = (url, data, options, captureMetrics, callback) => {
         endpoint: url.slice(url.length - 2),
         ...options._metrics,
     })
-
-    if (options.method === 'POST' && !options.blob) {
-        req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
-    }
 
     // send the ph_optout cookie
     // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
