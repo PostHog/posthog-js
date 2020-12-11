@@ -448,7 +448,6 @@ declare namespace posthog {
         save_referrer?: boolean
         test?: boolean
         verbose?: boolean
-        img?: boolean
         capture_pageview?: boolean
         debug?: boolean
         cookie_expiration?: number
