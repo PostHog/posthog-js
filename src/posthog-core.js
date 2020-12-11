@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 import Config from './config'
-import { _, console, userAgent, window, document } from './utils'
+import { _, userAgent, window, document, logIfDebug } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -89,7 +89,7 @@ var create_mplib = function (token, config, name) {
         instance = target
     } else {
         if (target && !_.isArray(target)) {
-            console.error('You have already initialized ' + name)
+            logIfDebug('You have already initialized ' + name)
             return
         }
         instance = new PostHogLib()
@@ -150,11 +150,11 @@ var create_mplib = function (token, config, name) {
  */
 PostHogLib.prototype.init = function (token, config, name) {
     if (_.isUndefined(name)) {
-        console.error('You must name your new library: init(token, config, name)')
+        logIfDebug('You must name your new library: init(token, config, name)')
         return
     }
     if (name === PRIMARY_INSTANCE_NAME) {
-        console.error('You must initialize the main posthog object right after you include the PostHog js snippet')
+        logIfDebug('You must initialize the main posthog object right after you include the PostHog js snippet')
         return
     }
 
@@ -293,7 +293,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         try {
             xhr(url, data, options, this._captureMetrics, callback)
         } catch (e) {
-            console.error(e)
+            logIfDebug(e)
         }
     }
 }
@@ -409,7 +409,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     }
 
     if (_.isUndefined(event_name)) {
-        console.error('No event name provided to posthog.capture')
+        logIfDebug('No event name provided to posthog.capture')
         return
     }
 
@@ -495,7 +495,7 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
             delete properties[blacklisted_prop]
         })
     } else {
-        console.error('Invalid value for property_blacklist config: ' + property_blacklist)
+        logIfDebug('Invalid value for property_blacklist config: ' + property_blacklist)
     }
 
     var sanitize_properties = this.get_config('sanitize_properties')
@@ -643,7 +643,7 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
 PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
     //if the new_distinct_id has not been set ignore the identify event
     if (!new_distinct_id) {
-        console.error('Unique user id has not been set in posthog.identify')
+        logIfDebug('Unique user id has not been set in posthog.identify')
         return
     }
 
@@ -753,7 +753,7 @@ PostHogLib.prototype.alias = function (alias, original) {
     // posthog.people.identify() call made for this user. It is VERY BAD to make an alias with
     // this ID, as it will duplicate users.
     if (alias === this.get_property(PEOPLE_DISTINCT_ID_KEY)) {
-        console.critical('Attempting to create alias for existing People user - aborting.')
+        console.warn('Posthog error: Attempting to create alias for existing People user - aborting.')
         return -2
     }
 
@@ -768,7 +768,7 @@ PostHogLib.prototype.alias = function (alias, original) {
             _this.identify(alias)
         })
     } else {
-        console.error('alias matches current distinct_id - skipping api call.')
+        logIfDebug('alias matches current distinct_id - skipping api call.')
         this.identify(alias)
         return -1
     }
@@ -1282,7 +1282,7 @@ export function init_from_snippet() {
 
     if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
         // lib has already been loaded at least once; we don't want to override the global object this time so bomb early
-        console.error('PostHog library has already been downloaded at least once.')
+        logIfDebug('PostHog library has already been downloaded at least once.')
         return
     }
     // Load instances of the PostHog Library

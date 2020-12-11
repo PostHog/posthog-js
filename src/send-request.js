@@ -1,4 +1,4 @@
-import { _, console } from './utils'
+import { _, logIfDebug } from './utils'
 
 export const encodePostData = (data, options) => {
     if (options.blob) {
@@ -43,15 +43,13 @@ export const xhr = (url, data, options, captureMetrics, callback) => {
                     let response
                     try {
                         response = JSON.parse(req.responseText)
+                        callback(response)
                     } catch (e) {
-                        console.error(e)
-                        return
+                        logIfDebug(e)
                     }
-                    callback(response)
                 }
             } else {
-                const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
-                console.error(error)
+                logIfDebug('Bad HTTP status: ' + req.status + ' ' + req.statusText, req)
 
                 captureMetrics.markRequestFailed({
                     ...data,

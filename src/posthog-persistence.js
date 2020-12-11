@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 
 import Config from './config'
-import { _, console } from './utils'
+import { _ } from './utils'
 import { cookieStore, localStore, memoryStore } from './storage'
 
 /*
@@ -54,7 +54,7 @@ var PostHogPersistence = function (config) {
 
     var storage_type = config['persistence']
     if (storage_type !== 'cookie' && storage_type !== 'localStorage' && storage_type !== 'memory') {
-        console.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
+        console.warn('Posthog: Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
     }
 

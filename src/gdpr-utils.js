@@ -11,7 +11,7 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { _, window } from './utils'
+import { _, window, logIfDebug } from './utils'
 import { cookieStore, localStore } from './storage'
 
 /**
@@ -222,7 +222,7 @@ function _hasDoNotTrackFlagOn(options) {
  */
 function _optInOut(optValue, token, options) {
     if (!_.isString(token) || !token.length) {
-        console.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
+        logIfDebug('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
         return
     }
 
@@ -276,7 +276,7 @@ function _addOptOutCheck(method, getConfigValue, silenceErrors) {
             }
         } catch (err) {
             if (!silenceErrors) {
-                console.error('Unexpected error when checking capturing opt-out status: ' + err)
+                logIfDebug('Unexpected error when checking capturing opt-out status: ', err)
             }
         }
 

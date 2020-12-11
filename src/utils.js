@@ -23,46 +23,10 @@ const nativeBind = FuncProto.bind,
     nativeIsArray = Array.isArray,
     breaker = {}
 
-// Console override
-var console = {
-    /** @type {function(...*)} */
-    log: function () {
-        if (Config.DEBUG && !_.isUndefined(window.console) && window.console) {
-            try {
-                window.console.log.apply(window.console, arguments)
-            } catch (err) {
-                _.each(arguments, function (arg) {
-                    window.console.log(arg)
-                })
-            }
-        }
-    },
-    /** @type {function(...*)} */
-    error: function () {
-        if (Config.DEBUG && !_.isUndefined(window.console) && window.console) {
-            var args = ['PostHog error:', ...arguments]
-            try {
-                window.console.error.apply(window.console, args)
-            } catch (err) {
-                _.each(args, function (arg) {
-                    window.console.error(arg)
-                })
-            }
-        }
-    },
-    /** @type {function(...*)} */
-    critical: function () {
-        if (!_.isUndefined(window.console) && window.console) {
-            var args = ['PostHog error:', ...arguments]
-            try {
-                window.console.error.apply(window.console, args)
-            } catch (err) {
-                _.each(args, function (arg) {
-                    window.console.error(arg)
-                })
-            }
-        }
-    },
+const logIfDebug = (...args) => {
+    if (Config.DEBUG) {
+        console.log('Posthog:', ...args)
+    }
 }
 
 const _ = {}
@@ -256,11 +220,9 @@ _.safewrap = function (f) {
     return function () {
         try {
             return f.apply(this, arguments)
-        } catch (e) {
-            console.critical('Implementation error. Please turn on debug and contact support@posthog.com.')
-            if (Config.DEBUG) {
-                console.critical(e)
-            }
+        } catch (err) {
+            console.warn('Posthog error: Implementation error. Please turn on debug and contact support@posthog.com.')
+            logIfDebug(err)
         }
     }
 }
@@ -441,7 +403,7 @@ _.getQueryParam = function (url, param) {
         try {
             result = decodeURIComponent(result)
         } catch (err) {
-            console.error('Skipping decoding for malformed query param: ' + result)
+            logIfDebug('Skipping decoding for malformed query param: ' + result)
         }
         return result.replace(/\+/g, ' ')
     }
@@ -680,4 +642,4 @@ _['info']['browser'] = _.info.browser
 _['info']['browserVersion'] = _.info.browserVersion
 _['info']['properties'] = _.info.properties
 
-export { win as window, _, userAgent, console, document }
+export { win as window, _, userAgent, logIfDebug, document }
