@@ -46,8 +46,6 @@ const defaultConfig = () => ({
     loaded: function () {},
     store_google: true,
     save_referrer: true,
-    test: false,
-    verbose: false,
     capture_pageview: true,
     debug: false,
     cookie_expiration: 365,
@@ -286,7 +284,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var DEFAULT_OPTIONS = {
         method: this.get_config('api_method'),
         transport: this.get_config('api_transport'),
-        verbose: this.get_config('verbose'),
     }
 
     options = _.extend(DEFAULT_OPTIONS, options || {})

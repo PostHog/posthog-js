@@ -446,8 +446,6 @@ declare namespace posthog {
         loaded?: (posthog_instance: typeof posthog) => void
         store_google?: boolean
         save_referrer?: boolean
-        test?: boolean
-        verbose?: boolean
         capture_pageview?: boolean
         debug?: boolean
         cookie_expiration?: number

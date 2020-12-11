@@ -63,11 +63,7 @@ export const xhr = (url, data, options, captureMetrics, callback) => {
                 })
 
                 if (callback) {
-                    if (options.verbose) {
-                        callback({ status: 0, error: error })
-                    } else {
-                        callback(0)
-                    }
+                    callback(0)
                 }
             }
         }
