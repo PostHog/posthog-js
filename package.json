@@ -16,7 +16,7 @@
         "process-types": "mkdir -p dist; eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
         "lint": "eslint src --fix",
         "prepublishOnly": "yarn lint && yarn test && yarn build",
-        "test": "jest src",
+        "test": "jest",
         "test-watch": "jest --watch",
         "cypress": "cypress open"
     },
@@ -68,6 +68,10 @@
         ]
     },
     "jest": {
+        "testPathIgnorePatterns": [
+            "/node_modules/",
+            "/cypress/"
+        ],
         "moduleFileExtensions": [
             "js",
             "json"
