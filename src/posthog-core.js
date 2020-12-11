@@ -60,7 +60,6 @@ const defaultConfig = () => ({
     save_referrer: true,
     test: false,
     verbose: false,
-    img: false,
     capture_pageview: true,
     debug: false,
     cookie_expiration: 365,
@@ -294,24 +293,10 @@ PostHogLib.prototype._prepare_callback = function (callback, data) {
         return null
     }
 
-    if (USE_XHR) {
-        var callback_function = function (response) {
-            callback(response, data)
-        }
-        return callback_function
-    } else {
-        // if the user gives us a callback, we store as a random
-        // property on this instances jsc function and update our
-        // callback string to reflect that.
-        var jsc = this['_jsc']
-        var randomized_cb = '' + Math.floor(Math.random() * 100000000)
-        var callback_string = this.get_config('callback_fn') + '[' + randomized_cb + ']'
-        jsc[randomized_cb] = function (response) {
-            delete jsc[randomized_cb]
-            callback(response, data)
-        }
-        return callback_string
+    var callback_function = function (response) {
+        callback(response, data)
     }
+    return callback_function
 }
 
 PostHogLib.prototype._handle_unload = function () {
@@ -356,23 +341,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     }
 
     options = _.extend(DEFAULT_OPTIONS, options || {})
-    if (!USE_XHR) {
-        options.method = 'GET'
-    }
 
     const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
-
-    if (!USE_XHR) {
-        if (callback) {
-            data['callback'] = callback
-        } else if (verbose_mode || this.get_config('test')) {
-            // Verbose output (from verbose mode, or an error in test mode) is a json blob,
-            // which by itself is not valid javascript. Without a callback, this verbose output will
-            // cause an error when returned via jsonp, so we force a no-op callback param.
-            // See the ECMA script spec: http://www.ecma-international.org/ecma-262/5.1/#sec-12.4
-            data['callback'] = '(function(){})'
-        }
-    }
 
     var args = options.urlQueryArgs || {}
     args['ip'] = this.get_config('ip') ? 1 : 0
@@ -380,30 +350,18 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
 
     url += '?' + _.HTTPBuildQuery(args)
 
-    if (_.isObject(data) && this.get_config('img')) {
-        var img = document.createElement('img')
-        img.src = url
-        document.body.appendChild(img)
-    } else if (useSendBeacon) {
+    if (useSendBeacon) {
         // beacon documentation https://w3c.github.io/beacon/
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
         window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
-    } else if (USE_XHR) {
+    } else {
         try {
             xhr(url, data, this.get_config('xhr_headers'), options, this._captureMetrics, callback)
         } catch (e) {
             console.error(e)
         }
-    } else {
-        var script = document.createElement('script')
-        script.type = 'text/javascript'
-        script.async = true
-        script.defer = true
-        script.src = url
-        var s = document.getElementsByTagName('script')[0]
-        s.parentNode.insertBefore(script, s)
     }
 }
 
