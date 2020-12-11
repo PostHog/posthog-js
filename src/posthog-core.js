@@ -432,27 +432,17 @@ PostHogLib.prototype.push = function (item) {
  * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
  * @param {Object} [options] Optional configuration for this capture request.
  * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
- * @param {Function} [callback] [Deprecated] If provided, the callback function will be called after capturing the event.
  */
-PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options, callback) {
+PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options) {
     this._captureMetrics.incr('capture')
     if (event_name === '$snapshot') {
         this._captureMetrics.incr('snapshot')
     }
 
-    if (!callback && typeof options === 'function') {
-        callback = options
-        options = null
-    }
     options = options || __NOOPTIONS
     var transport = options['transport'] // external API, don't minify 'transport' prop
     if (transport) {
         options.transport = transport // 'transport' prop name can be minified internally
-    }
-    if (typeof callback !== 'function') {
-        callback = __NOOP
-    } else {
-        window.console.warn('WARNING! Calling posthog.capture with a callback is deprecated and will be removed soon!')
     }
 
     if (_.isUndefined(event_name)) {
@@ -490,20 +480,17 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     const jsonData = JSON.stringify(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
-    const cb = this._prepare_callback(callback, data)
 
-    const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
+    const has_unique_traits = options !== __NOOPTIONS
 
     if (this.get_config('request_batching') && (!has_unique_traits || options._batchKey)) {
         data['timestamp'] = new Date()
         this._requestQueue.enqueue(url, data, options)
     } else {
-        this.__compress_and_send_json_request(url, jsonData, options, cb)
+        this.__compress_and_send_json_request(url, jsonData, options)
     }
 
     this._invokeCaptureHooks(event_name)
-
-    return data
 })
 
 PostHogLib.prototype._addCaptureHook = function (callback) {

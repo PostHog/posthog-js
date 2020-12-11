@@ -41,14 +41,12 @@ declare class posthog {
      * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
      * @param {Object} [options] Optional configuration for this capture request.
      * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
-     * @param {Function} [callback] [Deprecated] If provided, the callback function will be called after capturing the event.
      */
     static capture(
         event_name: string,
         properties?: posthog.Properties,
-        options?: { transport: 'XHR' | 'sendBeacon' },
-        callback?: posthog.CaptureCallback
-    ): posthog.CaptureResult
+        options?: { transport: 'XHR' | 'sendBeacon' }
+    ): void
 
     /**
      * Capture a page view event, which is currently ignored by the server.
