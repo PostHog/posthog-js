@@ -3,37 +3,23 @@ import { autocapture } from '../autocapture'
 import { decideCompression, compressData } from '../compression'
 
 describe('decideCompression()', () => {
-    given('subject', () => decideCompression(given.compressionSupport, given.forceGzip, given.forceCompression))
+    given('subject', () => decideCompression(given.compressionSupport))
     given('compressionSupport', () => ({}))
 
     it('returns base64 by default', () => {
         expect(given.subject).toEqual('base64')
     })
 
-    it('returns gzip-js if forceGzip', () => {
-        given('forceGzip', () => true)
+    it('returns gzip-js if all compressions supported', () => {
+        given('compressionSupport', () => ({ lz64: true, 'gzip-js': true }))
 
         expect(given.subject).toEqual('gzip-js')
     })
 
-    it('returns lz64 if forceCompression and no support', () => {
-        given('forceCompression', () => true)
-
-        expect(given.subject).toEqual('lz64')
-    })
-
-    describe('all compressions supported', () => {
+    it('returns lz64 if supported', () => {
         given('compressionSupport', () => ({ lz64: true, 'gzip-js': true }))
 
-        it('returns lz64', () => {
-            expect(given.subject).toEqual('lz64')
-        })
-
-        it('returns gzip-js if forceGzip', () => {
-            given('forceGzip', () => true)
-
-            expect(given.subject).toEqual('gzip-js')
-        })
+        expect(given.subject).toEqual('gzip-js')
     })
 })
 

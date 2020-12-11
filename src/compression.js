@@ -2,13 +2,11 @@ import { LZString } from './lz-string'
 import { strToU8, gzipSync } from 'fflate'
 import { _ } from './utils'
 
-export function decideCompression(compressionSupport, forceGzip, forceCompression) {
-    if (forceGzip) {
+export function decideCompression(compressionSupport) {
+    if (compressionSupport['gzip-js']) {
         return 'gzip-js'
-    } else if (compressionSupport['lz64'] || forceCompression) {
+    } else if (compressionSupport['lz64']) {
         return 'lz64'
-    } else if (compressionSupport['gzip-js'] || forceCompression) {
-        return 'gzip-js'
     } else {
         return 'base64'
     }
