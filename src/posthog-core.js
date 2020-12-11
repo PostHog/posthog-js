@@ -1312,59 +1312,13 @@ var override_ph_init_func = function () {
 }
 
 var add_dom_loaded_handler = function () {
-    // Cross browser DOM Loaded support
     function dom_loaded_handler() {
-        // function flag since we only want to execute this once
-        if (dom_loaded_handler.done) {
-            return
-        }
-        dom_loaded_handler.done = true
-
         _.each(instances, function (inst) {
             inst._dom_loaded()
         })
     }
 
-    function do_scroll_check() {
-        try {
-            document.documentElement.doScroll('left')
-        } catch (e) {
-            setTimeout(do_scroll_check, 1)
-            return
-        }
-
-        dom_loaded_handler()
-    }
-
-    if (document.addEventListener) {
-        if (document.readyState === 'complete') {
-            // safari 4 can fire the DOMContentLoaded event before loading all
-            // external JS (including this file). you will see some copypasta
-            // on the internet that checks for 'complete' and 'loaded', but
-            // 'loaded' is an IE thing
-            dom_loaded_handler()
-        } else {
-            document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
-        }
-    } else if (document.attachEvent) {
-        // IE
-        document.attachEvent('onreadystatechange', dom_loaded_handler)
-
-        // check to make sure we arn't in a frame
-        var toplevel = false
-        try {
-            toplevel = window.frameElement === null
-        } catch (e) {
-            // noop
-        }
-
-        if (document.documentElement.doScroll && toplevel) {
-            do_scroll_check()
-        }
-    }
-
-    // fallback handler, always will work
-    _.register_event(window, 'load', dom_loaded_handler, true)
+    document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
 }
 
 export function init_from_snippet() {
