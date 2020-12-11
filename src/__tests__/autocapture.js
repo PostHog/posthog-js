@@ -383,7 +383,6 @@ describe('Autocapture system', () => {
                         ],
                     })
                 ),
-                _prepare_callback: sandbox.spy((callback) => callback),
                 get_config: sandbox.spy(function (key) {
                     switch (key) {
                         case 'api_host':
@@ -770,7 +769,6 @@ describe('Autocapture system', () => {
         given('subject', () => () => autocapture.init(given.lib))
 
         given('lib', () => ({
-            _prepare_callback: jest.fn().mockImplementation((callback) => callback),
             _send_request: jest
                 .fn()
                 .mockImplementation((url, params, options, callback) => callback({ config: given.decideResponse })),

@@ -39,7 +39,7 @@ export class PostHogFeatureFlags {
             this.instance.get_config('api_host') + '/decide/',
             { data: encoded_data },
             { method: 'POST' },
-            this.instance._prepare_callback(parseDecideResponse)
+            parseDecideResponse
         )
     }
 

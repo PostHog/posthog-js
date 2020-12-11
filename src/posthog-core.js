@@ -253,26 +253,6 @@ PostHogLib.prototype._dom_loaded = function () {
     this._start_queue_if_opted_in()
 }
 
-/**
- * _prepare_callback() should be called by callers of _send_request for use
- * as the callback argument.
- *
- * If there is no callback, this returns null.
- * If we are going to make XHR/XDR requests, this returns a function.
- * If we are going to use script tags, this returns a string to use as the
- * callback GET param.
- */
-PostHogLib.prototype._prepare_callback = function (callback, data) {
-    if (_.isUndefined(callback)) {
-        return null
-    }
-
-    var callback_function = function (response) {
-        callback(response, data)
-    }
-    return callback_function
-}
-
 PostHogLib.prototype._handle_unload = function () {
     if (!this.get_config('request_batching')) {
         if (this.get_config('capture_pageview')) {

@@ -272,7 +272,7 @@ var autocapture = {
             instance.get_config('api_host') + '/decide/',
             { data: encoded_data },
             { method: 'POST' },
-            instance._prepare_callback(parseDecideResponse)
+            parseDecideResponse
         )
     },
 

@@ -50,7 +50,6 @@ describe('Payload Compression', () => {
             autocapture._initializedTokens = []
             lib = {
                 debug: true,
-                _prepare_callback: sandbox.spy((callback) => callback),
                 _send_request: sandbox.spy((url, params, options, callback) => {
                     if (url === 'https://test.com/decide/') {
                         callback({ config: { enable_collect_everything: true }, supportedCompression: ['lz64'] })
