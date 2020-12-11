@@ -290,11 +290,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         //   and is defined as best effort attempt
         window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
     } else {
-        try {
-            xhr(url, data, options, this._captureMetrics, callback)
-        } catch (e) {
-            logIfDebug(e)
-        }
+        xhr(url, data, options, this._captureMetrics, callback)
     }
 }
 
