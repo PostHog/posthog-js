@@ -32,7 +32,8 @@ export function getSafeText(el) {
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         _.each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += _.trim(child.textContent)
+                elText += child.textContent
+                    .trim()
                     // scrub potentially sensitive values
                     .split(/(\s+)/)
                     .filter(shouldCaptureValue)
@@ -46,7 +47,7 @@ export function getSafeText(el) {
         })
     }
 
-    return _.trim(elText)
+    return elText.trim()
 }
 
 /*
@@ -219,7 +220,7 @@ export function shouldCaptureValue(value) {
     }
 
     if (typeof value === 'string') {
-        value = _.trim(value)
+        value = value.trim()
 
         // check to see if input value looks like a credit card number
         // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html

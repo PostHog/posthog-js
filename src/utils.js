@@ -23,13 +23,6 @@ const nativeBind = FuncProto.bind,
     nativeIsArray = Array.isArray,
     breaker = {}
 
-var _ = {
-    trim: function (str) {
-        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/Trim#Polyfill
-        return str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
-    },
-}
-
 // Console override
 var console = {
     /** @type {function(...*)} */
@@ -71,6 +64,8 @@ var console = {
         }
     },
 }
+
+const _ = {}
 
 // UNDERSCORE
 // Embed part of the Underscore Library
