@@ -120,9 +120,6 @@ var create_mplib = function (token, config, name) {
         if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
             instance['__autocapture_enabled'] = false
             console.log('Not in active bucket: disabling Automatic Event Collection.')
-        } else if (!autocapture.isBrowserSupported()) {
-            instance['__autocapture_enabled'] = false
-            console.log('Disabling Automatic Event Collection because this browser is not supported')
         } else {
             autocapture.init(instance)
         }

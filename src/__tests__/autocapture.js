@@ -97,27 +97,6 @@ describe('Autocapture system', () => {
         })
     })
 
-    describe('isBrowserSupported', () => {
-        let orig
-        beforeEach(() => {
-            orig = document.querySelectorAll
-        })
-
-        afterEach(() => {
-            document.querySelectorAll = orig
-        })
-
-        it('should return true if document.querySelectorAll is a function', () => {
-            document.querySelectorAll = function () {}
-            expect(autocapture.isBrowserSupported()).toBe(true)
-        })
-
-        it('should return false if document.querySelectorAll is not a function', () => {
-            document.querySelectorAll = undefined
-            expect(autocapture.isBrowserSupported()).toBe(false)
-        })
-    })
-
     describe('enabledForProject', () => {
         it('should enable ce for the project with token "d" when 5 buckets are enabled out of 10', () => {
             expect(autocapture.enabledForProject('d', 10, 5)).toBe(true)

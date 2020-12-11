@@ -290,10 +290,6 @@ var autocapture = {
         }
         return charCodeSum % numBuckets < numEnabledBuckets
     },
-
-    isBrowserSupported: function () {
-        return _.isFunction(document.querySelectorAll)
-    },
 }
 
 _.bind_instance_methods(autocapture)
