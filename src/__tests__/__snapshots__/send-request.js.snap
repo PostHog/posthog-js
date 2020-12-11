@@ -25,12 +25,6 @@ Object {
 }
 `;
 
-exports[`encodePostData() handles plaintext post 1`] = `
-Object {
-  "data": "content",
-}
-`;
-
 exports[`encodePostData() handles sendBeacon 1`] = `
 Array [
   "Blob",

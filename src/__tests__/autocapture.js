@@ -842,7 +842,7 @@ describe('Autocapture system', () => {
                         distinct_id: 'distinctid',
                     },
                 },
-                { method: 'POST', plainText: true },
+                { method: 'POST' },
                 expect.any(Function)
             )
         })

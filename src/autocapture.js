@@ -271,7 +271,7 @@ var autocapture = {
                     distinct_id: instance.get_distinct_id(),
                 },
             },
-            { method: 'POST', plainText: true },
+            { method: 'POST' },
             parseDecideResponse
         )
     },
