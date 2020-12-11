@@ -219,14 +219,14 @@ var autocapture = {
 
         var token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
-            console.log('autocapture already initialized for token "' + token + '"')
+            console.warn('autocapture already initialized for token "' + token + '"')
             return
         }
         this._initializedTokens.push(token)
 
         var parseDecideResponse = _.bind(function (response) {
             if (!(document && document.body)) {
-                console.log('document not ready yet, trying again in 500 milliseconds...')
+                // document not ready yet, trying again in 500 milliseconds...
                 setTimeout(function () {
                     parseDecideResponse(response)
                 }, 500)
