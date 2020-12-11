@@ -951,14 +951,6 @@ PostHogLib.prototype.get_property = function (property_name) {
     return this['persistence']['props'][property_name]
 }
 
-PostHogLib.prototype.toString = function () {
-    var name = this.get_config('name')
-    if (name !== PRIMARY_INSTANCE_NAME) {
-        name = PRIMARY_INSTANCE_NAME + '.' + name
-    }
-    return name
-}
-
 // perform some housekeeping around GDPR opt-in/out state
 PostHogLib.prototype._gdpr_init = function () {
     var is_localStorage_requested = this.get_config('opt_out_capturing_persistence_type') === 'localStorage'
@@ -1277,7 +1269,6 @@ PostHogLib.prototype['set_config'] = PostHogLib.prototype.set_config
 PostHogLib.prototype['get_config'] = PostHogLib.prototype.get_config
 PostHogLib.prototype['get_property'] = PostHogLib.prototype.get_property
 PostHogLib.prototype['get_distinct_id'] = PostHogLib.prototype.get_distinct_id
-PostHogLib.prototype['toString'] = PostHogLib.prototype.toString
 PostHogLib.prototype['opt_out_captureing'] = PostHogLib.prototype.opt_out_captureing
 PostHogLib.prototype['opt_in_captureing'] = PostHogLib.prototype.opt_in_captureing
 PostHogLib.prototype['has_opted_out_captureing'] = PostHogLib.prototype.has_opted_out_captureing
