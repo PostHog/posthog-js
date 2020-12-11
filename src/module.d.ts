@@ -567,13 +567,8 @@ declare namespace posthog {
          *
          * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
          * @param {*} [to] A value to set on the given property name
-         * @param {Function} [callback] If provided, the callback will be called after captureing the event.
          */
-        static set(
-            prop: posthog.Properties | string,
-            to?: posthog.Property,
-            callback?: posthog.CaptureCallback
-        ): posthog.Properties
+        static set(prop: posthog.Properties | string, to?: posthog.Property): posthog.Properties
 
         /*
          * Set properties on a user record, only if they do not yet exist.
@@ -594,13 +589,8 @@ declare namespace posthog {
          *
          * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
          * @param {*} [to] A value to set on the given property name
-         * @param {Function} [callback] If provided, the callback will be called after captureing the event.
          */
-        static set_once(
-            prop: posthog.Properties | string,
-            to?: posthog.Property,
-            callback?: posthog.CaptureCallback
-        ): posthog.Properties
+        static set_once(prop: posthog.Properties | string, to?: posthog.Property): posthog.Properties
 
         static toString(): string
     }

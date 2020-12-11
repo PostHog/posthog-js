@@ -32,13 +32,9 @@ PostHogPeople.prototype._init = function (posthog_instance) {
  *
  * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
  * @param {*} [to] A value to set on the given property name
- * @param {Function} [callback] If provided, the callback will be called after captureing the event.
  */
-PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, callback) {
+PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to) {
     var data = this.set_action(prop, to)
-    if (_.isObject(prop)) {
-        callback = to
-    }
     // make sure that the referrer info has been updated and saved
     if (this._get_config('save_referrer')) {
         this._posthog['persistence'].update_referrer_info(document.referrer)
@@ -51,7 +47,7 @@ PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, ca
         this._posthog['persistence'].get_referrer_info(),
         data[SET_ACTION]
     )
-    return this._send_request(data, callback)
+    return this._send_request(data)
 })
 
 /*
@@ -75,19 +71,16 @@ PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, ca
  * @param {*} [to] A value to set on the given property name
  * @param {Function} [callback] If provided, the callback will be called after captureing the event.
  */
-PostHogPeople.prototype.set_once = addOptOutCheckPostHogPeople(function (prop, to, callback) {
+PostHogPeople.prototype.set_once = addOptOutCheckPostHogPeople(function (prop, to) {
     var data = this.set_once_action(prop, to)
-    if (_.isObject(prop)) {
-        callback = to
-    }
-    return this._send_request(data, callback)
+    return this._send_request(data)
 })
 
 PostHogPeople.prototype.toString = function () {
     return this._posthog.toString() + '.people'
 }
 
-PostHogPeople.prototype._send_request = function (data, callback) {
+PostHogPeople.prototype._send_request = function (data) {
     data['$token'] = this._get_config('token')
     data['$distinct_id'] = this._posthog.get_distinct_id()
     var device_id = this._posthog.get_property('$device_id')
@@ -108,11 +101,7 @@ PostHogPeople.prototype._send_request = function (data, callback) {
     var json_data = JSON.stringify(date_encoded_data)
     var encoded_data = _.base64Encode(json_data)
 
-    this._posthog._send_request(
-        this._get_config('api_host') + '/engage/',
-        { data: encoded_data },
-        this._posthog._prepare_callback(callback, truncated_data)
-    )
+    this._posthog._send_request(this._get_config('api_host') + '/engage/', { data: encoded_data })
 
     return truncated_data
 }
