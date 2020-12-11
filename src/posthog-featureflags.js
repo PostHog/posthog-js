@@ -35,7 +35,7 @@ export class PostHogFeatureFlags {
                     distinct_id: this.instance.get_distinct_id(),
                 },
             },
-            { method: 'POST' },
+            {},
             parseDecideResponse
         )
     }

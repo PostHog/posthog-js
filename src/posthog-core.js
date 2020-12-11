@@ -36,7 +36,6 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 
 const defaultConfig = () => ({
     api_host: 'https://app.posthog.com',
-    api_method: 'POST',
     api_transport: 'XHR',
     autocapture: true,
     cross_subdomain_cookie: document.location.hostname.indexOf('herokuapp.com') === -1,
@@ -281,7 +280,6 @@ PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData,
 
 PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var DEFAULT_OPTIONS = {
-        method: this.get_config('api_method'),
         transport: this.get_config('api_transport'),
     }
 
@@ -794,9 +792,6 @@ PostHogLib.prototype.alias = function (alias, original) {
  *     {
  *       // Posthog host
  *       api_host: 'https://app.posthog.com',
- *
- *       // HTTP method for capturing requests
- *       api_method: 'POST'
  *
  *       // transport for sending requests ('XHR' or 'sendBeacon')
  *       // NB: sendBeacon should only be used for scenarios such as

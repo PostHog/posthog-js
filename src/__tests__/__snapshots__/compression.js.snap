@@ -55,7 +55,6 @@ Array [
   ],
   Object {
     "blob": true,
-    "method": "POST",
     "urlQueryArgs": Object {
       "compression": "gzip-js",
     },

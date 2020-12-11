@@ -90,7 +90,6 @@ describe('SessionRecording', () => {
                     $snapshot_data: { event: 1 },
                 },
                 {
-                    method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
                     _forceCompression: true,
@@ -106,7 +105,6 @@ describe('SessionRecording', () => {
                     $snapshot_data: { event: 2 },
                 },
                 {
-                    method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
                     _forceCompression: true,

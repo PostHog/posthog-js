@@ -4,10 +4,8 @@ export const encodePostData = (data, options) => {
     if (options.blob) {
         return new Blob([data.buffer], { type: 'text/plain' })
     } else if (options.sendBeacon) {
-        const body = encodePostData(data, { method: 'POST' })
+        const body = encodePostData(data, {})
         return new Blob([body], { type: 'text/plain' })
-    } else if (options.method !== 'POST') {
-        return null
     }
 
     return data

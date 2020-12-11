@@ -17,7 +17,7 @@ describe('compressData()', () => {
     given('subject', () => compressData(given.compression, given.jsonData, given.options))
 
     given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
-    given('options', () => ({ method: 'POST' }))
+    given('options', () => ({}))
 
     it('handles gzip-js', () => {
         given('compression', () => 'gzip-js')

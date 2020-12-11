@@ -163,9 +163,6 @@ declare class posthog {
      * The default config is:
      *
      *     {
-     *       // HTTP method for capturing requests
-     *       api_method: 'POST'
-     *
      *       // transport for sending requests ('XHR' or 'sendBeacon')
      *       // NB: sendBeacon should only be used for scenarios such as
      *       // page unload where a "best-effort" attempt to send is
@@ -429,7 +426,6 @@ declare namespace posthog {
 
     interface Config {
         api_host?: string
-        api_method?: string
         api_transport?: string
         autocapture?: boolean
         cdn?: string
