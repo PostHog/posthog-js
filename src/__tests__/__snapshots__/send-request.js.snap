@@ -18,6 +18,12 @@ exports[`encodePostData() handles data with compression 1`] = `"data=content&com
 
 exports[`encodePostData() handles objects 1`] = `"data=content"`;
 
+exports[`encodePostData() handles plaintext post 1`] = `
+Object {
+  "data": "content",
+}
+`;
+
 exports[`encodePostData() handles sendBeacon 1`] = `
 Array [
   "Blob",

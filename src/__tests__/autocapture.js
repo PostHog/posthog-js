@@ -839,14 +839,12 @@ describe('Autocapture system', () => {
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://test.com/decide/',
                 {
-                    data: _.base64Encode(
-                        JSON.stringify({
-                            token: 'testtoken',
-                            distinct_id: 'distinctid',
-                        })
-                    ),
+                    data: {
+                        token: 'testtoken',
+                        distinct_id: 'distinctid',
+                    },
                 },
-                { method: 'POST' },
+                { method: 'POST', plainText: true },
                 expect.any(Function)
             )
         })

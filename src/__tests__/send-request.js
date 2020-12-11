@@ -44,4 +44,10 @@ describe('encodePostData()', () => {
 
         expect(given.subject).toMatchSnapshot()
     })
+
+    it('handles plaintext post', () => {
+        given('options', () => ({ method: 'POST', plainText: true }))
+
+        expect(given.subject).toMatchSnapshot()
+    })
 })

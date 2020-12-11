@@ -263,15 +263,15 @@ var autocapture = {
             }
         }, this)
 
-        var json_data = JSON.stringify({
-            token: token,
-            distinct_id: instance.get_distinct_id(),
-        })
-        var encoded_data = _.base64Encode(json_data)
         instance._send_request(
             instance.get_config('api_host') + '/decide/',
-            { data: encoded_data },
-            { method: 'POST' },
+            {
+                data: {
+                    token: token,
+                    distinct_id: instance.get_distinct_id(),
+                },
+            },
+            { method: 'POST', plainText: true },
             parseDecideResponse
         )
     },

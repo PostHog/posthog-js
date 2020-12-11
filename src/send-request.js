@@ -8,6 +8,8 @@ export const encodePostData = (data, options) => {
         return new Blob([body], { type: 'application/x-www-form-urlencoded' })
     } else if (options.method !== 'POST') {
         return null
+    } else if (options.plainText) {
+        return data
     }
 
     let body_data

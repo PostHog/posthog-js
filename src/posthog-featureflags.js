@@ -1,5 +1,3 @@
-import { _ } from './utils'
-
 export class PostHogFeatureFlags {
     constructor(instance) {
         this.instance = instance
@@ -29,16 +27,15 @@ export class PostHogFeatureFlags {
             }
         }
 
-        const token = this.instance.get_config('token')
-        const json_data = JSON.stringify({
-            token: token,
-            distinct_id: this.instance.get_distinct_id(),
-        })
-        const encoded_data = _.base64Encode(json_data)
         this.instance._send_request(
             this.instance.get_config('api_host') + '/decide/',
-            { data: encoded_data },
-            { method: 'POST' },
+            {
+                data: {
+                    token: this.instance.get_config('token'),
+                    distinct_id: this.instance.get_distinct_id(),
+                },
+            },
+            { method: 'POST', plainText: true },
             parseDecideResponse
         )
     }
