@@ -1079,10 +1079,6 @@ PostHogLib.prototype.opt_in_capturing = function (options) {
     this._gdpr_call_func(optIn, options)
     this._gdpr_update_persistence(options)
 }
-PostHogLib.prototype.opt_in_captureing = function (options) {
-    deprecate_warning('opt_in_captureing')
-    this.opt_in_capturing(options)
-}
 
 /**
  * Opt the user out of data capturing and cookies/localstorage for this PostHog instance
@@ -1117,10 +1113,6 @@ PostHogLib.prototype.opt_out_capturing = function (options) {
     this._gdpr_call_func(optOut, options)
     this._gdpr_update_persistence(options)
 }
-PostHogLib.prototype.opt_out_captureing = function (options) {
-    deprecate_warning('opt_out_captureing')
-    this.opt_out_capturing(options)
-}
 
 /**
  * Check whether the user has opted in to data capturing and cookies/localstorage for this PostHog instance
@@ -1138,10 +1130,6 @@ PostHogLib.prototype.opt_out_captureing = function (options) {
 PostHogLib.prototype.has_opted_in_capturing = function (options) {
     return this._gdpr_call_func(hasOptedIn, options)
 }
-PostHogLib.prototype.has_opted_in_captureing = function (options) {
-    deprecate_warning('has_opted_in_captureing')
-    return this.has_opted_in_capturing(options)
-}
 
 /**
  * Check whether the user has opted out of data capturing and cookies/localstorage for this PostHog instance
@@ -1158,10 +1146,6 @@ PostHogLib.prototype.has_opted_in_captureing = function (options) {
  */
 PostHogLib.prototype.has_opted_out_capturing = function (options) {
     return this._gdpr_call_func(hasOptedOut, options)
-}
-PostHogLib.prototype.has_opted_out_captureing = function (options) {
-    deprecate_warning('has_opted_out_captureing')
-    return this.has_opted_out_capturing(options)
 }
 
 /**
@@ -1197,10 +1181,6 @@ PostHogLib.prototype.clear_opt_in_out_capturing = function (options) {
 
     this._gdpr_call_func(clearOptInOut, options)
     this._gdpr_update_persistence(options)
-}
-PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
-    deprecate_warning('clear_opt_in_out_captureing')
-    this.clear_opt_in_out_capturing(options)
 }
 
 /**
@@ -1242,16 +1222,6 @@ PostHogLib.prototype.sentry_integration = function (_posthog, organization, proj
             return event
         })
     }
-}
-
-function deprecate_warning(method) {
-    window.console.warn(
-        'WARNING! posthog.' +
-            method +
-            ' is deprecated and will be removed soon! Please use posthog.' +
-            method.split('captureing').join('capturing') +
-            ' instead (without the "e")!'
-    )
 }
 
 // EXPORTS (for closure compiler)
