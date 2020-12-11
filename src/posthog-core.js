@@ -34,18 +34,6 @@ const __NOOPTIONS = {}
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
-/*
- * Dynamic... constants? Is that an oxymoron?
- */
-// http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
-// https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-const USE_XHR = window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
-
-// IE<10 does not support cross-origin XHR's but script tags
-// with defer won't block window.onload; ENQUEUE_REQUESTS
-// should only be true for Opera<12
-let ENQUEUE_REQUESTS = !USE_XHR && userAgent.indexOf('MSIE') === -1 && userAgent.indexOf('Mozilla') === -1
-
 const defaultConfig = () => ({
     api_host: 'https://app.posthog.com',
     api_method: 'POST',
@@ -219,7 +207,6 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this._requestQueue = new RequestQueue(this._captureMetrics, _.bind(this._handle_queued_event, this))
     this.__captureHooks = []
-    this.__request_queue = []
 
     this['persistence'] = new PostHogPersistence(this['config'])
     this._gdpr_init()
@@ -264,18 +251,6 @@ PostHogLib.prototype._start_queue_if_opted_in = function () {
 }
 
 PostHogLib.prototype._dom_loaded = function () {
-    if (!this.has_opted_out_capturing()) {
-        _.each(
-            this.__request_queue,
-            function (item) {
-                this._send_request.apply(this, item)
-            },
-            this
-        )
-    }
-
-    delete this.__request_queue
-
     this._start_queue_if_opted_in()
 }
 
@@ -329,11 +304,6 @@ PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData,
 }
 
 PostHogLib.prototype._send_request = function (url, data, options, callback) {
-    if (ENQUEUE_REQUESTS) {
-        this.__request_queue.push(arguments)
-        return
-    }
-
     var DEFAULT_OPTIONS = {
         method: this.get_config('api_method'),
         transport: this.get_config('api_transport'),
@@ -1422,8 +1392,6 @@ var add_dom_loaded_handler = function () {
             return
         }
         dom_loaded_handler.done = true
-
-        ENQUEUE_REQUESTS = false
 
         _.each(instances, function (inst) {
             inst._dom_loaded()
