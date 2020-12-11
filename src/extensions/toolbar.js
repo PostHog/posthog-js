@@ -85,7 +85,7 @@ export class Toolbar {
                 window['ph_load_editor'](editorParams)
             })
             // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
-            _.register_event(window, 'turbolinks:load', () => {
+            window.addEventListener('turbolinks:load', () => {
                 window['_postHogToolbarLoaded'] = false
                 this._loadEditor(editorParams)
             })

@@ -208,9 +208,9 @@ var autocapture = {
             e = e || window.event
             this._captureEvent(e, instance)
         }, this)
-        _.register_event(document, 'submit', handler, false, true)
-        _.register_event(document, 'change', handler, false, true)
-        _.register_event(document, 'click', handler, false, true)
+        document.addEventListener('submit', handler, true)
+        document.addEventListener('change', handler, true)
+        document.addEventListener('click', handler, true)
     },
 
     _customProperties: {},
