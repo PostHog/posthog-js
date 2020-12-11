@@ -226,12 +226,6 @@ declare class posthog {
      *       // should we capture a page view on page load
      *       capture_pageview: true
      *
-     *       // if you set upgrade to be true, the library will check for
-     *       // a cookie from our old js library and import super
-     *       // properties from it, then the old cookie is deleted
-     *       // The upgrade config option only works in the initialization,
-     *       // so make sure you set it when you create the library.
-     *       upgrade: false
      *       // protocol for fetching in-app message resources, e.g.
      *       // 'https://' or 'http://'; defaults to '//' (which defers to the
      *       // current page's protocol)
@@ -449,7 +443,6 @@ declare namespace posthog {
         capture_pageview?: boolean
         debug?: boolean
         cookie_expiration?: number
-        upgrade?: boolean
         disable_persistence?: boolean
         disable_cookie?: boolean
         secure_cookie?: boolean

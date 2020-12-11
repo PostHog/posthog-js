@@ -105,27 +105,7 @@ PostHogPersistence.prototype.load = function () {
 }
 
 PostHogPersistence.prototype.upgrade = function (config) {
-    var upgrade_from_old_lib = config['upgrade'],
-        old_cookie_name,
-        old_cookie
-
-    if (upgrade_from_old_lib) {
-        old_cookie_name = 'ph_super_properties'
-        // Case where they had a custom cookie name before.
-        if (typeof upgrade_from_old_lib === 'string') {
-            old_cookie_name = upgrade_from_old_lib
-        }
-
-        old_cookie = this.storage.parse(old_cookie_name)
-
-        // remove the cookie
-        this.storage.remove(old_cookie_name)
-        this.storage.remove(old_cookie_name, true)
-
-        if (old_cookie) {
-            this['props'] = _.extend(this['props'], old_cookie['all'], old_cookie['events'])
-        }
-    }
+    var old_cookie_name, old_cookie
 
     if (!config['cookie_name'] && config['name'] !== 'posthog') {
         // special case to handle people with cookies of the form

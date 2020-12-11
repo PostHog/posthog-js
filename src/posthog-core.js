@@ -49,7 +49,6 @@ const defaultConfig = () => ({
     capture_pageview: true,
     debug: false,
     cookie_expiration: 365,
-    upgrade: false,
     disable_session_recording: false,
     disable_persistence: false,
     disable_cookie: false,
@@ -858,13 +857,6 @@ PostHogLib.prototype.alias = function (alias, original) {
  *
  *       // should we capture a page view on page load
  *       capture_pageview: true
- *
- *       // if you set upgrade to be true, the library will check for
- *       // a cookie from our old js library and import super
- *       // properties from it, then the old cookie is deleted
- *       // The upgrade config option only works in the initialization,
- *       // so make sure you set it when you create the library.
- *       upgrade: false
  *
  *       // if this is true, session recording is always disabled.
  *       disable_session_recording: false,
