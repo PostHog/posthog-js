@@ -98,10 +98,8 @@ PostHogPeople.prototype._send_request = function (data) {
 
     var date_encoded_data = _.encodeDates(data)
     var truncated_data = _.copyAndTruncateStrings(date_encoded_data, 255)
-    var json_data = JSON.stringify(date_encoded_data)
-    var encoded_data = _.base64Encode(json_data)
 
-    this._posthog._send_request(this._get_config('api_host') + '/engage/', { data: encoded_data })
+    this._posthog.__compress_and_send_json_request(this._get_config('api_host') + '/engage/', { data: truncated_data })
 
     return truncated_data
 }
