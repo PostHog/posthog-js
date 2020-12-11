@@ -25,6 +25,7 @@ configs.push({
         file: 'dist/module.js',
         format: 'esm',
     },
+    // :TODO: babelHelpers runtime should be better here.
     plugins: [json(), babel({ babelHelpers: 'bundled', presets: ['@babel/preset-env'] }), terser({ ecma: 5 })],
     external: ['fflate'],
 })
