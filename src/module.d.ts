@@ -232,11 +232,6 @@ declare class posthog {
      *       // The upgrade config option only works in the initialization,
      *       // so make sure you set it when you create the library.
      *       upgrade: false
-     *
-     *       // extra HTTP request headers to set for each API request, in
-     *       // the format {'Header-Name': value}
-     *       xhr_headers: {}
-     *
      *       // protocol for fetching in-app message resources, e.g.
      *       // 'https://' or 'http://'; defaults to '//' (which defers to the
      *       // current page's protocol)
@@ -468,7 +463,6 @@ declare namespace posthog {
         opt_out_capturing_cookie_prefix?: string | null
         respect_dnt?: boolean
         property_blacklist?: string[]
-        xhr_headers?: { [header_name: string]: string }
         inapp_protocol?: string
         inapp_link_new_window?: boolean
         request_batching?: boolean

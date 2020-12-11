@@ -63,7 +63,6 @@ const defaultConfig = () => ({
     opt_out_capturing_cookie_prefix: null,
     property_blacklist: [],
     sanitize_properties: null,
-    xhr_headers: {}, // { header: value, header2: value }
     inapp_protocol: '//',
     inapp_link_new_window: false,
     request_batching: true,
@@ -328,7 +327,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
     } else {
         try {
-            xhr(url, data, this.get_config('xhr_headers'), options, this._captureMetrics, callback)
+            xhr(url, data, options, this._captureMetrics, callback)
         } catch (e) {
             console.error(e)
         }
@@ -892,10 +891,6 @@ PostHogLib.prototype.alias = function (alias, original) {
  *
  *       // if this is true, session recording is always disabled.
  *       disable_session_recording: false,
- *
- *       // extra HTTP request headers to set for each API request, in
- *       // the format {'Header-Name': value}
- *       xhr_headers: {}
  *
  *       // protocol for fetching in-app message resources, e.g.
  *       // 'https://' or 'http://'; defaults to '//' (which defers to the

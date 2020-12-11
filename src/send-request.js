@@ -24,7 +24,7 @@ export const encodePostData = (data, options) => {
     return body_data
 }
 
-export const xhr = (url, data, headers, options, captureMetrics, callback) => {
+export const xhr = (url, data, options, captureMetrics, callback) => {
     const req = new XMLHttpRequest()
     req.open(options.method, url, true)
 
@@ -39,9 +39,6 @@ export const xhr = (url, data, headers, options, captureMetrics, callback) => {
         ...options._metrics,
     })
 
-    _.each(headers, function (headerValue, headerName) {
-        req.setRequestHeader(headerName, headerValue)
-    })
     if (options.method === 'POST' && !options.blob) {
         req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     }
