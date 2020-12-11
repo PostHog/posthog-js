@@ -97,15 +97,6 @@ describe('Autocapture system', () => {
         })
     })
 
-    describe('enabledForProject', () => {
-        it('should enable ce for the project with token "d" when 5 buckets are enabled out of 10', () => {
-            expect(autocapture.enabledForProject('d', 10, 5)).toBe(true)
-        })
-        it('should NOT enable ce for the project with token "a" when 5 buckets are enabled out of 10', () => {
-            expect(autocapture.enabledForProject('a', 10, 5)).toBe(false)
-        })
-    })
-
     describe('_previousElementSibling', () => {
         it('should return the adjacent sibling', () => {
             const div = document.createElement('div')

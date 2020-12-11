@@ -275,21 +275,6 @@ var autocapture = {
             parseDecideResponse
         )
     },
-
-    // this is a mechanism to ramp up CE with no server-side interaction.
-    // when CE is active, every page load results in a decide request. we
-    // need to gently ramp this up so we don't overload decide. this decides
-    // deterministically if CE is enabled for this project by modding the char
-    // value of the project token.
-    enabledForProject: function (token, numBuckets, numEnabledBuckets) {
-        numBuckets = !_.isUndefined(numBuckets) ? numBuckets : 10
-        numEnabledBuckets = !_.isUndefined(numEnabledBuckets) ? numEnabledBuckets : 10
-        var charCodeSum = 0
-        for (var i = 0; i < token.length; i++) {
-            charCodeSum += token.charCodeAt(i)
-        }
-        return charCodeSum % numBuckets < numEnabledBuckets
-    },
 }
 
 _.bind_instance_methods(autocapture)

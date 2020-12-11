@@ -115,14 +115,7 @@ var create_mplib = function (token, config, name) {
 
     instance['__autocapture_enabled'] = instance.get_config('autocapture')
     if (instance.get_config('autocapture')) {
-        var num_buckets = 100
-        var num_enabled_buckets = 100
-        if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
-            instance['__autocapture_enabled'] = false
-            console.log('Not in active bucket: disabling Automatic Event Collection.')
-        } else {
-            autocapture.init(instance)
-        }
+        autocapture.init(instance)
     }
 
     // if target is not defined, we called init after the lib already
