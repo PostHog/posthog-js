@@ -7,7 +7,7 @@ import { usePostHogContext, FeatureFlags } from '../context'
  * @param props.sendEvent - A flag that controls whether an event will be sent on flag refresh.
  * @returns An object containing active flags and flags that are enabled for the user.
  */
-export function useFeatureFlags(props: { refreshInterval: number; sendEvent: boolean }): FeatureFlags {
+export function useFeatureFlags(props: { refreshInterval?: number; sendEvent?: boolean } = {}): FeatureFlags {
     const { refreshInterval = 0, sendEvent = true } = props || {}
     const { client: posthog, featureFlags, setFeatureFlags } = usePostHogContext()
 
