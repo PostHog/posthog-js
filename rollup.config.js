@@ -16,7 +16,7 @@ configs.push({
         resolve({ browser: true, modulesOnly: true }),
         babel({ babelHelpers: 'bundled', presets: ['@babel/preset-env'] }),
         terser({ ecma: 5 }),
-        analyze(),
+        analyze({ summaryOnly: true }),
     ],
 })
 configs.push({
