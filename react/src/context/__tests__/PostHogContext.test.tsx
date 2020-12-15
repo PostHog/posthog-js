@@ -1,4 +1,5 @@
 import React from 'react'
+import { mocked } from 'ts-jest/utils'
 import { render, cleanup } from '@testing-library/react'
 import posthog from 'posthog-js'
 import { usePostHogContext, PostHogProvider } from '../'
@@ -26,5 +27,18 @@ describe('usePostHogContext hook', () => {
                 <App />
             </PostHogProvider>
         )
+    })
+
+    it("should error if a client instance can't be found in the context", () => {
+        const mockedConsole = mocked(console)
+        jest.spyOn(mockedConsole, 'error').mockImplementation(() => null)
+
+        function App() {
+            usePostHogContext()
+            return null
+        }
+
+        expect(() => render(<App />)).toThrow()
+        mockedConsole.error.mockRestore()
     })
 })
