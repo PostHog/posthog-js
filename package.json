@@ -15,8 +15,9 @@
         "build-react": "cd react; yarn; cd ..; tsc -p react",
         "process-types": "mkdir -p dist; eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
         "lint": "eslint src --fix",
-        "prepublishOnly": "yarn lint && yarn test && yarn build",
+        "prepublishOnly": "yarn lint && yarn test && yarn test-react && yarn build",
         "test": "jest",
+        "test-react": "jest --config react/jest.config.js",
         "test-watch": "jest --watch",
         "cypress": "cypress open"
     },
@@ -72,7 +73,8 @@
     "jest": {
         "testPathIgnorePatterns": [
             "/node_modules/",
-            "/cypress/"
+            "/cypress/",
+            "/react/"
         ],
         "moduleFileExtensions": [
             "js",
