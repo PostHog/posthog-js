@@ -16,9 +16,8 @@
         "esModuleInterop": true,
         "experimentalDecorators": true,
         "outDir": "./dist",
-        "lib": ["es2015", "esnext.asynciterable", "dom"],
+        "lib": ["es2015", "dom"],
         "jsx": "react"
     },
-    "include": ["src/**/*"],
-    "exclude": ["src/**/__tests__/**/*"]
+    "include": ["src/**/*"]
 }
