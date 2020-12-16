@@ -1,4 +1,5 @@
 import React, { useState, Dispatch, SetStateAction } from 'react'
+import invariant from 'tiny-invariant'
 import { PostHog } from 'posthog-js'
 import { getPostHogContext } from './PostHogContext'
 
@@ -52,6 +53,13 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ client, childr
                 if (client && context.client !== client) {
                     context = Object.assign({}, context, { client })
                 }
+
+                invariant(
+                    context.client,
+                    'PostHogProvider was not passed a client instance. ' +
+                        'Make sure you pass in your PostHog client via the "client" prop.'
+                )
+
                 const value: PostHogProviderValue = { ...context, featureFlags, setFeatureFlags }
                 return <PostHogContext.Provider value={value}>{children}</PostHogContext.Provider>
             }}
