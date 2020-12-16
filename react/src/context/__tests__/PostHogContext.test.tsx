@@ -1,6 +1,6 @@
 import React from 'react'
 import { mocked } from 'ts-jest/utils'
-import { render, cleanup } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import posthog from 'posthog-js'
 import { usePostHogContext, PostHogProvider } from '../'
 
@@ -9,10 +9,6 @@ describe('usePostHogContext hook', () => {
         posthog.init('test_token', {
             api_host: 'https://test.com',
         })
-    })
-
-    afterEach(() => {
-        cleanup()
     })
 
     it('should return a client instance from the context if available', () => {
@@ -39,7 +35,5 @@ describe('usePostHogContext hook', () => {
         }
 
         expect(() => render(<App />)).toThrow()
-
-        mockedConsole.error.mockRestore()
     })
 })

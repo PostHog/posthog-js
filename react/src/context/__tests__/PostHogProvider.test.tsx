@@ -1,6 +1,6 @@
 import React, { useContext } from 'react'
 import { mocked } from 'ts-jest/utils'
-import { render, cleanup } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import posthog from 'posthog-js'
 import { PostHogProvider, getPostHogContext } from '..'
 
@@ -9,10 +9,6 @@ describe('PostHogProvider component', () => {
         posthog.init('test_token', {
             api_host: 'https://test.com',
         })
-    })
-
-    afterEach(() => {
-        cleanup()
     })
 
     it('should render children components', () => {
@@ -36,8 +32,6 @@ describe('PostHogProvider component', () => {
                 </PostHogProvider>
             )
         }).toThrow()
-
-        mockedConsole.error.mockRestore()
     })
 
     it('should make the context consumable by the children', () => {
