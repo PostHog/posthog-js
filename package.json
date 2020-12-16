@@ -15,7 +15,7 @@
         "build-react": "cd react; yarn; cd ..; tsc -p react",
         "process-types": "mkdir -p dist; eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
         "lint": "eslint src --fix",
-        "prepublishOnly": "yarn lint && yarn test && yarn test-react && yarn build",
+        "prepublishOnly": "yarn lint && yarn test && yarn build && yarn test-react",
         "test": "jest",
         "test-react": "jest --config react/jest.config.js",
         "test-watch": "jest --watch",
