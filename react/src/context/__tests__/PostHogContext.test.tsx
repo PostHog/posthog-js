@@ -39,6 +39,7 @@ describe('usePostHogContext hook', () => {
         }
 
         expect(() => render(<App />)).toThrow()
+
         mockedConsole.error.mockRestore()
     })
 })
