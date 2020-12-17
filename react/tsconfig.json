@@ -17,8 +17,8 @@
         "experimentalDecorators": true,
         "outDir": "./dist",
         "lib": ["es2015", "dom"],
-        "jsx": "react"
+        "jsx": "react",
+        "allowJs": true
     },
-    "include": ["src/**/*"],
-    "exclude": ["src/**/__tests__/**/*"]
+    "include": ["src/**/*"]
 }

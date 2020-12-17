@@ -27,7 +27,7 @@ describe('PostHogProvider component', () => {
 
         expect(() => {
             render(
-                <PostHogProvider client={undefined as any}>
+                <PostHogProvider client={undefined}>
                     <div>Test</div>
                 </PostHogProvider>
             )

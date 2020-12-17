@@ -2,18 +2,18 @@ import React from 'react'
 import { mocked } from 'ts-jest/utils'
 import { renderHook, act } from '@testing-library/react-hooks'
 import posthog from 'posthog-js'
-import { PostHogProvider, FeatureFlags } from '../../context'
-import { useFeatureFlags } from '../'
+import { PostHogProvider } from '../../context'
+import { useFeatureFlags } from '..'
 
 describe('useFeatureFlags hook', () => {
-    const ACTIVE_FEATURE_FLAGS: FeatureFlags['active'] = ['example_feature_1', 'example_feature_2', 'example_feature_3']
-    const ENABLED_FEATURE_FLAGS: FeatureFlags['enabled'] = {
+    const ACTIVE_FEATURE_FLAGS = ['example_feature_1', 'example_feature_2', 'example_feature_3']
+    const ENABLED_FEATURE_FLAGS = {
         example_feature_1: true,
         example_feature_2: true,
         example_feature_3: false,
     }
 
-    const wrapper = ({ children }: { children: any }) => <PostHogProvider client={posthog}>{children}</PostHogProvider>
+    const wrapper = ({ children }) => <PostHogProvider client={posthog}>{children}</PostHogProvider>
 
     beforeEach(() => {
         posthog.init('test_token', {
