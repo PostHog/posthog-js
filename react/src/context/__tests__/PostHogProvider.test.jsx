@@ -1,5 +1,4 @@
 import React, { useContext } from 'react'
-import { mocked } from 'ts-jest/utils'
 import { render } from '@testing-library/react'
 import posthog from 'posthog-js'
 import { PostHogProvider, getPostHogContext } from '..'
@@ -22,8 +21,7 @@ describe('PostHogProvider component', () => {
     })
 
     it('should require a client', () => {
-        const mockedConsole = mocked(console)
-        jest.spyOn(mockedConsole, 'error').mockImplementation(() => null)
+        console.error = jest.fn()
 
         expect(() => {
             render(
