@@ -48,6 +48,7 @@
     },
     "jest": {
         "preset": "ts-jest/presets/js-with-ts",
+        "rootDir": "src",
         "setupFilesAfterEnv": [
             "given2/setup"
         ]
