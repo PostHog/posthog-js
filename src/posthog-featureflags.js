@@ -4,6 +4,7 @@ export class PostHogFeatureFlags {
     constructor(instance) {
         this.instance = instance
         this._override_warning = false
+        this.flagCallReported = {}
     }
 
     getFlags() {
@@ -59,7 +60,8 @@ export class PostHogFeatureFlags {
             return false
         }
         const flagEnabled = this.getFlags().indexOf(key) > -1
-        if (options.send_event || !('send_event' in options)) {
+        if ((options.send_event || !('send_event' in options)) && !this.flagCallReported[key]) {
+            this.flagCallReported[key] = true
             this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagEnabled })
         }
         return flagEnabled
