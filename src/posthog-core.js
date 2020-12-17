@@ -362,19 +362,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     }
 
     const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
-
-    if (!USE_XHR) {
-        if (callback) {
-            data['callback'] = callback
-        } else if (verbose_mode || this.get_config('test')) {
-            // Verbose output (from verbose mode, or an error in test mode) is a json blob,
-            // which by itself is not valid javascript. Without a callback, this verbose output will
-            // cause an error when returned via jsonp, so we force a no-op callback param.
-            // See the ECMA script spec: http://www.ecma-international.org/ecma-262/5.1/#sec-12.4
-            data['callback'] = '(function(){})'
-        }
-    }
-
     var args = options.urlQueryArgs || {}
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()

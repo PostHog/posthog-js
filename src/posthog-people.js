@@ -111,6 +111,7 @@ PostHogPeople.prototype._send_request = function (data, callback) {
     this._posthog._send_request(
         this._get_config('api_host') + '/engage/',
         { data: encoded_data },
+        {},
         this._posthog._prepare_callback(callback, truncated_data)
     )
 
