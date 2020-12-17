@@ -52,10 +52,14 @@ describe('useFeatureFlags hook', () => {
         })
     })
 
-        const { result } = renderHook(() => useFeatureFlags(), { wrapper })
-        expect(result.current).toEqual({
-            active: ACTIVE_FEATURE_FLAGS,
-            enabled: ENABLED_FEATURE_FLAGS,
+    it('should not refresh feature flags on an interval if a zero refreshInterval is provided', () => {
+        act(() => {
+            const reloadFeatureFlags = given.posthog.featureFlags.reloadFeatureFlags
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
+            jest.advanceTimersByTime(1000)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
+            jest.advanceTimersByTime(3000)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
         })
     })
 
