@@ -187,6 +187,12 @@ declare class posthog {
      *       // batching or retry mechanisms.
      *       api_transport: 'XHR'
      *
+     *       // Automatically capture clicks, form submittions and change events
+     *       autocapture: true
+     *
+     *       // Capture rage clicks (beta) - useful for session recording
+     *       rageclick: false
+     *
      *       // super properties cookie expiration (in days)
      *       cookie_expiration: 365
      *
@@ -455,6 +461,7 @@ declare namespace posthog {
         api_method?: string
         api_transport?: string
         autocapture?: boolean
+        rageclick?: boolean
         cdn?: string
         cross_subdomain_cookie?: boolean
         persistence?: 'localStorage' | 'cookie' | 'memory'
