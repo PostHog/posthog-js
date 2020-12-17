@@ -187,7 +187,7 @@ declare class posthog {
      *       // batching or retry mechanisms.
      *       api_transport: 'XHR'
      *
-     *       // Automatically capture clicks, form submittions and change events
+     *       // Automatically capture clicks, form submissions and change events
      *       autocapture: true
      *
      *       // Capture rage clicks (beta) - useful for session recording

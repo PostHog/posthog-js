@@ -1,4 +1,7 @@
-const RAGE_CLICK_THRESHOLD = 30
+// Naive rage click implementation: If mouse has not moved than RAGE_CLICK_THRESHOLD_PX
+// over RAGE_CLICK_CLICK_COUNT clicks with max RAGE_CLICK_TIMEOUT_MS between clicks, it's
+// counted as a rage click
+const RAGE_CLICK_THRESHOLD_PX = 30
 const RAGE_CLICK_TIMEOUT_MS = 1000
 const RAGE_CLICK_CLICK_COUNT = 3
 
@@ -17,7 +20,7 @@ export default class RageClick {
         const lastClick = this.clicks[this.clicks.length - 1]
         if (
             lastClick &&
-            Math.abs(x - lastClick.x) + Math.abs(y - lastClick.y) < RAGE_CLICK_THRESHOLD &&
+            Math.abs(x - lastClick.x) + Math.abs(y - lastClick.y) < RAGE_CLICK_THRESHOLD_PX &&
             timestamp - lastClick.timestamp < RAGE_CLICK_TIMEOUT_MS
         ) {
             this.clicks.push({ x, y, timestamp })

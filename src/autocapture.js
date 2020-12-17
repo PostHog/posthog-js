@@ -219,7 +219,6 @@ var autocapture = {
     },
 
     _customProperties: {},
-    _clicks: [],
     init: function (instance) {
         instance.toolbar.maybeLoadEditor()
 

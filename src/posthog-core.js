@@ -912,7 +912,7 @@ PostHogLib.prototype.alias = function (alias, original) {
  *       // HTTP method for capturing requests
  *       api_method: 'POST'
  *
- *       // Automatically capture clicks, form submittions and change events
+ *       // Automatically capture clicks, form submissions and change events
  *       autocapture: true
  *
  *       // Capture rage clicks (beta) - useful for session recording
