@@ -1,5 +1,4 @@
 import React, { useContext } from 'react'
-import invariant from 'tiny-invariant'
 import { PostHogProviderValue } from './PostHogProvider'
 
 // Track the PostHog context in global state to ensure that all consumers of the context
@@ -25,9 +24,11 @@ export function getPostHogContext(): React.Context<any> {
  */
 export function usePostHogContext(): PostHogProviderValue {
     const context = useContext(getPostHogContext())
-    invariant(
-        context.client,
-        'No PostHog Client instance can be found. Please ensure that your application is wrapped by `PostHogProvider`.'
-    )
+    if (!context.client) {
+        throw new Error(
+            'No PostHog client instance can be found. ' +
+                'Please ensure that your application is wrapped by `PostHogProvider`.'
+        )
+    }
     return context
 }
