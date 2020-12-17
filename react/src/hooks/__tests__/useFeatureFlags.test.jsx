@@ -52,7 +52,7 @@ describe('useFeatureFlags hook', () => {
         })
     })
 
-    it('should not refresh feature flags on an interval if a zero refreshInterval is provided', () => {
+    it('should not refresh feature flags on an interval if no refreshInterval is provided', () => {
         act(() => {
             const reloadFeatureFlags = given.posthog.featureFlags.reloadFeatureFlags
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
