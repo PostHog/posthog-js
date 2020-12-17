@@ -5,15 +5,31 @@ import posthog from 'posthog-js'
 import { PostHogProvider } from '../../context'
 import { useFeatureFlags } from '..'
 
-describe('useFeatureFlags hook', () => {
-    const ACTIVE_FEATURE_FLAGS = ['example_feature_1', 'example_feature_2', 'example_feature_3']
-    const ENABLED_FEATURE_FLAGS = {
-        example_feature_1: true,
-        example_feature_2: true,
-        example_feature_3: false,
-    }
+jest.useFakeTimers()
 
-    const wrapper = ({ children }) => <PostHogProvider client={posthog}>{children}</PostHogProvider>
+const ACTIVE_FEATURE_FLAGS = ['example_feature_1', 'example_feature_2', 'example_feature_3']
+const ENABLED_FEATURE_FLAGS = {
+    example_feature_1: true,
+    example_feature_2: true,
+    example_feature_3: false,
+}
+
+describe('useFeatureFlags hook', () => {
+    given('renderProvider', () => ({ children }) => (
+        <PostHogProvider client={given.posthog}>{children}</PostHogProvider>
+    ))
+
+    given('props', () => undefined)
+
+    given('subject', () => renderHook(() => useFeatureFlags(given.props), { wrapper: given.renderProvider }))
+
+    given('onFeatureFlags', () => (callback) => callback(ACTIVE_FEATURE_FLAGS))
+
+    given('posthog', () => ({
+        onFeatureFlags: given.onFeatureFlags,
+        isFeatureEnabled: (flag) => flag !== 'example_feature_3',
+        featureFlags: { reloadFeatureFlags: jest.fn() },
+    }))
 
     beforeEach(() => {
         posthog.init('test_token', {
@@ -22,24 +38,19 @@ describe('useFeatureFlags hook', () => {
     })
 
     it('should return an empty `enabled` object by default', () => {
-        const mockedPosthog = mocked(posthog)
-        jest.spyOn(mockedPosthog, 'onFeatureFlags').mockImplementationOnce(() => undefined)
+        given('onFeatureFlags', () => () => {})
 
-        const { result } = renderHook(() => useFeatureFlags(), { wrapper })
-        expect(result.current).toEqual({
+        expect(given.subject.result.current).toEqual({
             enabled: {},
         })
     })
 
     it('should return `active` and `enabled` features when feature flags are changed', async () => {
-        const mockedPosthog = mocked(posthog)
-        jest.spyOn(mockedPosthog, 'onFeatureFlags').mockImplementationOnce((callback) => {
-            callback(ACTIVE_FEATURE_FLAGS)
-            return undefined
+        expect(given.subject.result.current).toEqual({
+            active: ACTIVE_FEATURE_FLAGS,
+            enabled: ENABLED_FEATURE_FLAGS,
         })
-        jest.spyOn(mockedPosthog, 'isFeatureEnabled').mockImplementation((flag) => {
-            return ENABLED_FEATURE_FLAGS[flag]
-        })
+    })
 
         const { result } = renderHook(() => useFeatureFlags(), { wrapper })
         expect(result.current).toEqual({
@@ -49,22 +60,18 @@ describe('useFeatureFlags hook', () => {
     })
 
     it('should refresh feature flags on an interval if a non-zero refreshInterval is provided', () => {
-        jest.useFakeTimers()
-
-        const mockedPosthog = mocked(posthog)
-        jest.spyOn(mockedPosthog, 'onFeatureFlags').mockImplementationOnce(() => undefined)
-        jest.spyOn(mockedPosthog.featureFlags, 'reloadFeatureFlags').mockImplementation(() => undefined)
-
-        renderHook(() => useFeatureFlags({ refreshInterval: 1 }), { wrapper })
+        given('props', () => ({ refreshInterval: 1 }))
+        given.subject.rerender()
 
         act(() => {
-            expect(mockedPosthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(0)
+            const reloadFeatureFlags = given.posthog.featureFlags.reloadFeatureFlags
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
             jest.advanceTimersByTime(1000)
-            expect(mockedPosthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             jest.advanceTimersByTime(1000)
-            expect(mockedPosthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(2)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
             jest.advanceTimersByTime(3000)
-            expect(mockedPosthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(5)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(5)
         })
     })
 })
