@@ -1,0 +1,15 @@
+name: posthog-js/react
+
+on:
+  - pull_request
+
+jobs:
+  react:
+    name: React tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 14
+      - run: yarn && yarn build && cd react && yarn test

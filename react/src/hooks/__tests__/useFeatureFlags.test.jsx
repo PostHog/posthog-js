@@ -1,7 +1,5 @@
 import React from 'react'
-import { mocked } from 'ts-jest/utils'
 import { renderHook, act } from '@testing-library/react-hooks'
-import posthog from 'posthog-js'
 import { PostHogProvider } from '../../context'
 import { useFeatureFlags } from '..'
 
@@ -21,7 +19,7 @@ describe('useFeatureFlags hook', () => {
 
     given('props', () => undefined)
 
-    given('subject', () => renderHook(() => useFeatureFlags(given.props), { wrapper: given.renderProvider }))
+    given('subject', () => () => renderHook(() => useFeatureFlags(given.props), { wrapper: given.renderProvider }))
 
     given('onFeatureFlags', () => (callback) => callback(ACTIVE_FEATURE_FLAGS))
 
@@ -31,28 +29,24 @@ describe('useFeatureFlags hook', () => {
         featureFlags: { reloadFeatureFlags: jest.fn() },
     }))
 
-    beforeEach(() => {
-        posthog.init('test_token', {
-            api_host: 'https://test.com',
-        })
-    })
-
     it('should return an empty `enabled` object by default', () => {
         given('onFeatureFlags', () => () => {})
 
-        expect(given.subject.result.current).toEqual({
+        expect(given.subject().result.current).toEqual({
             enabled: {},
         })
     })
 
     it('should return `active` and `enabled` features when feature flags are changed', async () => {
-        expect(given.subject.result.current).toEqual({
+        expect(given.subject().result.current).toEqual({
             active: ACTIVE_FEATURE_FLAGS,
             enabled: ENABLED_FEATURE_FLAGS,
         })
     })
 
     it('should not refresh feature flags on an interval if no refreshInterval is provided', () => {
+        given.subject()
+
         act(() => {
             const reloadFeatureFlags = given.posthog.featureFlags.reloadFeatureFlags
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
@@ -65,7 +59,7 @@ describe('useFeatureFlags hook', () => {
 
     it('should refresh feature flags on an interval if a non-zero refreshInterval is provided', () => {
         given('props', () => ({ refreshInterval: 1 }))
-        given.subject.rerender()
+        given.subject()
 
         act(() => {
             const reloadFeatureFlags = given.posthog.featureFlags.reloadFeatureFlags
