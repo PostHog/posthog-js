@@ -136,8 +136,8 @@ var autocapture = {
             target = target.parentNode
         }
 
-        if (e === 'click') {
-            this.rageclicks.click(target.clientX, target.clientY, new Date().getTime())
+        if (e.type === 'click') {
+            this.rageclicks.click(e.clientX, e.clientY, new Date().getTime())
         }
 
         if (shouldCaptureDomEvent(target, e)) {

@@ -48,6 +48,16 @@ describe('Event capture', () => {
         cy.phCaptures().should('include', '$feature_flag_called')
     })
 
+    it('captures rage clicks', () => {
+        given('options', () => ({ rageclick: true }))
+
+        start()
+
+        cy.get('body').click(100, 100).click(98, 102).click(101, 103)
+
+        cy.phCaptures().should('deep.equal', ['$pageview', '$rageclick'])
+    })
+
     describe('session recording enabled from API', () => {
         given('sessionRecording', () => ({
             endpoint: '/ses/',
