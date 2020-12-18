@@ -52,6 +52,14 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ client, childr
                 if (client && context.client !== client) {
                     context = Object.assign({}, context, { client })
                 }
+
+                if (!context.client) {
+                    throw new Error(
+                        'PostHogProvider was not passed a client instance. ' +
+                            'Make sure you pass in your PostHog client via the "client" prop.'
+                    )
+                }
+
                 const value: PostHogProviderValue = { ...context, featureFlags, setFeatureFlags }
                 return <PostHogContext.Provider value={value}>{children}</PostHogContext.Provider>
             }}

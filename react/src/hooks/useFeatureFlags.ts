@@ -8,7 +8,7 @@ import { usePostHogContext, FeatureFlags } from '../context'
  * @returns An object containing active flags and flags that are enabled for the user.
  */
 export function useFeatureFlags(props: { refreshInterval?: number; sendEvent?: boolean } = {}): FeatureFlags {
-    const { refreshInterval = 0, sendEvent = true } = props || {}
+    const { refreshInterval = 0, sendEvent = true } = props
     const { client: posthog, featureFlags, setFeatureFlags } = usePostHogContext()
 
     const getEnabledFlags = useCallback(

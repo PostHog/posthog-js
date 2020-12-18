@@ -24,5 +24,11 @@ export function getPostHogContext(): React.Context<any> {
  */
 export function usePostHogContext(): PostHogProviderValue {
     const context = useContext(getPostHogContext())
+    if (!context.client) {
+        throw new Error(
+            'No PostHog client instance can be found. ' +
+                'Please ensure that your application is wrapped by `PostHogProvider`.'
+        )
+    }
     return context
 }
