@@ -1,49 +1,39 @@
 import React, { useContext } from 'react'
 import { render } from '@testing-library/react'
-import posthog from 'posthog-js'
 import { PostHogProvider, getPostHogContext } from '..'
 
 describe('PostHogProvider component', () => {
-    beforeEach(() => {
-        posthog.init('test_token', {
-            api_host: 'https://test.com',
-        })
-    })
+    given('render', () => () =>
+        render(<PostHogProvider client={given.posthog}>{given.childComponent}</PostHogProvider>)
+    )
+    given('childComponent', () => <div>Test</div>)
+    given('posthog', () => ({}))
 
     it('should render children components', () => {
-        const { getByText } = render(
-            <PostHogProvider client={posthog}>
-                <div>Test</div>
-            </PostHogProvider>
-        )
-
-        expect(getByText('Test')).toBeTruthy()
+        expect(given.render().getByText('Test')).toBeTruthy()
     })
 
     it('should require a client', () => {
+        given('posthog', () => undefined)
         console.error = jest.fn()
 
-        expect(() => {
-            render(
-                <PostHogProvider client={undefined}>
-                    <div>Test</div>
-                </PostHogProvider>
-            )
-        }).toThrow()
+        expect(() => given.render()).toThrow()
     })
 
     it('should make the context consumable by the children', () => {
-        const TestChild = () => {
+        function TestChild() {
             const context = useContext(getPostHogContext())
-            expect(context.client).toEqual(posthog)
+            expect(context.client).toEqual(given.posthog)
             return null
         }
 
-        render(
-            <PostHogProvider client={posthog}>
+        given('childComponent', () => (
+            <>
                 <TestChild />
                 <TestChild />
-            </PostHogProvider>
-        )
+            </>
+        ))
+
+        given.render()
     })
 })
