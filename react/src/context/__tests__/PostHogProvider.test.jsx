@@ -1,4 +1,4 @@
-import React, { useContext } from 'react'
+import * as React from 'react'
 import { render } from '@testing-library/react'
 import { PostHogProvider, getPostHogContext } from '..'
 
@@ -22,7 +22,7 @@ describe('PostHogProvider component', () => {
 
     it('should make the context consumable by the children', () => {
         function TestChild() {
-            const context = useContext(getPostHogContext())
+            const context = React.useContext(getPostHogContext())
             expect(context.client).toEqual(given.posthog)
             return null
         }
