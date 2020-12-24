@@ -44,7 +44,7 @@ const buildUmd = {
     input: 'src/index.ts',
     output: {
         file: packageJson.main,
-        name: 'MswWebarchiveExtension',
+        name: 'PosthogReact',
         format: 'umd',
         esModule: false,
         globals: {
