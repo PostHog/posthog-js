@@ -11,6 +11,7 @@ import {
     shouldCaptureValue,
     usefulElements,
 } from './autocapture-utils'
+import RageClick from './extensions/rageclick'
 
 var autocapture = {
     _initializedTokens: [],
@@ -135,6 +136,10 @@ var autocapture = {
             target = target.parentNode
         }
 
+        if (e.type === 'click') {
+            this.rageclicks.click(e.clientX, e.clientY, new Date().getTime())
+        }
+
         if (shouldCaptureDomEvent(target, e)) {
             var targetElementList = [target]
             var curEl = target
@@ -223,6 +228,7 @@ var autocapture = {
             return
         }
         this._initializedTokens.push(token)
+        this.rageclicks = new RageClick(instance)
 
         var parseDecideResponse = _.bind(function (response) {
             if (!(document && document.body)) {

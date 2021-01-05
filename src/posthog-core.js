@@ -52,6 +52,7 @@ const defaultConfig = () => ({
     api_method: 'POST',
     api_transport: 'XHR',
     autocapture: true,
+    rageclick: false,
     cross_subdomain_cookie: document.location.hostname.indexOf('herokuapp.com') === -1,
     persistence: 'cookie',
     persistence_name: '',
@@ -910,6 +911,12 @@ PostHogLib.prototype.alias = function (alias, original) {
  *
  *       // HTTP method for capturing requests
  *       api_method: 'POST'
+ *
+ *       // Automatically capture clicks, form submissions and change events
+ *       autocapture: true
+ *
+ *       // Capture rage clicks (beta) - useful for session recording
+ *       rageclick: false
  *
  *       // transport for sending requests ('XHR' or 'sendBeacon')
  *       // NB: sendBeacon should only be used for scenarios such as
