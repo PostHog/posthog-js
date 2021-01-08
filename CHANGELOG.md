@@ -1,3 +1,7 @@
+## 1.8.1 - 2021-01-08
+
+- Increase compatibility with IE 11
+
 ## 1.8.0 - 2020-12-14
 
 - Using gzip-based compression over lzstring using the fflate library: [fflate](https://github.com/101arrowz/fflate). This reduces the amount of data transferred, and makes posthog servers respond faster (requires posthog 1.19.0). https://github.com/PostHog/posthog/issues/2560
