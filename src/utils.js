@@ -297,7 +297,8 @@ _.strip_empty_properties = function (p) {
 // Deep copies an object.
 // It handles cycles by replacing all references to them with `undefined`
 // Also supports customizing native values
-const COPY_IN_PROGRESS_ATTRIBUTE = Symbol ? Symbol('__deepCircularCopyInProgress__') : '__deepCircularCopyInProgress__'
+const COPY_IN_PROGRESS_ATTRIBUTE =
+    typeof Symbol !== 'undefined' ? Symbol('__deepCircularCopyInProgress__') : '__deepCircularCopyInProgress__'
 
 function deepCircularCopy(value, customizer) {
     if (value !== Object(value)) return customizer ? customizer(value) : value // primitive value
