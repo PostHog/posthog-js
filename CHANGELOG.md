@@ -1,3 +1,7 @@
+## 1.8.2 - 2021-01-11
+
+- Event names must be strings in `posthog.capture`
+
 ## 1.8.1 - 2021-01-08
 
 - Increase compatibility with IE 11
