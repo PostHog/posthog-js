@@ -24,7 +24,6 @@
     "types": "dist/types",
     "files": [
         "dist/*",
-        "LICENSE",
         "README.md"
     ],
     "peerDependencies": {
