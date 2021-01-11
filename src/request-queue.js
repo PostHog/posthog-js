@@ -107,7 +107,7 @@ export class RequestQueue {
                 options &&
                 requests[key].options &&
                 requests[key].options._metrics &&
-                typeof requests[key].options._metrics['rrweb_full_snapshot'] === 'undefined'
+                !requests[key].options._metrics['rrweb_full_snapshot']
             ) {
                 requests[key].options._metrics['rrweb_full_snapshot'] = options._metrics['rrweb_full_snapshot']
             }
