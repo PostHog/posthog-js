@@ -516,13 +516,8 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         window.console.warn('WARNING! Calling posthog.capture with a callback is deprecated and will be removed soon!')
     }
 
-    if (_.isUndefined(event_name)) {
+    if (_.isUndefined(event_name) || typeof event_name !== 'string') {
         console.error('No event name provided to posthog.capture')
-        return
-    }
-
-    if (typeof event_name !== 'string') {
-        console.error('Event name must be a string')
         return
     }
 
