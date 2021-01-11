@@ -98,7 +98,11 @@ describe('identify()', () => {
 })
 
 describe('capture()', () => {
-    given('subject', () => () => given.lib.capture('$event', given.eventProperties, given.options, given.callback))
+    given('eventName', () => '$event')
+
+    given('subject', () => () =>
+        given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
+    )
 
     given('overrides', () => ({
         get_config: jest.fn(),
@@ -134,6 +138,26 @@ describe('capture()', () => {
         given.subject()
 
         expect(hook).toHaveBeenCalledWith('$event')
+    })
+
+    it('errors with undefined event name', () => {
+        given('eventName', () => undefined)
+
+        const hook = jest.fn()
+        given.lib._addCaptureHook(hook)
+
+        expect(() => given.subject()).not.toThrow()
+        expect(hook).not.toHaveBeenCalled()
+    })
+
+    it('errors with object event name', () => {
+        given('eventName', () => ({ event: 'object as name' }))
+
+        const hook = jest.fn()
+        given.lib._addCaptureHook(hook)
+
+        expect(() => given.subject()).not.toThrow()
+        expect(hook).not.toHaveBeenCalled()
     })
 })
 
