@@ -1,4 +1,4 @@
-## 1.8.2 - 2021-01-11
+## 1.8.3 - 2021-01-11
 
 - Event names must be strings in `posthog.capture`
 
