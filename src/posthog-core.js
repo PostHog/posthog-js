@@ -521,6 +521,11 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         return
     }
 
+    if (typeof event_name !== 'string') {
+        console.error('Event name must be a string')
+        return
+    }
+
     if (_.isBlockedUA(userAgent)) {
         callback(0)
         return
