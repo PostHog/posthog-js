@@ -31,3 +31,7 @@ We tend to follow the following steps:
     - `npm publish`
     - `git push --tags`
 6. Create a PR linking to this version [in the main repo](https://github.com/posthog/posthog)
+
+## Questions?
+
+### [Join our Slack community.](https://join.slack.com/t/posthogusers/shared_invite/enQtOTY0MzU5NjAwMDY3LTc2MWQ0OTZlNjhkODk3ZDI3NDVjMDE1YjgxY2I4ZjI4MzJhZmVmNjJkN2NmMGJmMzc2N2U3Yjc3ZjI5NGFlZDQ)
