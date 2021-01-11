@@ -2,11 +2,9 @@ import * as path from 'path'
 import resolve from '@rollup/plugin-node-resolve'
 import commonjs from '@rollup/plugin-commonjs'
 import typescript from 'rollup-plugin-typescript2'
-import json from '@rollup/plugin-json'
 import packageJson from './package.json'
 
 const plugins = [
-    json(),
     resolve({
         preferBuiltins: false,
         mainFields: ['module', 'main', 'jsnext:main', 'browser'],
@@ -22,7 +20,7 @@ const plugins = [
  * Configuration for the ESM build
  */
 const buildEsm = {
-    external: ['posthog-js', 'react', 'react-dom'],
+    external: ['posthog-js', 'react'],
     input: [
         // Split modules so they can be tree-shaken
         'src/index.ts',
@@ -40,7 +38,7 @@ const buildEsm = {
  * Configuration for the UMD build
  */
 const buildUmd = {
-    external: ['posthog-js', 'react', 'react-dom'],
+    external: ['posthog-js', 'react'],
     input: 'src/index.ts',
     output: {
         file: packageJson.main,
@@ -49,7 +47,6 @@ const buildUmd = {
         esModule: false,
         globals: {
             react: 'React',
-            'react-dom': 'ReactDOM',
         },
     },
     plugins,
