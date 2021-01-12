@@ -451,7 +451,7 @@ declare class posthog {
 declare namespace posthog {
     /* eslint-disable @typescript-eslint/no-explicit-any */
     type Property = any
-    type Properties = { [key: string]: Property }
+    type Properties = Record<string, Property>
     type CaptureResult = { event: string; properties: Properties } | undefined
     type CaptureCallback = (response: any, data: any) => void
     /* eslint-enable @typescript-eslint/no-explicit-any */
