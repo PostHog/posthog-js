@@ -36,7 +36,10 @@ describe('identify()', () => {
         expect(given.overrides.register).toHaveBeenCalledWith({ distinct_id: 'a-new-id' })
     })
 
-    it('calls capture when identity changes', () => {
+    it('calls capture when identity changes and old ID is anonymous', () => {
+        given.lib.persistence = { $device_id: 'oldIdentity' }
+        given.lib.persistence.props = { $device_id: 'oldIdentity' }
+        console.log('aaaa', given.lib.persistence.props.$device_id)
         given.subject()
 
         expect(given.overrides.capture).toHaveBeenCalledWith(
@@ -47,6 +50,13 @@ describe('identify()', () => {
             },
             { $set: {} }
         )
+        expect(given.overrides.people.set).not.toHaveBeenCalled()
+    })
+
+    it("Don't identify if the old id isn't anonymous", () => {
+        given.subject()
+
+        expect(given.overrides.capture).not.toHaveBeenCalled()
         expect(given.overrides.people.set).not.toHaveBeenCalled()
     })
 

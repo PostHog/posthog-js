@@ -826,9 +826,11 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
         this.register({ distinct_id: new_distinct_id })
     }
 
-    // send an $identify event any time the distinct_id is changing - logic on the server
-    // will determine whether or not to do anything with it.
-    if (new_distinct_id !== previous_distinct_id) {
+    // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
+    // - logic on the server will determine whether or not to do anything with it.
+    console.log(new_distinct_id, previous_distinct_id, this['persistence'].props.$device_id)
+    if (new_distinct_id !== previous_distinct_id && previous_distinct_id === this['persistence']?.props?.$device_id) {
+        console.log(new_distinct_id)
         this.capture(
             '$identify',
             {
