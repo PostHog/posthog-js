@@ -1,10 +1,15 @@
+## 1.8.4 - 2021-01-18
+
+- Allow passing custom domain for sentry integration (#176)
+- Update typing (#173)
+
 ## 1.8.3 - 2021-01-11
 
-- Event names must be strings in `posthog.capture`
+- Event names must be strings in `posthog.capture` (#171)
 
 ## 1.8.1 - 2021-01-08
 
-- Increase compatibility with IE 11
+- Increase compatibility with IE 11 (#169)
 
 ## 1.8.0 - 2020-12-14
 
