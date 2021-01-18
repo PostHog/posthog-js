@@ -1,4 +1,4 @@
-## 1.8.4 - 2021-01-18
+## 1.8.5 - 2021-01-18
 
 - Allow passing custom domain for sentry integration (#176)
 - Update typing (#173)
