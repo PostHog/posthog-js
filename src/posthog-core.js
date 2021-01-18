@@ -1326,8 +1326,9 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
  * @param {Object} [posthog] The posthog object
  * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
  * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
+ * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  */
-PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId) {
+PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId, prefix) {
     // setupOnce gets called by Sentry when it intializes the plugin
     this.setupOnce = function (addGlobalEventProcessor) {
         addGlobalEventProcessor((event) => {
@@ -1340,7 +1341,7 @@ PostHogLib.prototype.sentry_integration = function (_posthog, organization, proj
             }
             if (organization && projectId)
                 data['$sentry_url'] =
-                    'https://sentry.io/organizations/' +
+                    (prefix || 'https://sentry.io/organizations/') +
                     organization +
                     '/issues/?project=' +
                     projectId +
