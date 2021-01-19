@@ -660,6 +660,26 @@ declare namespace posthog {
     }
 
     export class feature_flags extends featureFlags {}
+
+    /**
+     * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
+     *
+     * ### Usage
+     *
+     *     Sentry.init({
+     *          dsn: 'https://example',
+     *          integrations: [
+     *              new posthog.SentryIntegration(posthog)
+     *          ]
+     *     })
+     *
+     * @param {Object} [posthog] The posthog object
+     * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
+     * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
+     */
+    export class SentryIntegration {
+        constructor(_posthog: PostHog, organization: string, projectId: string)
+    }
 }
 
 export type PostHog = typeof posthog
