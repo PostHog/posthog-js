@@ -11,6 +11,7 @@
         "sourceMap": true,
         "declaration": true,
         "declarationMap": true,
+        "declarationDir": "dist/types",
         "target": "es5",
         "module": "es2015",
         "esModuleInterop": true,
@@ -20,5 +21,6 @@
         "jsx": "react",
         "allowJs": true
     },
-    "include": ["src/**/*"]
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "__tests__", "**/*.test.jsx"]
 }
