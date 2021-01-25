@@ -629,7 +629,14 @@ PostHogLib.prototype.capture_pageview = function (page) {
     if (_.isUndefined(page)) {
         page = document.location.href
     }
-    this.capture('$pageview')
+    const isFirstPageviewInSession = !window.sessionStorage.getItem('captured-first-pageview')
+    const pageviewProps = isFirstPageviewInSession ? { $is_first_pageview: true } : {}
+
+    if (isFirstPageviewInSession) {
+        window.sessionStorage.setItem('captured-first-pageview', '1')
+    }
+
+    this.capture('$pageview', pageviewProps)
 }
 
 /**
