@@ -2,6 +2,7 @@ import { loadScript } from '../autocapture-utils'
 import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
 import sessionIdGenerator from './sessionid'
+import Config from '../config'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -37,14 +38,25 @@ export class SessionRecording {
         this.emit = true
         this._startCapture()
         this.snapshots.forEach((properties) => this._captureSnapshot(properties))
-        // If session recording is enabled, we send events to server more frequently
-        this.instance._requestQueue.setPollInterval(300)
     }
 
     _startCapture() {
+        // According to the rrweb docs, rrweb is not supported on IE11 and below:
+        // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
+        // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
+        //
+        // However, MutationObserver does exist on IE11, it just doesn't work well and does not detect all changes.
+        // Instead, when we load "recorder.js", the first JS error is about "Object.assign" being undefined.
+        // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
+        if (typeof Object.assign === 'undefined') {
+            return
+        }
         if (!this.captureStarted && !this.instance.get_config('disable_session_recording')) {
             this.captureStarted = true
-            loadScript(this.instance.get_config('api_host') + '/static/recorder.js', _.bind(this._onScriptLoaded, this))
+            loadScript(
+                this.instance.get_config('api_host') + '/static/recorder.js?v=' + Config.LIB_VERSION,
+                _.bind(this._onScriptLoaded, this)
+            )
         }
     }
 
@@ -85,7 +97,7 @@ export class SessionRecording {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
-            compression: 'lz64', // Force lz64 even if /decide endpoint has not yet responded
+            _forceCompression: true,
             _noTruncate: true,
             _batchKey: 'sessionRecording',
             _metrics: {

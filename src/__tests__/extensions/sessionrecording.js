@@ -5,6 +5,7 @@ import sessionIdGenerator from '../../extensions/sessionid'
 
 jest.mock('../../autocapture-utils')
 jest.mock('../../extensions/sessionid')
+jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
 
 describe('SessionRecording', () => {
     let _emit
@@ -15,7 +16,6 @@ describe('SessionRecording', () => {
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
-        _requestQueue: { setPollInterval: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
     }))
@@ -35,7 +35,6 @@ describe('SessionRecording', () => {
 
             expect(given.sessionRecording.submitRecordings).toHaveBeenCalled()
             expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: true })
-            expect(given.posthog._requestQueue.setPollInterval).toHaveBeenCalledWith(300)
         })
 
         it('starts session recording, saves setting and endpoint when enabled', () => {
@@ -46,7 +45,6 @@ describe('SessionRecording', () => {
             expect(given.sessionRecording.submitRecordings).toHaveBeenCalled()
             expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: true })
             expect(given.sessionRecording.endpoint).toEqual('/ses/')
-            expect(given.posthog._requestQueue.setPollInterval).toHaveBeenCalledWith(300)
         })
 
         it('does not start recording if not allowed', () => {
@@ -56,7 +54,6 @@ describe('SessionRecording', () => {
 
             expect(given.sessionRecording.submitRecordings).not.toHaveBeenCalled()
             expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: false })
-            expect(given.posthog._requestQueue.setPollInterval).not.toHaveBeenCalled()
         })
     })
 
@@ -96,7 +93,7 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
-                    compression: 'lz64',
+                    _forceCompression: true,
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                     _metrics: expect.anything(),
@@ -112,7 +109,7 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
-                    compression: 'lz64',
+                    _forceCompression: true,
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                     _metrics: expect.anything(),
@@ -123,7 +120,7 @@ describe('SessionRecording', () => {
         it('loads recording script from right place', () => {
             given.sessionRecording.startRecordingIfEnabled()
 
-            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js', expect.anything())
+            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js?v=v0.0.1', expect.anything())
         })
 
         it('loads script after `submitRecordings` if not previously loaded', () => {

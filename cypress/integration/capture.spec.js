@@ -1,11 +1,12 @@
 /// <reference types="cypress" />
 
-import { version } from '../../package.json'
+import * as fflate from 'fflate'
 import { LZString } from '../../src/lz-string'
 
 describe('Event capture', () => {
     given('options', () => ({}))
     given('sessionRecording', () => false)
+    given('supportedCompression', () => ['gzip', 'lz64'])
 
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     const start = ({ waitForDecide = true } = {}) => {
@@ -18,7 +19,7 @@ describe('Event capture', () => {
                 featureFlags: ['session-recording-player'],
                 isAuthenticated: false,
                 sessionRecording: given.sessionRecording,
-                supportedCompression: ['gzip', 'lz64'],
+                supportedCompression: given.supportedCompression,
             },
         }).as('decide')
 
@@ -45,6 +46,16 @@ describe('Event capture', () => {
         cy.get('[data-cy-feature-flag-button]').click()
 
         cy.phCaptures().should('include', '$feature_flag_called')
+    })
+
+    it('captures rage clicks', () => {
+        given('options', () => ({ rageclick: true }))
+
+        start()
+
+        cy.get('body').click(100, 100).click(98, 102).click(101, 103)
+
+        cy.phCaptures().should('deep.equal', ['$pageview', '$rageclick'])
     })
 
     describe('session recording enabled from API', () => {
@@ -138,6 +149,31 @@ describe('Event capture', () => {
                 const captures = JSON.parse(LZString.decompressFromBase64(data))
 
                 expect(captures.map(({ event }) => event)).to.deep.equal(['$pageview', '$autocapture', 'custom-event'])
+            })
+        })
+
+        describe('gzip-js supported', () => {
+            given('supportedCompression', () => ['gzip-js'])
+
+            it('contains the correct payload after an event', () => {
+                start()
+
+                cy.get('[data-cy-custom-event-button]').click()
+                cy.phCaptures().should('deep.equal', ['$pageview', '$autocapture', 'custom-event'])
+
+                cy.wait('@capture').its('requestBody.type').should('deep.equal', 'text/plain')
+
+                cy.get('@capture').should(async ({ requestBody }) => {
+                    const data = new Uint8Array(await requestBody.arrayBuffer())
+                    const decoded = fflate.strFromU8(fflate.decompressSync(data))
+                    const captures = JSON.parse(decoded)
+
+                    expect(captures.map(({ event }) => event)).to.deep.equal([
+                        '$pageview',
+                        '$autocapture',
+                        'custom-event',
+                    ])
+                })
             })
         })
     })

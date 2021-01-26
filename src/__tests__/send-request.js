@@ -6,6 +6,10 @@ describe('encodePostData()', () => {
     given('data', () => ({ data: 'content' }))
     given('options', () => ({ method: 'POST' }))
 
+    beforeEach(() => {
+        jest.spyOn(global, 'Blob').mockImplementation((...args) => ['Blob', ...args])
+    })
+
     it('handles objects', () => {
         expect(given.subject).toMatchSnapshot()
     })
@@ -28,8 +32,15 @@ describe('encodePostData()', () => {
         expect(given.subject).toEqual(null)
     })
 
-    it('handles plainJSON', () => {
-        given('options', () => ({ method: 'POST', plainJSON: true }))
+    it('handles blob', () => {
+        given('options', () => ({ method: 'POST', blob: true }))
+        given('data', () => ({ buffer: 'buffer' }))
+
+        expect(given.subject).toMatchSnapshot()
+    })
+
+    it('handles sendBeacon', () => {
+        given('options', () => ({ method: 'POST', sendBeacon: true }))
 
         expect(given.subject).toMatchSnapshot()
     })

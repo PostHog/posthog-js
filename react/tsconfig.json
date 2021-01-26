@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noUnusedParameters": false,
+        "noUnusedLocals": true,
+        "skipLibCheck": true,
+        "moduleResolution": "node",
+        "importHelpers": true,
+        "removeComments": true,
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "declarationDir": "dist/types",
+        "target": "es5",
+        "module": "es2015",
+        "esModuleInterop": true,
+        "experimentalDecorators": true,
+        "outDir": "./dist",
+        "lib": ["es2015", "dom"],
+        "jsx": "react",
+        "allowJs": true
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "__tests__", "**/*.test.jsx"]
+}

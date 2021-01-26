@@ -108,7 +108,11 @@ describe('identify()', () => {
 })
 
 describe('capture()', () => {
-    given('subject', () => () => given.lib.capture('$event', given.eventProperties, given.options, given.callback))
+    given('eventName', () => '$event')
+
+    given('subject', () => () =>
+        given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
+    )
 
     given('overrides', () => ({
         get_config: jest.fn(),
@@ -144,6 +148,26 @@ describe('capture()', () => {
         given.subject()
 
         expect(hook).toHaveBeenCalledWith('$event')
+    })
+
+    it('errors with undefined event name', () => {
+        given('eventName', () => undefined)
+
+        const hook = jest.fn()
+        given.lib._addCaptureHook(hook)
+
+        expect(() => given.subject()).not.toThrow()
+        expect(hook).not.toHaveBeenCalled()
+    })
+
+    it('errors with object event name', () => {
+        given('eventName', () => ({ event: 'object as name' }))
+
+        const hook = jest.fn()
+        given.lib._addCaptureHook(hook)
+
+        expect(() => given.subject()).not.toThrow()
+        expect(hook).not.toHaveBeenCalled()
     })
 })
 
@@ -269,5 +293,27 @@ describe('_handle_unload()', () => {
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
         })
+    })
+})
+
+describe('__compress_and_send_json_request', () => {
+    given('subject', () => () =>
+        given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
+    )
+
+    given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
+
+    given('overrides', () => ({
+        compression: {},
+        _send_request: jest.fn(),
+        get_config: () => false,
+    }))
+
+    it('handles base64 compression', () => {
+        given('compression', () => ({}))
+
+        given.subject()
+
+        expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
     })
 })

@@ -12,6 +12,7 @@ import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPo
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
+import { compressData, decideCompression } from './compression'
 import { xhr, encodePostData } from './send-request'
 
 /*
@@ -51,6 +52,7 @@ const defaultConfig = () => ({
     api_method: 'POST',
     api_transport: 'XHR',
     autocapture: true,
+    rageclick: false,
     cross_subdomain_cookie: document.location.hostname.indexOf('herokuapp.com') === -1,
     persistence: 'cookie',
     persistence_name: '',
@@ -339,13 +341,8 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
-    if (this.get_config('_capture_metrics')) {
-        this._send_request(url, jsonData, { ...options, plainJSON: true }, callback)
-    } else if (this.compression['lz64'] || (options.compression && options.compression === 'lz64')) {
-        this._send_request(url, { data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options, callback)
-    } else {
-        this._send_request(url, { data: _.base64Encode(jsonData) }, options, callback)
-    }
+    const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
+    this._send_request(url, data, _options, callback)
 }
 
 PostHogLib.prototype._send_request = function (url, data, options, callback) {
@@ -357,45 +354,22 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     var DEFAULT_OPTIONS = {
         method: this.get_config('api_method'),
         transport: this.get_config('api_transport'),
-        verbose: this.get_config('verbose') || data['verbose'],
+        verbose: this.get_config('verbose'),
     }
 
-    if (!callback && (_.isFunction(options) || typeof options === 'string')) {
-        callback = options
-        options = null
-    }
     options = _.extend(DEFAULT_OPTIONS, options || {})
     if (!USE_XHR) {
         options.method = 'GET'
     }
 
     const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
-
-    if (this.get_config('test')) {
-        data['test'] = 1
-    }
-    if (this.get_config('img')) {
-        data['img'] = 1
-    }
-    if (!USE_XHR) {
-        if (callback) {
-            data['callback'] = callback
-        } else if (verbose_mode || this.get_config('test')) {
-            // Verbose output (from verbose mode, or an error in test mode) is a json blob,
-            // which by itself is not valid javascript. Without a callback, this verbose output will
-            // cause an error when returned via jsonp, so we force a no-op callback param.
-            // See the ECMA script spec: http://www.ecma-international.org/ecma-262/5.1/#sec-12.4
-            data['callback'] = '(function(){})'
-        }
-    }
-
-    var args = {}
+    var args = options.urlQueryArgs || {}
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()
 
     url += '?' + _.HTTPBuildQuery(args)
 
-    if (_.isObject(data) && 'img' in data) {
+    if (_.isObject(data) && this.get_config('img')) {
         var img = document.createElement('img')
         img.src = url
         document.body.appendChild(img)
@@ -404,9 +378,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
-        const headers = options.plainJSON ? { type: 'text/plain' } : { type: 'application/x-www-form-urlencoded' }
-        const body = new Blob([encodePostData(data, options)], headers)
-        window.navigator.sendBeacon(url, body)
+        window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
     } else if (USE_XHR) {
         try {
             xhr(url, data, this.get_config('xhr_headers'), options, this._captureMetrics, callback)
@@ -544,7 +516,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         window.console.warn('WARNING! Calling posthog.capture with a callback is deprecated and will be removed soon!')
     }
 
-    if (_.isUndefined(event_name)) {
+    if (_.isUndefined(event_name) || typeof event_name !== 'string') {
         console.error('No event name provided to posthog.capture')
         return
     }
@@ -941,6 +913,12 @@ PostHogLib.prototype.alias = function (alias, original) {
  *
  *       // HTTP method for capturing requests
  *       api_method: 'POST'
+ *
+ *       // Automatically capture clicks, form submissions and change events
+ *       autocapture: true
+ *
+ *       // Capture rage clicks (beta) - useful for session recording
+ *       rageclick: false
  *
  *       // transport for sending requests ('XHR' or 'sendBeacon')
  *       // NB: sendBeacon should only be used for scenarios such as
@@ -1350,8 +1328,9 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
  * @param {Object} [posthog] The posthog object
  * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
  * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
+ * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  */
-PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId) {
+PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId, prefix) {
     // setupOnce gets called by Sentry when it intializes the plugin
     this.setupOnce = function (addGlobalEventProcessor) {
         addGlobalEventProcessor((event) => {
@@ -1364,7 +1343,7 @@ PostHogLib.prototype.sentry_integration = function (_posthog, organization, proj
             }
             if (organization && projectId)
                 data['$sentry_url'] =
-                    'https://sentry.io/organizations/' +
+                    (prefix || 'https://sentry.io/organizations/') +
                     organization +
                     '/issues/?project=' +
                     projectId +

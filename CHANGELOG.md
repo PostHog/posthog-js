@@ -1,3 +1,23 @@
+## 1.8.5 - 2021-01-18
+
+- Allow passing custom domain for sentry integration (#176)
+- Update typing (#173)
+
+## 1.8.3 - 2021-01-11
+
+- Event names must be strings in `posthog.capture` (#171)
+
+## 1.8.1 - 2021-01-08
+
+- Increase compatibility with IE 11 (#169)
+
+## 1.8.0 - 2020-12-14
+
+- Using gzip-based compression over lzstring using the fflate library: [fflate](https://github.com/101arrowz/fflate). This reduces the amount of data transferred, and makes posthog servers respond faster (requires posthog 1.19.0). https://github.com/PostHog/posthog/issues/2560
+- Support last touch $referrer and $referring_domain user properties https://github.com/PostHog/posthog-js/pull/139
+- Publish a ES dist file https://github.com/PostHog/posthog-js/pull/157
+- Publish a react integration for feature flags https://github.com/PostHog/posthog-js/pull/154
+
 ## 1.7.2 - 2020-11-28
 
 - Fix issues with incorrect headers being set on decide

@@ -103,8 +103,13 @@ export class RequestQueue {
             }
 
             // :TRICKY: Metrics-only code
-            if (options && requests[key].options && requests[key].options._metrics) {
-                requests[key].options._metrics['rrweb_full_snapshot'] ||= options._metrics['rrweb_full_snapshot']
+            if (
+                options &&
+                requests[key].options &&
+                requests[key].options._metrics &&
+                !requests[key].options._metrics['rrweb_full_snapshot']
+            ) {
+                requests[key].options._metrics['rrweb_full_snapshot'] = options._metrics['rrweb_full_snapshot']
             }
             requests[key].data.push(data)
         })

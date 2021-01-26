@@ -1,8 +1,11 @@
 import { _, console } from './utils'
 
 export const encodePostData = (data, options) => {
-    if (options.plainJSON) {
-        return data
+    if (options.blob) {
+        return new Blob([data.buffer], { type: 'text/plain' })
+    } else if (options.sendBeacon) {
+        const body = encodePostData(data, { method: 'POST' })
+        return new Blob([body], { type: 'application/x-www-form-urlencoded' })
     } else if (options.method !== 'POST') {
         return null
     }
@@ -31,7 +34,7 @@ export const xhr = (url, data, headers, options, captureMetrics, callback) => {
     captureMetrics.incr('_send_request_inflight')
 
     const requestId = captureMetrics.startRequest({
-        data_size: body && body.length,
+        data_size: _.isString(data) ? data.length : body.length,
         endpoint: url.slice(url.length - 2),
         ...options._metrics,
     })
@@ -39,7 +42,7 @@ export const xhr = (url, data, headers, options, captureMetrics, callback) => {
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
-    if (options.method === 'POST' && !options.plainJSON) {
+    if (options.method === 'POST' && !options.blob) {
         req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     }
 
