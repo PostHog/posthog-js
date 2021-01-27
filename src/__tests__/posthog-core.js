@@ -37,8 +37,7 @@ describe('identify()', () => {
     })
 
     it('calls capture when identity changes and old ID is anonymous', () => {
-        given.lib.persistence = { $device_id: 'oldIdentity' }
-        given.lib.persistence.props = { $device_id: 'oldIdentity' }
+        given.lib.get_property = () => 'oldIdentity'
         given.subject()
 
         expect(given.overrides.capture).toHaveBeenCalledWith(
@@ -53,8 +52,7 @@ describe('identify()', () => {
     })
 
     it("Don't identify if the old id isn't anonymous", () => {
-        given.lib.persistence = {}
-        given.lib.persistence.props = { $device_id: 'anonymous-id' }
+        given.lib.get_property = () => 'anonymous-id'
 
         given.subject()
 
