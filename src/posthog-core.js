@@ -802,9 +802,8 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
     // - logic on the server will determine whether or not to do anything with it.
     if (
         new_distinct_id !== previous_distinct_id &&
-        (!this['persistence']?.props?.$device_id || previous_distinct_id === this['persistence']?.props?.$device_id)
+        (!this.get_property('$device_id') || previous_distinct_id === this.get_property('$device_id'))
     ) {
-        console.log(new_distinct_id)
         this.capture(
             '$identify',
             {
