@@ -15,7 +15,7 @@ describe('identify()', () => {
         register: jest.fn(),
         register_once: jest.fn(),
         unregister: jest.fn(),
-        get_property: jest.fn(),
+        get_property: () => given.deviceId,
         people: {
             set: jest.fn(),
         },
@@ -28,6 +28,7 @@ describe('identify()', () => {
 
     given('properties', () => ({ $device_id: '123', __alias: 'efg' }))
     given('oldIdentity', () => 'oldIdentity')
+    given('deviceId', () => given.oldIdentity)
 
     it('registers new user id and updates alias', () => {
         given.subject()
@@ -36,8 +37,7 @@ describe('identify()', () => {
         expect(given.overrides.register).toHaveBeenCalledWith({ distinct_id: 'a-new-id' })
     })
 
-    it('calls capture when identity changes and old ID is anonymous', () => {
-        given.lib.get_property = () => 'oldIdentity'
+    it('calls capture when identity changes', () => {
         given.subject()
 
         expect(given.overrides.capture).toHaveBeenCalledWith(
@@ -51,8 +51,24 @@ describe('identify()', () => {
         expect(given.overrides.people.set).not.toHaveBeenCalled()
     })
 
-    it("Don't identify if the old id isn't anonymous", () => {
-        given.lib.get_property = () => 'anonymous-id'
+    it('calls capture when identity changes and old ID is anonymous', () => {
+        given('deviceId', () => null)
+
+        given.subject()
+
+        expect(given.overrides.capture).toHaveBeenCalledWith(
+            '$identify',
+            {
+                distinct_id: 'a-new-id',
+                $anon_distinct_id: 'oldIdentity',
+            },
+            { $set: {} }
+        )
+        expect(given.overrides.people.set).not.toHaveBeenCalled()
+    })
+
+    it("don't identify if the old id isn't anonymous", () => {
+        given('deviceId', () => 'anonymous-id')
 
         given.subject()
 
