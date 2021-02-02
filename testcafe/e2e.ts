@@ -34,12 +34,19 @@ async function queryAPIOnce(): Promise<Array<{ event: string }>> {
 }
 
 async function queryAPI(): Promise<Array<{ event: string }>> {
-    const attempt = (resolve, reject) =>
-        queryAPIOnce()
-            .then((results) => (results.length > 0 ? resolve(results) : attempt(resolve, reject)))
-            .catch(reject)
+    const attempt = (count, resolve, reject) => {
+        if (count === 50) {
+            return reject(new Error('Failed to fetch results in 10 attempts'))
+        }
 
-    return new Promise(attempt)
+        setTimeout(() => {
+            queryAPIOnce()
+                .then((results) => (results.length > 0 ? resolve(results) : attempt(count + 1, resolve, reject)))
+                .catch(reject)
+        }, 300)
+    }
+
+    return new Promise((...args) => attempt(0, ...args))
 }
 
 fixture('posthog.js capture')
@@ -57,11 +64,11 @@ test('Captured events are accessible via /api/event', async (t) => {
         .expect(captureLogger.count(() => true))
         .gt(1)
 
-    const results = await queryAPIOnce()
+    const results = await queryAPI()
 
     console.log(results)
 
-    await t.expect(results.length).gt(3)
+    await t.expect(results.length).gte(2)
     await t.expect(results.filter(({ event }) => event === 'custom-event').length).gte(1)
     await t.expect(results.filter(({ event }) => event === '$pageview').length).gte(1)
 })

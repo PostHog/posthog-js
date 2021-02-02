@@ -7,9 +7,9 @@ env:
   DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_posthog'
   REDIS_URL: 'redis://localhost'
   TEST: 'true'
-  BROWSERSTACK_DEBUG: 'info'
-  BROWSERSTACK_NETWORK_LOGS: '1'
-  BROWSERSTACK_CONSOLE: '1'
+  BROWSERSTACK_DEBUG: 'true'
+  BROWSERSTACK_NETWORK_LOGS: 'true'
+  BROWSERSTACK_CONSOLE: 'info'
 
 jobs:
   testcafe:
@@ -69,7 +69,7 @@ jobs:
         run: yarn; yarn build-array; cd posthog; yarn add posthog-js@"link:.."; mkdir -p frontend/dist; yarn copy-scripts; python manage.py collectstatic --noinput
 
       - name: Start server
-        run: cd posthog; python manage.py setup_dev --no-data; bin/docker-server &
+        run: cd posthog; python manage.py setup_dev --no-data; bin/docker &
 
       - name: Run curl
         run: "curl --header 'Authorization: Bearer e2e_demo_api_key' localhost:8000/api/event"
