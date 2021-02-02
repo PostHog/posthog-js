@@ -1,4 +1,4 @@
-name: testcafe
+name: Chrome/IE11 E2E test
 on: [pull_request]
 env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
@@ -66,19 +66,13 @@ jobs:
         run: python -m http.server 8080 &
 
       - name: Set up posthog-js
-        run: yarn; yarn build-array; cd posthog; yarn add posthog-js@"link:.."; mkdir -p frontend/dist; yarn copy-scripts; python manage.py collectstatic --noinput
+        run: yarn; yarn build-array; mkdir -p posthog/frontend/dist; cp dist/array.js posthog/frontend/dist; python posthog/manage.py collectstatic --noinput
 
       - name: Start server
         run: cd posthog; python manage.py setup_dev --no-data; bin/docker &
 
-      - name: Run curl
-        run: "curl --header 'Authorization: Bearer e2e_demo_api_key' localhost:8000/api/event"
-
-      - name: Run curl2
-        run: "curl localhost:8000/static/array.js"
-
       - name: Run chrome test
-        run: npx testcafe "browserstack:chrome" testcafe/*.spec.js --assertion-timeout 10000
+        run: npx testcafe "browserstack:chrome" testcafe/*.spec.js
 
       - name: Run ie test
-        run: npx testcafe "browserstack:ie" testcafe/*.spec.js --assertion-timeout 10000
+        run: npx testcafe "browserstack:ie" testcafe/*.spec.js
