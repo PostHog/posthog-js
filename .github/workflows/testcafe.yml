@@ -68,15 +68,8 @@ jobs:
       - name: Set up posthog-js
         run: yarn; yarn build-array; cd posthog; yarn add posthog-js@"link:.."; mkdir -p frontend/dist; yarn copy-scripts
 
-      - name: Install TestCafe BrowserStack plugin
-        run: yarn add testcafe-browser-provider-browserstack
-
       - name: Run chrome test
-        uses: DevExpress/testcafe-action@latest
-        with:
-            args: "browserstack:chrome testcafe/e2e.ts"
+        run: npx testcafe "browserstack:chrome" testcafe/e2e.ts
 
       - name: Run ie test
-        uses: DevExpress/testcafe-action@latest
-        with:
-            args: "browserstack:ie testcafe/e2e.ts"
+        run: npx testcafe "browserstack:ie" testcafe/e2e.ts
