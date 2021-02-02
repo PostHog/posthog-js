@@ -1,4 +1,4 @@
-import { ClientFunction, RequestLogger } from 'testcafe'
+import { ClientFunction, RequestLogger, t } from 'testcafe'
 import fetch from 'node-fetch'
 
 const captureLogger = RequestLogger(/ip=1/, {
@@ -9,9 +9,18 @@ const captureLogger = RequestLogger(/ip=1/, {
     stringifyRequestBody: true,
 })
 
+const allNetwork = RequestLogger(/./, {
+    logRequestHeaders: true,
+    logRequestBody: true,
+    logResponseHeaders: true,
+    logResponseBody: true,
+    stringifyRequestBody: true,
+})
+
 const initPosthog = ClientFunction(() => {
     const $win: any = window
     $win.posthog.init('e2e_token_1239', { api_host: 'http://localhost:8000' })
+    console.log($win.posthog)
 })
 
 async function queryAPIOnce(): Promise<Array<{ event: string }>> {
@@ -32,7 +41,13 @@ async function queryAPI(): Promise<Array<{ event: string }>> {
     return new Promise(attempt)
 }
 
-fixture('posthog.js capture').page('http://localhost:8080/playground/cypress/index.html').requestHooks(captureLogger)
+fixture('posthog.js capture')
+    .page('http://localhost:8080/playground/cypress/index.html')
+    .requestHooks(captureLogger, allNetwork)
+    .afterEach(async () => {
+        console.log(await t.getBrowserConsoleMessages())
+        console.log(allNetwork)
+    })
 
 test('Captured events are accessible via /api/event', async (t) => {
     await initPosthog()
