@@ -46,7 +46,7 @@ fixture('posthog.js capture')
     .requestHooks(captureLogger, allNetwork)
     .afterEach(async () => {
         console.log(await t.getBrowserConsoleMessages())
-        console.log(allNetwork)
+        console.log(JSON.stringify(allNetwork, null, 2))
     })
 
 test('Captured events are accessible via /api/event', async (t) => {

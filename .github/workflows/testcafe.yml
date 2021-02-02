@@ -73,22 +73,8 @@ jobs:
       - name: Run curl2
         run: "curl localhost:8000/static/array.js"
 
-      # - name: 'BrowserStack Env Setup'
-      #   uses: 'browserstack/github-actions/setup-env@master'
-      #   with:
-      #     username:  ${{ secrets.BROWSERSTACK_USERNAME }}
-      #     access-key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
-
-      # - name: 'BrowserStack Local Tunnel Setup'  # Invokes the setup-local action
-      #   uses: browserstack/github-actions/setup-local@master
-      #   with:
-      #     local-testing: start
-      #     local-identifier: random
-
-      - name: Run Chrome test
-        uses: DevExpress/testcafe-action@latest
-        with:
-            args: '"browserstack:chrome" testcafe/e2e.ts --assertion-timeout 10000'
+      - name: Run chrome test
+        run: npx testcafe "browserstack:chrome" testcafe/e2e.ts --assertion-timeout 10000
 
       - name: Run ie test
         run: npx testcafe "browserstack:ie" testcafe/e2e.ts --assertion-timeout 10000
