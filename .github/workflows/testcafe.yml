@@ -44,7 +44,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-            python-version: 3.8
+            python-version: 3.9.0
 
       - name: Set up Node 14
         uses: actions/setup-node@v2
@@ -62,11 +62,16 @@ jobs:
       - name: Start server
         run: cd posthog; python manage.py setup_dev --no-data; ./bin/start-backend &
 
+      - name: Run curl
+        run: "curl --header 'Authorization: Bearer e2e_demo_api_key' localhost:8000/api/event"
+
       - name: Serve static files
         run: python -m http.server 8080 &
 
       - name: Set up posthog-js
         run: yarn; yarn build-array; cd posthog; yarn add posthog-js@"link:.."; mkdir -p frontend/dist; yarn copy-scripts
+      - name: Run curl2
+        run: "curl localhost:8000/static/array.js"
 
       - name: Run chrome test
         run: npx testcafe "browserstack:chrome" testcafe/e2e.ts --assertion-timeout 10000
