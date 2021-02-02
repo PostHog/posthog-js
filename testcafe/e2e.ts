@@ -57,7 +57,7 @@ test('Captured events are accessible via /api/event', async (t) => {
         .expect(captureLogger.count(() => true))
         .gt(1)
 
-    const results = await queryAPI()
+    const results = await queryAPIOnce()
 
     console.log(results)
 
