@@ -7,6 +7,9 @@ env:
   DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_posthog'
   REDIS_URL: 'redis://localhost'
   TEST: 'true'
+  BROWSERSTACK_DEBUG: '1'
+  BROWSERSTACK_NETWORK_LOGS: '1'
+  BROWSERSTACK_CONSOLE: '1'
 
 jobs:
   testcafe:
