@@ -7,13 +7,30 @@ const captureLogger = RequestLogger(/ip=1/, {
     logResponseHeaders: true,
     logResponseBody: true,
     stringifyRequestBody: true,
-    // stringifyResponseBody: true,
 })
 
 const initPosthog = ClientFunction(() => {
     const $win: any = window
     $win.posthog.init('e2e_token_1239', { api_host: 'http://localhost:8000' })
 })
+
+async function queryAPIOnce(): Promise<Array<{ event: string }>> {
+    const response = await fetch('http://localhost:8000/api/event', {
+        headers: { Authorization: 'Bearer e2e_demo_api_key' },
+    })
+
+    const { results } = JSON.parse(await response.text())
+    return results
+}
+
+async function queryAPI(): Promise<Array<{ event: string }>> {
+    const attempt = (resolve, reject) =>
+        queryAPIOnce()
+            .then((results) => (results.length > 0 ? resolve(results) : attempt(resolve, reject)))
+            .catch(reject)
+
+    return new Promise(attempt)
+}
 
 fixture('posthog.js capture').page('http://localhost:8080/playground/cypress/index.html').requestHooks(captureLogger)
 
@@ -24,11 +41,7 @@ test('Captured events are accessible via /api/event', async (t) => {
         .expect(captureLogger.count(() => true))
         .gt(1)
 
-    const response = await fetch('http://localhost:8000/api/event', {
-        headers: { Authorization: 'Bearer e2e_demo_api_key' },
-    })
-
-    const { results } = JSON.parse(await response.text())
+    const results = await queryAPI()
 
     console.log(results)
 

@@ -69,7 +69,7 @@ jobs:
         run: yarn; yarn build-array; cd posthog; yarn add posthog-js@"link:.."; mkdir -p frontend/dist; yarn copy-scripts
 
       - name: Run chrome test
-        run: npx testcafe "browserstack:chrome" testcafe/e2e.ts
+        run: npx testcafe "browserstack:chrome" testcafe/e2e.ts --assertion-timeout 10000
 
       - name: Run ie test
-        run: npx testcafe "browserstack:ie" testcafe/e2e.ts
+        run: npx testcafe "browserstack:ie" testcafe/e2e.ts --assertion-timeout 10000
