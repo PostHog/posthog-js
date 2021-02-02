@@ -7,7 +7,7 @@ env:
   DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_posthog'
   REDIS_URL: 'redis://localhost'
   TEST: 'true'
-  BROWSERSTACK_DEBUG: '1'
+  BROWSERSTACK_DEBUG: 'info'
   BROWSERSTACK_NETWORK_LOGS: '1'
   BROWSERSTACK_CONSOLE: '1'
 
@@ -62,17 +62,18 @@ jobs:
             DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/posthog' # override for setup_test_environment command
         run: cd posthog && python manage.py setup_test_environment
 
-      - name: Start server
-        run: cd posthog; python manage.py setup_dev --no-data; ./bin/start-backend &
-
-      - name: Run curl
-        run: "curl --header 'Authorization: Bearer e2e_demo_api_key' localhost:8000/api/event"
-
       - name: Serve static files
         run: python -m http.server 8080 &
 
       - name: Set up posthog-js
-        run: yarn; yarn build-array; cd posthog; yarn add posthog-js@"link:.."; mkdir -p frontend/dist; yarn copy-scripts
+        run: yarn; yarn build-array; cd posthog; yarn add posthog-js@"link:.."; mkdir -p frontend/dist; yarn copy-scripts; python manage.py collectstatic --noinput
+
+      - name: Start server
+        run: cd posthog; python manage.py setup_dev --no-data; bin/docker-server &
+
+      - name: Run curl
+        run: "curl --header 'Authorization: Bearer e2e_demo_api_key' localhost:8000/api/event"
+
       - name: Run curl2
         run: "curl localhost:8000/static/array.js"
 

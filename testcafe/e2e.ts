@@ -15,6 +15,7 @@ const allNetwork = RequestLogger(/./, {
     logResponseHeaders: true,
     logResponseBody: true,
     stringifyRequestBody: true,
+    stringifyResponseBody: true,
 })
 
 const initPosthog = ClientFunction(() => {
