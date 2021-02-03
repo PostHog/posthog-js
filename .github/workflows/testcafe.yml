@@ -1,0 +1,80 @@
+name: Chrome/IE11/Safari E2E test
+on: [pull_request]
+env:
+  BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
+  BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
+  SECRET_KEY: 'abcdef' # unsafe - for testing only
+  DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_posthog'
+  REDIS_URL: 'redis://localhost'
+  TEST: 'true'
+  BROWSERSTACK_DEBUG: 'true'
+  BROWSERSTACK_NETWORK_LOGS: 'true'
+  BROWSERSTACK_CONSOLE: 'info'
+
+jobs:
+  testcafe:
+    runs-on: ubuntu-latest
+    services:
+        postgres:
+            image: postgres:12
+            env:
+                POSTGRES_USER: postgres
+                POSTGRES_PASSWORD: postgres
+                POSTGRES_DB: test_posthog
+            ports: ['5432:5432']
+            options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+        redis:
+            image: redis
+            ports:
+                - '6379:6379'
+            options: >-
+                --health-cmd "redis-cli ping"
+                --health-interval 10s
+                --health-timeout 5s
+                --health-retries 5
+
+    steps:
+      - name: Check out posthog-js server
+        uses: actions/checkout@v2
+
+      - name: Check out Django server for database setup
+        uses: actions/checkout@v2
+        with:
+            repository: 'PostHog/posthog'
+            path: 'posthog/'
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+            python-version: 3.9.0
+
+      - name: Set up Node 14
+        uses: actions/setup-node@v2
+        with:
+            node-version: 14
+
+      - name: Install requirements.txt dependencies with pip
+        run: python -m pip install --upgrade pip && python -m pip install -r posthog/requirements.txt
+
+      - name: Set up databases
+        env:
+            DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/posthog' # override for setup_test_environment command
+        run: cd posthog && python manage.py setup_test_environment
+
+      - name: Serve static files
+        run: python -m http.server 8080 &
+
+      - name: Set up posthog-js
+        run: yarn; yarn build-array; mkdir -p posthog/frontend/dist; cp dist/array.js posthog/frontend/dist; python posthog/manage.py collectstatic --noinput
+
+      - name: Start server
+        run: cd posthog; python manage.py setup_dev --no-data; bin/docker &
+
+      - name: Run chrome test
+        run: npx testcafe "browserstack:chrome" testcafe/*.spec.js
+
+      - name: Run ie11 test
+        run: npx testcafe "browserstack:ie" testcafe/*.spec.js
+
+      - name: Run safari test
+        run: npx testcafe "browserstack:safari" testcafe/*.spec.js

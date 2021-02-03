@@ -16,9 +16,9 @@
         "process-types": "mkdir -p dist; eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
         "lint": "eslint src --fix",
         "prepublishOnly": "yarn lint && yarn test && yarn build && yarn test-react",
-        "test": "jest",
+        "test": "jest src",
         "test-react": "cd react; yarn test",
-        "test-watch": "jest --watch",
+        "test-watch": "jest --watch src",
         "cypress": "cypress open"
     },
     "main": "dist/module.js",
@@ -49,12 +49,15 @@
         "jsdom-global": "3.0.2",
         "lint-staged": "^10.2.11",
         "localStorage": "1.0.4",
+        "node-fetch": "^2.6.1",
         "parcel": "^1.12.4",
         "posthog-js": "link:.",
         "prettier": "^2.0.5",
         "rollup": "^2.18.2",
         "rrweb": "^0.9.9",
         "sinon": "9.0.2",
+        "testcafe": "^1.10.1",
+        "testcafe-browser-provider-browserstack": "^1.13.2-alpha.1",
         "typescript": "^3.9.6"
     },
     "husky": {
