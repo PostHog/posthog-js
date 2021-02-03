@@ -1,35 +1,12 @@
-import { ClientFunction, RequestLogger, t } from 'testcafe'
-import fetch from 'node-fetch'
-import { retryUntilResults } from './helpers'
-
-const HEADERS = { Authorization: 'Bearer e2e_demo_api_key' }
-
-const captureLogger = RequestLogger(/ip=1/, {
-    logRequestHeaders: true,
-    logRequestBody: true,
-    logResponseHeaders: true,
-    stringifyRequestBody: true,
-})
-
-const initPosthog = ClientFunction(() => {
-    window.posthog.init('e2e_token_1239', { api_host: 'http://localhost:8000' })
-})
-
-async function queryAPI() {
-    const response = await fetch('http://localhost:8000/api/event', {
-        headers: HEADERS,
-    })
-
-    const { results } = JSON.parse(await response.text())
-    return results
-}
+import { t } from 'testcafe'
+import { retryUntilResults, queryAPI, initPosthog, captureLogger, clearEvents } from './helpers'
 
 fixture('posthog.js capture')
     .page('http://localhost:8080/playground/cypress/index.html')
     .requestHooks(captureLogger)
     .beforeEach(() => initPosthog())
     .afterEach(async () => {
-        await fetch('http://localhost:8000/delete_events/', { headers: HEADERS })
+        await clearEvents()
 
         console.debug('Browser logs:', await t.getBrowserConsoleMessages())
         console.debug('Requests to posthog:', captureLogger.requests)
