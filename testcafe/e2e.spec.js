@@ -1,4 +1,4 @@
-import { ClientFunction, RequestLogger } from 'testcafe'
+import { ClientFunction, RequestLogger, t } from 'testcafe'
 import fetch from 'node-fetch'
 import { retryUntilResults } from './helpers'
 
@@ -8,7 +8,6 @@ const captureLogger = RequestLogger(/ip=1/, {
     logRequestHeaders: true,
     logRequestBody: true,
     logResponseHeaders: true,
-    logResponseBody: true,
     stringifyRequestBody: true,
 })
 
@@ -31,13 +30,21 @@ fixture('posthog.js capture')
     .beforeEach(() => initPosthog())
     .afterEach(async () => {
         await fetch('http://localhost:8000/delete_events/', { headers: HEADERS })
+
+        console.debug('Browser logs:', await t.getBrowserConsoleMessages())
+        console.debug('Requests to posthog:', captureLogger.requests)
     })
 
 test('Captured events are accessible via /api/event', async (t) => {
     await t
         .click('[data-cy-custom-event-button]')
+        .wait(5000)
         .expect(captureLogger.count(() => true))
         .gte(1)
+
+    // Check no requests failed
+    await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
+    console.log(captureLogger.requests)
 
     const results = await retryUntilResults(queryAPI)
 
