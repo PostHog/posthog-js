@@ -1,4 +1,4 @@
-name: Chrome/IE11 E2E test
+name: Chrome/IE11/Safari E2E test
 on: [pull_request]
 env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
@@ -74,5 +74,8 @@ jobs:
       - name: Run chrome test
         run: npx testcafe "browserstack:chrome" testcafe/*.spec.js
 
-      - name: Run ie test
+      - name: Run ie11 test
         run: npx testcafe "browserstack:ie" testcafe/*.spec.js
+
+      - name: Run safari test
+        run: npx testcafe "browserstack:safari" testcafe/*.spec.js
