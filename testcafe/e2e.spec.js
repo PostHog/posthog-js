@@ -1,15 +1,21 @@
 import { t } from 'testcafe'
-import { retryUntilResults, queryAPI, initPosthog, captureLogger, clearEvents } from './helpers'
+import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock, clearEvents } from './helpers'
 
 fixture('posthog.js capture')
-    .page('http://localhost:8080/playground/cypress/index.html')
-    .requestHooks(captureLogger)
+    .page('http://localhost:8000/playground/cypress/index.html')
+    .requestHooks(captureLogger, staticFilesMock)
     .beforeEach(() => initPosthog())
     .afterEach(async () => {
         await clearEvents()
 
-        console.debug('Browser logs:', await t.getBrowserConsoleMessages())
-        console.debug('Requests to posthog:', captureLogger.requests)
+        const browserLogs = await t.getBrowserConsoleMessages()
+        Object.keys(browserLogs).forEach((level) => {
+            browserLogs[level].forEach((line) => {
+                console.log(`Browser ${level}:`, line)
+            })
+        })
+
+        console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
     })
 
 test('Captured events are accessible via /api/event', async (t) => {
@@ -21,11 +27,8 @@ test('Captured events are accessible via /api/event', async (t) => {
 
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
-    console.log(captureLogger.requests)
 
     const results = await retryUntilResults(queryAPI)
-
-    console.log(results)
 
     await t.expect(results.length).gte(2)
     await t.expect(results.filter(({ event }) => event === 'custom-event').length).gte(1)
