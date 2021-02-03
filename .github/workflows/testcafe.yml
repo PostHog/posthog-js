@@ -42,7 +42,6 @@ jobs:
         with:
             repository: 'PostHog/posthog'
             path: 'posthog/'
-            ref: testcafe-setup
 
       - name: Set up Python
         uses: actions/setup-python@v2
