@@ -2,6 +2,8 @@ import { ClientFunction, RequestLogger } from 'testcafe'
 import fetch from 'node-fetch'
 import { retryUntilResults } from './helpers'
 
+const HEADERS = { Authorization: 'Bearer e2e_demo_api_key' }
+
 const captureLogger = RequestLogger(/ip=1/, {
     logRequestHeaders: true,
     logRequestBody: true,
@@ -16,7 +18,7 @@ const initPosthog = ClientFunction(() => {
 
 async function queryAPI() {
     const response = await fetch('http://localhost:8000/api/event', {
-        headers: { Authorization: 'Bearer e2e_demo_api_key' },
+        headers: HEADERS,
     })
 
     const { results } = JSON.parse(await response.text())
@@ -27,6 +29,9 @@ fixture('posthog.js capture')
     .page('http://localhost:8080/playground/cypress/index.html')
     .requestHooks(captureLogger)
     .beforeEach(() => initPosthog())
+    .afterEach(async () => {
+        await fetch('http://localhost:8000/delete_events/', { headers: HEADERS })
+    })
 
 test('Captured events are accessible via /api/event', async (t) => {
     await t
