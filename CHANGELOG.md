@@ -1,3 +1,6 @@
+## 1.8.6 - 2021-02-05
+- When logging in as another user, don't link those two identities (#174)
+
 ## 1.8.5 - 2021-01-18
 
 - Allow passing custom domain for sentry integration (#176)
