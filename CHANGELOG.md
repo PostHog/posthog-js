@@ -1,3 +1,6 @@
+## 1.8.7 - 2021-02-11
+- Fix internal metric unpacking error
+
 ## 1.8.6 - 2021-02-05
 - When logging in as another user, don't link those two identities (#174)
 - Testcafe E2E tests, IE11 fixes (#180)
