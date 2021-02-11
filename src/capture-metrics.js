@@ -34,7 +34,7 @@ export class CaptureMetrics {
     }
 
     finishRequest(requestId) {
-        if (this.enabled) {
+        if (this.enabled && this.requests[requestId]) {
             const [startTime, payload] = this.requests[requestId]
             payload['duration'] = this.getTime() - startTime
             delete this.requests[requestId]
