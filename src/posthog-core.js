@@ -629,7 +629,19 @@ PostHogLib.prototype.capture_pageview = function (page) {
     if (_.isUndefined(page)) {
         page = document.location.href
     }
-    this.capture('$pageview')
+    var params = _.info.campaignParams()
+    var set_once = {}
+    for (var key in params) {
+        set_once['initial_' + key] = params[key]
+    }
+
+    if (Object.keys(params).length > 0) {
+        params = {
+            $set_once: set_once,
+            $set: params,
+        }
+    }
+    this.capture('$pageview', params)
 }
 
 /**

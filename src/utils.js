@@ -633,7 +633,7 @@ _.info = {
             kw = '',
             params = {}
         _.each(campaign_keywords, function (kwkey) {
-            kw = _.getQueryParam(document.URL, kwkey)
+            kw = _.getQueryParam(window.location.href, kwkey)
             if (kw.length) {
                 params[kwkey] = kw
             }

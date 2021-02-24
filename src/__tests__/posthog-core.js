@@ -94,11 +94,12 @@ describe('identify()', () => {
     describe('identity did not change', () => {
         given('oldIdentity', () => given.identity)
 
-        it('does not capture or set user properties', () => {
+        it('capture or set user properties even if not identifed', () => {
+            given('userProperties', () => ({ testprop: 'bla' }))
             given.subject()
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
-            expect(given.overrides.people.set).not.toHaveBeenCalled()
+            expect(given.overrides.people.set).toHaveBeenCalledWith({ testprop: 'bla' })
         })
 
         it('calls people.set when user properties passed', () => {
@@ -331,5 +332,38 @@ describe('__compress_and_send_json_request', () => {
         given.subject()
 
         expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
+    })
+})
+
+describe('utm tags', () => {
+    given('overrides', () => ({
+        get_config: (key) => given.config[key],
+        capture: jest.fn(),
+    }))
+
+    it('should pass utm tags to person', () => {
+        given.lib.init('token', {})
+        Object.defineProperty(window, 'location', {
+            writable: true,
+            value: { href: 'https://test.org/?utm_medium=twitter' },
+        })
+        given.lib.capture_pageview()
+        expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {
+            $set_once: {
+                initial_utm_medium: 'twitter',
+            },
+            $set: {
+                utm_medium: 'twitter',
+            },
+        })
+    })
+    it('should not pass utm tags if none set', () => {
+        given('url', () => 'https://test.com')
+        Object.defineProperty(window, 'location', {
+            writable: true,
+            value: { href: 'https://test.org/' },
+        })
+        given.lib.capture_pageview()
+        expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {})
     })
 })
