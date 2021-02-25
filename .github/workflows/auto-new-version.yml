@@ -1,0 +1,114 @@
+name: 'CD'
+
+on:
+    push:
+        branches:
+            - main
+            - master
+
+jobs:
+    check-package-version:
+        name: Check package version and detect an update
+        runs-on: ubuntu-20.04
+        outputs:
+            committed-version: ${{ steps.check-package-version.outputs.committed-version }}
+            published-version: ${{ steps.check-package-version.outputs.published-version }}
+            is-new-version: ${{ steps.check-package-version.outputs.is-new-version }}
+        steps:
+            - name: Checkout the repository
+              uses: actions/checkout@v2
+
+            - name: Check package version and detect an update
+              id: check-package-version
+              uses: PostHog/check-package-version@v2
+
+    release:
+        name: Publish release if new version
+        runs-on: ubuntu-20.04
+        needs: check-package-version
+        if: needs.check-package-version.outputs.is-new-version == 'true'
+        env:
+            COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
+            PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
+        steps:
+            - name: Checkout the repository
+              uses: actions/checkout@v2
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+
+            - name: Set up Node 14
+              uses: actions/setup-node@v2
+              with:
+                  node-version: 14
+                  registry-url: https://registry.npmjs.org
+
+            - name: Install dependencies
+              run: yarn --frozen-lockfile
+
+            - name: Publish the package in the npm registry
+              run: npm publish --access public
+              env:
+                  DATABASE_URL: 'postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres'
+                  REDIS_URL: 'redis://localhost'
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+            - name: Create GitHub release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: v${{ env.COMMITTED_VERSION }}
+                  release_name: ${{ env.COMMITTED_VERSION }}
+
+    create-pull-request:
+        name: Create main repo PR with new posthog-js version
+        runs-on: ubuntu-20.04
+        needs: [check-package-version, release]
+        env:
+            COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
+            PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
+        steps:
+            - name: Check out main repo
+              uses: actions/checkout@v2
+              with:
+                  repository: 'PostHog/posthog'
+                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+
+            - name: Install new posthog-js version in main repo
+              id: yarn-upgrade
+              run: |
+                  cd plugins/
+                  OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
+                  echo "::set-output name=outgoing-version::$OUTGOING_VERSION"
+                  for i in $(seq 1 $RETRY_TIMES); do
+                      # Retry loop because of npm being _eventually_ consistent
+                      if yarn upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then
+                          break
+                      else
+                          [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
+                      fi
+                  done
+              env:
+                  RETRY_TIMES: 20
+                  RETRY_WAIT_SECONDS: 5
+
+            - name: Create main repo pull request
+              id: main-repo-pr
+              uses: peter-evans/create-pull-request@v3
+              with:
+                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+                  commit-message: Update posthog-js to ${{ env.COMMITTED_VERSION }}
+                  branch: posthog-js-${{ env.COMMITTED_VERSION }}
+                  delete-branch: true
+                  title: Update posthog-js to ${{ env.COMMITTED_VERSION }}
+                  body: |
+                      ## Changes
+
+                      posthog-js version ${{ env.COMMITTED_VERSION }} has been released. This updates PostHog to use it.
+
+                      https://github.com/PostHog/posthog-js/compare/v${{ steps.yarn-upgrade.outputs.outgoing-version }}...v${{ env.COMMITTED_VERSION }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/posthog-js?activeTab=version)
+
+            - name: Output pull request result
+              run: |
+                  echo "PostHog pull request for posthog-js version ${{ env.COMMITTED_VERSION }} ready: ${{ steps.main-repo-pr.outputs.pull-request-url }}"
