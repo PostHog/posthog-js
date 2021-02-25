@@ -2,7 +2,7 @@ import { t } from 'testcafe'
 import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock, clearEvents } from './helpers'
 
 fixture('posthog.js capture')
-    .page('http://localhost:8000/playground/cypress/index.html')
+    .page('http://localhost:8000/playground/cypress/index.html?utm_campaign=somecampaign')
     .requestHooks(captureLogger, staticFilesMock)
     .beforeEach(() => initPosthog())
     .afterEach(async () => {
@@ -28,9 +28,13 @@ test('Captured events are accessible via /api/event', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI)
+    const results = await retryUntilResults(queryAPI, 'api/event')
 
     await t.expect(results.length).gte(2)
     await t.expect(results.filter(({ event }) => event === 'custom-event').length).gte(1)
     await t.expect(results.filter(({ event }) => event === '$pageview').length).gte(1)
+
+    const people = await queryAPI('api/person')
+
+    await t.expect(people[0].properties).eql({ utm_campaign: 'somecampaign', initial_utm_campaign: 'somecampaign' })
 })

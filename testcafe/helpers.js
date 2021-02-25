@@ -30,24 +30,31 @@ export const initPosthog = ClientFunction(() => {
     window.posthog.init('e2e_token_1239', { api_host: 'http://localhost:8000' })
 })
 
-export async function retryUntilResults(operation, limit = 50) {
+export async function retryUntilResults(operation, ...args) {
     const attempt = (count, resolve, reject) => {
-        if (count === limit) {
-            return reject(new Error('Failed to fetch results in 10 attempts'))
+        if (count === 50) {
+            return reject(new Error('Failed to fetch results in 50 attempts'))
         }
 
-        setTimeout(() => {
-            operation()
-                .then((results) => (results.length > 0 ? resolve(results) : attempt(count + 1, resolve, reject)))
-                .catch(reject)
+        setTimeout(async () => {
+            try {
+                const results = await operation(...args)
+                if (results.length > 0) {
+                    resolve(results)
+                } else {
+                    attempt(count + 1, resolve, reject)
+                }
+            } catch (err) {
+                reject(err)
+            }
         }, 300)
     }
 
     return new Promise((...args) => attempt(0, ...args))
 }
 
-export async function queryAPI() {
-    const response = await fetch('http://localhost:8000/api/event', {
+export async function queryAPI(endpoint) {
+    const response = await fetch(`http://localhost:8000/${endpoint}`, {
         headers: HEADERS,
     })
 
