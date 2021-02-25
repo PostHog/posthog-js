@@ -335,19 +335,30 @@ describe('__compress_and_send_json_request', () => {
     })
 })
 
-describe('utm tags', () => {
+describe('capture_pageview()', () => {
+    given('subject', () => () => given.lib.capture_pageview())
+
     given('overrides', () => ({
         get_config: (key) => given.config[key],
         capture: jest.fn(),
     }))
 
-    it('should pass utm tags to person', () => {
-        given.lib.init('token', {})
+    it('should capture a pageview', () => {
+        Object.defineProperty(window, 'location', {
+            writable: true,
+            value: { href: 'https://test.org/' },
+        })
+        given.subject()
+        expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {})
+    })
+
+    it('should set utm tags on the person', () => {
         Object.defineProperty(window, 'location', {
             writable: true,
             value: { href: 'https://test.org/?utm_medium=twitter' },
         })
-        given.lib.capture_pageview()
+
+        given.subject()
         expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {
             $set_once: {
                 initial_utm_medium: 'twitter',
@@ -356,14 +367,5 @@ describe('utm tags', () => {
                 utm_medium: 'twitter',
             },
         })
-    })
-    it('should not pass utm tags if none set', () => {
-        given('url', () => 'https://test.com')
-        Object.defineProperty(window, 'location', {
-            writable: true,
-            value: { href: 'https://test.org/' },
-        })
-        given.lib.capture_pageview()
-        expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {})
     })
 })

@@ -55,7 +55,6 @@ declare class posthog {
      * This function is called by default on page load unless the
      * capture_pageview configuration variable is false.
      *
-     * @param {String} [page] The url of the page to record. If you don't include this, it defaults to the current url.
      * @api private
      */
     static capture_pageview(page?: string): void

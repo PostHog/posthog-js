@@ -622,26 +622,16 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
  * This function is called by default on page load unless the
  * capture_pageview configuration variable is false.
  *
- * @param {String} [page] The url of the page to record. If you don't include this, it defaults to the current url.
  * @api private
  */
-PostHogLib.prototype.capture_pageview = function (page) {
-    if (_.isUndefined(page)) {
-        page = document.location.href
-    }
-    var set = _.info.campaignParams()
-    var set_once = {}
-    for (var key in set) {
-        set_once['initial_' + key] = set[key]
+PostHogLib.prototype.capture_pageview = function () {
+    const $set = _.info.campaignParams()
+    const $set_once = {}
+    for (const key in $set) {
+        $set_once['initial_' + key] = $set[key]
     }
 
-    var params =
-        Object.keys(set).length > 0
-            ? {
-                  $set_once: set_once,
-                  $set: set,
-              }
-            : {}
+    const params = Object.keys($set).length > 0 ? { $set_once, $set } : {}
     this.capture('$pageview', params)
 }
 
