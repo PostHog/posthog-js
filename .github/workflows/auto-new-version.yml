@@ -92,7 +92,6 @@ jobs:
             - name: Install new posthog-js version in main repo
               id: yarn-upgrade
               run: |
-                  cd plugins/
                   OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
                   echo "::set-output name=outgoing-version::$OUTGOING_VERSION"
                   for i in $(seq 1 $RETRY_TIMES); do
