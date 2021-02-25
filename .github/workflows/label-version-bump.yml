@@ -60,7 +60,7 @@ jobs:
             - name: Update CHANGELOG.md
               run: |
                   CHANGELOG_HEADING='## ${{ steps.new-version.outputs.new-version }} - '$(date --iso-8601)
-                  CHANGELOG_POINTS=$(git log v${{ steps.new-version.outputs.new-version }}..v${{ github.sha }} --pretty=format:"%s" | sed -e '/^.*\d*)$/!d' -e 's/^/- /' -e 's/^/- /')
+                  CHANGELOG_POINTS=$(git log v${{ steps.new-version.outputs.new-version }}..master --pretty=format:"%s" | sed -e '/^.*\d*)$/!d' -e 's/^/- /')
                   mv CHANGELOG.md CHANGELOG.old.md
                   echo -e "$CHANGELOG_HEADING\n\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
                   rm CHANGELOG.old.md
