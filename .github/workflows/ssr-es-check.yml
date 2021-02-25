@@ -16,7 +16,7 @@ jobs:
       - run: yarn install && yarn build-module && yarn build
 
       - name: Run es-check to check if our bundle is ES5 compatible
-        run: yarn add es-check; npx es-check es5 dist/{array,module}.js
+        run: npx es-check@5.2.0 es5 dist/{array,module}.js
 
       - name: Require module via node
         run: cd dist; node -e "require('./module')"
