@@ -21,6 +21,7 @@ jobs:
               with:
                   ref: master
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+                  fetch-depth: 0
 
             - name: Detect version bump type
               id: bump-type
@@ -60,7 +61,7 @@ jobs:
             - name: Update CHANGELOG.md
               run: |
                   CHANGELOG_HEADING='## ${{ steps.versions.outputs.new-version }} - '$(date --iso-8601)
-                  CHANGELOG_POINTS=$(git log v${{ steps.versions.outputs.old-version }}..master --pretty=format:"%s" | sed -e '/^.*\d*)$/!d' -e 's/^/- /')
+                  CHANGELOG_POINTS=$(git log v${{ steps.versions.outputs.old-version }}..master --pretty=format:%s --grep='^.*\d*)$' | -e 's/^/- /')
                   mv CHANGELOG.md CHANGELOG.old.md
                   echo -e "$CHANGELOG_HEADING\n\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
                   rm CHANGELOG.old.md
