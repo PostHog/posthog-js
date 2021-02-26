@@ -42,7 +42,7 @@ jobs:
                   BUMP_MAJOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump major') }}
 
             - name: Determine new version
-              id: new-version
+              id: versions
               if: steps.bump-type.outputs.bump-type != 'null'
               run: |
                   OLD_VERSION=$(jq ".version" package.json -r)
@@ -54,13 +54,13 @@ jobs:
               if: steps.bump-type.outputs.bump-type != 'null'
               run: |
                   mv package.json package.old.json
-                  jq --indent 4 '.version = "${{ steps.new-version.outputs.new-version }}"' package.old.json > package.json
+                  jq --indent 4 '.version = "${{ steps.versions.outputs.new-version }}"' package.old.json > package.json
                   rm package.old.json
 
             - name: Update CHANGELOG.md
               run: |
-                  CHANGELOG_HEADING='## ${{ steps.new-version.outputs.new-version }} - '$(date --iso-8601)
-                  CHANGELOG_POINTS=$(git log v${{ steps.new-version.outputs.new-version }}..master --pretty=format:"%s" | sed -e '/^.*\d*)$/!d' -e 's/^/- /')
+                  CHANGELOG_HEADING='## ${{ steps.versions.outputs.new-version }} - '$(date --iso-8601)
+                  CHANGELOG_POINTS=$(git log v${{ steps.versions.outputs.old-version }}..master --pretty=format:"%s" | sed -e '/^.*\d*)$/!d' -e 's/^/- /')
                   mv CHANGELOG.md CHANGELOG.old.md
                   echo -e "$CHANGELOG_HEADING\n\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
                   rm CHANGELOG.old.md
@@ -70,4 +70,4 @@ jobs:
               uses: EndBug/add-and-commit@v7
               with:
                   branch: master
-                  message: 'Bump version to ${{ steps.new-version.outputs.new-version }} and update CHANGELOG.md'
+                  message: 'Bump version to ${{ steps.versions.outputs.new-version }} and update CHANGELOG.md'
