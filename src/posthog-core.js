@@ -85,6 +85,7 @@ const defaultConfig = () => ({
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
+    capture_canvas: false,
 })
 
 /**

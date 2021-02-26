@@ -492,6 +492,7 @@ declare namespace posthog {
         inapp_link_new_window?: boolean
         request_batching?: boolean
         sanitize_properties?: (properties: posthog.Properties, event_name: string) => posthog.Properties
+        capture_canvas?: boolean
     }
 
     interface OptInOutCapturingOptions {
