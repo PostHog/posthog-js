@@ -82,10 +82,10 @@ const defaultConfig = () => ({
     inapp_protocol: '//',
     inapp_link_new_window: false,
     request_batching: true,
+    session_recording_record_canvas: false,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
-    capture_canvas: false,
 })
 
 /**

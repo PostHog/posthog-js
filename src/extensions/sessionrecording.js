@@ -80,7 +80,7 @@ export class SessionRecording {
             },
             blockClass: 'ph-no-capture', // Does not capture the element at all
             ignoreClass: 'ph-ignore-input', // Ignores content of input but still records the input element
-            captureCanvas: this.instance.get_config('capture_canvas'),
+            recordCanvas: this.instance.get_config('session_recording_record_canvas'),
         })
 
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
