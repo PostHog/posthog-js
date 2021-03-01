@@ -5,7 +5,7 @@ import { _ } from '../utils'
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
 describe('identify()', () => {
-    given('subject', () => () => given.lib.identify(given.identity, given.userProperties))
+    given('subject', () => () => given.lib.identify(given.identity, given.userProperties, given.setOnce))
 
     given('identity', () => 'a-new-id')
 
@@ -18,6 +18,7 @@ describe('identify()', () => {
         get_property: () => given.deviceId,
         people: {
             set: jest.fn(),
+            set_once: jest.fn(),
         },
         _flags: {},
         _captureMetrics: {
@@ -88,6 +89,22 @@ describe('identify()', () => {
                 $anon_distinct_id: 'oldIdentity',
             },
             { $set: { email: 'john@example.com' } }
+        )
+    })
+
+    it('calls capture with $set_once if setOnce is true', () => {
+        given('userProperties', () => ({ email: 'john@example.com' }))
+        given('setOnce', () => true)
+
+        given.subject()
+
+        expect(given.overrides.capture).toHaveBeenCalledWith(
+            '$identify',
+            {
+                distinct_id: 'a-new-id',
+                $anon_distinct_id: 'oldIdentity',
+            },
+            { $set_once: { email: 'john@example.com' } }
         )
     })
 
