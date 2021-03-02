@@ -9,7 +9,7 @@ Specifically, the [JS integration](https://posthog.com/docs/integrations/js-inte
 Unit tests: run `yarn test`
 Cypress: `yarn cypress`
 
-### Running testcafe E2E tests via browserstack
+### Running TestCafe E2E tests with BrowserStack
 
 Testing on IE11 requires a bit more setup.
 
