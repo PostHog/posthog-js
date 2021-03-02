@@ -159,7 +159,6 @@ PostHogPersistence.prototype.save = function () {
     if (this.disabled) {
         return
     }
-    this._expire_notification_campaigns()
     this.storage.set(this.name, JSON.stringify(this['props']), this.expire_days, this.cross_subdomain, this.secure)
 }
 
@@ -238,22 +237,6 @@ PostHogPersistence.prototype.unregister = function (prop) {
         }
     }
 }
-
-PostHogPersistence.prototype._expire_notification_campaigns = _.safewrap(function () {
-    var campaigns_shown = this['props'][CAMPAIGN_IDS_KEY],
-        EXPIRY_TIME = Config.DEBUG ? 60 * 1000 : 60 * 60 * 1000 // 1 minute (Config.DEBUG) / 1 hour (PDXN)
-    if (!campaigns_shown) {
-        return
-    }
-    for (var campaign_id in campaigns_shown) {
-        if (1 * new Date() - campaigns_shown[campaign_id] > EXPIRY_TIME) {
-            delete campaigns_shown[campaign_id]
-        }
-    }
-    if (_.isEmptyObject(campaigns_shown)) {
-        delete this['props'][CAMPAIGN_IDS_KEY]
-    }
-})
 
 PostHogPersistence.prototype.update_campaign_params = function () {
     if (!this.campaign_params_saved) {
