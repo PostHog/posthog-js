@@ -1,11 +1,3 @@
-## 1.8.9 - 2021-03-02
-
-- Bump version after sed fix (#194)
-- Update README.md (#194)
-- Add debug function (#193)
-- Fix auto changelog (#188)
-- Fix auto new version (#187)
-
 ## 1.8.7 - 2021-02-11
 - Fix internal metric unpacking error
 
