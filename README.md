@@ -1,5 +1,8 @@
 # PostHog.js
 
+[![npm package](https://img.shields.io/npm/v/posthog-js?style=flat-square)](https://www.npmjs.com/package/posthog-js)
+[![MIT License](https://img.shields.io/badge/License-MIT-red.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+
 Please see the main [PostHog docs](https://posthog.com/docs).
 
 Specifically, the [JS integration](https://posthog.com/docs/integrations/js-integration) details.
