@@ -496,6 +496,7 @@ declare namespace posthog {
         inapp_link_new_window?: boolean
         request_batching?: boolean
         sanitize_properties?: (properties: posthog.Properties, event_name: string) => posthog.Properties
+        properties_string_max_length?: number
     }
 
     interface OptInOutCapturingOptions {
