@@ -769,7 +769,7 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
  * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
  * @param {Object} [userProperties] Optional: An associative array of properties to store about the user
  */
-PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
+PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce) {
     //if the new_distinct_id has not been set ignore the identify event
     if (!new_distinct_id) {
         console.error('Unique user id has not been set in posthog.identify')
@@ -813,10 +813,16 @@ PostHogLib.prototype.identify = function (new_distinct_id, userProperties) {
                 distinct_id: new_distinct_id,
                 $anon_distinct_id: previous_distinct_id,
             },
-            { $set: userProperties || {} }
+            { $set: userPropertiesToSet || {} },
+            { $set_once: userPropertiesToSetOnce || {} }
         )
-    } else if (userProperties) {
-        this['people'].set(userProperties)
+    } else {
+        if (userPropertiesToSet) {
+            this['people'].set(userPropertiesToSet)
+        }
+        if (userPropertiesToSetOnce) {
+            this['people'].set_once(userPropertiesToSetOnce)
+        }
     }
 
     this.reloadFeatureFlags()

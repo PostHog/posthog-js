@@ -144,7 +144,11 @@ declare class posthog {
      * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
      * @param {Object} [userProperties] Optional: An associative array of properties to store about the user
      */
-    static identify(unique_id?: string, userProperties?: posthog.Properties): void
+    static identify(
+        unique_id?: string,
+        userPropertiesToSet?: posthog.Properties,
+        userPropertiesToSetOnce?: posthog.Properties
+    ): void
 
     /**
      * Create an alias, which PostHog will use to link two distinct_ids going forward (not retroactively).
