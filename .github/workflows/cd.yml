@@ -46,20 +46,6 @@ jobs:
             - name: Install dependencies
               run: yarn --frozen-lockfile
 
-            - name: Update CHANGELOG.md
-              run: |
-                  CHANGELOG_HEADING='## '$COMMITTED_VERSION' - '$(date --iso-8601)
-                  CHANGELOG_POINTS=$(git log v$PUBLISHED_VERSION..v${{ github.sha }} --pretty=format:"%s" | sed -e '/^(Bump version|Update CHANGELOG).*$/d' -e 's/^/- /')
-                  mv CHANGELOG.md CHANGELOG.old.md
-                  echo -e "$CHANGELOG_HEADING\n\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
-                  rm CHANGELOG.old.md
-
-            - name: Commit CHANGELOG.md update
-              uses: EndBug/add-and-commit@v7
-              with:
-                  branch: master
-                  message: 'Update CHANGELOG.md for ${{ env.COMMITTED_VERSION }}'
-
             - name: Publish the package in the npm registry
               run: npm publish --access public
               env:

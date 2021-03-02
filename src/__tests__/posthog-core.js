@@ -5,7 +5,9 @@ import { _ } from '../utils'
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
 describe('identify()', () => {
-    given('subject', () => () => given.lib.identify(given.identity, given.userProperties))
+    given('subject', () => () =>
+        given.lib.identify(given.identity, given.userPropertiesToSet, given.userPropertiesToSetOnce)
+    )
 
     given('identity', () => 'a-new-id')
 
@@ -18,6 +20,7 @@ describe('identify()', () => {
         get_property: () => given.deviceId,
         people: {
             set: jest.fn(),
+            set_once: jest.fn(),
         },
         _flags: {},
         _captureMetrics: {
@@ -46,7 +49,8 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: {} }
+            { $set: {} },
+            { $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
     })
@@ -62,7 +66,8 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: {} }
+            { $set: {} },
+            { $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
     })
@@ -77,7 +82,8 @@ describe('identify()', () => {
     })
 
     it('calls capture with user properties if passed', () => {
-        given('userProperties', () => ({ email: 'john@example.com' }))
+        given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
+        given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
 
         given.subject()
 
@@ -87,7 +93,8 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: { email: 'john@example.com' } }
+            { $set: { email: 'john@example.com' } },
+            { $set_once: { howOftenAmISet: 'once!' } }
         )
     })
 
@@ -102,12 +109,14 @@ describe('identify()', () => {
         })
 
         it('calls people.set when user properties passed', () => {
-            given('userProperties', () => ({ email: 'john@example.com' }))
+            given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
+            given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
 
             given.subject()
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
             expect(given.overrides.people.set).toHaveBeenCalledWith({ email: 'john@example.com' })
+            expect(given.overrides.people.set_once).toHaveBeenCalledWith({ howOftenAmISet: 'once!' })
         })
     })
 
