@@ -1,3 +1,11 @@
+## 1.8.10 - 2021-03-02
+
+- Add properties_string_max_length = 65535 (#197)
+- Add properties_string_max_length = 65535 (#197)
+- Remove unused notification code (#191)
+- Remove old upgrade code (never used) (#192)
+- Support $set_once with identify (#190)
+
 ## 1.8.9 - 2021-03-02
 
 - Add Yarn lock resiliency (#196)
