@@ -530,8 +530,6 @@ declare namespace posthog {
 
         static load(): void
 
-        static upgrade(config: posthog.Config): void
-
         static save(): void
 
         static remove(): void
