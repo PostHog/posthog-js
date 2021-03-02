@@ -104,7 +104,7 @@ PostHogPeople.prototype._send_request = function (data, callback) {
     }
 
     var date_encoded_data = _.encodeDates(data)
-    var truncated_data = _.copyAndTruncateStrings(date_encoded_data, 255)
+    var truncated_data = _.copyAndTruncateStrings(date_encoded_data, this._get_config('properties_string_max_length'))
     var json_data = JSON.stringify(date_encoded_data)
     var encoded_data = _.base64Encode(json_data)
 

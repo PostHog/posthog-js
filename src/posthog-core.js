@@ -82,6 +82,7 @@ const defaultConfig = () => ({
     inapp_protocol: '//',
     inapp_link_new_window: false,
     request_batching: true,
+    properties_string_max_length: 65535,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
@@ -547,7 +548,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         data['$set'] = options['$set']
     }
 
-    data = _.copyAndTruncateStrings(data, options._noTruncate ? null : 255)
+    data = _.copyAndTruncateStrings(data, options._noTruncate ? null : this.get_config('properties_string_max_length'))
     if (this.get_config('debug')) {
         console.log('PostHog.js send', data)
     }

@@ -131,7 +131,7 @@ describe('capture()', () => {
     )
 
     given('overrides', () => ({
-        get_config: jest.fn(),
+        get_config: (key) => given.config?.[key],
         config: {
             _onCapture: jest.fn(),
         },
@@ -184,6 +184,28 @@ describe('capture()', () => {
 
         expect(() => given.subject()).not.toThrow()
         expect(hook).not.toHaveBeenCalled()
+    })
+
+    it('truncates long properties', () => {
+        given('config', () => ({
+            properties_string_max_length: 1000,
+        }))
+        given('eventProperties', () => ({
+            key: 'value'.repeat(10000),
+        }))
+        const event = given.subject()
+        expect(event.properties.key.length).toBe(1000)
+    })
+
+    it('keeps long properties if null', () => {
+        given('config', () => ({
+            properties_string_max_length: null,
+        }))
+        given('eventProperties', () => ({
+            key: 'value'.repeat(10000),
+        }))
+        const event = given.subject()
+        expect(event.properties.key.length).toBe(50000)
     })
 })
 
