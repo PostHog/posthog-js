@@ -548,6 +548,9 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     }
 
     data = _.copyAndTruncateStrings(data, options._noTruncate ? null : 255)
+    if (this.get_config('debug')) {
+        console.log('PostHog.js send', data)
+    }
     const jsonData = JSON.stringify(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
@@ -1021,6 +1024,9 @@ PostHogLib.prototype.set_config = function (config) {
         if (this['persistence']) {
             this['persistence'].update_config(this['config'])
         }
+        if (localStorage && localStorage.getItem('ph_debug') === 'true') {
+            this['config']['debug'] = true
+        }
         Config.DEBUG = Config.DEBUG || this.get_config('debug')
     }
 }
@@ -1356,6 +1362,37 @@ PostHogLib.prototype.sentry_integration = function (_posthog, organization, proj
     }
 }
 
+/**
+ * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
+ *
+ * ### Usage
+ *
+ *     Sentry.init({
+ *          dsn: 'https://example',
+ *          integrations: [
+ *              new posthog.SentryIntegration(posthog)
+ *          ]
+ *     })
+ *
+ * @param {Object} [posthog] The posthog object
+ * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
+ * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
+ * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
+ */
+PostHogLib.prototype.debug = function (debug) {
+    if (debug === false) {
+        window.console.log("You've disabled debug mode.")
+        localStorage && localStorage.setItem('ph_debug', undefined)
+        this.set_config({ debug: false })
+    } else {
+        window.console.log(
+            "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
+        )
+        localStorage && localStorage.setItem('ph_debug', 'true')
+        this.set_config({ debug: true })
+    }
+}
+
 function deprecate_warning(method) {
     window.console.warn(
         'WARNING! posthog.' +
@@ -1400,6 +1437,7 @@ PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureF
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags
 PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 PostHogLib.prototype['SentryIntegration'] = PostHogLib.prototype.sentry_integration
+PostHogLib.prototype['debug'] = PostHogLib.prototype.debug
 PostHogLib.prototype['LIB_VERSION'] = Config.LIB_VERSION
 
 // PostHogPersistence Exports
