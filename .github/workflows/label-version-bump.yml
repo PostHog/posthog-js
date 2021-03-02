@@ -66,9 +66,12 @@ jobs:
                   echo -e "$CHANGELOG_HEADING\n\n- ${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
                   rm CHANGELOG.old.md
 
+            - name: Update yarn.lock
+              run: yarn
+
             - name: Commit bump
               if: steps.bump-type.outputs.bump-type != 'null'
               uses: EndBug/add-and-commit@v7
               with:
                   branch: master
-                  message: 'Bump version to ${{ steps.versions.outputs.new-version }} and update CHANGELOG.md'
+                  message: Bump version to ${{ steps.versions.outputs.new-version }}, update CHANGELOG.md & yarn.lock
