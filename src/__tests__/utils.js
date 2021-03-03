@@ -63,3 +63,41 @@ describe('_.copyAndTruncateStrings', () => {
         expect(given.subject).toEqual({ key: 'vaaaa', values: ['fooob', undefined], __deepCircularCopyInProgress__: 1 })
     })
 })
+
+describe('_.info', () => {
+    given('subject', () => _.info)
+
+    it('deviceType', () => {
+        const deviceTypes = {
+            // iPad
+            'Mozilla/5.0 (iPad; CPU OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5355d Safari/8536.25':
+                'Tablet',
+            // Samsung tablet
+            'Mozilla/5.0 (Linux; Android 7.1.1; SM-T555 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/83.0.4103.96 Safari/537.36':
+                'Tablet',
+            // Windows Chrome
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.157 Safari/537.36':
+                'Desktop',
+            // Mac Safari
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.75.14 (KHTML, like Gecko) Version/7.0.3 Safari/7046A194A':
+                'Desktop',
+            // iPhone
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.4 Mobile/15E148 Safari/604.1':
+                'Mobile',
+            // LG Android
+            'Mozilla/5.0 (Linux; Android 6.0; LG-H631 Build/MRA58K) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/38.0.2125.102 Mobile Safari/537.36':
+                'Mobile',
+        }
+
+        for (const [userAgent, deviceType] of Object.entries(deviceTypes)) {
+            expect(given.subject.deviceType(userAgent)).toEqual(deviceType)
+        }
+    })
+
+    it('properties', () => {
+        const properties = given.subject.properties()
+
+        expect(properties['$lib']).toEqual('web')
+        expect(properties['$device_type']).toEqual('Desktop')
+    })
+})
