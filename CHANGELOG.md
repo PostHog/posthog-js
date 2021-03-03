@@ -1,3 +1,8 @@
+## 1.9.0 - 2021-03-03
+
+- Device Type (#198)
+- Device Type (#198)
+
 ## 1.8.10 - 2021-03-02
 
 - Add properties_string_max_length = 65535 (#197)
