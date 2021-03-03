@@ -795,10 +795,23 @@ _.info = {
             return 'iPhone'
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
             return 'BlackBerry'
+        } else if (/Android/.test(user_agent) && !/Mobile/.test(user_agent)) {
+            return 'Android Tablet'
         } else if (/Android/.test(user_agent)) {
             return 'Android'
         } else {
             return ''
+        }
+    },
+
+    deviceType: function (user_agent) {
+        const device = this.device(user_agent)
+        if (device === 'iPad' || device === 'Android Tablet') {
+            return 'Tablet'
+        } else if (device) {
+            return 'Mobile'
+        } else {
+            return 'Desktop'
         }
     },
 
@@ -816,6 +829,7 @@ _.info = {
                 $os: _.info.os(),
                 $browser: _.info.browser(userAgent, navigator.vendor, window.opera),
                 $device: _.info.device(userAgent),
+                $device_type: _.info.deviceType(userAgent),
             }),
             {
                 $current_url: window.location.href,
