@@ -93,4 +93,11 @@ describe('_.info', () => {
             expect(given.subject.deviceType(userAgent)).toEqual(deviceType)
         }
     })
+
+    it('properties', () => {
+        const properties = given.subject.properties()
+
+        expect(properties['$lib']).toEqual('web')
+        expect(properties['$device_type']).toEqual('Desktop')
+    })
 })
