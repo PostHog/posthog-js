@@ -121,6 +121,7 @@ declare class posthog {
      *
      *      posthog.identify('[user unique id]')
      *      posthog.identify('[user unique id]', { email: 'john@example.com' })
+     *      posthog.identify('[user unique id]', {}, { referral_code: '12345' })
      *
      * ### Notes:
      *
@@ -143,6 +144,7 @@ declare class posthog {
      *
      * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
      * @param {Object} [userProperties] Optional: An associative array of properties to store about the user
+     * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
      */
     static identify(
         unique_id?: string,
