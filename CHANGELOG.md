@@ -1,3 +1,9 @@
+## 1.9.1 - 2021-03-08
+
+- Add posthog.debug() to types, remove bad docstring (#201)
+- Remove a bad docstring (#201)
+- Fix ".identify" docstrings (#200)
+
 ## 1.9.0 - 2021-03-03
 
 - Device Type (#198)
