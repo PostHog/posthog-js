@@ -747,6 +747,7 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
  *
  *      posthog.identify('[user unique id]')
  *      posthog.identify('[user unique id]', { email: 'john@example.com' })
+ *      posthog.identify('[user unique id]', {}, { referral_code: '12345' })
  *
  * ### Notes:
  *
@@ -769,6 +770,7 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
  *
  * @param {String} [unique_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
  * @param {Object} [userProperties] Optional: An associative array of properties to store about the user
+ * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
  */
 PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce) {
     //if the new_distinct_id has not been set ignore the identify event
