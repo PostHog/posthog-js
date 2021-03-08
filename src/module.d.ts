@@ -452,6 +452,8 @@ declare class posthog {
     static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
 
     static toString(): string
+
+    static debug(): void
 }
 
 declare namespace posthog {
