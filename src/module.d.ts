@@ -451,8 +451,28 @@ declare class posthog {
      */
     static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
 
+    /**
+         * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
+         *
+         * ### Usage
+         *
+         *     Sentry.init({
+         *          dsn: 'https://example',
+         *          integrations: [
+         *              new posthog.SentryIntegration(posthog)
+         *          ]
+         *     })
+         *
+         * @param {Object} [posthog] The posthog object
+         * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
+         * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
+         * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
+     */
+    static SentryIntegration(posthog: posthog, organization: string, projectId: number, prefix: string): void
+
     static toString(): string
 
+    /* Will log all capture requests to the Javascript console, including event properties for easy debugging */
     static debug(): void
 }
 
