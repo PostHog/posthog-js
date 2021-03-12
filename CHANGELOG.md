@@ -1,3 +1,8 @@
+## 1.9.2 - 2021-03-12
+
+- Add SentryIntegration TS (#202)
+- add SentryIntegration typing (#202)
+
 ## 1.9.1 - 2021-03-08
 
 - Add posthog.debug() to types, remove bad docstring (#201)
