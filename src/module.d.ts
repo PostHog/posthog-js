@@ -470,7 +470,7 @@ declare class posthog {
      * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
      * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
      */
-    static SentryIntegration: SentryIntegration
+    static SentryIntegration: typeof SentryIntegration
 
     static toString(): string
 
