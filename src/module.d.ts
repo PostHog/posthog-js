@@ -1,5 +1,7 @@
 // Type definitions for exported methods
 
+import { EventProcessor, Integration } from '@sentry/types'
+
 declare class posthog {
     /**
      * This function initializes a new instance of the PostHog capturing object.
@@ -468,7 +470,7 @@ declare class posthog {
      * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
      * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
      */
-    static SentryIntegration(posthog: posthog, organization?: string, projectId?: number, prefix?: string): void
+    static SentryIntegration: SentryIntegration
 
     static toString(): string
 
@@ -687,6 +689,12 @@ declare namespace posthog {
     }
 
     export class feature_flags extends featureFlags {}
+}
+
+export class SentryIntegration implements Integration {
+    constructor(posthog: posthog, organization?: string, projectId?: number, prefix?: string)
+    name: string
+    setupOnce(addGlobalEventProcessor: (callback: EventProcessor) => void): void
 }
 
 export type PostHog = typeof posthog
