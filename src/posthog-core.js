@@ -1348,6 +1348,7 @@ PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
  */
 PostHogLib.prototype.sentry_integration = function (_posthog, organization, projectId, prefix) {
     // setupOnce gets called by Sentry when it intializes the plugin
+    this.name = 'posthog-js'
     this.setupOnce = function (addGlobalEventProcessor) {
         addGlobalEventProcessor((event) => {
             if (event.level !== 'error' || !_posthog.__loaded) return event
