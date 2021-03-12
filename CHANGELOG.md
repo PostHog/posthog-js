@@ -1,3 +1,8 @@
+## 1.9.3 - 2021-03-12
+
+- Fix SentryIntegration optional param typing (#203)
+- Fix SentryIntegration optional param typing (#203)
+
 ## 1.9.2 - 2021-03-12
 
 - Add SentryIntegration TS (#202)
