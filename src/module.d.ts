@@ -523,6 +523,7 @@ declare namespace posthog {
         request_batching?: boolean
         sanitize_properties?: (properties: posthog.Properties, event_name: string) => posthog.Properties
         properties_string_max_length?: number
+        mask_all_inputs: boolean
     }
 
     interface OptInOutCapturingOptions {

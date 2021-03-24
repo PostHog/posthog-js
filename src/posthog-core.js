@@ -83,6 +83,7 @@ const defaultConfig = () => ({
     inapp_link_new_window: false,
     request_batching: true,
     properties_string_max_length: 65535,
+    mask_all_inputs: false,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
