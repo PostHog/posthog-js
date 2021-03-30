@@ -1045,6 +1045,8 @@ PostHogLib.prototype.alias = function (alias, original) {
  *      // prevent autocapture from capturing any attribute names on elements
  *      mask_all_element_attributes: false
  *
+ *      // prevent autocapture from capturing textContent on all elements
+ *      mask_all_text: false
  *     }
  *
  *

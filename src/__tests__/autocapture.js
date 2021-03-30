@@ -738,7 +738,7 @@ describe('Autocapture system', () => {
 
         it('does not capture any element attributes if mask_all_element_attributes is set', () => {
             const dom = `
-      <button id='button1' sensitive='1'>
+      <button id='button1' formmethod='post'>
         Not sensitive
       </button>
       `
@@ -753,7 +753,7 @@ describe('Autocapture system', () => {
                 get_config: sandbox.spy(function (key) {
                     switch (key) {
                         case 'mask_all_element_attributes':
-                            return false
+                            return true
                     }
                 }),
             }
@@ -766,9 +766,10 @@ describe('Autocapture system', () => {
                 type: 'click',
             }
             autocapture._captureEvent(e1, lib)
+
             const props1 = getCapturedProps(lib.capture)
-            expect(props1['$elements'][0]).toHaveProperty('$el_text')
-            expect(props1['$elements'][0]['attr__sensitive']).toMatch('')
+            console.log(props1['$elements'][0])
+            expect(props1['$elements'][0]).not.toContain('attr__formmethod')
         })
     })
 
