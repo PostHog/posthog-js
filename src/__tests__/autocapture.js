@@ -362,7 +362,7 @@ describe('Autocapture system', () => {
                 capture: sandbox.spy(),
                 get_config: sandbox.spy(function (key) {
                     switch (key) {
-                        case 'mask_all_inputs':
+                        case 'mask_all_element_attributes':
                             return false
                     }
                 }),
@@ -396,7 +396,7 @@ describe('Autocapture system', () => {
                             return 'https://test.com'
                         case 'token':
                             return 'testtoken'
-                        case 'mask_all_inputs':
+                        case 'mask_all_element_attributes':
                             return false
                     }
                 }),
@@ -736,9 +736,9 @@ describe('Autocapture system', () => {
             expect(lib.capture.callCount).toBe(0)
         })
 
-        it('does not capture any input values if mask_all_inputs is set', () => {
+        it('does not capture any element attributes if mask_all_element_attributes is set', () => {
             const dom = `
-      <button id='button1'>
+      <button id='button1' sensitive='1'>
         Not sensitive
       </button>
       `
@@ -752,7 +752,7 @@ describe('Autocapture system', () => {
                 capture: sandbox.spy(),
                 get_config: sandbox.spy(function (key) {
                     switch (key) {
-                        case 'mask_all_inputs':
+                        case 'mask_all_element_attributes':
                             return false
                     }
                 }),
@@ -768,7 +768,7 @@ describe('Autocapture system', () => {
             autocapture._captureEvent(e1, lib)
             const props1 = getCapturedProps(lib.capture)
             expect(props1['$elements'][0]).toHaveProperty('$el_text')
-            expect(props1['$elements'][0]['$el_text']).toMatch('')
+            expect(props1['$elements'][0]['attr__sensitive']).toMatch('')
         })
     })
 
@@ -782,7 +782,7 @@ describe('Autocapture system', () => {
             },
             get_config: sandbox.spy(function (key) {
                 switch (key) {
-                    case 'mask_all_inputs':
+                    case 'mask_all_element_attributes':
                         return false
                 }
             }),

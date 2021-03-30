@@ -175,7 +175,9 @@ var autocapture = {
                         explicitNoCapture = true
                     }
 
-                    elementsJson.push(this._getPropertiesFromElement(el, instance.get_config('mask_all_inputs')))
+                    elementsJson.push(
+                        this._getPropertiesFromElement(el, instance.get_config('mask_all_element_attributes'))
+                    )
                 },
                 this
             )
