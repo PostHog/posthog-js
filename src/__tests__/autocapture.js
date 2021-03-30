@@ -743,7 +743,7 @@ describe('Autocapture system', () => {
       </button>
       `
 
-            lib.get_config = jest.fn(() => true)
+            const newLib = { ...lib, get_config: jest.fn(() => true) }
 
             document.body.innerHTML = dom
             const button1 = document.getElementById('button1')
@@ -752,7 +752,7 @@ describe('Autocapture system', () => {
                 target: button1,
                 type: 'click',
             }
-            autocapture._captureEvent(e1, lib)
+            autocapture._captureEvent(e1, newLib)
 
             const props1 = getCapturedProps(lib.capture)
             console.log(props1['$elements'][0])
