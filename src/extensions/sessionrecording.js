@@ -62,6 +62,27 @@ export class SessionRecording {
 
     _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
+        const sessionRecordingOptions = {
+            // select set of rrweb config options we expose to our users
+            // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+            blockClass: 'ph-no-capture',
+            blockSelector: null,
+            ignoreClass: 'ph-ignore-input',
+            maskAllInputs: false,
+            maskInputOptions: {},
+            maskInputFn: null,
+            slimDOMOptions: {},
+            collectFonts: false,
+        }
+
+        // only allows user to set our 'whitelisted' options
+        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+        for (const [key, value] of Object.entries(userSessionRecordingOptions)) {
+            if (key in userSessionRecordingOptions) {
+                sessionRecordingOptions[key] = value
+            }
+        }
+
         window.rrweb.record({
             emit: (data) => {
                 const properties = {
