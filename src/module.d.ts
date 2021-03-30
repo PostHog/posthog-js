@@ -270,6 +270,10 @@ declare class posthog {
      *
      *       // whether to open in-app message link in new tab/window
      *       inapp_link_new_window: false
+     *
+     *      // specify if input values should be captured by default
+     *      // works for both autocapture and session recording
+     *      mask_all_inputs: false
      *     }
      *
      *
