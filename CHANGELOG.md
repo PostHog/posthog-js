@@ -1,3 +1,9 @@
+## 1.9.6 - 2021-03-30
+
+- Support rrweb mask all inputs (#207)
+- Support rrweb mask all inputs (#207)
+- fix: incorrect typing for isFeatureEnabled (#208)
+
 ## 1.9.3 - 2021-03-12
 
 - Fix SentryIntegration optional param typing (#203)
