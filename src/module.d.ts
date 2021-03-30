@@ -544,7 +544,7 @@ declare namespace posthog {
         request_batching?: boolean
         sanitize_properties?: (properties: posthog.Properties, event_name: string) => posthog.Properties
         properties_string_max_length?: number
-        session_recording: SessionRecordingOptions
+        session_recording?: SessionRecordingOptions
         mask_all_element_attributes?: boolean
         mask_all_text?: boolean
     }
