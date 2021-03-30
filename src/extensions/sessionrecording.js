@@ -99,7 +99,7 @@ export class SessionRecording {
                     this.snapshots.push(properties)
                 }
             },
-            ...this.instance.get_config('session_recording'),
+            ...sessionRecordingOptions,
         })
 
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
