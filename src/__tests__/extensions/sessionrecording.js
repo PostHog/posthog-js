@@ -11,6 +11,7 @@ describe('SessionRecording', () => {
     let _emit
 
     given('sessionRecording', () => new SessionRecording(given.posthog))
+
     given('posthog', () => ({
         get_property: () => given.$session_recording_enabled,
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
@@ -19,7 +20,36 @@ describe('SessionRecording', () => {
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
     }))
-    given('config', () => ({ api_host: 'https://test.com', disable_session_recording: given.disabled }))
+
+    given('config', () => ({
+        api_host: 'https://test.com',
+        disable_session_recording: given.disabled,
+        session_recording: {
+            maskAllInputs: true,
+            recordCanvas: true,
+            someUnregisteredProp: 'abc',
+        },
+    }))
+
+    describe('session recording config', () => {
+        beforeEach(() => {
+            window.rrweb = {
+                record: jest.fn(),
+            }
+        })
+
+        it('removes options that are not whitelisted', () => {
+            given.sessionRecording._onScriptLoaded()
+            const recordCallArgs = window.rrweb.record.mock.calls[0][0]
+
+            // props that aren't whitelisted doesn't make it to rrweb
+            expect('someUnregisteredProp' in recordCallArgs).toEqual(false)
+            expect('recordCanvas' in recordCallArgs).toEqual(false)
+
+            // update whitelisted props
+            expect(recordCallArgs['maskAllInputs']).toEqual(true)
+        })
+    })
 
     describe('afterDecideResponse()', () => {
         given('subject', () => () => given.sessionRecording.afterDecideResponse(given.response))
