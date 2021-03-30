@@ -742,21 +742,8 @@ describe('Autocapture system', () => {
         Not sensitive
       </button>
       `
-            const sandbox = sinon.createSandbox()
 
-            const lib = {
-                _ceElementTextProperties: [],
-                get_distinct_id() {
-                    return 'distinctid'
-                },
-                capture: sandbox.spy(),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'mask_all_element_attributes':
-                            return true
-                    }
-                }),
-            }
+            lib.get_config = jest.fn(() => true)
 
             document.body.innerHTML = dom
             const button1 = document.getElementById('button1')
@@ -769,7 +756,7 @@ describe('Autocapture system', () => {
 
             const props1 = getCapturedProps(lib.capture)
             console.log(props1['$elements'][0])
-            expect(props1['$elements'][0]).not.toContain('attr__formmethod')
+            expect('attr__formmethod' in props1['$elements'][0]).toEqual(false)
         })
     })
 
