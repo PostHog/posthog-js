@@ -44,7 +44,6 @@ var autocapture = {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
 
-            console.log('!!!!!!!', maskInputs)
             if (!maskInputs && shouldCaptureValue(attr.value)) {
                 props['attr__' + attr.name] = attr.value
             }
