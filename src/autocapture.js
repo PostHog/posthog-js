@@ -27,12 +27,14 @@ var autocapture = {
         }
     },
 
-    _getPropertiesFromElement: function (elem, maskInputs) {
+    _getPropertiesFromElement: function (elem, maskInputs, maskText) {
         var tag_name = elem.tagName.toLowerCase()
         var props = {
             tag_name: tag_name,
         }
-        if (usefulElements.indexOf(tag_name) > -1) props['$el_text'] = getSafeText(elem)
+        if (!usefulElements.includes(tag_name) && !maskText) {
+            props['$el_text'] = getSafeText(elem)
+        }
 
         var classes = getClassName(elem)
         if (classes.length > 0)
@@ -176,7 +178,11 @@ var autocapture = {
                     }
 
                     elementsJson.push(
-                        this._getPropertiesFromElement(el, instance.get_config('mask_all_element_attributes'))
+                        this._getPropertiesFromElement(
+                            el,
+                            instance.get_config('mask_all_element_attributes'),
+                            instance.get_config('mask_all_text')
+                        )
                     )
                 },
                 this
