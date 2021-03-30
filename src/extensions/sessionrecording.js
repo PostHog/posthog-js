@@ -77,7 +77,7 @@ export class SessionRecording {
 
         // only allows user to set our 'whitelisted' options
         const userSessionRecordingOptions = this.instance.get_config('session_recording')
-        for (const [key, value] of Object.entries(userSessionRecordingOptions)) {
+        for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in userSessionRecordingOptions) {
                 sessionRecordingOptions[key] = value
             }
