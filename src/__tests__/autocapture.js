@@ -786,8 +786,8 @@ describe('Autocapture system', () => {
             autocapture._captureEvent(e1, newLib)
             autocapture._captureEvent(e2, newLib)
 
-            const props1 = getCapturedProps(lib.capture)
-            const props2 = getCapturedProps(lib.capture)
+            const props1 = getCapturedProps(newLib.capture)
+            const props2 = getCapturedProps(newLib.capture)
 
             for (const el of [...props1['$elements'], ...props2['$elements']]) {
                 if ('$el_text' in el) {
