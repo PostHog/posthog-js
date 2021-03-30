@@ -360,6 +360,12 @@ describe('Autocapture system', () => {
                     return 'distinctid'
                 },
                 capture: sandbox.spy(),
+                get_config: sandbox.spy(function (key) {
+                    switch (key) {
+                        case 'mask_all_inputs':
+                            return false
+                    }
+                }),
             }
         })
 
@@ -390,6 +396,8 @@ describe('Autocapture system', () => {
                             return 'https://test.com'
                         case 'token':
                             return 'testtoken'
+                        case 'mask_all_inputs':
+                            return false
                     }
                 }),
                 token: 'testtoken',
@@ -727,14 +735,57 @@ describe('Autocapture system', () => {
             autocapture._captureEvent({ target: span, type: 'click' }, lib)
             expect(lib.capture.callCount).toBe(0)
         })
+
+        it('does not capture any input values if mask_all_inputs is set', () => {
+            const dom = `
+      <button id='button1'>
+        Not sensitive
+      </button>
+      `
+            const sandbox = sinon.createSandbox()
+
+            const lib = {
+                _ceElementTextProperties: [],
+                get_distinct_id() {
+                    return 'distinctid'
+                },
+                capture: sandbox.spy(),
+                get_config: sandbox.spy(function (key) {
+                    switch (key) {
+                        case 'mask_all_inputs':
+                            return false
+                    }
+                }),
+            }
+
+            document.body.innerHTML = dom
+            const button1 = document.getElementById('button1')
+
+            const e1 = {
+                target: button1,
+                type: 'click',
+            }
+            autocapture._captureEvent(e1, lib)
+            const props1 = getCapturedProps(lib.capture)
+            expect(props1['$elements'][0]).toHaveProperty('$el_text')
+            expect(props1['$elements'][0]['$el_text']).toMatch('')
+        })
     })
 
     describe('_addDomEventHandlers', () => {
+        const sandbox = sinon.createSandbox()
+
         const lib = {
             capture: sinon.spy(),
             get_distinct_id() {
                 return 'distinctid'
             },
+            get_config: sandbox.spy(function (key) {
+                switch (key) {
+                    case 'mask_all_inputs':
+                        return false
+                }
+            }),
         }
 
         let navigateSpy

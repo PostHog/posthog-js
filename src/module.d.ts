@@ -270,6 +270,10 @@ declare class posthog {
      *
      *       // whether to open in-app message link in new tab/window
      *       inapp_link_new_window: false
+     *
+     *      // specify if input values should be captured by default
+     *      // works for both autocapture and session recording
+     *      mask_all_inputs: false
      *     }
      *
      *
@@ -523,6 +527,7 @@ declare namespace posthog {
         request_batching?: boolean
         sanitize_properties?: (properties: posthog.Properties, event_name: string) => posthog.Properties
         properties_string_max_length?: number
+        mask_all_inputs?: boolean
     }
 
     interface OptInOutCapturingOptions {
