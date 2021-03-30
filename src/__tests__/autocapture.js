@@ -770,23 +770,6 @@ describe('Autocapture system', () => {
             expect(props1['$elements'][0]).toHaveProperty('$el_text')
             expect(props1['$elements'][0]['$el_text']).toMatch('')
         })
-
-        /*
-
-                    lib = {
-                _ceElementTextProperties: [],
-                get_distinct_id() {
-                    return 'distinctid'
-                },
-                capture: sandbox.spy(),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'mask_all_inputs':
-                            return false
-                    }
-                }),
-            }
-        */
     })
 
     describe('_addDomEventHandlers', () => {
