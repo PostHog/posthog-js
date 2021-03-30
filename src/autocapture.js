@@ -27,7 +27,7 @@ var autocapture = {
         }
     },
 
-    _getPropertiesFromElement: function (elem) {
+    _getPropertiesFromElement: function (elem, maskInputs) {
         var tag_name = elem.tagName.toLowerCase()
         var props = {
             tag_name: tag_name,
@@ -43,7 +43,9 @@ var autocapture = {
         _.each(elem.attributes, function (attr) {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
-            if (shouldCaptureValue(attr.value)) {
+
+            console.log('!!!!!!!', maskInputs)
+            if (!maskInputs && shouldCaptureValue(attr.value)) {
                 props['attr__' + attr.name] = attr.value
             }
         })
@@ -174,7 +176,7 @@ var autocapture = {
                         explicitNoCapture = true
                     }
 
-                    elementsJson.push(this._getPropertiesFromElement(el))
+                    elementsJson.push(this._getPropertiesFromElement(el, instance.get_config('mask_all_inputs')))
                 },
                 this
             )
