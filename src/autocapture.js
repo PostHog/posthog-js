@@ -188,7 +188,9 @@ var autocapture = {
                 this
             )
 
-            elementsJson[0]['$el_text'] = instance.get_config('mask_all_text') ? '' : getSafeText(target)
+            if (!instance.get_config('mask_all_text')) {
+                elementsJson[0]['$el_text'] = getSafeText(target)
+            }
 
             if (href) {
                 elementsJson[0]['attr__href'] = href

@@ -31,24 +31,10 @@ describe('SessionRecording', () => {
         },
     }))
 
-    describe('session recording config', () => {
-        beforeEach(() => {
-            window.rrweb = {
-                record: jest.fn(),
-            }
-        })
-
-        it('removes options that are not whitelisted', () => {
-            given.sessionRecording._onScriptLoaded()
-            const recordCallArgs = window.rrweb.record.mock.calls[0][0]
-
-            // props that aren't whitelisted doesn't make it to rrweb
-            expect('someUnregisteredProp' in recordCallArgs).toEqual(false)
-            expect('recordCanvas' in recordCallArgs).toEqual(false)
-
-            // update whitelisted props
-            expect(recordCallArgs['maskAllInputs']).toEqual(true)
-        })
+    beforeEach(() => {
+        window.rrweb = {
+            record: jest.fn(),
+        }
     })
 
     describe('afterDecideResponse()', () => {
@@ -93,13 +79,31 @@ describe('SessionRecording', () => {
 
         beforeEach(() => {
             window.rrweb = {
-                record: function ({ emit }) {
+                record: jest.fn(({ emit }) => {
                     _emit = emit
-                },
+                }),
             }
 
             loadScript.mockImplementation((path, callback) => callback())
             sessionIdGenerator.mockReturnValue('sid')
+        })
+
+        it('calls rrweb.record with the right options', () => {
+            given.sessionRecording._onScriptLoaded()
+
+            // maskAllInputs should change from default
+            // someUnregisteredProp should not be present
+            expect(window.rrweb.record).toHaveBeenCalledWith({
+                emit: expect.anything(),
+                maskAllInputs: true,
+                blockClass: 'ph-no-capture',
+                blockSelector: null,
+                ignoreClass: 'ph-ignore-input',
+                maskInputOptions: {},
+                maskInputFn: null,
+                slimDOMOptions: {},
+                collectFonts: false,
+            })
         })
 
         it('records events emitted before and after starting recording', () => {
