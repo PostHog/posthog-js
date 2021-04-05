@@ -760,40 +760,25 @@ describe('Autocapture system', () => {
 
         it('does not capture any textContent if mask_all_text is set', () => {
             const dom = `
-      <div id='div1'>
-        Dont capture me!
-      </div>
-      <a id='a1'>
-        Dont capture me either!
-      </a>
-      `
+        <a id='a1'>
+          Dont capture me!
+        </a>
+        `
 
             const newLib = { ...lib, get_config: jest.fn(() => true) }
 
             document.body.innerHTML = dom
-            const div1 = document.getElementById('div1')
             const a = document.getElementById('a1')
 
             const e1 = {
-                target: div1,
-                type: 'click',
-            }
-            const e2 = {
                 target: a,
                 type: 'click',
             }
 
             autocapture._captureEvent(e1, newLib)
-            autocapture._captureEvent(e2, newLib)
-
             const props1 = getCapturedProps(newLib.capture)
-            const props2 = getCapturedProps(newLib.capture)
 
-            for (const el of [...props1['$elements'], ...props2['$elements']]) {
-                if ('$el_text' in el) {
-                    expect(el['$el_text']).toEqual('')
-                }
-            }
+            expect(props1['$elements'][0]).not.toHaveProperty('$el_text')
         })
     })
 

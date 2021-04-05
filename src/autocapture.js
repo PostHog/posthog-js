@@ -32,7 +32,7 @@ var autocapture = {
         var props = {
             tag_name: tag_name,
         }
-        if (!usefulElements.includes(tag_name) && !maskText) {
+        if (usefulElements.indexOf(tag_name) > -1 && !maskText) {
             props['$el_text'] = getSafeText(elem)
         }
 
