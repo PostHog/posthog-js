@@ -48,13 +48,32 @@ test('Config option mask_all_text does not set $el_text for autocaptured events'
 
     const results = await retryUntilResults(queryAPI)
 
-    console.debug('Results:', JSON.stringify(results))
-
-    const autocapturedElement = results[0].elements[0]
+    const autocapturedElement = results.filter((e) => e.event === '$autocapture')[0].elements[0]
 
     // $pageview + $autocapture
     await t.expect(results.length).gte(2)
 
     await t.expect(autocapturedElement.tag_name).eql('a')
     await t.expect('$el_text' in autocapturedElement).eql(false)
+})
+
+test('Config option mask_all_element_attributes does not capture any attributes for autocaptured elements', async (t) => {
+    await initPosthog({ mask_all_element_attributes: true })
+    await t
+        .click('[data-cy-button-sensitive-attributes]')
+        .wait(5000)
+        .expect(captureLogger.count(() => true))
+        .gte(1)
+
+    // Check no requests failed
+    await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
+
+    const results = await retryUntilResults(queryAPI)
+
+    const autocapturedElement = results.filter((e) => e.event === '$autocapture')[0].elements[0]
+
+    // $pageview + $autocapture
+    await t.expect(results.length).gte(2)
+
+    await t.expect(Object.keys(autocapturedElement.attributes).length).eql(0)
 })
