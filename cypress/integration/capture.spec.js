@@ -55,7 +55,7 @@ describe('Event capture', () => {
 
         cy.get('body').click(100, 100).click(98, 102).click(101, 103)
 
-        cy.phCaptures().should('deep.equal', ['$pageview', '$rageclick'])
+        cy.phCaptures().should('include', '$rageclick')
     })
 
     describe('session recording enabled from API', () => {
