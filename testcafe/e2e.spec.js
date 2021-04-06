@@ -40,7 +40,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     await t
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(5000)
+        .wait(8000)
         .expect(captureLogger.count(() => true))
         .gte(2)
 
@@ -75,7 +75,7 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     await t
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(5000)
+        .wait(8000)
         .expect(captureLogger.count(() => true))
         .gte(2)
 
