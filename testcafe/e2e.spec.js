@@ -50,13 +50,24 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     const results = await retryUntilResults(queryAPI)
 
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
+
     await t.expect(autocapturedEvents.length).eql(2)
 
-    const autocapturedButtonClick = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'a')
-    const autocapturedLinkClick = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'button')
+    const autocapturedLinkClickEvents = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'a')
+    const autocapturedButtonClickEvents = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'button')
 
-    await t.expect(autocapturedButtonClick.length).eql(1)
-    await t.expect(autocapturedLinkClick.length).eql(1)
+    await t.expect(autocapturedButtonClickEvents.length).eql(1)
+    await t.expect(autocapturedLinkClickEvents.length).eql(1)
+
+    const autocapturedButtonElement = autocapturedButtonClickEvents[0].elements[0]
+    const autocapturedLinkElement = autocapturedLinkClickEvents[0].elements[0]
+
+    // Captures text content if mask_all_text isn't set
+    await t.expect(autocapturedLinkElement['text']).eql('Sensitive text!')
+
+    await t
+        .expect(Object.keys(autocapturedButtonElement.attributes))
+        .eql(['attr__id', 'attr__class', 'attr__data-sensitive', 'attr__data-cy-button-sensitive-attributes'])
 })
 
 test('Config options change autocapture behavior accordingly', async (t) => {
@@ -76,11 +87,12 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
     await t.expect(autocapturedEvents.length).eql(2)
 
-    const autocapturedButtonElement = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'a')[0].elements[0]
-    const autocapturedLinkElement = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'button')[0].elements[0]
+    const autocapturedLinkElement = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'a')[0].elements[0]
+    const autocapturedButtonElement = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'button')[0]
+        .elements[0]
 
     // mask_all_text does not set $el_text
-    await t.expect('$el_text' in autocapturedLinkElement).eql(false)
+    await t.expect(autocapturedLinkElement['text']).eql(null)
 
     // mask_all_element_attributes does not capture any attributes at all from all elements
     await t.expect(Object.keys(autocapturedButtonElement.attributes).length).eql(0)

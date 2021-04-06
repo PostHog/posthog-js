@@ -30,7 +30,6 @@ export const initPosthog = ClientFunction((configParams = {}) => {
     if (!('api_host' in configParams)) {
         configParams['api_host'] = 'http://localhost:8000'
     }
-    configParams['request_batching'] = false
     window.posthog.init('e2e_token_1239', configParams)
 })
 
