@@ -61,7 +61,7 @@ test('Config option mask_all_element_attributes does not capture any attributes 
     await initPosthog({ mask_all_element_attributes: true })
     await t
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(5000)
+        .wait(8000)
         .expect(captureLogger.count(() => true))
         .gte(1)
 
