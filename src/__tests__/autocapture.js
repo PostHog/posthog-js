@@ -2,8 +2,6 @@ import sinon from 'sinon'
 
 import { autocapture } from '../autocapture'
 
-import { _ } from '../utils'
-
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
         new MouseEvent(eventType, {
