@@ -19,24 +19,12 @@ describe('SessionRecording', () => {
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
-        autocapture: false, // Assert that session recording works even if `autocapture = false`
     }))
-
     given('config', () => ({
         api_host: 'https://test.com',
         disable_session_recording: given.disabled,
-        session_recording: {
-            maskAllInputs: true,
-            recordCanvas: true,
-            someUnregisteredProp: 'abc',
-        },
+        autocapture: false, // Assert that session recording works even if `autocapture = false`
     }))
-
-    beforeEach(() => {
-        window.rrweb = {
-            record: jest.fn(),
-        }
-    })
 
     describe('afterDecideResponse()', () => {
         given('subject', () => () => given.sessionRecording.afterDecideResponse(given.response))
