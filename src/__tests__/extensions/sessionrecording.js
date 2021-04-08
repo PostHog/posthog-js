@@ -19,6 +19,7 @@ describe('SessionRecording', () => {
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
+        autocapture: false, // Assert that session recording works even if `autocapture = false`
     }))
 
     given('config', () => ({
