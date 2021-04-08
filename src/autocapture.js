@@ -240,57 +240,19 @@ var autocapture = {
         }
         this._initializedTokens.push(token)
         this.rageclicks = new RageClick(instance)
+    },
 
-        var parseDecideResponse = _.bind(function (response) {
-            if (!(document && document.body)) {
-                console.log('document not ready yet, trying again in 500 milliseconds...')
-                setTimeout(function () {
-                    parseDecideResponse(response)
-                }, 500)
-                return
+    afterDecideResponse: function (response, instance) {
+        console.log('-------------------afterDecideResponse----------')
+        console.log(response)
+        if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
+            if (response['custom_properties']) {
+                this._customProperties = response['custom_properties']
             }
-
-            instance.toolbar.afterDecideResponse(response)
-            instance.sessionRecording.afterDecideResponse(response)
-
-            if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
-                if (response['custom_properties']) {
-                    this._customProperties = response['custom_properties']
-                }
-                this._addDomEventHandlers(instance)
-            } else {
-                instance['__autocapture_enabled'] = false
-            }
-
-            if (response['featureFlags']) {
-                instance.persistence &&
-                    instance.persistence.register({ $active_feature_flags: response['featureFlags'] })
-            } else {
-                instance.persistence && instance.persistence.unregister('$active_feature_flags')
-            }
-
-            if (response['supportedCompression']) {
-                let compression = {}
-                for (const method of response['supportedCompression']) {
-                    compression[method] = true
-                }
-                instance['compression'] = compression
-            } else {
-                instance['compression'] = {}
-            }
-        }, this)
-
-        var json_data = JSON.stringify({
-            token: token,
-            distinct_id: instance.get_distinct_id(),
-        })
-        var encoded_data = _.base64Encode(json_data)
-        instance._send_request(
-            instance.get_config('api_host') + '/decide/',
-            { data: encoded_data },
-            { method: 'POST' },
-            instance._prepare_callback(parseDecideResponse)
-        )
+            this._addDomEventHandlers(instance)
+        } else {
+            instance['__autocapture_enabled'] = false
+        }
     },
 
     // this is a mechanism to ramp up CE with no server-side interaction.
