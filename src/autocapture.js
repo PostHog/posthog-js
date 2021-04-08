@@ -232,19 +232,18 @@ var autocapture = {
     _customProperties: {},
     init: function (instance) {
         instance.toolbar.maybeLoadEditor()
+        this.rageclicks = new RageClick(instance)
+    },
 
+    afterDecideResponse: function (response, instance) {
         var token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
             console.log('autocapture already initialized for token "' + token + '"')
             return
         }
-        this._initializedTokens.push(token)
-        this.rageclicks = new RageClick(instance)
-    },
 
-    afterDecideResponse: function (response, instance) {
-        console.log('-------------------afterDecideResponse----------')
-        console.log(response)
+        this._initializedTokens.push(token)
+
         if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
             if (response['custom_properties']) {
                 this._customProperties = response['custom_properties']

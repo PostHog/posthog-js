@@ -373,22 +373,21 @@ describe('Autocapture system', () => {
             sandbox.restore()
         })
 
+        given('decideResponse', () => ({
+            config: {
+                enable_collect_everything: true,
+            },
+            custom_properties: [
+                {
+                    event_selectors: ['.event-element-1', '.event-element-2'],
+                    css_selector: '.property-element',
+                    name: 'my property name',
+                },
+            ],
+        }))
+
         it('should add the custom property when an element matching any of the event selectors is clicked', () => {
             lib = {
-                _send_request: sandbox.spy((url, params, options, callback) =>
-                    callback({
-                        config: {
-                            enable_collect_everything: true,
-                        },
-                        custom_properties: [
-                            {
-                                event_selectors: ['.event-element-1', '.event-element-2'],
-                                css_selector: '.property-element',
-                                name: 'my property name',
-                            },
-                        ],
-                    })
-                ),
                 _prepare_callback: sandbox.spy((callback) => callback),
                 get_config: sandbox.spy(function (key) {
                     switch (key) {
@@ -407,13 +406,10 @@ describe('Autocapture system', () => {
                 },
                 toolbar: {
                     maybeLoadEditor: jest.fn(),
-                    afterDecideResponse: jest.fn(),
-                },
-                sessionRecording: {
-                    afterDecideResponse: jest.fn(),
                 },
             }
             autocapture.init(lib)
+            autocapture.afterDecideResponse(given.decideResponse, lib)
 
             const eventElement1 = document.createElement('div')
             const eventElement2 = document.createElement('div')
@@ -831,11 +827,6 @@ describe('Autocapture system', () => {
         given('subject', () => () => autocapture.init(given.lib))
 
         given('lib', () => ({
-            _prepare_callback: jest.fn().mockImplementation((callback) => callback),
-            _send_request: jest
-                .fn()
-                .mockImplementation((url, params, options, callback) => callback({ config: given.decideResponse })),
-
             get_config: jest.fn().mockImplementation((key) => given.config[key]),
             token: 'testtoken',
             capture: jest.fn(),
@@ -843,10 +834,6 @@ describe('Autocapture system', () => {
 
             toolbar: {
                 maybeLoadEditor: jest.fn(),
-                afterDecideResponse: jest.fn(),
-            },
-            sessionRecording: {
-                afterDecideResponse: jest.fn(),
             },
         }))
 
@@ -856,6 +843,37 @@ describe('Autocapture system', () => {
         }))
 
         given('decideResponse', () => ({ enable_collect_everything: true }))
+
+        beforeEach(() => {
+            document.title = 'test page'
+            autocapture._initializedTokens = []
+
+            jest.spyOn(autocapture, '_addDomEventHandlers')
+        })
+
+        it('should check whether to load the editor', () => {
+            given.subject()
+
+            expect(given.lib.toolbar.maybeLoadEditor).toHaveBeenCalled()
+        })
+    })
+
+    describe('afterDecideResponse()', () => {
+        given('subject', () => () => autocapture.afterDecideResponse(given.decideResponse, given.posthog))
+
+        given('posthog', () => ({
+            get_config: jest.fn().mockImplementation((key) => given.config[key]),
+            token: 'testtoken',
+            capture: jest.fn(),
+            get_distinct_id: () => 'distinctid',
+        }))
+
+        given('config', () => ({
+            api_host: 'https://test.com',
+            token: 'testtoken',
+        }))
+
+        given('decideResponse', () => ({ config: { enable_collect_everything: true } }))
 
         beforeEach(() => {
             document.title = 'test page'
@@ -878,46 +896,22 @@ describe('Autocapture system', () => {
         })
 
         it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', () => {
-            given('decideResponse', () => ({ enable_collect_everything: false }))
+            given('decideResponse', () => ({ config: { enable_collect_everything: false } }))
 
             given.subject()
             expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
-            autocapture.init(given.lib)
+            autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
-            autocapture.init(given.lib)
+            autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
             given('config', () => ({ api_host: 'https://test.com', token: 'anotherproject' }))
-            autocapture.init(given.lib)
+            autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
-        })
-
-        it('should call instance._send_request', () => {
-            given.subject()
-
-            expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/',
-                {
-                    data: _.base64Encode(
-                        JSON.stringify({
-                            token: 'testtoken',
-                            distinct_id: 'distinctid',
-                        })
-                    ),
-                },
-                { method: 'POST' },
-                expect.any(Function)
-            )
-        })
-
-        it('should check whether to load the editor', () => {
-            given.subject()
-
-            expect(given.lib.toolbar.maybeLoadEditor).toHaveBeenCalled()
         })
     })
 })

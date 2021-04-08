@@ -1,6 +1,7 @@
 import sinon from 'sinon'
 import { autocapture } from '../autocapture'
 import { decideCompression, compressData } from '../compression'
+import { decide } from '../decide'
 
 describe('decideCompression()', () => {
     given('subject', () => decideCompression(given.compressionSupport))
@@ -98,6 +99,7 @@ describe('Payload Compression', () => {
         })
 
         it('should save supported compression in instance', () => {
+            decide.init(lib)
             autocapture.init(lib)
             expect(lib.compression).toEqual({ lz64: true })
         })
