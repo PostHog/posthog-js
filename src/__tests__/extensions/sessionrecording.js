@@ -11,6 +11,7 @@ describe('SessionRecording', () => {
     let _emit
 
     given('sessionRecording', () => new SessionRecording(given.posthog))
+
     given('posthog', () => ({
         get_property: () => given.$session_recording_enabled,
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
@@ -19,7 +20,22 @@ describe('SessionRecording', () => {
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
     }))
-    given('config', () => ({ api_host: 'https://test.com', disable_session_recording: given.disabled }))
+
+    given('config', () => ({
+        api_host: 'https://test.com',
+        disable_session_recording: given.disabled,
+        session_recording: {
+            maskAllInputs: true,
+            recordCanvas: true,
+            someUnregisteredProp: 'abc',
+        },
+    }))
+
+    beforeEach(() => {
+        window.rrweb = {
+            record: jest.fn(),
+        }
+    })
 
     describe('afterDecideResponse()', () => {
         given('subject', () => () => given.sessionRecording.afterDecideResponse(given.response))
@@ -63,13 +79,31 @@ describe('SessionRecording', () => {
 
         beforeEach(() => {
             window.rrweb = {
-                record: function ({ emit }) {
+                record: jest.fn(({ emit }) => {
                     _emit = emit
-                },
+                }),
             }
 
             loadScript.mockImplementation((path, callback) => callback())
             sessionIdGenerator.mockReturnValue('sid')
+        })
+
+        it('calls rrweb.record with the right options', () => {
+            given.sessionRecording._onScriptLoaded()
+
+            // maskAllInputs should change from default
+            // someUnregisteredProp should not be present
+            expect(window.rrweb.record).toHaveBeenCalledWith({
+                emit: expect.anything(),
+                maskAllInputs: true,
+                blockClass: 'ph-no-capture',
+                blockSelector: null,
+                ignoreClass: 'ph-ignore-input',
+                maskInputOptions: {},
+                maskInputFn: null,
+                slimDOMOptions: {},
+                collectFonts: false,
+            })
         })
 
         it('records events emitted before and after starting recording', () => {

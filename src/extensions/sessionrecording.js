@@ -62,6 +62,27 @@ export class SessionRecording {
 
     _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
+        const sessionRecordingOptions = {
+            // select set of rrweb config options we expose to our users
+            // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+            blockClass: 'ph-no-capture',
+            blockSelector: null,
+            ignoreClass: 'ph-ignore-input',
+            maskAllInputs: false,
+            maskInputOptions: {},
+            maskInputFn: null,
+            slimDOMOptions: {},
+            collectFonts: false,
+        }
+
+        // only allows user to set our 'whitelisted' options
+        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+        for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
+            if (key in sessionRecordingOptions) {
+                sessionRecordingOptions[key] = value
+            }
+        }
+
         window.rrweb.record({
             emit: (data) => {
                 const properties = {
@@ -78,10 +99,7 @@ export class SessionRecording {
                     this.snapshots.push(properties)
                 }
             },
-            blockClass: 'ph-no-capture', // Does not capture the element at all
-            ignoreClass: 'ph-ignore-input', // Ignores content of input but still records the input element
-            maskAllInputs: this.instance.get_config('mask_all_inputs'),
-
+            ...sessionRecordingOptions,
         })
 
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.

@@ -27,12 +27,14 @@ var autocapture = {
         }
     },
 
-    _getPropertiesFromElement: function (elem, maskInputs) {
+    _getPropertiesFromElement: function (elem, maskInputs, maskText) {
         var tag_name = elem.tagName.toLowerCase()
         var props = {
             tag_name: tag_name,
         }
-        if (usefulElements.indexOf(tag_name) > -1) props['$el_text'] = getSafeText(elem)
+        if (usefulElements.indexOf(tag_name) > -1 && !maskText) {
+            props['$el_text'] = getSafeText(elem)
+        }
 
         var classes = getClassName(elem)
         if (classes.length > 0)
@@ -175,12 +177,20 @@ var autocapture = {
                         explicitNoCapture = true
                     }
 
-                    elementsJson.push(this._getPropertiesFromElement(el, instance.get_config('mask_all_inputs')))
+                    elementsJson.push(
+                        this._getPropertiesFromElement(
+                            el,
+                            instance.get_config('mask_all_element_attributes'),
+                            instance.get_config('mask_all_text')
+                        )
+                    )
                 },
                 this
             )
 
-            elementsJson[0]['$el_text'] = getSafeText(target)
+            if (!instance.get_config('mask_all_text')) {
+                elementsJson[0]['$el_text'] = getSafeText(target)
+            }
 
             if (href) {
                 elementsJson[0]['attr__href'] = href

@@ -26,8 +26,11 @@ export const staticFilesMock = RequestMock()
         res.setBody(html)
     })
 
-export const initPosthog = ClientFunction(() => {
-    window.posthog.init('e2e_token_1239', { api_host: 'http://localhost:8000' })
+export const initPosthog = ClientFunction((configParams = {}) => {
+    if (!('api_host' in configParams)) {
+        configParams['api_host'] = 'http://localhost:8000'
+    }
+    window.posthog.init('e2e_token_1239', configParams)
 })
 
 export async function retryUntilResults(operation, limit = 50) {

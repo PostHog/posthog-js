@@ -23,3 +23,4 @@ yalc*
 cypress/videos
 coverage
 react/dist
+test-result.json

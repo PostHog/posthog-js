@@ -1,6 +1,7 @@
 // Type definitions for exported methods
 
 import { EventProcessor, Integration } from '@sentry/types'
+import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 
 declare class posthog {
     /**
@@ -271,9 +272,25 @@ declare class posthog {
      *       // whether to open in-app message link in new tab/window
      *       inapp_link_new_window: false
      *
-     *      // specify if input values should be captured by default
-     *      // works for both autocapture and session recording
-     *      mask_all_inputs: false
+     *      // a set of rrweb config options that PostHog users can configure
+     *      // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     *      session_recording: {
+     *         blockClass: 'ph-no-capture',
+     *         blockSelector: null,
+     *         ignoreClass: 'ph-ignore-input',
+     *         maskAllInputs: false,
+     *         maskInputOptions: {},
+     *         maskInputFn: null,
+     *         slimDOMOptions: {},
+     *         collectFonts: false
+     *      }
+     *
+     *      // prevent autocapture from capturing any attribute names on elements
+     *      mask_all_element_attributes: false
+     *
+     *      // prevent autocapture from capturing textContent on all elements
+     *      mask_all_text: false
+     *
      *     }
      *
      *
@@ -527,7 +544,9 @@ declare namespace posthog {
         request_batching?: boolean
         sanitize_properties?: (properties: posthog.Properties, event_name: string) => posthog.Properties
         properties_string_max_length?: number
-        mask_all_inputs?: boolean
+        session_recording?: SessionRecordingOptions
+        mask_all_element_attributes?: boolean
+        mask_all_text?: boolean
     }
 
     interface OptInOutCapturingOptions {
@@ -555,6 +574,17 @@ declare namespace posthog {
 
     interface isFeatureEnabledOptions {
         send_event: boolean
+    }
+
+    interface SessionRecordingOptions {
+        blockClass?: string | RegExp
+        blockSelector?: string
+        ignoreClass?: string
+        maskAllInputs?: boolean
+        maskInputOptions?: MaskInputOptions
+        maskInputFn?: (text: string) => string
+        slimDOMOptions?: SlimDOMOptions | 'all' | true
+        collectFonts?: boolean
     }
 
     export class persistence {

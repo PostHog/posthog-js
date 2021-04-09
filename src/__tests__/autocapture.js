@@ -362,7 +362,7 @@ describe('Autocapture system', () => {
                 capture: sandbox.spy(),
                 get_config: sandbox.spy(function (key) {
                     switch (key) {
-                        case 'mask_all_inputs':
+                        case 'mask_all_element_attributes':
                             return false
                     }
                 }),
@@ -396,7 +396,7 @@ describe('Autocapture system', () => {
                             return 'https://test.com'
                         case 'token':
                             return 'testtoken'
-                        case 'mask_all_inputs':
+                        case 'mask_all_element_attributes':
                             return false
                     }
                 }),
@@ -736,27 +736,14 @@ describe('Autocapture system', () => {
             expect(lib.capture.callCount).toBe(0)
         })
 
-        it('does not capture any input values if mask_all_inputs is set', () => {
+        it('does not capture any element attributes if mask_all_element_attributes is set', () => {
             const dom = `
-      <button id='button1'>
+      <button id='button1' formmethod='post'>
         Not sensitive
       </button>
       `
-            const sandbox = sinon.createSandbox()
 
-            const lib = {
-                _ceElementTextProperties: [],
-                get_distinct_id() {
-                    return 'distinctid'
-                },
-                capture: sandbox.spy(),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'mask_all_inputs':
-                            return false
-                    }
-                }),
-            }
+            const newLib = { ...lib, get_config: jest.fn(() => true) }
 
             document.body.innerHTML = dom
             const button1 = document.getElementById('button1')
@@ -765,10 +752,33 @@ describe('Autocapture system', () => {
                 target: button1,
                 type: 'click',
             }
-            autocapture._captureEvent(e1, lib)
-            const props1 = getCapturedProps(lib.capture)
-            expect(props1['$elements'][0]).toHaveProperty('$el_text')
-            expect(props1['$elements'][0]['$el_text']).toMatch('')
+            autocapture._captureEvent(e1, newLib)
+
+            const props1 = getCapturedProps(newLib.capture)
+            expect('attr__formmethod' in props1['$elements'][0]).toEqual(false)
+        })
+
+        it('does not capture any textContent if mask_all_text is set', () => {
+            const dom = `
+        <a id='a1'>
+          Dont capture me!
+        </a>
+        `
+
+            const newLib = { ...lib, get_config: jest.fn(() => true) }
+
+            document.body.innerHTML = dom
+            const a = document.getElementById('a1')
+
+            const e1 = {
+                target: a,
+                type: 'click',
+            }
+
+            autocapture._captureEvent(e1, newLib)
+            const props1 = getCapturedProps(newLib.capture)
+
+            expect(props1['$elements'][0]).not.toHaveProperty('$el_text')
         })
     })
 
@@ -782,7 +792,7 @@ describe('Autocapture system', () => {
             },
             get_config: sandbox.spy(function (key) {
                 switch (key) {
-                    case 'mask_all_inputs':
+                    case 'mask_all_element_attributes':
                         return false
                 }
             }),

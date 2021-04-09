@@ -83,7 +83,20 @@ const defaultConfig = () => ({
     inapp_link_new_window: false,
     request_batching: true,
     properties_string_max_length: 65535,
-    mask_all_inputs: false,
+    session_recording: {
+        // select set of rrweb config options we expose to our users
+        // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+        blockClass: 'ph-no-capture',
+        blockSelector: null,
+        ignoreClass: 'ph-ignore-input',
+        maskAllInputs: false,
+        maskInputOptions: {},
+        maskInputFn: null,
+        slimDOMOptions: {},
+        collectFonts: false,
+    },
+    mask_all_element_attributes: false,
+    mask_all_text: false,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
@@ -1016,14 +1029,30 @@ PostHogLib.prototype.alias = function (alias, original) {
  *       // whether to open in-app message link in new tab/window
  *       inapp_link_new_window: false
  *
- *      // specify if input values should be captured by default
- *      // works for both autocapture and session recording
- *      mask_all_inputs: false
+ *      // a set of rrweb config options that PostHog users can configure
+ *      // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+ *      session_recording: {
+ *         blockClass: 'ph-no-capture',
+ *         blockSelector: null,
+ *         ignoreClass: 'ph-ignore-input',
+ *         maskAllInputs: false,
+ *         maskInputOptions: {},
+ *         maskInputFn: null,
+ *         slimDOMOptions: {},
+ *         collectFonts: false
+ *      }
+ *
+ *      // prevent autocapture from capturing any attribute names on elements
+ *      mask_all_element_attributes: false
+ *
+ *      // prevent autocapture from capturing textContent on all elements
+ *      mask_all_text: false
  *     }
  *
  *
  * @param {Object} config A dictionary of new configuration values to update
  */
+
 PostHogLib.prototype.set_config = function (config) {
     if (_.isObject(config)) {
         _.extend(this['config'], config)
