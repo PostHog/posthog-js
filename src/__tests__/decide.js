@@ -29,7 +29,7 @@ describe('Decide', () => {
     given('config', () => ({ api_host: 'https://test.com' }))
 
     describe('constructor', () => {
-        given('subject', () => () => given.decide.callDecide())
+        given('subject', () => () => given.decide.call())
 
         given('config', () => ({
             api_host: 'https://test.com',

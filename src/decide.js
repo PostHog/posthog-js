@@ -6,7 +6,10 @@ export class Decide {
         this.instance = instance
     }
 
-    callDecide() {
+    call() {
+        /*
+        Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
+        */
         const json_data = JSON.stringify({
             token: this.instance.get_config('token'),
             distinct_id: this.instance.get_distinct_id(),
@@ -42,7 +45,7 @@ export class Decide {
         }
 
         if (response['supportedCompression']) {
-            let compression = {}
+            const compression = {}
             for (const method of response['supportedCompression']) {
                 compression[method] = true
             }
