@@ -1,30 +1,31 @@
 import { autocapture } from './autocapture'
 import { _ } from './utils'
 
-const decide = {
-    instance: null,
-
-    init: function (instance) {
+export class Decide {
+    constructor(instance) {
         this.instance = instance
-        var json_data = JSON.stringify({
-            token: instance.get_config('token'),
-            distinct_id: instance.get_distinct_id(),
+    }
+
+    callDecide() {
+        const json_data = JSON.stringify({
+            token: this.instance.get_config('token'),
+            distinct_id: this.instance.get_distinct_id(),
         })
 
-        var encoded_data = _.base64Encode(json_data)
-        instance._send_request(
-            instance.get_config('api_host') + '/decide/',
+        const encoded_data = _.base64Encode(json_data)
+        this.instance._send_request(
+            this.instance.get_config('api_host') + '/decide/',
             { data: encoded_data },
             { method: 'POST' },
-            instance._prepare_callback(this.parseDecideResponse)
+            (response) => this.parseDecideResponse(response)
         )
-    },
+    }
 
     parseDecideResponse(response) {
         if (!(document && document.body)) {
             console.log('document not ready yet, trying again in 500 milliseconds...')
             setTimeout(function () {
-                parseDecideResponse(response)
+                this.parseDecideResponse(response)
             }, 500)
             return
         }
@@ -49,8 +50,5 @@ const decide = {
         } else {
             this.instance['compression'] = {}
         }
-    },
+    }
 }
-_.bind_instance_methods(decide)
-
-export { decide }

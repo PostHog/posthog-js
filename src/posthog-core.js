@@ -7,7 +7,7 @@ import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
-import { decide } from './decide'
+import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
@@ -145,7 +145,8 @@ var create_mplib = function (token, config, name) {
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    decide.init(instance)
+    instance.decide = new Decide(instance)
+    instance.decide.callDecide()
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true

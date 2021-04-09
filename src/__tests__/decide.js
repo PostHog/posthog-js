@@ -1,8 +1,8 @@
-import { decide } from '../decide'
+import { Decide } from '../decide'
 import { _ } from '../utils'
 
-describe('decide', () => {
-    given('decide', () => decide.init(given.posthog))
+describe('Decide', () => {
+    given('decide', () => new Decide(given.posthog))
     given('posthog', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
@@ -13,9 +13,7 @@ describe('decide', () => {
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
         _send_request: jest
             .fn()
-            .mockImplementation((url, params, options, callback) =>
-                callback({ config: given.decideResponse }, given.posthog)
-            ),
+            .mockImplementation((url, params, options, callback) => callback({ config: given.decideResponse })),
         toolbar: {
             maybeLoadEditor: jest.fn(),
             afterDecideResponse: jest.fn(),
@@ -31,14 +29,14 @@ describe('decide', () => {
     given('config', () => ({ api_host: 'https://test.com' }))
 
     describe('constructor', () => {
-        given('subject', () => () => given.decide)
+        given('subject', () => () => given.decide.callDecide())
 
         given('config', () => ({
             api_host: 'https://test.com',
             token: 'testtoken',
         }))
 
-        it('should call instance._send_request on decide.init()', () => {
+        it('should call instance._send_request on constructor', () => {
             given.subject()
 
             expect(given.posthog._send_request).toHaveBeenCalledWith(
