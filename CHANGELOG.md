@@ -1,3 +1,8 @@
+## 1.9.7 - 2021-04-09
+
+- Config Additions: session_recording, mask_all_element_attributes, mask_all_text (#209)
+- Config Additions: session_recording, mask_all_element_attributes, mask_all_text (#209)
+
 ## 1.9.6 - 2021-03-30
 
 - Support rrweb mask all inputs (#207)
