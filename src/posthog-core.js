@@ -98,6 +98,7 @@ const defaultConfig = () => ({
     },
     mask_all_element_attributes: false,
     mask_all_text: false,
+    advanced_disable_decide: false,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
@@ -145,27 +146,31 @@ var create_mplib = function (token, config, name) {
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance.decide = new Decide(instance)
-    instance.decide.call()
+    if (!instance.get_config('advanced_disable_decide')) {
+        instance.decide = new Decide(instance)
+        instance.decide.call()
+
+        instance['__autocapture_enabled'] = instance.get_config('autocapture')
+        if (instance.get_config('autocapture')) {
+            var num_buckets = 100
+            var num_enabled_buckets = 100
+            if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
+                instance['__autocapture_enabled'] = false
+                console.log('Not in active bucket: disabling Automatic Event Collection.')
+            } else if (!autocapture.isBrowserSupported()) {
+                instance['__autocapture_enabled'] = false
+                console.log('Disabling Automatic Event Collection because this browser is not supported')
+            } else {
+                autocapture.init(instance)
+            }
+        }
+    } else {
+        instance['__autocapture_enabled'] = false
+    }
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true
     Config.DEBUG = Config.DEBUG || instance.get_config('debug')
-
-    instance['__autocapture_enabled'] = instance.get_config('autocapture')
-    if (instance.get_config('autocapture')) {
-        var num_buckets = 100
-        var num_enabled_buckets = 100
-        if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
-            instance['__autocapture_enabled'] = false
-            console.log('Not in active bucket: disabling Automatic Event Collection.')
-        } else if (!autocapture.isBrowserSupported()) {
-            instance['__autocapture_enabled'] = false
-            console.log('Disabling Automatic Event Collection because this browser is not supported')
-        } else {
-            autocapture.init(instance)
-        }
-    }
 
     // if target is not defined, we called init after the lib already
     // loaded, so there won't be an array of things to execute
