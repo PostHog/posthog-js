@@ -10,7 +10,7 @@ Specifically, the [JS integration](https://posthog.com/docs/integrations/js-inte
 ## Testing
 
 Unit tests: run `yarn test`
-Cypress: `yarn cypress`
+Cypress: run `yarn serve` to have a test server running and separately `yarn cypress` to launch Cypress test engine
 
 ### Running TestCafe E2E tests with BrowserStack
 
