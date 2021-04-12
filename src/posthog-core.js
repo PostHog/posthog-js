@@ -137,37 +137,6 @@ var create_mplib = function (token, config, name) {
     instance['people'] = new PostHogPeople()
     instance['people']._init(instance)
 
-    instance.featureFlags = new PostHogFeatureFlags(instance)
-    // This key is deprecated
-    instance.feature_flags = instance.featureFlags
-
-    instance.toolbar = new Toolbar(instance)
-
-    instance.sessionRecording = new SessionRecording(instance)
-    instance.sessionRecording.startRecordingIfEnabled()
-
-    if (!instance.get_config('advanced_disable_decide')) {
-        instance.decide = new Decide(instance)
-        instance.decide.call()
-
-        instance['__autocapture_enabled'] = instance.get_config('autocapture')
-        if (instance.get_config('autocapture')) {
-            var num_buckets = 100
-            var num_enabled_buckets = 100
-            if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
-                instance['__autocapture_enabled'] = false
-                console.log('Not in active bucket: disabling Automatic Event Collection.')
-            } else if (!autocapture.isBrowserSupported()) {
-                instance['__autocapture_enabled'] = false
-                console.log('Disabling Automatic Event Collection because this browser is not supported')
-            } else {
-                autocapture.init(instance)
-            }
-        }
-    } else {
-        instance['__autocapture_enabled'] = false
-    }
-
     // if any instance on the page has debug = true, we set the
     // global debug to be true
     Config.DEBUG = Config.DEBUG || instance.get_config('debug')
@@ -179,6 +148,38 @@ var create_mplib = function (token, config, name) {
         // flush on identify, so it's better to do all these operations first
         instance._execute_array.call(instance['people'], target['people'])
         instance._execute_array(target)
+    }
+
+    if (instance.get_config('advanced_disable_decide')) {
+        // When /decide endpoint is disabled, nonone of the features below are available.
+        return instance
+    }
+
+    instance.featureFlags = new PostHogFeatureFlags(instance)
+    // This key is deprecated
+    instance.feature_flags = instance.featureFlags
+
+    instance.toolbar = new Toolbar(instance)
+
+    instance.sessionRecording = new SessionRecording(instance)
+    instance.sessionRecording.startRecordingIfEnabled()
+
+    instance.decide = new Decide(instance)
+    instance.decide.call()
+
+    instance['__autocapture_enabled'] = instance.get_config('autocapture')
+    if (instance.get_config('autocapture')) {
+        var num_buckets = 100
+        var num_enabled_buckets = 100
+        if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
+            instance['__autocapture_enabled'] = false
+            console.log('Not in active bucket: disabling Automatic Event Collection.')
+        } else if (!autocapture.isBrowserSupported()) {
+            instance['__autocapture_enabled'] = false
+            console.log('Disabling Automatic Event Collection because this browser is not supported')
+        } else {
+            autocapture.init(instance)
+        }
     }
 
     return instance
