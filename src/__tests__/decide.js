@@ -1,3 +1,4 @@
+import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
 import { _ } from '../utils'
 
@@ -28,6 +29,8 @@ describe('Decide', () => {
 
     given('config', () => ({ api_host: 'https://test.com' }))
 
+    jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
+
     describe('constructor', () => {
         given('subject', () => () => given.decide.call())
 
@@ -52,6 +55,36 @@ describe('Decide', () => {
                 { method: 'POST' },
                 expect.any(Function)
             )
+        })
+    })
+
+    describe('parseDecideResponse', () => {
+        given('subject', () => () => given.decide.parseDecideResponse(given.decideResponse))
+
+        it('properly parses decide response', () => {
+            given('decideResponse', () => ({ enable_collect_everything: true }))
+            given.subject()
+
+            expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+        })
+
+        it('enables compression from decide response', () => {
+            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+            given.subject()
+
+            expect(given.posthog.compression['gzip']).toBe(true)
+            expect(given.posthog.compression['lz64']).toBe(true)
+        })
+
+        it('enables feature flags from decide response', () => {
+            given('decideResponse', () => ({ featureFlags: ['beta-feature', 'alpha-feature-2'] }))
+            given.subject()
+
+            expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
+            })
         })
     })
 })
