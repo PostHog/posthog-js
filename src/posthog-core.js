@@ -732,7 +732,13 @@ PostHogLib.prototype._register_single = function (prop, value) {
  * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
  */
 PostHogLib.prototype.isFeatureEnabled = function (key, options = {}) {
-    return this.feature_flags.isFeatureEnabled(key, options)
+    if (!this.featureFlags) {
+        window.console.warn(
+            'Feature flags are not enabled. Maybe the decide endpoint is disabled. Try setting advanced_disable_decide = false.'
+        )
+        return undefined
+    }
+    return this.featureFlags.isFeatureEnabled(key, options)
 }
 
 PostHogLib.prototype.reloadFeatureFlags = function () {

@@ -1,6 +1,7 @@
 import { PostHogLib } from '../posthog-core'
 import { CaptureMetrics } from '../capture-metrics'
 import { _ } from '../utils'
+import { autocapture } from '../autocapture'
 
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
@@ -362,5 +363,53 @@ describe('__compress_and_send_json_request', () => {
         given.subject()
 
         expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
+    })
+})
+
+describe('init()', () => {
+    given('subject', () => () => given.lib.init())
+
+    given('overrides', () => ({
+        get_distinct_id: () => 'distinct_id_987',
+        advanced_disable_decide: given.advanced_disable_decide,
+        _send_request: jest.fn(),
+        capture: jest.fn(),
+    }))
+
+    jest.spyOn(window.console, 'warn').mockImplementation()
+    jest.spyOn(autocapture, 'init').mockImplementation()
+    jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
+
+    given('advanced_disable_decide', () => true)
+
+    it('does not load decide enpoint on advanced_disable_decide', () => {
+        given.subject()
+        expect(given.decide).toBe(undefined)
+        expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
+    })
+
+    it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
+        given.subject()
+
+        // Autocapture
+        expect(given.lib['__autocapture_enabled']).toBe(undefined)
+        expect(autocapture.init).toHaveBeenCalledTimes(0)
+        expect(autocapture.afterDecideResponse).toHaveBeenCalledTimes(0)
+
+        // Feature flags
+        expect(given.lib.featureFlags).toBe(undefined)
+        expect(given.lib.isFeatureEnabled('test_key')).toBe(undefined)
+        expect(window.console.warn).toHaveBeenLastCalledWith(
+            'Feature flags are not enabled. Maybe the decide endpoint is disabled. Try setting advanced_disable_decide = false.'
+        )
+
+        // Toolbar
+        expect(given.lib.toolbar).toBe(undefined)
+
+        // Session recording
+        expect(given.lib.sessionRecording).toBe(undefined)
+
+        // Compression
+        expect(given.lib['compression']).toBe(undefined)
     })
 })
