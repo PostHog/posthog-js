@@ -149,8 +149,7 @@ var create_mplib = function (token, config, name) {
     if (!instance.get_config('advanced_disable_decide')) {
         // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
         // and compression will not be available.
-        const decide = new Decide(instance)
-        decide.call()
+        new Decide(instance).call()
     }
 
     instance['__autocapture_enabled'] = instance.get_config('autocapture')
