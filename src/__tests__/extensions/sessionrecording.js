@@ -24,7 +24,18 @@ describe('SessionRecording', () => {
         api_host: 'https://test.com',
         disable_session_recording: given.disabled,
         autocapture: false, // Assert that session recording works even if `autocapture = false`
+        session_recording: {
+            maskAllInputs: true,
+            recordCanvas: true,
+            someUnregisteredProp: 'abc',
+        },
     }))
+
+    beforeEach(() => {
+        window.rrweb = {
+            record: jest.fn(),
+        }
+    })
 
     describe('afterDecideResponse()', () => {
         given('subject', () => () => given.sessionRecording.afterDecideResponse(given.response))
