@@ -137,24 +137,6 @@ var create_mplib = function (token, config, name) {
     instance['people'] = new PostHogPeople()
     instance['people']._init(instance)
 
-    // if any instance on the page has debug = true, we set the
-    // global debug to be true
-    Config.DEBUG = Config.DEBUG || instance.get_config('debug')
-
-    // if target is not defined, we called init after the lib already
-    // loaded, so there won't be an array of things to execute
-    if (!_.isUndefined(target) && _.isArray(target)) {
-        // Crunch through the people queue first - we queue this data up &
-        // flush on identify, so it's better to do all these operations first
-        instance._execute_array.call(instance['people'], target['people'])
-        instance._execute_array(target)
-    }
-
-    if (instance.get_config('advanced_disable_decide')) {
-        // When /decide endpoint is disabled, nonone of the features below are available.
-        return instance
-    }
-
     instance.featureFlags = new PostHogFeatureFlags(instance)
     // This key is deprecated
     instance.feature_flags = instance.featureFlags
@@ -164,8 +146,12 @@ var create_mplib = function (token, config, name) {
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance.decide = new Decide(instance)
-    instance.decide.call()
+    if (!instance.get_config('advanced_disable_decide')) {
+        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
+        // and compression will not be available.
+        const decide = new Decide(instance)
+        decide.call()
+    }
 
     instance['__autocapture_enabled'] = instance.get_config('autocapture')
     if (instance.get_config('autocapture')) {
@@ -180,6 +166,19 @@ var create_mplib = function (token, config, name) {
         } else {
             autocapture.init(instance)
         }
+    }
+
+    // if any instance on the page has debug = true, we set the
+    // global debug to be true
+    Config.DEBUG = Config.DEBUG || instance.get_config('debug')
+
+    // if target is not defined, we called init after the lib already
+    // loaded, so there won't be an array of things to execute
+    if (!_.isUndefined(target) && _.isArray(target)) {
+        // Crunch through the people queue first - we queue this data up &
+        // flush on identify, so it's better to do all these operations first
+        instance._execute_array.call(instance['people'], target['people'])
+        instance._execute_array(target)
     }
 
     return instance
@@ -732,12 +731,6 @@ PostHogLib.prototype._register_single = function (prop, value) {
  * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
  */
 PostHogLib.prototype.isFeatureEnabled = function (key, options = {}) {
-    if (!this.featureFlags) {
-        window.console.warn(
-            'Feature flags are not enabled. Maybe the decide endpoint is disabled. Try setting advanced_disable_decide = false.'
-        )
-        return undefined
-    }
     return this.featureFlags.isFeatureEnabled(key, options)
 }
 

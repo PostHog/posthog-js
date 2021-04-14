@@ -376,9 +376,11 @@ describe('init()', () => {
         capture: jest.fn(),
     }))
 
-    jest.spyOn(window.console, 'warn').mockImplementation()
-    jest.spyOn(autocapture, 'init').mockImplementation()
-    jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
+    beforeEach(() => {
+        jest.spyOn(window.console, 'warn').mockImplementation()
+        jest.spyOn(autocapture, 'init').mockImplementation()
+        jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
+    })
 
     given('advanced_disable_decide', () => true)
 
@@ -389,7 +391,25 @@ describe('init()', () => {
     })
 
     it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
+        given('overrides', () => {
+            return {
+                sessionRecording: {
+                    afterDecideResponse: jest.fn(),
+                },
+                toolbar: {
+                    afterDecideResponse: jest.fn(),
+                },
+                persistence: {
+                    register: jest.fn(),
+                },
+            }
+        })
+
         given.subject()
+
+        jest.spyOn(given.lib.toolbar, 'afterDecideResponse').mockImplementation()
+        jest.spyOn(given.lib.sessionRecording, 'afterDecideResponse').mockImplementation()
+        jest.spyOn(given.lib.persistence, 'register').mockImplementation()
 
         // Autocapture
         expect(given.lib['__autocapture_enabled']).toBe(undefined)
@@ -397,17 +417,13 @@ describe('init()', () => {
         expect(autocapture.afterDecideResponse).toHaveBeenCalledTimes(0)
 
         // Feature flags
-        expect(given.lib.featureFlags).toBe(undefined)
-        expect(given.lib.isFeatureEnabled('test_key')).toBe(undefined)
-        expect(window.console.warn).toHaveBeenLastCalledWith(
-            'Feature flags are not enabled. Maybe the decide endpoint is disabled. Try setting advanced_disable_decide = false.'
-        )
+        expect(given.lib.persistence.register).toHaveBeenCalledTimes(0) // FFs are saved this way
 
         // Toolbar
-        expect(given.lib.toolbar).toBe(undefined)
+        expect(given.lib.toolbar.afterDecideResponse).toHaveBeenCalledTimes(0)
 
         // Session recording
-        expect(given.lib.sessionRecording).toBe(undefined)
+        expect(given.lib.sessionRecording.afterDecideResponse).toHaveBeenCalledTimes(0)
 
         // Compression
         expect(given.lib['compression']).toBe(undefined)

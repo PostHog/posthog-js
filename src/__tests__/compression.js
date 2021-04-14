@@ -99,8 +99,7 @@ describe('Payload Compression', () => {
         })
 
         it('should save supported compression in instance', () => {
-            const decide = new Decide(lib)
-            decide.call()
+            const decide = new Decide(lib).call()
             autocapture.init(lib)
             expect(lib.compression).toEqual({ lz64: true })
         })

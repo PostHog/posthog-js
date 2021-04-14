@@ -29,7 +29,9 @@ describe('Decide', () => {
 
     given('config', () => ({ api_host: 'https://test.com' }))
 
-    jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
+    beforeEach(() => {
+        jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
+    })
 
     describe('constructor', () => {
         given('subject', () => () => given.decide.call())
