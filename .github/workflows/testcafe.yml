@@ -10,6 +10,7 @@ env:
   BROWSERSTACK_DEBUG: 'true'
   BROWSERSTACK_NETWORK_LOGS: 'true'
   BROWSERSTACK_CONSOLE: 'info'
+  PLUGIN_SERVER_INGESTION: 'true'
 
 jobs:
   testcafe:
