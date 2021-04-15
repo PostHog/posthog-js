@@ -4,9 +4,10 @@ import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMoc
 fixture('posthog.js capture')
     .page('http://localhost:8000/playground/cypress/index.html')
     .requestHooks(captureLogger, staticFilesMock)
-    .afterEach(async () => {
+    .beforeEach(async () => {
         await clearEvents()
-
+    })
+    .afterEach(async () => {
         const browserLogs = await t.getBrowserConsoleMessages()
         Object.keys(browserLogs).forEach((level) => {
             browserLogs[level].forEach((line) => {
@@ -28,11 +29,12 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI)
+    const results = await retryUntilResults(queryAPI, 3)
 
-    await t.expect(results.length).gte(2)
-    await t.expect(results.filter(({ event }) => event === 'custom-event').length).gte(1)
-    await t.expect(results.filter(({ event }) => event === '$pageview').length).gte(1)
+    await t.expect(results.length).eql(3)
+    await t.expect(results.filter(({ event }) => event === 'custom-event').length).eql(1)
+    await t.expect(results.filter(({ event }) => event === '$pageview').length).eql(1)
+    await t.expect(results.filter(({ event }) => event === '$autocapture').length).eql(1)
 })
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
@@ -47,7 +49,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI)
+    const results = await retryUntilResults(queryAPI, 3)
 
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
 
@@ -82,7 +84,7 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI)
+    const results = await retryUntilResults(queryAPI, 3)
 
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
     await t.expect(autocapturedEvents.length).eql(2)
