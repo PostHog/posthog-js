@@ -870,3 +870,6 @@ _['info']['browserVersion'] = _.info.browserVersion
 _['info']['properties'] = _.info.properties
 
 export { win as window, _, userAgent, console, document }
+
+// Exports For Test ONLY
+export { COPY_IN_PROGRESS_ATTRIBUTE }
