@@ -303,7 +303,7 @@ const COPY_IN_PROGRESS_ATTRIBUTE =
 function deepCircularCopy(value, customizer) {
     if (value !== Object(value)) return customizer ? customizer(value) : value // primitive value
 
-    if (COPY_IN_PROGRESS_ATTRIBUTE in value) return undefined
+    if (value[COPY_IN_PROGRESS_ATTRIBUTE]) return undefined
 
     value[COPY_IN_PROGRESS_ATTRIBUTE] = true
     let result
