@@ -303,7 +303,7 @@ const COPY_IN_PROGRESS_ATTRIBUTE =
 function deepCircularCopy(value, customizer) {
     if (value !== Object(value)) return customizer ? customizer(value) : value // primitive value
 
-    if (COPY_IN_PROGRESS_ATTRIBUTE in value) return undefined
+    if (value[COPY_IN_PROGRESS_ATTRIBUTE]) return undefined
 
     value[COPY_IN_PROGRESS_ATTRIBUTE] = true
     let result
@@ -870,3 +870,6 @@ _['info']['browserVersion'] = _.info.browserVersion
 _['info']['properties'] = _.info.properties
 
 export { win as window, _, userAgent, console, document }
+
+// Exports For Test ONLY
+export { COPY_IN_PROGRESS_ATTRIBUTE }

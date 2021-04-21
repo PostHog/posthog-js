@@ -5,7 +5,7 @@
  * currently not supported in the browser lib).
  */
 
-import { _ } from '../utils'
+import { _, COPY_IN_PROGRESS_ATTRIBUTE } from '../utils'
 
 describe(`utils.js`, () => {
     it('should have $host and $pathname in properties', () => {
@@ -61,6 +61,16 @@ describe('_.copyAndTruncateStrings', () => {
         })
 
         expect(given.subject).toEqual({ key: 'vaaaa', values: ['fooob', undefined], __deepCircularCopyInProgress__: 1 })
+    })
+
+    it('should check copy-in-progress correctly', () => {
+        given('target', () => {
+            const base = Object.create({ [COPY_IN_PROGRESS_ATTRIBUTE]: undefined })
+            const object = Object.create(base)
+            return object
+        })
+
+        expect(given.subject).toEqual({})
     })
 })
 
