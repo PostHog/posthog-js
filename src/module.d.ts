@@ -474,6 +474,15 @@ declare class posthog {
      */
     static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
 
+    /*
+     * Reload all feature flags for the user.
+     *
+     * ### Usage:
+     *
+     *     posthog.reloadFeatureFlags()
+     */
+    static reloadFeatureFlags(): void
+
     /**
      * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
      *
