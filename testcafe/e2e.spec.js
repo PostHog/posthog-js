@@ -15,7 +15,7 @@ fixture('posthog.js capture')
             })
         })
 
-        console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
+        // console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
     })
 
 test('Custom events work and are accessible via /api/event', async (t) => {
@@ -37,7 +37,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     await t.expect(results.filter(({ event }) => event === '$autocapture').length).eql(1)
 })
 
-test('Autocaptured events work and are accessible via /api/event', async (t) => {
+test.skip('Autocaptured events work and are accessible via /api/event', async (t) => {
     await initPosthog()
     await t
         .click('[data-cy-link-mask-text]')
@@ -72,7 +72,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
         .eql(['attr__id', 'attr__class', 'attr__data-sensitive', 'attr__data-cy-button-sensitive-attributes'])
 })
 
-test('Config options change autocapture behavior accordingly', async (t) => {
+test.skip('Config options change autocapture behavior accordingly', async (t) => {
     await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
     await t
         .click('[data-cy-link-mask-text]')
