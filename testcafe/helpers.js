@@ -33,17 +33,19 @@ export const initPosthog = ClientFunction((configParams = {}) => {
     window.posthog.init('e2e_token_1239', configParams)
 })
 
-export async function retryUntilResults(operation, limit = 50) {
+export async function retryUntilResults(operation, target_results, limit = 100) {
     const attempt = (count, resolve, reject) => {
         if (count === limit) {
-            return reject(new Error('Failed to fetch results in 10 attempts'))
+            return reject(new Error(`Failed to fetch results in ${limit} attempts`))
         }
 
         setTimeout(() => {
             operation()
-                .then((results) => (results.length > 0 ? resolve(results) : attempt(count + 1, resolve, reject)))
+                .then((results) =>
+                    results.length >= target_results ? resolve(results) : attempt(count + 1, resolve, reject)
+                )
                 .catch(reject)
-        }, 300)
+        }, 600)
     }
 
     return new Promise((...args) => attempt(0, ...args))

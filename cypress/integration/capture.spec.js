@@ -177,4 +177,33 @@ describe('Event capture', () => {
             })
         })
     })
+
+    describe('advanced_disable_decide config', () => {
+        given('options', () => ({ advanced_disable_decide: true }))
+        it('does not autocapture anything when /decide is disabled', () => {
+            start({ waitForDecide: false })
+
+            cy.get('body').click(100, 100).click(98, 102).click(101, 103)
+            cy.get('[data-cy-custom-event-button]').click()
+
+            // No autocapture events, still captures custom events
+            cy.phCaptures().should('deep.equal', ['$pageview', 'custom-event'])
+        })
+
+        it('does not capture session recordings', () => {
+            start({ waitForDecide: false })
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.wait('@capture')
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    const requests = cy
+                        .state('requests')
+                        .filter(({ alias }) => alias === 'session-recording' || alias === 'recorder')
+                    expect(requests.length).to.be.equal(0)
+                })
+        })
+    })
 })

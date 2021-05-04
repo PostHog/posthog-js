@@ -1,6 +1,7 @@
 import { PostHogLib } from '../posthog-core'
 import { CaptureMetrics } from '../capture-metrics'
 import { _ } from '../utils'
+import { autocapture } from '../autocapture'
 
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
@@ -362,5 +363,69 @@ describe('__compress_and_send_json_request', () => {
         given.subject()
 
         expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
+    })
+})
+
+describe('init()', () => {
+    given('subject', () => () => given.lib.init())
+
+    given('overrides', () => ({
+        get_distinct_id: () => 'distinct_id_987',
+        advanced_disable_decide: given.advanced_disable_decide,
+        _send_request: jest.fn(),
+        capture: jest.fn(),
+    }))
+
+    beforeEach(() => {
+        jest.spyOn(window.console, 'warn').mockImplementation()
+        jest.spyOn(autocapture, 'init').mockImplementation()
+        jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
+    })
+
+    given('advanced_disable_decide', () => true)
+
+    it('does not load decide enpoint on advanced_disable_decide', () => {
+        given.subject()
+        expect(given.decide).toBe(undefined)
+        expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
+    })
+
+    it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
+        given('overrides', () => {
+            return {
+                sessionRecording: {
+                    afterDecideResponse: jest.fn(),
+                },
+                toolbar: {
+                    afterDecideResponse: jest.fn(),
+                },
+                persistence: {
+                    register: jest.fn(),
+                },
+            }
+        })
+
+        given.subject()
+
+        jest.spyOn(given.lib.toolbar, 'afterDecideResponse').mockImplementation()
+        jest.spyOn(given.lib.sessionRecording, 'afterDecideResponse').mockImplementation()
+        jest.spyOn(given.lib.persistence, 'register').mockImplementation()
+
+        // Autocapture
+        expect(given.lib['__autocapture_enabled']).toBe(undefined)
+        expect(autocapture.init).toHaveBeenCalledTimes(0)
+        expect(autocapture.afterDecideResponse).toHaveBeenCalledTimes(0)
+
+        // Feature flags
+        expect(given.lib.persistence.register).toHaveBeenCalledTimes(0) // FFs are saved this way
+
+        // Toolbar
+        expect(given.lib.toolbar.afterDecideResponse).toHaveBeenCalledTimes(0)
+
+        // Session recording
+        expect(given.lib.sessionRecording.afterDecideResponse).toHaveBeenCalledTimes(0)
+
+        // Compression
+        expect(given.lib['compression']).toBe(undefined)
     })
 })

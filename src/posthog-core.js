@@ -7,6 +7,7 @@ import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
+import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
@@ -97,6 +98,7 @@ const defaultConfig = () => ({
     },
     mask_all_element_attributes: false,
     mask_all_text: false,
+    advanced_disable_decide: false,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
@@ -144,9 +146,11 @@ var create_mplib = function (token, config, name) {
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    // if any instance on the page has debug = true, we set the
-    // global debug to be true
-    Config.DEBUG = Config.DEBUG || instance.get_config('debug')
+    if (!instance.get_config('advanced_disable_decide')) {
+        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
+        // and compression will not be available.
+        new Decide(instance).call()
+    }
 
     instance['__autocapture_enabled'] = instance.get_config('autocapture')
     if (instance.get_config('autocapture')) {
@@ -162,6 +166,10 @@ var create_mplib = function (token, config, name) {
             autocapture.init(instance)
         }
     }
+
+    // if any instance on the page has debug = true, we set the
+    // global debug to be true
+    Config.DEBUG = Config.DEBUG || instance.get_config('debug')
 
     // if target is not defined, we called init after the lib already
     // loaded, so there won't be an array of things to execute
@@ -722,7 +730,7 @@ PostHogLib.prototype._register_single = function (prop, value) {
  * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
  */
 PostHogLib.prototype.isFeatureEnabled = function (key, options = {}) {
-    return this.feature_flags.isFeatureEnabled(key, options)
+    return this.featureFlags.isFeatureEnabled(key, options)
 }
 
 PostHogLib.prototype.reloadFeatureFlags = function () {

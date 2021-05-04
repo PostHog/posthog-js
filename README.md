@@ -10,13 +10,13 @@ Specifically, the [JS integration](https://posthog.com/docs/integrations/js-inte
 ## Testing
 
 Unit tests: run `yarn test`
-Cypress: `yarn cypress`
+Cypress: run `yarn serve` to have a test server running and separately `yarn cypress` to launch Cypress test engine
 
 ### Running TestCafe E2E tests with BrowserStack
 
 Testing on IE11 requires a bit more setup.
 
-1. Run `posthog` locally on port 8000
+1. Run `posthog` locally on port 8000 (`DEBUG=1 TEST=1 ./bin/start`)
 2. Run `python manage.py setup_dev --no-data` on posthog repo, which sets up a demo account
 3. Optional: rebuild array.js on changes: `nodemon -w src/ --exec bash -c "yarn build-array"`
 4. Export browserstack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`

@@ -291,6 +291,10 @@ declare class posthog {
      *      // prevent autocapture from capturing textContent on all elements
      *      mask_all_text: false
      *
+     *      // will disable requests to the /decide endpoint (please review documentation for details)
+     *      // autocapture, feature flags, compression and session recording will be disabled when set to `true`
+     *      advanced_disable_decide: false
+     *
      *     }
      *
      *
@@ -557,6 +561,7 @@ declare namespace posthog {
         session_recording?: SessionRecordingOptions
         mask_all_element_attributes?: boolean
         mask_all_text?: boolean
+        advanced_disable_decide?: boolean
     }
 
     interface OptInOutCapturingOptions {

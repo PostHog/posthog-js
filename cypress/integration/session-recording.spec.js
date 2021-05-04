@@ -8,7 +8,7 @@ describe('Session recording', () => {
             method: 'POST',
             url: '**/decide/*',
             response: {
-                config: { enable_collect_everything: true },
+                config: { enable_collect_everything: false },
                 editorParams: {},
                 featureFlags: ['session-recording-player'],
                 isAuthenticated: false,

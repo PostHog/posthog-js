@@ -20,10 +20,10 @@ describe('SessionRecording', () => {
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
     }))
-
     given('config', () => ({
         api_host: 'https://test.com',
         disable_session_recording: given.disabled,
+        autocapture: false, // Assert that session recording works even if `autocapture = false`
         session_recording: {
             maskAllInputs: true,
             recordCanvas: true,
