@@ -4,13 +4,14 @@ env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
   BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
   SECRET_KEY: 'abcdef' # unsafe - for testing only
-  DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_posthog'
+  DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/test_posthog'
   REDIS_URL: 'redis://localhost'
   TEST: 'true'
   BROWSERSTACK_DEBUG: 'true'
   BROWSERSTACK_NETWORK_LOGS: 'true'
   BROWSERSTACK_CONSOLE: 'info'
   PLUGIN_SERVER_INGESTION: 'true'
+  DISABLE_MMDB: 'true'
 
 jobs:
   testcafe:
@@ -19,8 +20,8 @@ jobs:
         postgres:
             image: postgres:12
             env:
-                POSTGRES_USER: postgres
-                POSTGRES_PASSWORD: postgres
+                POSTGRES_USER: posthog
+                POSTGRES_PASSWORD: posthog
                 POSTGRES_DB: test_posthog
             ports: ['5432:5432']
             options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
@@ -43,6 +44,7 @@ jobs:
         with:
             repository: 'PostHog/posthog'
             path: 'posthog/'
+            ref: server-debugging
 
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -59,7 +61,7 @@ jobs:
 
       - name: Set up databases
         env:
-            DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/posthog' # override for setup_test_environment command
+            DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/posthog' # override for setup_test_environment command
         run: cd posthog && python manage.py setup_test_environment
 
       - name: Serve static files

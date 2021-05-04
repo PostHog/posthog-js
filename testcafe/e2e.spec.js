@@ -21,6 +21,7 @@ fixture('posthog.js capture')
 test('Custom events work and are accessible via /api/event', async (t) => {
     await initPosthog()
     await t
+        .wait(1000)
         .click('[data-cy-custom-event-button]')
         .wait(5000)
         .expect(captureLogger.count(() => true))
@@ -37,12 +38,13 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     await t.expect(results.filter(({ event }) => event === '$autocapture').length).eql(1)
 })
 
-test.skip('Autocaptured events work and are accessible via /api/event', async (t) => {
+test('Autocaptured events work and are accessible via /api/event', async (t) => {
     await initPosthog()
     await t
+        .wait(1000)
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(10000)
+        .wait(5000)
         .expect(captureLogger.count(() => true))
         .gte(2)
 
@@ -72,12 +74,13 @@ test.skip('Autocaptured events work and are accessible via /api/event', async (t
         .eql(['attr__id', 'attr__class', 'attr__data-sensitive', 'attr__data-cy-button-sensitive-attributes'])
 })
 
-test.skip('Config options change autocapture behavior accordingly', async (t) => {
+test('Config options change autocapture behavior accordingly', async (t) => {
     await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
     await t
+        .wait(1000)
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(10000)
+        .wait(5000)
         .expect(captureLogger.count(() => true))
         .gte(2)
 
