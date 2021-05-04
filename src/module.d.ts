@@ -537,6 +537,7 @@ declare namespace posthog {
         debug?: boolean
         cookie_expiration?: number
         upgrade?: boolean
+        disable_session_recording?: boolean
         disable_persistence?: boolean
         disable_cookie?: boolean
         secure_cookie?: boolean
