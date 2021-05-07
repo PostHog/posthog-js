@@ -1,3 +1,10 @@
+## 1.10.0 - 2021-05-07
+
+- Refactor /decide endpoint & allow recording without autocapture (#212)
+- Fix in-progress check for utils/deepCircularCopy (#216)
+- Update types, add missing reloadFeatureFlags (#219)
+- Add missing disable_session_recording property in Config interface (#221)
+
 ## 1.9.7 - 2021-04-09
 
 - Config Additions: session_recording, mask_all_element_attributes, mask_all_text (#209)
