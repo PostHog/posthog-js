@@ -10,7 +10,7 @@ export class RequestQueueScaffold {
     setPollInterval(interval) {
         this._pollInterval = interval
         // Reset interval if running already
-        if (this.isPolling && this.poll) {
+        if (this.isPolling) {
             this.poll()
         }
     }
