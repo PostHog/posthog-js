@@ -15,6 +15,7 @@ import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
 import { compressData, decideCompression } from './compression'
 import { xhr, encodePostData } from './send-request'
+import { RetryQueue } from './retry-queue'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -244,6 +245,8 @@ PostHogLib.prototype._init = function (token, config, name) {
     this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'), _.bind(this.capture, this))
 
     this._requestQueue = new RequestQueue(this._captureMetrics, _.bind(this._handle_queued_event, this))
+
+    this._retryQueue = new RetryQueue(this._captureMetrics)
     this.__captureHooks = []
     this.__request_queue = []
 
@@ -356,6 +359,7 @@ PostHogLib.prototype._handle_unload = function () {
         this._captureMetrics.captureInProgressRequests()
     }
     this._requestQueue.unload()
+    this._retryQueue.unload()
 }
 
 PostHogLib.prototype._handle_queued_event = function (url, data, options) {
@@ -404,7 +408,17 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
     } else if (USE_XHR) {
         try {
-            xhr(url, data, this.get_config('xhr_headers'), options, this._captureMetrics, callback)
+            const retryRequestId = Math.floor(Math.random() * 1000000)
+            xhr({
+                url: url,
+                data: data,
+                headers: this.get_config('xhr_headers'),
+                options: options,
+                captureMetrics: this._captureMetrics,
+                callback,
+                retryRequestId,
+                retryQueue: this._retryQueue,
+            })
         } catch (e) {
             console.error(e)
         }
