@@ -4,58 +4,74 @@ import { encodePostData, xhr } from './send-request'
 export class RetryQueue extends RequestQueueScaffold {
     constructor(captureMetrics) {
         super()
-        this._requestRetriesMap = new Map() // <RequestId, number>
         this.captureMetrics = captureMetrics
+        this._requestRetriesMap = {} // <RequestId, number>
+        this._counterToQueueMap = {}
+        this._pollerCounter = 1
+        this._currentQueueLength = 0
+        this._areWeOnline = 'onLine' in window.navigator ? window.navigator.onLine : true
+        this._offlineBacklog = []
+
+        if ('onLine' in window.navigator) {
+            window.addEventListener('online', () => {
+                this._areWeOnline = true
+                this._flushOfflineBacklog()
+            })
+            window.addEventListener('offline', () => {
+                this._areWeOnline = false
+            })
+        }
     }
 
     enqueue(requestData) {
         const { requestId } = requestData
-        if (!this._requestRetriesMap.has(requestId)) {
-            this._requestRetriesMap.set(requestId, 0)
+        let retriesPerformedSoFar = 0
+        if (!(requestId in this._requestRetriesMap)) {
+            this._requestRetriesMap[requestId] = 0
         } else {
-            const retriesPerformedSoFar = this._requestRetriesMap.get(requestId)
-            if (retriesPerformedSoFar === 2) {
-                this._requestRetriesMap.delete(requestId)
+            retriesPerformedSoFar = this._requestRetriesMap[requestId]
+            if (retriesPerformedSoFar === 10) {
+                delete this._requestRetriesMap[requestId]
                 return
             }
-            this._requestRetriesMap.set(requestId, retriesPerformedSoFar + 1)
+            this._requestRetriesMap[requestId]++
         }
-        this._event_queue.push(requestData)
+
+        const nextRetry = this._pollerCounter + 2 ** retriesPerformedSoFar
+        if (!(nextRetry in this._counterToQueueMap)) {
+            this._counterToQueueMap[nextRetry] = []
+        }
+        this._counterToQueueMap[nextRetry].push(requestData)
+        this.poll()
     }
 
     poll() {
         clearTimeout(this._poller)
         this._poller = setTimeout(() => {
-            if (this._event_queue.length > 0) {
-                // Clone and flush before doing the requests as they may push to the queue
-                const currentEventQueue = this._event_queue.slice(0, this._event_queue.length) // clone queue
-                this._event_queue.length = 0 // flush queue
-                for (let i = 0; i < currentEventQueue.length; ++i) {
-                    const { url, data, options, headers, callback, requestId } = currentEventQueue[i]
-
-                    xhr({
-                        url,
-                        data,
-                        options,
-                        requestId,
-                        headers,
-                        callback,
-                        captureMetrics: this.captureMetrics,
-                        retryQueue: this,
-                    })
+            const currentQueue = this._counterToQueueMap[this._pollerCounter]
+            if (currentQueue && currentQueue.length > 0) {
+                if (!this._areWeOnline) {
+                    this._offlineBacklog = [...this._offlineBacklog, ...currentQueue]
+                } else {
+                    for (let i = 0; i < currentQueue.length; ++i) {
+                        const { url, data, options, headers, callback, requestId } = currentQueue[i]
+                        xhr({
+                            url,
+                            data: data || {},
+                            options: options || {},
+                            headers: headers || {},
+                            requestId,
+                            callback,
+                            captureMetrics: this.captureMetrics,
+                            retryQueue: this,
+                        })
+                    }
                 }
-                this._empty_queue_count = 0
-            } else {
-                this._empty_queue_count++
-            }
 
-            if (this._empty_queue_count > 4) {
-                this.isPolling = false
-                this._empty_queue_count = 0
+                delete this._counterToQueueMap[this._pollerCounter]
             }
-            if (this.isPolling) {
-                this.poll()
-            }
+            this.poll()
+            this._pollerCounter++
         }, this._pollInterval)
     }
 
@@ -67,5 +83,22 @@ export class RetryQueue extends RequestQueueScaffold {
         }
 
         this._event_queue.length = 0
+    }
+
+    _flushOfflineBacklog() {
+        for (let i = 0; i < this._offlineBacklog.length; ++i) {
+            const { url, data, options, headers, callback, requestId } = this._offlineBacklog[i]
+            xhr({
+                url,
+                data: data || {},
+                options: options || {},
+                headers: headers || {},
+                requestId,
+                callback,
+                captureMetrics: this.captureMetrics,
+                retryQueue: this,
+            })
+        }
+        this._offlineBacklog.length = 0
     }
 }
