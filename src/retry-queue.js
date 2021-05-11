@@ -54,17 +54,7 @@ export class RetryQueue extends RequestQueueScaffold {
                     this._offlineBacklog = [...this._offlineBacklog, ...currentQueue]
                 } else {
                     for (let i = 0; i < currentQueue.length; ++i) {
-                        const { url, data, options, headers, callback, requestId } = currentQueue[i]
-                        xhr({
-                            url,
-                            data: data || {},
-                            options: options || {},
-                            headers: headers || {},
-                            requestId,
-                            callback,
-                            captureMetrics: this.captureMetrics,
-                            retryQueue: this,
-                        })
+                        this._executeXhrRequest(currentQueue[i])
                     }
                 }
 
@@ -87,18 +77,21 @@ export class RetryQueue extends RequestQueueScaffold {
 
     _flushOfflineBacklog() {
         for (let i = 0; i < this._offlineBacklog.length; ++i) {
-            const { url, data, options, headers, callback, requestId } = this._offlineBacklog[i]
-            xhr({
-                url,
-                data: data || {},
-                options: options || {},
-                headers: headers || {},
-                requestId,
-                callback,
-                captureMetrics: this.captureMetrics,
-                retryQueue: this,
-            })
+            this._executeXhrRequest(this._offlineBacklog[i])
         }
         this._offlineBacklog.length = 0
+    }
+
+    _executeXhrRequest({ url, data, options, headers, callback, requestId }) {
+        xhr({
+            url,
+            data: data || {},
+            options: options || {},
+            headers: headers || {},
+            requestId,
+            callback,
+            captureMetrics: this.captureMetrics,
+            retryQueue: this,
+        })
     }
 }
