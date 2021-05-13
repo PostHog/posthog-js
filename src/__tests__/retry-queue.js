@@ -11,6 +11,10 @@ describe('RetryQueue', () => {
     given('queue', () => new RetryQueue(given.captureMetrics))
     given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
 
+    window.addEventListener = jest.fn().mockImplementationOnce((event, callback) => {
+        callback()
+    })
+
     const xhrMockClass = () => ({
         open: jest.fn(),
         send: jest.fn(),
@@ -50,22 +54,19 @@ describe('RetryQueue', () => {
 
     beforeEach(() => {
         jest.useFakeTimers()
-
         jest.spyOn(given.queue, 'getTime').mockReturnValue(EPOCH)
     })
 
     it('processes retry requests', () => {
         enqueueRequests()
 
-        expect(given.queue._event_queue.length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual(
-            new Map([
-                [1, 0],
-                [2, 0],
-                [3, 0],
-                [4, 0],
-            ])
-        )
+        expect(given.queue._counterToQueueMap[1].length).toEqual(4)
+        expect(given.queue._requestRetriesMap).toEqual({
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+        })
 
         given.queue.poll()
 
@@ -75,20 +76,19 @@ describe('RetryQueue', () => {
 
         expect(window.XMLHttpRequest).toHaveBeenCalledTimes(4)
 
-        expect(given.queue._event_queue.length).toEqual(0)
+        expect(given.queue._counterToQueueMap[1]).toEqual(undefined)
 
         enqueueRequests()
 
-        expect(given.queue._event_queue.length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual(
-            new Map([
-                [1, 1],
-                [2, 1],
-                [3, 1],
-                [4, 1],
-            ])
-        )
-        expect(given.queue._event_queue).toEqual([
+        expect(given.queue._counterToQueueMap[2].length).toEqual(4)
+        expect(given.queue._requestRetriesMap).toEqual({
+            1: 1,
+            2: 1,
+            3: 1,
+            4: 1,
+        })
+
+        expect(given.queue._counterToQueueMap[2]).toEqual([
             {
                 url: '/e',
                 data: { event: 'foo', timestamp: EPOCH - 3000 },
@@ -126,55 +126,74 @@ describe('RetryQueue', () => {
         expect(window.navigator.sendBeacon).toHaveBeenCalledTimes(4)
     })
 
-    it('clears polling flag after 4 empty iterations', () => {
+    it('enqueues requests when offline and flushes immediately when online again', () => {
         enqueueRequests()
 
-        for (let i = 0; i < 5; i++) {
-            given.queue.poll()
-            jest.runOnlyPendingTimers()
-
-            expect(given.queue.isPolling).toEqual(true)
-        }
+        given.queue._areWeOnline = false
+        expect(given.queue._areWeOnline).toEqual(false)
 
         given.queue.poll()
         jest.runOnlyPendingTimers()
 
-        expect(given.queue.isPolling).toEqual(false)
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(4)
+        expect(given.queue._offlineBacklog.length).toEqual(4)
+
+        given.queue._handleWeAreNowOnline()
+
+        expect(given.queue._areWeOnline).toEqual(true)
+        expect(given.queue._offlineBacklog.length).toEqual(0)
+
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(8)
     })
 
-    it('stops retrying after 3 attempts', () => {
-        given.queue.poll()
+    it('retries using an exponential backoff mechanism', () => {
+        enqueueRequests()
 
-        // Add requests to queue and retry twice
+        expect(given.queue._counterToQueueMap[1].length).toEqual(4)
+        expect(given.queue._requestRetriesMap).toEqual({
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+        })
+
+        jest.runOnlyPendingTimers()
+        enqueueRequests()
+
+        expect(given.queue._counterToQueueMap[1]).toEqual(undefined)
+        expect(given.queue._counterToQueueMap[2].length).toEqual(4)
+        expect(given.queue._requestRetriesMap).toEqual({
+            1: 1,
+            2: 1,
+            3: 1,
+            4: 1,
+        })
+
+        jest.runOnlyPendingTimers()
+        enqueueRequests()
+
+        expect(given.queue._counterToQueueMap[2]).toEqual(undefined)
+        expect(given.queue._counterToQueueMap[4].length).toEqual(4)
+        expect(given.queue._requestRetriesMap).toEqual({
+            1: 2,
+            2: 2,
+            3: 2,
+            4: 2,
+        })
+
         for (let i = 0; i < 2; ++i) {
-            enqueueRequests()
-            expect(given.queue._event_queue.length).toEqual(4)
             jest.runOnlyPendingTimers()
         }
 
-        // Enqueue requests a third time
         enqueueRequests()
 
-        expect(given.queue._event_queue.length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual(
-            new Map([
-                [1, 2],
-                [2, 2],
-                [3, 2],
-                [4, 2],
-            ])
-        )
-
-        // Retry a third time
-        jest.runOnlyPendingTimers()
-
-        // Try to enqueue the same requests again
-        enqueueRequests()
-
-        // Requests are not added to the queue
-        expect(given.queue._event_queue.length).toEqual(0)
-
-        // Requests are cleared from retries map
-        expect(given.queue._requestRetriesMap).toEqual(new Map())
+        expect(given.queue._counterToQueueMap[4]).toEqual(undefined)
+        expect(given.queue._counterToQueueMap[8].length).toEqual(4)
+        expect(given.queue._requestRetriesMap).toEqual({
+            1: 3,
+            2: 3,
+            3: 3,
+            4: 3,
+        })
     })
 })

@@ -8,14 +8,12 @@ export class RetryQueue extends RequestQueueScaffold {
         this._requestRetriesMap = {} // <RequestId, number>
         this._counterToQueueMap = {}
         this._pollerCounter = 1
-        this._currentQueueLength = 0
         this._areWeOnline = 'onLine' in window.navigator ? window.navigator.onLine : true
         this._offlineBacklog = []
 
         if ('onLine' in window.navigator) {
             window.addEventListener('online', () => {
-                this._areWeOnline = true
-                this._flushOfflineBacklog()
+                this._handleWeAreNowOnline()
             })
             window.addEventListener('offline', () => {
                 this._areWeOnline = false
@@ -37,7 +35,7 @@ export class RetryQueue extends RequestQueueScaffold {
             this._requestRetriesMap[requestId]++
         }
 
-        const nextRetry = this._pollerCounter + 2 ** retriesPerformedSoFar
+        const nextRetry = this._pollerCounter - 1 + 2 ** retriesPerformedSoFar
         if (!(nextRetry in this._counterToQueueMap)) {
             this._counterToQueueMap[nextRetry] = []
         }
@@ -67,9 +65,13 @@ export class RetryQueue extends RequestQueueScaffold {
 
     unload() {
         clearTimeout(this._poller)
-        for (let i = 0; i < this._event_queue.length; ++i) {
-            let { url, data, options } = this._event_queue[i]
-            window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+        const existingQueues = Object.values(this._counterToQueueMap)
+        for (let i = 0; i < existingQueues.length; ++i) {
+            const currentQueue = existingQueues[i]
+            for (let j = 0; j < currentQueue.length; ++j) {
+                const { url, data, options } = currentQueue[j]
+                window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+            }
         }
 
         this._event_queue.length = 0
@@ -93,5 +95,10 @@ export class RetryQueue extends RequestQueueScaffold {
             captureMetrics: this.captureMetrics,
             retryQueue: this,
         })
+    }
+
+    _handleWeAreNowOnline() {
+        this._areWeOnline = true
+        this._flushOfflineBacklog()
     }
 }
