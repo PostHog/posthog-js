@@ -11,10 +11,6 @@ describe('RetryQueue', () => {
     given('queue', () => new RetryQueue(given.captureMetrics))
     given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
 
-    window.addEventListener = jest.fn().mockImplementationOnce((event, callback) => {
-        callback()
-    })
-
     const xhrMockClass = () => ({
         open: jest.fn(),
         send: jest.fn(),
@@ -116,7 +112,7 @@ describe('RetryQueue', () => {
         ])
     })
 
-    it('tries to send requests via beacon on unload ', () => {
+    it('tries to send requests via beacon on unload', () => {
         enqueueRequests()
 
         given.queue.poll()
