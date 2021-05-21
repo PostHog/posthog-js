@@ -5,6 +5,7 @@ export class RetryQueue extends RequestQueueScaffold {
     constructor(captureMetrics) {
         super()
         this.captureMetrics = captureMetrics
+        this.isPolling = false
         this._requestRetriesMap = {} // <RequestId, number>
         this._counterToQueueMap = {}
         this._pollerCounter = 1
@@ -40,7 +41,10 @@ export class RetryQueue extends RequestQueueScaffold {
             this._counterToQueueMap[nextRetry] = []
         }
         this._counterToQueueMap[nextRetry].push(requestData)
-        this.poll()
+        if (!this.isPolling) {
+            this.isPolling = true
+            this.poll()
+        }
     }
 
     poll() {
