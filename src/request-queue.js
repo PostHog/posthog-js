@@ -87,8 +87,8 @@ export class RequestQueue {
         clearTimeout(this._poller)
         const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
         this._event_queue.length = 0
-        for (let url in requests) {
-            const { data, options } = requests[url]
+        for (let key in requests) {
+            const { url, data, options } = requests[key]
             this.handlePollRequest(url, data, { ...options, transport: 'sendbeacon' })
         }
     }
