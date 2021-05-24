@@ -25,11 +25,9 @@ describe('Event capture', () => {
 
         cy.visit('./playground/cypress', {
             onBeforeLoad(win) {
-                // cy.stub(win.console, 'log').as('consoleLog')
                 cy.stub(win.console, 'error').as('consoleError')
             },
         })
-        //   cy.get('@consoleLog').should('be.calledWith', 'Hello World!')
         cy.posthogInit(given.options)
         if (waitForDecide) {
             cy.wait('@decide')
