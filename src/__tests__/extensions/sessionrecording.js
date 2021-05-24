@@ -71,6 +71,15 @@ describe('SessionRecording', () => {
             expect(given.sessionRecording.submitRecordings).not.toHaveBeenCalled()
             expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: false })
         })
+
+        it('does not start session recording if enabled via server but not client', () => {
+            given('response', () => ({ sessionRecording: { endpoint: '/ses/' } }))
+            given('disabled', () => true)
+            given.subject()
+
+            expect(given.sessionRecording.submitRecordings).not.toHaveBeenCalled()
+            expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: false })
+        })
     })
 
     describe('recording', () => {
