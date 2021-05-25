@@ -83,4 +83,32 @@ describe('RequestQueue', () => {
             { transport: 'sendbeacon' }
         )
     })
+
+    it('handles unload with batchKeys', () => {
+        given.queue.enqueue('/e', { event: 'foo', timestamp: 1_610_000_000 }, { transport: 'XHR' })
+        given.queue.enqueue('/identify', { event: '$identify', timestamp: 1_620_000_000 })
+        given.queue.enqueue('/e', { event: 'bar', timestamp: 1_630_000_000 })
+        given.queue.enqueue('/e', { event: 'zeta', timestamp: 1_640_000_000 }, { _batchKey: 'sessionRecording' })
+
+        given.queue.unload()
+
+        expect(given.handlePollRequest).toHaveBeenCalledTimes(3)
+        expect(given.handlePollRequest).toHaveBeenCalledWith(
+            '/e',
+            [
+                { event: 'foo', timestamp: 1_610_000_000 },
+                { event: 'bar', timestamp: 1_630_000_000 },
+            ],
+            { transport: 'sendbeacon' }
+        )
+        expect(given.handlePollRequest).toHaveBeenCalledWith(
+            '/identify',
+            [{ event: '$identify', timestamp: 1_620_000_000 }],
+            { transport: 'sendbeacon' }
+        )
+        expect(given.handlePollRequest).toHaveBeenCalledWith('/e', [{ event: 'zeta', timestamp: 1_640_000_000 }], {
+            _batchKey: 'sessionRecording',
+            transport: 'sendbeacon',
+        })
+    })
 })
