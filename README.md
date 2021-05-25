@@ -24,15 +24,22 @@ Testing on IE11 requires a bit more setup.
 
 ## Developing together with another repo
 
-Update dependency in package.json to e.g. `"posthog-js": "link:../posthog-js"`, `yarn` and run `yarn build && yarn build-module`
 
-An alternative is to use [`yarn link`](https://classic.yarnpkg.com/en/docs/cli/link/). Run `yarn link` in `posthog-js`, and then `yarn link posthog-js` in `posthog`. Once you're done, remember to `yarn unlink`.
+Use [`yarn link`](https://classic.yarnpkg.com/en/docs/cli/link/). Run `yarn link` in `posthog-js`, and then `yarn link posthog-js` in `posthog`. Once you're done, remember to `yarn unlink posthog-js` in `posthog`, and `yarn unlink` in `posthog-js`.
+
+An alternative is to update dependency in package.json to e.g. `"posthog-js": "link:../posthog-js"`, `yarn` and run `yarn build && yarn build-module`
+
 
 ### Developing with main PostHog repo
 
-The `posthog-js` snippet for a website loads static js from the main `PostHog/posthog` repo. Which means, when testing with a website running the snippet, you want to run `PostHog/posthog` locally, link the `posthog-js` dependency to your local version, and then run `yarn serve` in `posthog-js` to ensure `dist/array.js` is being generated.
+The `posthog-js` snippet for a website loads static js from the main `PostHog/posthog` repo. Which means, when testing the snippet with a website, there's a bit of extra setup required:
 
-Then, in your locally running `PostHog/posthog` build, run `yarn copy-scripts` so the scripts copied from `posthog-js` are served via `PostHog/posthog`. Further, it's a good idea to modify `start-http` script to add development mode: `webpack serve --mode development`, which doesn't minify the resulting js (which you can then read in your browser).
+1. Run `PostHog/posthog` locally
+2. Link the `posthog-js` dependency to your local version (see above)
+3. Run `yarn serve` in `posthog-js`. (This ensures `dist/array.js` is being generated)
+4. In your locally running `PostHog/posthog` build, run `yarn copy-scripts`. (This copies the scripts generated in step 3 to the static assets folder for `PostHog/posthog`)
+
+Further, it's a good idea to modify `start-http` script to add development mode: `webpack serve --mode development`, which doesn't minify the resulting js (which you can then read in your browser).
 
 
 ## Releasing a new version
