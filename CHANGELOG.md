@@ -1,3 +1,8 @@
+## 1.10.2 - 2021-05-25
+
+- Reconcile Server and Client side configurations for session recording and autocapture (#233)
+- Reconcile Server and Client side configurations for session recording and autocapture (#233)
+
 ## 1.10.1 - 2021-05-25
 
 - Fix sessionRecording bug (#234)
