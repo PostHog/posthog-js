@@ -75,3 +75,4 @@ jobs:
               with:
                   branch: ${{ github.event.pull_request.base.ref }}
                   message: Bump version to ${{ steps.versions.outputs.new-version }}, update CHANGELOG.md & yarn.lock
+                  github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
