@@ -23,7 +23,11 @@ describe('Event capture', () => {
             },
         }).as('decide')
 
-        cy.visit('./playground/cypress')
+        cy.visit('./playground/cypress', {
+            onBeforeLoad(win) {
+                cy.stub(win.console, 'error').as('consoleError')
+            },
+        })
         cy.posthogInit(given.options)
         if (waitForDecide) {
             cy.wait('@decide')
@@ -56,6 +60,16 @@ describe('Event capture', () => {
         cy.get('body').click(100, 100).click(98, 102).click(101, 103)
 
         cy.phCaptures().should('include', '$rageclick')
+    })
+
+    it('doesnt capture rage clicks when autocapture is disabled', () => {
+        given('options', () => ({ rageclick: true, autocapture: false }))
+
+        start()
+
+        cy.get('body').click(100, 100).click(98, 102).click(101, 103)
+
+        cy.phCaptures().should('not.include', '$rageclick')
     })
 
     describe('session recording enabled from API', () => {
@@ -91,6 +105,7 @@ describe('Event capture', () => {
             cy.wait(50)
             cy.get('[data-cy-custom-event-button]').click()
             cy.phCaptures().should('deep.equal', ['$pageview', 'custom-event'])
+            cy.get('@consoleError').should('not.be.called')
         })
     })
 

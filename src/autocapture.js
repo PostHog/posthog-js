@@ -244,7 +244,12 @@ var autocapture = {
 
         this._initializedTokens.push(token)
 
-        if (response && response['config'] && response['config']['enable_collect_everything'] === true) {
+        if (
+            response &&
+            response['config'] &&
+            response['config']['enable_collect_everything'] === true &&
+            instance.get_config('autocapture')
+        ) {
             if (response['custom_properties']) {
                 this._customProperties = response['custom_properties']
             }
