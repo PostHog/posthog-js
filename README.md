@@ -26,6 +26,15 @@ Testing on IE11 requires a bit more setup.
 
 Update dependency in package.json to e.g. `"posthog-js": "link:../posthog-js"`, `yarn` and run `yarn build && yarn build-module`
 
+An alternative is to use [`yarn link`](https://classic.yarnpkg.com/en/docs/cli/link/). Run `yarn link` in `posthog-js`, and then `yarn link posthog-js` in `posthog`. Once you're done, remember to `yarn unlink`.
+
+### Developing with main PostHog repo
+
+The `posthog-js` snippet for a website loads static js from the main `PostHog/posthog` repo. Which means, when testing with a website running the snippet, you want to run `PostHog/posthog` locally, link the `posthog-js` dependency to your local version, and then run `yarn serve` in `posthog-js` to ensure `dist/array.js` is being generated.
+
+Then, in your locally running `PostHog/posthog` build, run `yarn copy-scripts` so the scripts copied from `posthog-js` are served via `PostHog/posthog`. Further, it's a good idea to modify `start-http` script to add development mode: `webpack serve --mode development`, which doesn't minify the resulting js (which you can then read in your browser).
+
+
 ## Releasing a new version
 
 Add a label `bump X` label to a PR before merging (e.g. `bump patch`).
