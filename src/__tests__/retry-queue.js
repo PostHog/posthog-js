@@ -193,7 +193,7 @@ describe('RetryQueue', () => {
         ])
     })
 
-    it('retries using an exponential backoff mechanism', () => {
+    it('does not enqueue a request after 10 retries', () => {
         given.retryQueue.enqueue({
             url: '/e',
             data: { event: 'maxretries', timestamp: EPOCH },
