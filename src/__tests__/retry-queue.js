@@ -8,7 +8,7 @@ const defaultRequestOptions = {
 }
 
 describe('RetryQueue', () => {
-    given('queue', () => new RetryQueue(given.captureMetrics))
+    given('retryQueue', () => new RetryQueue(given.captureMetrics))
     given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
 
     const xhrMockClass = () => ({
@@ -21,175 +21,186 @@ describe('RetryQueue', () => {
     window.XMLHttpRequest = jest.fn().mockImplementation(xhrMockClass)
     window.navigator.sendBeacon = jest.fn()
 
+    function fastForwardTimeAndRunTimer() {
+        jest.spyOn(global.Date, 'now').mockImplementationOnce(() => new Date().getTime() + 3500)
+
+        jest.runOnlyPendingTimers()
+    }
+
     function enqueueRequests() {
-        given.queue.enqueue({
+        given.retryQueue.enqueue({
             url: '/e',
             data: { event: 'foo', timestamp: EPOCH - 3000 },
             options: defaultRequestOptions,
-            requestId: 1,
         })
-        given.queue.enqueue({
+        given.retryQueue.enqueue({
             url: '/e',
             data: { event: 'bar', timestamp: EPOCH - 2000 },
             options: defaultRequestOptions,
-            requestId: 2,
         })
-        given.queue.enqueue({
+        given.retryQueue.enqueue({
             url: '/e',
             data: { event: 'baz', timestamp: EPOCH - 1000 },
             options: defaultRequestOptions,
-            requestId: 3,
         })
-        given.queue.enqueue({
+        given.retryQueue.enqueue({
             url: '/e',
             data: { event: 'fizz', timestamp: EPOCH },
             options: defaultRequestOptions,
-            requestId: 4,
         })
     }
 
     beforeEach(() => {
         jest.useFakeTimers()
-        jest.spyOn(given.queue, 'getTime').mockReturnValue(EPOCH)
+        jest.spyOn(given.retryQueue, 'getTime').mockReturnValue(EPOCH)
     })
 
     it('processes retry requests', () => {
         enqueueRequests()
 
-        expect(given.queue._counterToQueueMap[1].length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual({
-            1: 0,
-            2: 0,
-            3: 0,
-            4: 0,
-        })
+        expect(given.retryQueue.queue.length).toEqual(4)
 
-        given.queue.poll()
+        expect(given.retryQueue.queue).toEqual([
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: 'foo', timestamp: EPOCH - 3000 },
+                    options: defaultRequestOptions,
+                },
+                retryAt: expect.any(Date),
+            },
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: 'bar', timestamp: EPOCH - 2000 },
+                    options: defaultRequestOptions,
+                },
+                retryAt: expect.any(Date),
+            },
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: 'baz', timestamp: EPOCH - 1000 },
+                    options: defaultRequestOptions,
+                },
+                retryAt: expect.any(Date),
+            },
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: 'fizz', timestamp: EPOCH },
+                    options: defaultRequestOptions,
+                },
+                retryAt: expect.any(Date),
+            },
+        ])
 
         expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
 
-        jest.runOnlyPendingTimers()
+        fastForwardTimeAndRunTimer()
+
+        // clears queue
+        expect(given.retryQueue.queue.length).toEqual(0)
 
         expect(window.XMLHttpRequest).toHaveBeenCalledTimes(4)
-
-        expect(given.queue._counterToQueueMap[1]).toEqual(undefined)
-
-        enqueueRequests()
-
-        expect(given.queue._counterToQueueMap[2].length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual({
-            1: 1,
-            2: 1,
-            3: 1,
-            4: 1,
-        })
-
-        expect(given.queue._counterToQueueMap[2]).toEqual([
-            {
-                url: '/e',
-                data: { event: 'foo', timestamp: EPOCH - 3000 },
-                options: defaultRequestOptions,
-                requestId: 1,
-            },
-            {
-                url: '/e',
-                data: { event: 'bar', timestamp: EPOCH - 2000 },
-                options: defaultRequestOptions,
-                requestId: 2,
-            },
-            {
-                url: '/e',
-                data: { event: 'baz', timestamp: EPOCH - 1000 },
-                options: defaultRequestOptions,
-                requestId: 3,
-            },
-            {
-                url: '/e',
-                data: { event: 'fizz', timestamp: EPOCH },
-                options: defaultRequestOptions,
-                requestId: 4,
-            },
-        ])
     })
 
     it('tries to send requests via beacon on unload', () => {
         enqueueRequests()
 
-        given.queue.poll()
-        given.queue.unload()
+        given.retryQueue.poll()
+        given.retryQueue.unload()
 
-        expect(given.queue._event_queue.length).toEqual(0)
+        expect(given.retryQueue.queue.length).toEqual(0)
         expect(window.navigator.sendBeacon).toHaveBeenCalledTimes(4)
     })
 
     it('enqueues requests when offline and flushes immediately when online again', () => {
+        given.retryQueue.areWeOnline = false
+        expect(given.retryQueue.areWeOnline).toEqual(false)
+
         enqueueRequests()
 
-        given.queue._areWeOnline = false
-        expect(given.queue._areWeOnline).toEqual(false)
+        fastForwardTimeAndRunTimer()
 
-        given.queue.poll()
-        jest.runOnlyPendingTimers()
+        // requests aren't attempted when we're offline
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
+
+        // queue stays the same
+        expect(given.retryQueue.queue.length).toEqual(4)
+
+        given.retryQueue._handleWeAreNowOnline()
+
+        expect(given.retryQueue.areWeOnline).toEqual(true)
+        expect(given.retryQueue.queue.length).toEqual(0)
 
         expect(window.XMLHttpRequest).toHaveBeenCalledTimes(4)
-        expect(given.queue._offlineBacklog.length).toEqual(4)
-
-        given.queue._handleWeAreNowOnline()
-
-        expect(given.queue._areWeOnline).toEqual(true)
-        expect(given.queue._offlineBacklog.length).toEqual(0)
-
-        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(8)
     })
 
     it('retries using an exponential backoff mechanism', () => {
-        enqueueRequests()
+        const fixedDate = new Date('2021-05-31T00:00:00')
+        jest.spyOn(global.Date, 'now').mockImplementation(() => fixedDate.getTime())
 
-        expect(given.queue._counterToQueueMap[1].length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual({
-            1: 0,
-            2: 0,
-            3: 0,
-            4: 0,
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: '1retry', timestamp: EPOCH },
+            options: defaultRequestOptions,
+            retriesPerformedSoFar: 1,
         })
 
-        jest.runOnlyPendingTimers()
-        enqueueRequests()
-
-        expect(given.queue._counterToQueueMap[1]).toEqual(undefined)
-        expect(given.queue._counterToQueueMap[2].length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual({
-            1: 1,
-            2: 1,
-            3: 1,
-            4: 1,
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: '5retries', timestamp: EPOCH },
+            options: defaultRequestOptions,
+            retriesPerformedSoFar: 5,
         })
 
-        jest.runOnlyPendingTimers()
-        enqueueRequests()
-
-        expect(given.queue._counterToQueueMap[2]).toEqual(undefined)
-        expect(given.queue._counterToQueueMap[4].length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual({
-            1: 2,
-            2: 2,
-            3: 2,
-            4: 2,
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: '9retries', timestamp: EPOCH },
+            options: defaultRequestOptions,
+            retriesPerformedSoFar: 9,
         })
 
-        for (let i = 0; i < 2; ++i) {
-            jest.runOnlyPendingTimers()
-        }
+        expect(given.retryQueue.queue).toEqual([
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: '1retry', timestamp: EPOCH },
+                    options: defaultRequestOptions,
+                    retriesPerformedSoFar: 1,
+                },
+                retryAt: new Date(fixedDate.getTime() + 6000), // 3000 * 2^1
+            },
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: '5retries', timestamp: EPOCH },
+                    options: defaultRequestOptions,
+                    retriesPerformedSoFar: 5,
+                },
+                retryAt: new Date(fixedDate.getTime() + 96000), // 3000 * 2^5
+            },
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: '9retries', timestamp: EPOCH },
+                    options: defaultRequestOptions,
+                    retriesPerformedSoFar: 9,
+                },
+                retryAt: new Date(fixedDate.getTime() + 1536000), // 3000 * 2^9
+            },
+        ])
+    })
 
-        enqueueRequests()
-
-        expect(given.queue._counterToQueueMap[4]).toEqual(undefined)
-        expect(given.queue._counterToQueueMap[8].length).toEqual(4)
-        expect(given.queue._requestRetriesMap).toEqual({
-            1: 3,
-            2: 3,
-            3: 3,
-            4: 3,
+    it('retries using an exponential backoff mechanism', () => {
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: EPOCH },
+            options: defaultRequestOptions,
+            retriesPerformedSoFar: 10,
         })
+
+        expect(given.retryQueue.queue.length).toEqual(0)
     })
 })

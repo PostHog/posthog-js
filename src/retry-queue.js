@@ -12,8 +12,7 @@ export class RetryQueue extends RequestQueueScaffold {
         if ('onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
-                this.areWeOnline = true
-                this.flush()
+                this._handleWeAreNowOnline()
             })
             window.addEventListener('offline', () => {
                 this.areWeOnline = false
@@ -22,13 +21,12 @@ export class RetryQueue extends RequestQueueScaffold {
     }
 
     enqueue(requestData) {
-        const { retriesPerformedSoFar } = requestData
+        const retriesPerformedSoFar = requestData.retriesPerformedSoFar || 0
         if (retriesPerformedSoFar >= 10) {
             return
         }
-        const retryAt = new Date(new Date().valueOf() + 2 ** retriesPerformedSoFar * 3000)
+        const retryAt = new Date(Date.now() + 3000 * 2 ** retriesPerformedSoFar)
         this.queue.push({ retryAt, requestData })
-
         if (!this.isPolling) {
             this.isPolling = true
             this.poll()
@@ -46,7 +44,8 @@ export class RetryQueue extends RequestQueueScaffold {
     }
 
     flush() {
-        const now = new Date().valueOf()
+        // using Date.now to make tests easier as recommended here https://codewithhugo.com/mocking-the-current-date-in-jest-tests/
+        const now = new Date(Date.now())
         const toFlush = this.queue.filter(({ retryAt }) => retryAt < now)
         if (toFlush.length > 0) {
             this.queue = this.queue.filter(({ retryAt }) => retryAt >= now)
@@ -65,16 +64,21 @@ export class RetryQueue extends RequestQueueScaffold {
         this.queue = []
     }
 
-    _executeXhrRequest({ url, data, options, headers, callback, retryNumber }) {
+    _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }) {
         xhr({
             url,
             data: data || {},
             options: options || {},
             headers: headers || {},
-            retryNumber: retryNumber || 0,
+            retriesPerformedSoFar: retriesPerformedSoFar || 0,
             callback,
             captureMetrics: this.captureMetrics,
             retryQueue: this,
         })
+    }
+
+    _handleWeAreNowOnline() {
+        this.areWeOnline = true
+        this.flush()
     }
 }
