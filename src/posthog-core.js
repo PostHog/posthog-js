@@ -596,7 +596,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
 
     if (this.get_config('request_batching') && (!has_unique_traits || options._batchKey)) {
         data['timestamp'] = new Date()
-        this._requestQueue.enqueue({ url, data, options })
+        this._requestQueue.enqueue(url, data, options)
     } else {
         this.__compress_and_send_json_request(url, jsonData, options, cb)
     }
