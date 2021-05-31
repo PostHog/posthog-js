@@ -113,6 +113,7 @@ export class RequestQueue {
             }
             requests[key].data.push(data)
         })
+
         return requests
     }
 
