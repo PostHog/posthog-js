@@ -395,6 +395,8 @@ describe('Autocapture system', () => {
                             return 'testtoken'
                         case 'mask_all_element_attributes':
                             return false
+                        case 'autocapture':
+                            return true
                     }
                 }),
                 token: 'testtoken',
@@ -432,6 +434,53 @@ describe('Autocapture system', () => {
             const eventType2 = captureArgs2[1]['my property name']
             expect(eventType1).toBe('my property value')
             expect(eventType2).toBe('my property value')
+            lib.capture.resetHistory()
+        })
+
+        it('should not capture events when get_config returns false, when an element matching any of the event selectors is clicked', () => {
+            lib = {
+                _prepare_callback: sandbox.spy((callback) => callback),
+                get_config: sandbox.spy(function (key) {
+                    switch (key) {
+                        case 'api_host':
+                            return 'https://test.com'
+                        case 'token':
+                            return 'testtoken'
+                        case 'mask_all_element_attributes':
+                            return false
+                        case 'autocapture':
+                            return false
+                    }
+                }),
+                token: 'testtoken',
+                capture: sandbox.spy(),
+                get_distinct_id() {
+                    return 'distinctid'
+                },
+                toolbar: {
+                    maybeLoadEditor: jest.fn(),
+                },
+            }
+            autocapture.init(lib)
+            autocapture.afterDecideResponse(given.decideResponse, lib)
+
+            const eventElement1 = document.createElement('div')
+            const eventElement2 = document.createElement('div')
+            const propertyElement = document.createElement('div')
+            eventElement1.className = 'event-element-1'
+            eventElement1.style.cursor = 'pointer'
+            eventElement2.className = 'event-element-2'
+            eventElement2.style.cursor = 'pointer'
+            propertyElement.className = 'property-element'
+            propertyElement.textContent = 'my property value'
+            document.body.appendChild(eventElement1)
+            document.body.appendChild(eventElement2)
+            document.body.appendChild(propertyElement)
+
+            expect(lib.capture.callCount).toBe(0)
+            simulateClick(eventElement1)
+            simulateClick(eventElement2)
+            expect(lib.capture.callCount).toBe(0)
             lib.capture.resetHistory()
         })
 
@@ -869,6 +918,7 @@ describe('Autocapture system', () => {
         given('config', () => ({
             api_host: 'https://test.com',
             token: 'testtoken',
+            autocapture: true,
         }))
 
         given('decideResponse', () => ({ config: { enable_collect_everything: true } }))
@@ -880,10 +930,22 @@ describe('Autocapture system', () => {
             jest.spyOn(autocapture, '_addDomEventHandlers')
         })
 
-        it('should call _addDomEventHandlders', () => {
+        it('should call _addDomEventHandlders if autocapture is true', () => {
             given.subject()
 
             expect(autocapture._addDomEventHandlers).toHaveBeenCalled()
+        })
+
+        it('should not call _addDomEventHandlders if autocapture is false', () => {
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                autocapture: false,
+            }))
+
+            given.subject()
+
+            expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders if the decide request fails', () => {
@@ -907,7 +969,7 @@ describe('Autocapture system', () => {
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
-            given('config', () => ({ api_host: 'https://test.com', token: 'anotherproject' }))
+            given('config', () => ({ api_host: 'https://test.com', token: 'anotherproject', autocapture: true }))
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
         })

@@ -16,17 +16,22 @@ export class SessionRecording {
     }
 
     startRecordingIfEnabled() {
-        if (this.instance.get_property(SESSION_RECORDING_ENABLED)) {
+        if (
+            this.instance.get_property(SESSION_RECORDING_ENABLED) &&
+            !this.instance.get_config('disable_session_recording')
+        ) {
             this._startCapture()
         }
     }
 
     afterDecideResponse(response) {
+        const enableRecordings =
+            !this.instance.get_config('disable_session_recording') && !!response['sessionRecording']
         if (this.instance.persistence) {
-            this.instance.persistence.register({ [SESSION_RECORDING_ENABLED]: !!response['sessionRecording'] })
+            this.instance.persistence.register({ [SESSION_RECORDING_ENABLED]: enableRecordings })
         }
 
-        if (response['sessionRecording']) {
+        if (enableRecordings) {
             if (response['sessionRecording'].endpoint) {
                 this.endpoint = response['sessionRecording'].endpoint
             }

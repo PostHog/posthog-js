@@ -1,3 +1,18 @@
+## 1.10.2 - 2021-05-25
+
+- Reconcile Server and Client side configurations for session recording and autocapture (#233)
+
+## 1.10.1 - 2021-05-25
+
+- Fix sessionRecording bug (#234)
+- Update outdated releasing instructions (#224)
+- changelog for 1.10.0 (#223)
+- 1.10.0 (#222)
+- Refactor /decide enpoint & allow recording without autocapture (#212)
+- Add missing `disable_session_recording` property in Config interface (#221)
+- Update types, add missing reloadFeatureFlags (#219)
+- Fix in-progress check for utils/deepCircularCopy (#216)
+
 ## 1.10.0 - 2021-05-07
 
 - Refactor /decide endpoint & allow recording without autocapture (#212)
@@ -8,17 +23,14 @@
 ## 1.9.7 - 2021-04-09
 
 - Config Additions: session_recording, mask_all_element_attributes, mask_all_text (#209)
-- Config Additions: session_recording, mask_all_element_attributes, mask_all_text (#209)
 
 ## 1.9.6 - 2021-03-30
 
-- Support rrweb mask all inputs (#207)
 - Support rrweb mask all inputs (#207)
 - fix: incorrect typing for isFeatureEnabled (#208)
 
 ## 1.9.3 - 2021-03-12
 
-- Fix SentryIntegration optional param typing (#203)
 - Fix SentryIntegration optional param typing (#203)
 
 ## 1.9.2 - 2021-03-12
@@ -29,17 +41,14 @@
 ## 1.9.1 - 2021-03-08
 
 - Add posthog.debug() to types, remove bad docstring (#201)
-- Remove a bad docstring (#201)
 - Fix ".identify" docstrings (#200)
 
 ## 1.9.0 - 2021-03-03
 
 - Device Type (#198)
-- Device Type (#198)
 
 ## 1.8.10 - 2021-03-02
 
-- Add properties_string_max_length = 65535 (#197)
 - Add properties_string_max_length = 65535 (#197)
 - Remove unused notification code (#191)
 - Remove old upgrade code (never used) (#192)
@@ -47,7 +56,6 @@
 
 ## 1.8.9 - 2021-03-02
 
-- Add Yarn lock resiliency (#196)
 - Add Yarn lock resiliency (#196)
 - Update README.md (#194)
 - Add debug function (#193)

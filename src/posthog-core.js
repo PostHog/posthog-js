@@ -147,12 +147,6 @@ var create_mplib = function (token, config, name) {
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    if (!instance.get_config('advanced_disable_decide')) {
-        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
-        // and compression will not be available.
-        new Decide(instance).call()
-    }
-
     instance['__autocapture_enabled'] = instance.get_config('autocapture')
     if (instance.get_config('autocapture')) {
         var num_buckets = 100
@@ -166,6 +160,12 @@ var create_mplib = function (token, config, name) {
         } else {
             autocapture.init(instance)
         }
+    }
+
+    if (!instance.get_config('advanced_disable_decide')) {
+        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
+        // and compression will not be available.
+        new Decide(instance).call()
     }
 
     // if any instance on the page has debug = true, we set the

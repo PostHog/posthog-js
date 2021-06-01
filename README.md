@@ -28,6 +28,12 @@ Update dependency in package.json to e.g. `"posthog-js": "link:../posthog-js"`, 
 
 ## Releasing a new version
 
+Add a label `bump X` label to a PR before merging (e.g. `bump patch`).
+
+This will create a new npm version, update tags, changelog and create a PR [in the main repo](https://github.com/posthog/posthog).
+
+### Alternative (manual) 
+
 To release a new version, make sure you're logged in to NPM (`npm login`)
 
 We tend to follow the following steps:
