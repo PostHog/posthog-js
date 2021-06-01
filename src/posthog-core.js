@@ -408,7 +408,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
     } else if (USE_XHR) {
         try {
-            const retryRequestId = Math.floor(Math.random() * 10 ** 9)
             xhr({
                 url: url,
                 data: data,
@@ -416,7 +415,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                 options: options,
                 captureMetrics: this._captureMetrics,
                 callback,
-                retryRequestId,
+                retriesPerformedSoFar: 0,
                 retryQueue: this._retryQueue,
             })
         } catch (e) {

@@ -6,41 +6,27 @@ export class RetryQueue extends RequestQueueScaffold {
         super()
         this.captureMetrics = captureMetrics
         this.isPolling = false
-        this._requestRetriesMap = {} // <RequestId, number>
-        this._counterToQueueMap = {}
-        this._pollerCounter = 1
-        this._areWeOnline = 'onLine' in window.navigator ? window.navigator.onLine : true
-        this._offlineBacklog = []
+        this.queue = []
+        this.areWeOnline = true
 
         if ('onLine' in window.navigator) {
+            this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
                 this._handleWeAreNowOnline()
             })
             window.addEventListener('offline', () => {
-                this._areWeOnline = false
+                this.areWeOnline = false
             })
         }
     }
 
     enqueue(requestData) {
-        const { requestId } = requestData
-        let retriesPerformedSoFar = 0
-        if (!(requestId in this._requestRetriesMap)) {
-            this._requestRetriesMap[requestId] = 0
-        } else {
-            retriesPerformedSoFar = this._requestRetriesMap[requestId]
-            if (retriesPerformedSoFar === 10) {
-                delete this._requestRetriesMap[requestId]
-                return
-            }
-            this._requestRetriesMap[requestId]++
+        const retriesPerformedSoFar = requestData.retriesPerformedSoFar || 0
+        if (retriesPerformedSoFar >= 10) {
+            return
         }
-
-        const nextRetry = this._pollerCounter - 1 + 2 ** retriesPerformedSoFar
-        if (!(nextRetry in this._counterToQueueMap)) {
-            this._counterToQueueMap[nextRetry] = []
-        }
-        this._counterToQueueMap[nextRetry].push(requestData)
+        const retryAt = new Date(Date.now() + 3000 * 2 ** retriesPerformedSoFar)
+        this.queue.push({ retryAt, requestData })
         if (!this.isPolling) {
             this.isPolling = true
             this.poll()
@@ -50,51 +36,41 @@ export class RetryQueue extends RequestQueueScaffold {
     poll() {
         clearTimeout(this._poller)
         this._poller = setTimeout(() => {
-            const currentQueue = this._counterToQueueMap[this._pollerCounter]
-            if (currentQueue && currentQueue.length > 0) {
-                if (!this._areWeOnline) {
-                    this._offlineBacklog = [...this._offlineBacklog, ...currentQueue]
-                } else {
-                    for (let i = 0; i < currentQueue.length; ++i) {
-                        this._executeXhrRequest(currentQueue[i])
-                    }
-                }
-
-                delete this._counterToQueueMap[this._pollerCounter]
+            if (this.areWeOnline && this.queue.length > 0) {
+                this.flush()
             }
             this.poll()
-            this._pollerCounter++
         }, this._pollInterval)
+    }
+
+    flush() {
+        // using Date.now to make tests easier as recommended here https://codewithhugo.com/mocking-the-current-date-in-jest-tests/
+        const now = new Date(Date.now())
+        const toFlush = this.queue.filter(({ retryAt }) => retryAt < now)
+        if (toFlush.length > 0) {
+            this.queue = this.queue.filter(({ retryAt }) => retryAt >= now)
+            for (const { requestData } of toFlush) {
+                this._executeXhrRequest(requestData)
+            }
+        }
     }
 
     unload() {
         clearTimeout(this._poller)
-        const existingQueues = Object.values(this._counterToQueueMap)
-        for (let i = 0; i < existingQueues.length; ++i) {
-            const currentQueue = existingQueues[i]
-            for (let j = 0; j < currentQueue.length; ++j) {
-                const { url, data, options } = currentQueue[j]
-                window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
-            }
+        for (const { requestData } of this.queue) {
+            const { url, data, options } = requestData
+            window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
         }
-
-        this._event_queue.length = 0
+        this.queue = []
     }
 
-    _flushOfflineBacklog() {
-        for (let i = 0; i < this._offlineBacklog.length; ++i) {
-            this._executeXhrRequest(this._offlineBacklog[i])
-        }
-        this._offlineBacklog.length = 0
-    }
-
-    _executeXhrRequest({ url, data, options, headers, callback, requestId }) {
+    _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }) {
         xhr({
             url,
             data: data || {},
             options: options || {},
             headers: headers || {},
-            requestId,
+            retriesPerformedSoFar: retriesPerformedSoFar || 0,
             callback,
             captureMetrics: this.captureMetrics,
             retryQueue: this,
@@ -102,7 +78,7 @@ export class RetryQueue extends RequestQueueScaffold {
     }
 
     _handleWeAreNowOnline() {
-        this._areWeOnline = true
-        this._flushOfflineBacklog()
+        this.areWeOnline = true
+        this.flush()
     }
 }
