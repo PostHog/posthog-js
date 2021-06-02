@@ -1,3 +1,11 @@
+## 1.11.0 - 2021-06-02
+
+- Retry Queue (#226)
+- Bump hosted-git-info from 2.8.8 to 2.8.9 in /react (#229)
+- Bump lodash from 4.17.20 to 4.17.21 in /react (#225)
+- Bump ws from 7.4.2 to 7.4.6 in /react (#237)
+- Remove duplicates in CHANGELOG (#236)
+
 ## 1.10.2 - 2021-05-25
 
 - Reconcile Server and Client side configurations for session recording and autocapture (#233)
