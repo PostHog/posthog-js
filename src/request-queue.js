@@ -1,22 +1,11 @@
+import { RequestQueueScaffold } from './base-request-queue'
 import { _ } from './utils'
 
-export class RequestQueue {
+export class RequestQueue extends RequestQueueScaffold {
     constructor(captureMetrics, handlePollRequest, pollInterval = 3000) {
-        this.captureMetrics = captureMetrics
+        super(pollInterval)
         this.handlePollRequest = handlePollRequest
-        this.isPolling = true // flag to continue to recursively poll or not
-        this._event_queue = []
-        this._empty_queue_count = 0 // to track empty polls
-        this._poller = function () {} // to become interval for reference to clear later
-        this._pollInterval = pollInterval
-    }
-
-    setPollInterval(interval) {
-        this._pollInterval = interval
-        // Reset interval if running already
-        if (this.isPolling) {
-            this.poll()
-        }
+        this.captureMetrics = captureMetrics
     }
 
     enqueue(url, data, options) {
@@ -49,6 +38,7 @@ export class RequestQueue {
                     this.captureMetrics.incr(`batch-handle-${url.slice(url.length - 2)}`, data.length)
                 }
                 this._event_queue.length = 0 // flush the _event_queue
+                this._empty_queue_count = 0
             } else {
                 this._empty_queue_count++
             }
@@ -114,9 +104,5 @@ export class RequestQueue {
             requests[key].data.push(data)
         })
         return requests
-    }
-
-    getTime() {
-        return new Date().getTime()
     }
 }
