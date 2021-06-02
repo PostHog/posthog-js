@@ -25,7 +25,9 @@ export class RetryQueue extends RequestQueueScaffold {
         if (retriesPerformedSoFar >= 10) {
             return
         }
-        const retryAt = new Date(Date.now() + 3000 * 2 ** retriesPerformedSoFar)
+        const msToNextRetry = 3000 * 2 ** retriesPerformedSoFar
+        const retryAt = new Date(Date.now() + msToNextRetry)
+        console.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
         this.queue.push({ retryAt, requestData })
         if (!this.isPolling) {
             this.isPolling = true
