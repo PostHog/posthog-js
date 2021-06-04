@@ -1,3 +1,6 @@
+## 1.11.1 - 2021-06-04
+- Fix: avoid directly accessing localStorage (#239) 
+
 ## 1.11.0 - 2021-06-02
 
 - Retry Queue (#226)
