@@ -1,3 +1,7 @@
+## 1.11.2 - 2021-06-07
+
+- Fix overridden request retry data (#241)
+
 ## 1.11.1 - 2021-06-04
 - Fix: avoid directly accessing localStorage (#239) 
 
