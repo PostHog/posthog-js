@@ -55,7 +55,7 @@ export const xhr = ({ url, data, headers, options, captureMetrics, callback, ret
             captureMetrics.incr(`xhr-response-${req.status}`)
             captureMetrics.decr('_send_request_inflight')
 
-            const data = captureMetrics.finishRequest(requestId)
+            const metricsData = captureMetrics.finishRequest(requestId)
 
             // XMLHttpRequest.DONE == 4, except in safari 4
             if (req.status === 200) {
@@ -86,7 +86,7 @@ export const xhr = ({ url, data, headers, options, captureMetrics, callback, ret
                 }
 
                 captureMetrics.markRequestFailed({
-                    ...data,
+                    ...metricsData,
                     type: 'non_200',
                     status: req.status,
                     statusText: req.statusText,
