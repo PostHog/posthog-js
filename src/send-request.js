@@ -24,7 +24,16 @@ export const encodePostData = (data, options) => {
     return body_data
 }
 
-export const xhr = ({ url, data, headers, options, captureMetrics, callback, retriesPerformedSoFar, retryQueue }) => {
+export const xhr = ({
+    url,
+    data,
+    headers = {},
+    options,
+    captureMetrics,
+    callback,
+    retriesPerformedSoFar,
+    retryQueue,
+}) => {
     const req = new XMLHttpRequest()
     req.open(options.method, url, true)
 
@@ -39,12 +48,11 @@ export const xhr = ({ url, data, headers, options, captureMetrics, callback, ret
         ...options._metrics,
     })
 
+    headers = { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' }
+
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
-    if (options.method === 'POST' && !options.blob) {
-        req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
-    }
 
     // send the ph_optout cookie
     // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
