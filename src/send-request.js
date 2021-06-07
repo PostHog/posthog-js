@@ -47,8 +47,10 @@ export const xhr = ({
         endpoint: url.slice(url.length - 2),
         ...options._metrics,
     })
-
-    headers = { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' }
+    
+    if (options.method === 'POST' && !options.blob) {
+        headers = { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' }
+    }
 
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
