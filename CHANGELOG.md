@@ -1,11 +1,24 @@
+## 1.11.2 - 2021-06-07
+
+- Fix overridden request retry data (#241)
+
+## 1.11.1 - 2021-06-04
+- Fix: avoid directly accessing localStorage (#239) 
+
+## 1.11.0 - 2021-06-02
+
+- Retry Queue (#226)
+- Bump hosted-git-info from 2.8.8 to 2.8.9 in /react (#229)
+- Bump lodash from 4.17.20 to 4.17.21 in /react (#225)
+- Bump ws from 7.4.2 to 7.4.6 in /react (#237)
+- Remove duplicates in CHANGELOG (#236)
+
 ## 1.10.2 - 2021-05-25
 
-- Reconcile Server and Client side configurations for session recording and autocapture (#233)
 - Reconcile Server and Client side configurations for session recording and autocapture (#233)
 
 ## 1.10.1 - 2021-05-25
 
-- Fix sessionRecording bug (#234)
 - Fix sessionRecording bug (#234)
 - Update outdated releasing instructions (#224)
 - changelog for 1.10.0 (#223)
@@ -25,17 +38,14 @@
 ## 1.9.7 - 2021-04-09
 
 - Config Additions: session_recording, mask_all_element_attributes, mask_all_text (#209)
-- Config Additions: session_recording, mask_all_element_attributes, mask_all_text (#209)
 
 ## 1.9.6 - 2021-03-30
 
-- Support rrweb mask all inputs (#207)
 - Support rrweb mask all inputs (#207)
 - fix: incorrect typing for isFeatureEnabled (#208)
 
 ## 1.9.3 - 2021-03-12
 
-- Fix SentryIntegration optional param typing (#203)
 - Fix SentryIntegration optional param typing (#203)
 
 ## 1.9.2 - 2021-03-12
@@ -46,17 +56,14 @@
 ## 1.9.1 - 2021-03-08
 
 - Add posthog.debug() to types, remove bad docstring (#201)
-- Remove a bad docstring (#201)
 - Fix ".identify" docstrings (#200)
 
 ## 1.9.0 - 2021-03-03
 
 - Device Type (#198)
-- Device Type (#198)
 
 ## 1.8.10 - 2021-03-02
 
-- Add properties_string_max_length = 65535 (#197)
 - Add properties_string_max_length = 65535 (#197)
 - Remove unused notification code (#191)
 - Remove old upgrade code (never used) (#192)
@@ -64,7 +71,6 @@
 
 ## 1.8.9 - 2021-03-02
 
-- Add Yarn lock resiliency (#196)
 - Add Yarn lock resiliency (#196)
 - Update README.md (#194)
 - Add debug function (#193)

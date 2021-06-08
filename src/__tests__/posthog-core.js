@@ -295,6 +295,9 @@ describe('_handle_unload()', () => {
         _requestQueue: {
             unload: jest.fn(),
         },
+        _retryQueue: {
+            unload: jest.fn(),
+        },
     }))
 
     given('config', () => ({
