@@ -1088,7 +1088,7 @@ PostHogLib.prototype.set_config = function (config) {
         if (this['persistence']) {
             this['persistence'].update_config(this['config'])
         }
-        
+
         if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
             this['config']['debug'] = true
         }
