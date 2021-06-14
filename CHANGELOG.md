@@ -1,3 +1,9 @@
+## 1.11.3 - 2021-06-14
+
+- Capture viewport height and width (#246)
+- Add extra local development instructions (#235)
+- Update README.md (#243)
+
 ## 1.11.2 - 2021-06-07
 
 - Fix overridden request retry data (#241)
