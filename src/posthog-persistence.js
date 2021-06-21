@@ -41,6 +41,14 @@ import { cookieStore, localStore, memoryStore } from './storage'
  * @constructor
  */
 var PostHogPersistence = function (config) {
+    // clean chars that aren't accepted by the http spec for cookie values
+    // https://datatracker.ietf.org/doc/html/rfc2616#section-2.2
+    let token = ''
+
+    if (config['token']) {
+        token = config['token'].replace(/\+/g, 'PL').replace(/\//g, 'SL').replace(/=/g, 'EQ')
+    }
+
     this['props'] = {}
     this.campaign_params_saved = false
     this['featureFlagEventHandlers'] = []
@@ -48,7 +56,7 @@ var PostHogPersistence = function (config) {
     if (config['persistence_name']) {
         this.name = 'ph_' + config['persistence_name']
     } else {
-        this.name = 'ph_' + config['token'] + '_posthog'
+        this.name = 'ph_' + token + '_posthog'
     }
 
     var storage_type = config['persistence']
