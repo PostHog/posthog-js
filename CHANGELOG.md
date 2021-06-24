@@ -1,3 +1,7 @@
+## 1.11.4 - 2021-06-24
+
+- fix invalid cookie (#250)
+
 ## 1.11.3 - 2021-06-14
 
 - Capture viewport height and width (#246)
