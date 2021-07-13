@@ -1075,6 +1075,7 @@ PostHogLib.prototype.alias = function (alias, original) {
  */
 
 PostHogLib.prototype.set_config = function (config) {
+    const oldConfig = { ...this.config }
     if (_.isObject(config)) {
         _.extend(this['config'], config)
 
@@ -1093,7 +1094,22 @@ PostHogLib.prototype.set_config = function (config) {
             this['config']['debug'] = true
         }
         Config.DEBUG = Config.DEBUG || this.get_config('debug')
+
+        if (this.sessionRecording && typeof config.disable_session_recording !== 'undefined') {
+            if (oldConfig.disable_session_recording !== config.disable_session_recording) {
+                this.sessionRecording.toggleSessionRecording(!config.disable_session_recording)
+            }
+        }
     }
+}
+
+/**
+ * turns session recording on if it is off, and off if it is on.
+ * returns true if session recording is enabled after the operation, and false otherwise.
+ */
+PostHogLib.prototype.toggleSessionRecording = function () {
+    this.set_config({ disable_session_recording: !this.config.disable_session_recording })
+    return !this.config.disable_session_recording
 }
 
 /**
@@ -1488,6 +1504,7 @@ PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 PostHogLib.prototype['SentryIntegration'] = PostHogLib.prototype.sentry_integration
 PostHogLib.prototype['debug'] = PostHogLib.prototype.debug
 PostHogLib.prototype['LIB_VERSION'] = Config.LIB_VERSION
+PostHogLib.prototype['toggleSessionRecording'] = PostHogLib.prototype.toggleSessionRecording
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties'] = PostHogPersistence.prototype.properties

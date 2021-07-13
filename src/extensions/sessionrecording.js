@@ -13,6 +13,7 @@ export class SessionRecording {
         this.snapshots = []
         this.emit = false
         this.endpoint = BASE_ENDPOINT
+        this.stopRecording = null
     }
 
     startRecordingIfEnabled() {
@@ -21,6 +22,19 @@ export class SessionRecording {
             !this.instance.get_config('disable_session_recording')
         ) {
             this._startCapture()
+        }
+    }
+
+    toggleSessionRecording(turnOn) {
+        if (turnOn) {
+            this.startRecordingIfEnabled()
+            return
+        }
+
+        if (this.captureStarted && this.stopRecording) {
+            this.stopRecording()
+            this.stopRecording = null
+            this.captureStarted = false
         }
     }
 
@@ -88,8 +102,9 @@ export class SessionRecording {
             }
         }
 
-        window.rrweb.record({
+        this.stopRecording = window.rrweb.record({
             emit: (data) => {
+                console.log('snapshot')
                 const properties = {
                     $snapshot_data: data,
                     $session_id: sessionIdGenerator(this.instance.persistence, data.timestamp),
