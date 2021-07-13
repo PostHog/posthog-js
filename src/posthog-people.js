@@ -83,6 +83,15 @@ PostHogPeople.prototype.set_once = addOptOutCheckPostHogPeople(function (prop, t
     return this._send_request(data, callback)
 })
 
+PostHogPeople.prototype.increment = addOptOutCheckPostHogPeople(function (prop, to, callback) {
+    var data = this.increment_action(prop, to)
+    console.log('!!!!!!', data)
+    if (_.isObject(prop)) {
+        callback = to
+    }
+    return this._send_request(data, callback)
+})
+
 PostHogPeople.prototype.toString = function () {
     return this._posthog.toString() + '.people'
 }
