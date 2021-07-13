@@ -19,7 +19,6 @@ var apiActions = {
 
     increment_action: function (prop, to) {
         const a = this.apiActionParser(INCREMENT_ACTION, prop, to)
-        console.log('sdsfd', a)
         return a
     },
 
@@ -27,7 +26,6 @@ var apiActions = {
         var data = {}
         var props = {}
 
-        console.log(prop, to)
         if (_.isObject(prop)) {
             _.each(
                 prop,
