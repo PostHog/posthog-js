@@ -104,7 +104,6 @@ export class SessionRecording {
 
         this.stopRecording = window.rrweb.record({
             emit: (data) => {
-                console.log('snapshot')
                 const properties = {
                     $snapshot_data: data,
                     $session_id: sessionIdGenerator(this.instance.persistence, data.timestamp),
