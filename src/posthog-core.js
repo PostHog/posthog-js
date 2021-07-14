@@ -139,6 +139,7 @@ var create_mplib = function (token, config, name) {
     instance['people']._init(instance)
 
     instance.featureFlags = new PostHogFeatureFlags(instance)
+    instance.feature_flags = instance.featureFlags
 
     instance.toolbar = new Toolbar(instance)
 
