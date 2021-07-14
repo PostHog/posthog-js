@@ -510,6 +510,35 @@ declare class posthog {
 
     /* Will log all capture requests to the Javascript console, including event properties for easy debugging */
     static debug(): void
+
+    /*
+     * Starts session recording and updates disable_session_recording to false.
+     * Used for manual session recording management. By default, session recording is enabled and
+     * starts automatically.
+     *
+     * ### Usage:
+     *
+     *     posthog.startSessionRecording()
+     */
+    static startSessionRecording(): void
+
+    /*
+     * Stops session recording and updates disable_session_recording to true.
+     *
+     * ### Usage:
+     *
+     *     posthog.stopSessionRecording()
+     */
+    static stopSessionRecording(): void
+
+    /*
+     * Check if session recording is currently running.
+     *
+     * ### Usage:
+     *
+     *     const isSessionRecordingOn = posthog.sessionRecordingStarted()
+     */
+    static sessionRecordingStarted(): boolean
 }
 
 declare namespace posthog {
