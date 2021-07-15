@@ -1,3 +1,7 @@
+## 1.12.0 - 2021-07-15
+
+- Remove deprecated methods and options (#255)
+
 ## 1.11.4 - 2021-06-24
 
 - fix invalid cookie (#250)
