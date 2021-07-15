@@ -44,13 +44,11 @@ declare class posthog {
      * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
      * @param {Object} [options] Optional configuration for this capture request.
      * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
-     * @param {Function} [callback] [Deprecated] If provided, the callback function will be called after capturing the event.
      */
     static capture(
         event_name: string,
         properties?: posthog.Properties,
-        options?: { transport: 'XHR' | 'sendBeacon' },
-        callback?: posthog.CaptureCallback
+        options?: { transport: 'XHR' | 'sendBeacon' }
     ): posthog.CaptureResult
 
     /**
@@ -671,7 +669,7 @@ declare namespace posthog {
          *
          * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
          * @param {*} [to] A value to set on the given property name
-         * @param {Function} [callback] If provided, the callback will be called after captureing the event.
+         * @param {Function} [callback] If provided, the callback will be called after capturing the event.
          */
         static set(
             prop: posthog.Properties | string,
@@ -698,7 +696,7 @@ declare namespace posthog {
          *
          * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
          * @param {*} [to] A value to set on the given property name
-         * @param {Function} [callback] If provided, the callback will be called after captureing the event.
+         * @param {Function} [callback] If provided, the callback will be called after capturing the event.
          */
         static set_once(
             prop: posthog.Properties | string,

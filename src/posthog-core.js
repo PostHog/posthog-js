@@ -139,7 +139,6 @@ var create_mplib = function (token, config, name) {
     instance['people']._init(instance)
 
     instance.featureFlags = new PostHogFeatureFlags(instance)
-    // This key is deprecated
     instance.feature_flags = instance.featureFlags
 
     instance.toolbar = new Toolbar(instance)
@@ -529,27 +528,17 @@ PostHogLib.prototype.push = function (item) {
  * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
  * @param {Object} [options] Optional configuration for this capture request.
  * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
- * @param {Function} [callback] [Deprecated] If provided, the callback function will be called after capturing the event.
  */
-PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options, callback) {
+PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options) {
     this._captureMetrics.incr('capture')
     if (event_name === '$snapshot') {
         this._captureMetrics.incr('snapshot')
     }
 
-    if (!callback && typeof options === 'function') {
-        callback = options
-        options = null
-    }
     options = options || __NOOPTIONS
     var transport = options['transport'] // external API, don't minify 'transport' prop
     if (transport) {
         options.transport = transport // 'transport' prop name can be minified internally
-    }
-    if (typeof callback !== 'function') {
-        callback = __NOOP
-    } else {
-        window.console.warn('WARNING! Calling posthog.capture with a callback is deprecated and will be removed soon!')
     }
 
     if (_.isUndefined(event_name) || typeof event_name !== 'string') {
@@ -558,7 +547,6 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     }
 
     if (_.isBlockedUA(userAgent)) {
-        callback(0)
         return
     }
 
@@ -590,15 +578,14 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     const jsonData = JSON.stringify(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
-    const cb = this._prepare_callback(callback, data)
 
-    const has_unique_traits = callback !== __NOOP || options !== __NOOPTIONS
+    const has_unique_traits = options !== __NOOPTIONS
 
     if (this.get_config('request_batching') && (!has_unique_traits || options._batchKey)) {
         data['timestamp'] = new Date()
         this._requestQueue.enqueue(url, data, options)
     } else {
-        this.__compress_and_send_json_request(url, jsonData, options, cb)
+        this.__compress_and_send_json_request(url, jsonData, options)
     }
 
     this._invokeCaptureHooks(event_name)
@@ -1261,10 +1248,6 @@ PostHogLib.prototype.opt_in_capturing = function (options) {
     this._gdpr_call_func(optIn, options)
     this._gdpr_update_persistence(options)
 }
-PostHogLib.prototype.opt_in_captureing = function (options) {
-    deprecate_warning('opt_in_captureing')
-    this.opt_in_capturing(options)
-}
 
 /**
  * Opt the user out of data capturing and cookies/localstorage for this PostHog instance
@@ -1299,10 +1282,6 @@ PostHogLib.prototype.opt_out_capturing = function (options) {
     this._gdpr_call_func(optOut, options)
     this._gdpr_update_persistence(options)
 }
-PostHogLib.prototype.opt_out_captureing = function (options) {
-    deprecate_warning('opt_out_captureing')
-    this.opt_out_capturing(options)
-}
 
 /**
  * Check whether the user has opted in to data capturing and cookies/localstorage for this PostHog instance
@@ -1320,10 +1299,6 @@ PostHogLib.prototype.opt_out_captureing = function (options) {
 PostHogLib.prototype.has_opted_in_capturing = function (options) {
     return this._gdpr_call_func(hasOptedIn, options)
 }
-PostHogLib.prototype.has_opted_in_captureing = function (options) {
-    deprecate_warning('has_opted_in_captureing')
-    return this.has_opted_in_capturing(options)
-}
 
 /**
  * Check whether the user has opted out of data capturing and cookies/localstorage for this PostHog instance
@@ -1340,10 +1315,6 @@ PostHogLib.prototype.has_opted_in_captureing = function (options) {
  */
 PostHogLib.prototype.has_opted_out_capturing = function (options) {
     return this._gdpr_call_func(hasOptedOut, options)
-}
-PostHogLib.prototype.has_opted_out_captureing = function (options) {
-    deprecate_warning('has_opted_out_captureing')
-    return this.has_opted_out_capturing(options)
 }
 
 /**
@@ -1379,10 +1350,6 @@ PostHogLib.prototype.clear_opt_in_out_capturing = function (options) {
 
     this._gdpr_call_func(clearOptInOut, options)
     this._gdpr_update_persistence(options)
-}
-PostHogLib.prototype.clear_opt_in_out_captureing = function (options) {
-    deprecate_warning('clear_opt_in_out_captureing')
-    this.clear_opt_in_out_capturing(options)
 }
 
 /**
@@ -1440,16 +1407,6 @@ PostHogLib.prototype.debug = function (debug) {
         localStorage && localStorage.setItem('ph_debug', 'true')
         this.set_config({ debug: true })
     }
-}
-
-function deprecate_warning(method) {
-    window.console.warn(
-        'WARNING! posthog.' +
-            method +
-            ' is deprecated and will be removed soon! Please use posthog.' +
-            method.split('captureing').join('capturing') +
-            ' instead (without the "e")!'
-    )
 }
 
 PostHogLib.prototype.decodeLZ64 = LZString.decompressFromBase64
