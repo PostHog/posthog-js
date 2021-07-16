@@ -90,6 +90,7 @@ describe('SessionRecording', () => {
             window.rrweb = {
                 record: jest.fn(({ emit }) => {
                     _emit = emit
+                    return () => {}
                 }),
             }
 
@@ -184,6 +185,21 @@ describe('SessionRecording', () => {
             given.sessionRecording.submitRecordings()
 
             expect(loadScript).not.toHaveBeenCalled()
+        })
+
+        it('session recording can be turned on and off', () => {
+            expect(given.sessionRecording.stopRrweb).toEqual(null)
+
+            given.sessionRecording.startRecordingIfEnabled()
+
+            expect(given.sessionRecording.started()).toEqual(true)
+            expect(given.sessionRecording.captureStarted).toEqual(true)
+            expect(given.sessionRecording.stopRrweb).not.toEqual(null)
+
+            given.sessionRecording.stopRecording()
+
+            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.captureStarted).toEqual(false)
         })
     })
 })

@@ -1062,6 +1062,7 @@ PostHogLib.prototype.alias = function (alias, original) {
  */
 
 PostHogLib.prototype.set_config = function (config) {
+    const oldConfig = { ...this.config }
     if (_.isObject(config)) {
         _.extend(this['config'], config)
 
@@ -1080,7 +1081,41 @@ PostHogLib.prototype.set_config = function (config) {
             this['config']['debug'] = true
         }
         Config.DEBUG = Config.DEBUG || this.get_config('debug')
+
+        if (this.sessionRecording && typeof config.disable_session_recording !== 'undefined') {
+            if (oldConfig.disable_session_recording !== config.disable_session_recording) {
+                if (config.disable_session_recording) {
+                    this.sessionRecording.stopRecording()
+                } else {
+                    this.sessionRecording.startRecordingIfEnabled()
+                }
+            }
+        }
     }
+}
+
+/**
+ * turns session recording on, and updates the config option
+ * disable_session_recording to false
+ */
+PostHogLib.prototype.startSessionRecording = function () {
+    this.set_config({ disable_session_recording: false })
+}
+
+/**
+ * turns session recording off, and updates the config option
+ * disable_session_recording to true
+ */
+PostHogLib.prototype.stopSessionRecording = function () {
+    this.set_config({ disable_session_recording: true })
+}
+
+/**
+ * returns a boolean indicating whether session recording
+ * is currently running
+ */
+PostHogLib.prototype.sessionRecordingStarted = function () {
+    return this.sessionRecording.started()
 }
 
 /**
@@ -1445,6 +1480,9 @@ PostHogLib.prototype['decodeLZ64'] = PostHogLib.prototype.decodeLZ64
 PostHogLib.prototype['SentryIntegration'] = PostHogLib.prototype.sentry_integration
 PostHogLib.prototype['debug'] = PostHogLib.prototype.debug
 PostHogLib.prototype['LIB_VERSION'] = Config.LIB_VERSION
+PostHogLib.prototype['startSessionRecording'] = PostHogLib.prototype.startSessionRecording
+PostHogLib.prototype['stopSessionRecording'] = PostHogLib.prototype.stopSessionRecording
+PostHogLib.prototype['sessionRecordingStarted'] = PostHogLib.prototype.sessionRecordingStarted
 
 // PostHogPersistence Exports
 PostHogPersistence.prototype['properties'] = PostHogPersistence.prototype.properties
