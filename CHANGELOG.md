@@ -1,3 +1,7 @@
+## 1.12.1 - 2021-07-16
+
+- Allow session recording reload (#253)
+
 ## 1.12.0 - 2021-07-15
 
 - Remove deprecated methods and options (#255)
