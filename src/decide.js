@@ -27,7 +27,7 @@ export class Decide {
     parseDecideResponse(response) {
         if (!(document && document.body)) {
             console.log('document not ready yet, trying again in 500 milliseconds...')
-            setTimeout(function () {
+            setTimeout(() => {
                 this.parseDecideResponse(response)
             }, 500)
             return
