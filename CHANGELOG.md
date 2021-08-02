@@ -1,3 +1,7 @@
+## 1.12.2 - 2021-08-02
+
+- Update decide.js (#258)
+
 ## 1.12.1 - 2021-07-16
 
 - Allow session recording reload (#253)
