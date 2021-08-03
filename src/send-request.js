@@ -74,7 +74,7 @@ export const xhr = ({ url, data, headers, options, captureMetrics, callback, ret
                 console.error(error)
 
                 // don't retry certain errors
-                if ([401, 403, 404].indexOf(req.status) < 0) {
+                if ([401, 403, 404, 500].indexOf(req.status) < 0) {
                     retryQueue.enqueue({
                         url,
                         data,
