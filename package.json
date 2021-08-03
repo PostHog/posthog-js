@@ -89,6 +89,7 @@
         "clearMocks": true
     },
     "dependencies": {
-        "fflate": "^0.4.1"
+        "fflate": "^0.4.1",
+        "rrweb-snapshot": "^1.1.7"
     }
 }
