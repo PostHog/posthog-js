@@ -1,3 +1,8 @@
+## 1.12.3 - 2021-08-04
+
+- Add `rrweb-snapshot` to dev deps (#262)
+- Don't retry 500 responses (#260)
+
 ## 1.12.2 - 2021-08-02
 
 - Update decide.js (#258)
