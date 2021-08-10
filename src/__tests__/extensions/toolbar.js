@@ -158,4 +158,24 @@ describe('Toolbar', () => {
             expect(given.subject()).toBe(false)
         })
     })
+
+    describe('afterDecideResponse', () => {
+        given('localStorage', () => ({
+            setItem: jest.fn(),
+            removeItem: jest.fn(),
+        }))
+
+        it('should enable the toolbar based on the /decide response', () => {
+            given('decideResponse', () => ({ isAuthenticated: true, editorParams: { toolbarVersion: 'toolbar' } }))
+            given.toolbar.afterDecideResponse(given.decideResponse, given.localStorage)
+            expect(given.localStorage.setItem).not.toHaveBeenCalled()
+            expect(given.localStorage.removeItem).toHaveBeenCalledWith('toolbar_disabled')
+        })
+
+        it('should disable the toolbar based on the /decide response', () => {
+            given('decideResponse', () => ({}))
+            given.toolbar.afterDecideResponse(given.decideResponse, given.localStorage)
+            expect(given.localStorage.setItem).toHaveBeenCalledWith('toolbar_disabled', '1')
+        })
+    })
 })
