@@ -19,9 +19,9 @@ export class Toolbar {
                 ...editorParams,
                 apiURL: this.instance.get_config('api_host'),
             })
-            localStorage.removeItem('toolbar_disabled')
+            localStorage.setItem('toolbar_enabled_by_user', '1')
         } else {
-            localStorage.setItem('toolbar_disabled', '1')
+            localStorage.removeItem('toolbar_enabled_by_user')
         }
     }
 
@@ -75,8 +75,8 @@ export class Toolbar {
         }
     }
 
-    _loadEditor(editorParams) {
-        if (localStorage.getItem('toolbar_disabled') || window['_postHogToolbarLoaded']) {
+    _loadEditor(editorParams, localStorage = window.localStorage) {
+        if (!localStorage.getItem('toolbar_enabled_by_user') || window['_postHogToolbarLoaded']) {
             return false
         }
         // only load the codeless event editor once, even if there are multiple instances of PostHogLib

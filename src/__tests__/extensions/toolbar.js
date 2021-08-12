@@ -139,7 +139,10 @@ describe('Toolbar', () => {
     })
 
     describe('load and close editor', () => {
-        given('subject', () => () => given.toolbar._loadEditor(given.editorParams))
+        given('localStorage', () => ({
+            getItem: jest.fn(() => true), // toolbar enabled
+        }))
+        given('subject', () => () => given.toolbar._loadEditor(given.editorParams, given.localStorage))
 
         given('editorParams', () => ({
             accessToken: 'accessToken',
@@ -163,19 +166,27 @@ describe('Toolbar', () => {
         given('localStorage', () => ({
             setItem: jest.fn(),
             removeItem: jest.fn(),
+            getItem: jest.fn(() => null),
         }))
 
         it('should enable the toolbar based on the /decide response', () => {
             given('decideResponse', () => ({ isAuthenticated: true, editorParams: { toolbarVersion: 'toolbar' } }))
             given.toolbar.afterDecideResponse(given.decideResponse, given.localStorage)
-            expect(given.localStorage.setItem).not.toHaveBeenCalled()
-            expect(given.localStorage.removeItem).toHaveBeenCalledWith('toolbar_disabled')
+            expect(given.localStorage.setItem).toHaveBeenCalledWith('toolbar_enabled_by_user', '1')
         })
 
         it('should disable the toolbar based on the /decide response', () => {
             given('decideResponse', () => ({}))
             given.toolbar.afterDecideResponse(given.decideResponse, given.localStorage)
-            expect(given.localStorage.setItem).toHaveBeenCalledWith('toolbar_disabled', '1')
+            expect(given.localStorage.setItem).not.toHaveBeenCalled()
+            expect(given.localStorage.removeItem).toHaveBeenCalledWith('toolbar_enabled_by_user')
+        })
+
+        it('should disable the toolbar based on the /decide response', () => {
+            given('editorParams', () => ({ toolbarVersion: 'toolbar' }))
+
+            const toolbarLoaded = given.toolbar._loadEditor(given.editorParams, given.localStorage)
+            expect(toolbarLoaded).toEqual(false)
         })
     })
 })
