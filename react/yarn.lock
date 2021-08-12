@@ -531,6 +531,11 @@
     estree-walker "^1.0.1"
     picomatch "^2.2.2"
 
+"@sentry/types@^6.2.2":
+  version "6.11.0"
+  resolved "https://registry.yarnpkg.com/@sentry/types/-/types-6.11.0.tgz#5122685478d32ddacd3a891cbcf550012df85f7c"
+  integrity sha512-gm5H9eZhL6bsIy/h3T+/Fzzz2vINhHhqd92CjHle3w7uXdTdFV98i2pDpErBGNTSNzbntqOMifYEB5ENtZAvcg==
+
 "@sinonjs/commons@^1.7.0":
   version "1.8.1"
   resolved "https://registry.yarnpkg.com/@sinonjs/commons/-/commons-1.8.1.tgz#e7df00f98a203324f6dc7cc606cad9d4a8ab2217"
@@ -3085,9 +3090,8 @@ posix-character-classes@^0.1.0:
   integrity sha1-AerA/jta9xoqbAL+q7jB/vfgDqs=
 
 "posthog-js@link:..":
-  version "1.10.2"
-  dependencies:
-    fflate "^0.4.1"
+  version "0.0.0"
+  uid ""
 
 prelude-ls@~1.1.2:
   version "1.1.2"
@@ -3350,6 +3354,11 @@ rollup@^2.35.1:
   integrity sha512-Ztz4NurU2LbS3Jn5rlhnYv35z6pkjBUmYKr94fOBIKINKRO6kug9NTFHArT7jqwMP2kqEZ39jJuEtkk91NBltQ==
   optionalDependencies:
     fsevents "~2.3.1"
+
+rrweb-snapshot@^1.1.7:
+  version "1.1.7"
+  resolved "https://registry.yarnpkg.com/rrweb-snapshot/-/rrweb-snapshot-1.1.7.tgz#92a3b47b1112a1b566c2fae2edb02fa48a6f6653"
+  integrity sha512-+f2kCCvIQ1hbEeCWnV7mPVPDEdWEExqwcYqMd/r1nfK52QE7qU52jefUOyTe85Vy67rZGqWnfK/B25e/OTSgYg==
 
 rsvp@^4.8.4:
   version "4.8.5"
