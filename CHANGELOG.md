@@ -1,3 +1,7 @@
+## 1.12.4 - 2021-08-16
+
+- Fix deps containing types not being installed (#265)
+
 ## 1.12.3 - 2021-08-04
 
 - Add `rrweb-snapshot` to dev deps (#262)
