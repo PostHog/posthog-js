@@ -1,3 +1,8 @@
+## 1.12.5 - 2021-08-17
+
+- Do not load toolbar when disabled (#264)
+- Bump path-parse from 1.0.6 to 1.0.7 in /react (#266)
+
 ## 1.12.4 - 2021-08-16
 
 - Fix deps containing types not being installed (#265)
