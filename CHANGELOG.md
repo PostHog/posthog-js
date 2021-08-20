@@ -1,3 +1,7 @@
+## 1.12.6 - 2021-08-20
+
+- Update `@sentry/types` to 6.11 (#267)
+
 ## 1.12.5 - 2021-08-17
 
 - Do not load toolbar when disabled (#264)
