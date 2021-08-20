@@ -1,11 +1,11 @@
-name: posthog-js/react
+name: React
 
 on:
   - pull_request
 
 jobs:
   react:
-    name: React tests
+    name: Test with React
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
