@@ -100,6 +100,7 @@ const defaultConfig = () => ({
     mask_all_element_attributes: false,
     mask_all_text: false,
     advanced_disable_decide: false,
+    decide_api_version: 2,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,

@@ -293,6 +293,9 @@ declare class posthog {
      *      // autocapture, feature flags, compression and session recording will be disabled when set to `true`
      *      advanced_disable_decide: false
      *
+     *      // use a different major version of the decide API (v2 changes the feature flag return type)
+     *      decide_api_version: 2
+     *
      *     }
      *
      *
@@ -589,6 +592,7 @@ declare namespace posthog {
         mask_all_element_attributes?: boolean
         mask_all_text?: boolean
         advanced_disable_decide?: boolean
+        decide_api_version?: number
     }
 
     interface OptInOutCapturingOptions {
