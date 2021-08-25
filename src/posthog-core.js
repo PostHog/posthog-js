@@ -394,7 +394,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()
 
-    url += '?' + _.HTTPBuildQuery(args)
+    const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
+    url += argSeparator + _.HTTPBuildQuery(args)
 
     if (_.isObject(data) && this.get_config('img')) {
         var img = document.createElement('img')

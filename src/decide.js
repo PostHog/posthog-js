@@ -17,7 +17,7 @@ export class Decide {
 
         const encoded_data = _.base64Encode(json_data)
         const decide_api_version = this.instance.get_config('decide_api_version')
-        const request_path = `/decide${decide_api_version ? `?v=${decide_api_version}` : ''}/`
+        const request_path = `/decide${decide_api_version ? `?v=${decide_api_version}` : '/'}`
         this.instance._send_request(
             this.instance.get_config('api_host') + request_path,
             { data: encoded_data },
