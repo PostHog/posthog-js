@@ -45,6 +45,30 @@ export class PostHogFeatureFlags {
     }
 
     /*
+     * Get feature flag's value for user.
+     *
+     * ### Usage:
+     *
+     *     if(posthog.getFeatureFlag('my-flag') === 'some-variant') { // do something }
+     *
+     * @param {Object|String} prop Key of the feature flag.
+     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     */
+    getFeatureFlag(key, options = {}) {
+        if (!this.getFlags()) {
+            console.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            return false
+        }
+        const decide_api_version = this.instance.get_config('decide_api_version')
+        const flagValue = decide_api_version === 2 ? this.getFlags()[key] : this.getFlags().indexOf(key) > -1
+        if ((options.send_event || !('send_event' in options)) && !this.flagCallReported[key]) {
+            this.flagCallReported[key] = true
+            this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
+        }
+        return flagValue
+    }
+
+    /*
      * See if feature flag is enabled for user.
      *
      * ### Usage:
@@ -59,12 +83,7 @@ export class PostHogFeatureFlags {
             console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
         }
-        const flagEnabled = this.getFlags().indexOf(key) > -1
-        if ((options.send_event || !('send_event' in options)) && !this.flagCallReported[key]) {
-            this.flagCallReported[key] = true
-            this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagEnabled })
-        }
-        return flagEnabled
+        return this.getFeatureFlag(key, options) === true
     }
 
     /*
