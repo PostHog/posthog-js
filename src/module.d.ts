@@ -294,7 +294,7 @@ declare class posthog {
      *      advanced_disable_decide: false
      *
      *      // use a different major version of the decide API (v2 changes the feature flag return type)
-     *      decide_api_version: 2
+     *      decide_api_version: 1
      *
      *     }
      *
