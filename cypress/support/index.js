@@ -23,7 +23,7 @@ import 'given2/setup'
 beforeEach(() => {
     cy.server()
 
-    cy.route('POST', '**/decide/*').as('decide')
+    cy.route('POST', '**/decide*').as('decide')
     cy.route('POST', '**/e/*').as('capture')
     cy.route('POST', '**/ses/*').as('session-recording')
 
