@@ -457,6 +457,18 @@ declare class posthog {
     static clear_opt_in_out_capturing(options?: posthog.ClearOptInOutCapturingOptions): void
 
     /*
+     * Get feature flag value for user (supports multivariate flags).
+     *
+     * ### Usage:
+     *
+     *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') { // do something }
+     *
+     * @param {Object|String} prop Key of the feature flag.
+     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     */
+    static getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined
+
+    /*
      * See if feature flag is enabled for user.
      *
      * ### Usage:
@@ -744,6 +756,18 @@ declare namespace posthog {
         static getFlags(): string[]
 
         static reloadFeatureFlags(): void
+
+        /*
+         * Get feature flag value for user (supports multivariate flags).
+         *
+         * ### Usage:
+         *
+         *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') { // do something }
+         *
+         * @param {Object|String} prop Key of the feature flag.
+         * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+         */
+        static getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined
 
         /*
          * See if feature flag is enabled for user.

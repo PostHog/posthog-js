@@ -722,6 +722,20 @@ PostHogLib.prototype._register_single = function (prop, value) {
 }
 
 /*
+ * Get feature flag value for user (supports multivariate flags).
+ *
+ * ### Usage:
+ *
+ *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') { // do something }
+ *
+ * @param {Object|String} prop Key of the feature flag.
+ * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+ */
+PostHogLib.prototype.getFeatureFlag = function (key, options = {}) {
+    return this.featureFlags.getFeatureFlag(key, options)
+}
+
+/*
  * See if feature flag is enabled for user.
  *
  * ### Usage:
@@ -1475,6 +1489,7 @@ PostHogLib.prototype['opt_in_capturing'] = PostHogLib.prototype.opt_in_capturing
 PostHogLib.prototype['has_opted_out_capturing'] = PostHogLib.prototype.has_opted_out_capturing
 PostHogLib.prototype['has_opted_in_capturing'] = PostHogLib.prototype.has_opted_in_capturing
 PostHogLib.prototype['clear_opt_in_out_capturing'] = PostHogLib.prototype.clear_opt_in_out_capturing
+PostHogLib.prototype['getFeatureFlag'] = PostHogLib.prototype.getFeatureFlag
 PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
 PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureFlags
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags

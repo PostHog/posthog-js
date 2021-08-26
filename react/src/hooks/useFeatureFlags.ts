@@ -14,9 +14,12 @@ export function useFeatureFlags(props: { refreshInterval?: number; sendEvent?: b
     const getEnabledFlags = useCallback(
         (flags): void => {
             const enabled = flags.reduce((result: FeatureFlags['enabled'], flag: string) => {
-                result[flag] = !!posthog?.isFeatureEnabled(flag, {
+                const flagValue = posthog?.getFeatureFlag(flag, {
                     send_event: sendEvent,
                 })
+                if (flagValue !== undefined) {
+                    result[flag] = flagValue
+                }
                 return result
             }, {})
             setFeatureFlags({ active: flags, enabled })

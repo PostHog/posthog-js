@@ -26,6 +26,7 @@ describe('useFeatureFlags hook', () => {
     given('posthog', () => ({
         onFeatureFlags: given.onFeatureFlags,
         isFeatureEnabled: (flag) => flag !== 'example_feature_3',
+        getFeatureFlag: (flag) => ENABLED_FEATURE_FLAGS[flag],
         featureFlags: { reloadFeatureFlags: jest.fn() },
     }))
 
