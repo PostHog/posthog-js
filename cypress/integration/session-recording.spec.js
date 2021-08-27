@@ -6,7 +6,7 @@ describe('Session recording', () => {
     beforeEach(() => {
         cy.route({
             method: 'POST',
-            url: '**/decide*',
+            url: '**/decide/*',
             response: {
                 config: { enable_collect_everything: false },
                 editorParams: {},

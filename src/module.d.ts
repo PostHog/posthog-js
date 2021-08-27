@@ -753,7 +753,7 @@ declare namespace posthog {
     }
 
     export class featureFlags {
-        static getFlags(): string[]
+        static getFlags(): string[] | Record<string, boolean | string>
 
         static reloadFeatureFlags(): void
 

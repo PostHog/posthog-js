@@ -17,16 +17,27 @@ export class PostHogFeatureFlags {
             this._override_warning = true
             return this.instance.get_property('$override_feature_flags')
         }
-        return this.instance.get_property('$active_feature_flags')
+        return this.instance.get_config('decide_api_version') < 2
+            ? this.instance.get_property('$active_feature_flags')
+            : this.instance.get_property('$enabled_feature_flags')
     }
 
     reloadFeatureFlags() {
         const parseDecideResponse = (response) => {
-            if (response['featureFlags']) {
+            const flags = response['featureFlags']
+            if (flags) {
+                const uses_v1_api = Array.isArray(flags)
+                const $active_feature_flags = uses_v1_api ? flags : Object.keys(flags)
                 this.instance.persistence &&
-                    this.instance.persistence.register({ $active_feature_flags: response['featureFlags'] })
+                    this.instance.persistence.register({
+                        $active_feature_flags,
+                        $enabled_feature_flags: uses_v1_api ? undefined : flags,
+                    })
             } else {
-                this.instance.persistence && this.instance.persistence.unregister('$active_feature_flags')
+                if (this.instance.persistence) {
+                    this.instance.persistence.unregister('$active_feature_flags')
+                    this.instance.persistence.unregister('$enabled_feature_flags')
+                }
             }
         }
 
@@ -60,7 +71,7 @@ export class PostHogFeatureFlags {
             return false
         }
         const decide_api_version = this.instance.get_config('decide_api_version')
-        const flagValue = decide_api_version === 2 ? this.getFlags()[key] : this.getFlags().indexOf(key) > -1
+        const flagValue = decide_api_version < 2 ? this.getFlags().indexOf(key) > -1 : this.getFlags()[key]
         if ((options.send_event || !('send_event' in options)) && !this.flagCallReported[key]) {
             this.flagCallReported[key] = true
             this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
@@ -83,7 +94,7 @@ export class PostHogFeatureFlags {
             console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
         }
-        return this.getFeatureFlag(key, options) === true
+        return !!this.getFeatureFlag(key, options)
     }
 
     /*

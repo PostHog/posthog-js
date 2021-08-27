@@ -135,7 +135,7 @@ describe('Decide v2', () => {
             given.subject()
 
             expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide?v=2',
+                'https://test.com/decide/?v=2',
                 {
                     data: _.base64Encode(
                         JSON.stringify({
@@ -181,7 +181,8 @@ describe('Decide v2', () => {
             given.subject()
 
             expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
-                $active_feature_flags: {
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+                $enabled_feature_flags: {
                     'beta-feature': true,
                     'alpha-feature-2': true,
                     'multivariate-flag': 'variant-1',

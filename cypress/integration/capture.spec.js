@@ -12,7 +12,7 @@ describe('Event capture', () => {
     const start = ({ waitForDecide = true } = {}) => {
         cy.route({
             method: 'POST',
-            url: '**/decide*',
+            url: '**/decide/*',
             response: {
                 config: { enable_collect_everything: true },
                 editorParams: {},

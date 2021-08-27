@@ -37,7 +37,8 @@ describe('featureflags', () => {
 describe('featureflags - with decide v2', () => {
     given('properties', () => ({
         $override_feature_flags: false,
-        $active_feature_flags: {
+        $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+        $enabled_feature_flags: {
             'beta-feature': true,
             'alpha-feature-2': true,
             'multivariate-flag': 'variant-1',
@@ -66,9 +67,7 @@ describe('featureflags - with decide v2', () => {
         })
         expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
         expect(given.featureFlags.isFeatureEnabled('random')).toEqual(false)
-
-        // strict check against true
-        expect(given.featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(false)
+        expect(given.featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
 
         expect(given.instance.capture).toHaveBeenCalledTimes(3)
 
