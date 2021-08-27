@@ -38,10 +38,17 @@ describe('Event capture', () => {
         start()
 
         cy.get('[data-cy-custom-event-button]').click()
-        cy.phCaptures().should('deep.equal', ['$pageview', '$autocapture', 'custom-event'])
+        cy.phCaptures().should('have.length', 3)
+        cy.phCaptures().should('include', '$pageview')
+        cy.phCaptures().should('include', '$autocapture')
+        cy.phCaptures().should('include', 'custom-event')
 
         cy.reload()
-        cy.phCaptures().should('deep.equal', ['$pageview', '$autocapture', 'custom-event', '$pageleave'])
+        cy.phCaptures().should('have.length', 4)
+        cy.phCaptures().should('include', '$pageview')
+        cy.phCaptures().should('include', '$pageleave')
+        cy.phCaptures().should('include', '$autocapture')
+        cy.phCaptures().should('include', 'custom-event')
     })
 
     it('captures $feature_flag_called', () => {
@@ -104,7 +111,9 @@ describe('Event capture', () => {
 
             cy.wait(50)
             cy.get('[data-cy-custom-event-button]').click()
-            cy.phCaptures().should('deep.equal', ['$pageview', 'custom-event'])
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', 'custom-event')
             cy.get('@consoleError').should('not.be.called')
         })
     })
@@ -118,7 +127,9 @@ describe('Event capture', () => {
             cy.get('[data-cy-custom-event-button]').click()
             cy.reload()
 
-            cy.phCaptures().should('deep.equal', ['$autocapture', 'custom-event'])
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$autocapture')
+            cy.phCaptures().should('include', 'custom-event')
         })
     })
 
@@ -153,7 +164,10 @@ describe('Event capture', () => {
             start()
 
             cy.get('[data-cy-custom-event-button]').click()
-            cy.phCaptures().should('deep.equal', ['$pageview', '$autocapture', 'custom-event'])
+            cy.phCaptures().should('have.length', 3)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', '$autocapture')
+            cy.phCaptures().should('include', 'custom-event')
 
             cy.wait('@capture').its('request.headers').should('deep.equal', {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -174,7 +188,10 @@ describe('Event capture', () => {
                 start()
 
                 cy.get('[data-cy-custom-event-button]').click()
-                cy.phCaptures().should('deep.equal', ['$pageview', '$autocapture', 'custom-event'])
+                cy.phCaptures().should('have.length', 3)
+                cy.phCaptures().should('include', '$pageview')
+                cy.phCaptures().should('include', '$autocapture')
+                cy.phCaptures().should('include', 'custom-event')
 
                 cy.wait('@capture').its('requestBody.type').should('deep.equal', 'text/plain')
 
@@ -202,7 +219,9 @@ describe('Event capture', () => {
             cy.get('[data-cy-custom-event-button]').click()
 
             // No autocapture events, still captures custom events
-            cy.phCaptures().should('deep.equal', ['$pageview', 'custom-event'])
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', 'custom-event')
         })
 
         it('does not capture session recordings', () => {
