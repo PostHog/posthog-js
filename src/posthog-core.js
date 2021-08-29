@@ -766,8 +766,7 @@ PostHogLib.prototype.reloadFeatureFlags = function () {
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
     this.persistence.addFeatureFlagsHandler(callback)
-    const decide_api_version = this.get_config('decide_api_version')
-    const flags = decide_api_version >= 2 ? Object.keys(this.feature_flags.getFlags()) : this.feature_flags.getFlags()
+    const flags = this.feature_flags.getFlags()
     if (flags) {
         callback(flags)
     }

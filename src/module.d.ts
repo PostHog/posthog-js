@@ -489,7 +489,7 @@ declare class posthog {
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
      */
-    static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
+    static onFeatureFlags(callback: (flags: string[] | Record<string, boolean | string>) => void): false | undefined
 
     /*
      * Reload all feature flags for the user.
@@ -790,7 +790,7 @@ declare namespace posthog {
          *
          * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
          */
-        static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
+        static onFeatureFlags(callback: (flags: string[] | Record<string, boolean | string>) => void): false | undefined
     }
 
     export class feature_flags extends featureFlags {}
