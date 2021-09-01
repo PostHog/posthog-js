@@ -853,6 +853,36 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
     this.reloadFeatureFlags()
 }
 
+PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet) {
+    if (!groupType || !groupKey) {
+        console.error('posthog.group requires a group type and group key')
+        return
+    }
+
+    this._captureMetrics.incr('group')
+
+    var existingGroups = this.getGroups()
+
+    // person is already in a group of the same type, disallow
+    // should use posthog.reset
+    if (Object.keys(existingGroups || {}).length > 0 && !!existingGroups[groupType]) {
+        return
+    }
+
+    this.register({ $groups: { ...existingGroups, groupType: groupKey } })
+
+    this.capture('$group', {
+        distinct_id: this.get_distinct_id(),
+        $group: {
+            type: groupType,
+            key: groupKey,
+            $set: groupPropertiesToSet,
+        },
+    })
+
+    this.reloadFeatureFlags()
+}
+
 /**
  * Clears super properties and generates a new random distinct_id for this instance.
  * Useful for clearing data when a user logs out.
@@ -888,6 +918,10 @@ PostHogLib.prototype.reset = function (reset_device_id) {
  */
 PostHogLib.prototype.get_distinct_id = function () {
     return this.get_property('distinct_id')
+}
+
+PostHogLib.prototype.getGroups = function () {
+    return this.get_property('groups')
 }
 
 /**
@@ -1457,6 +1491,7 @@ PostHogLib.prototype['register'] = PostHogLib.prototype.register
 PostHogLib.prototype['register_once'] = PostHogLib.prototype.register_once
 PostHogLib.prototype['unregister'] = PostHogLib.prototype.unregister
 PostHogLib.prototype['identify'] = PostHogLib.prototype.identify
+PostHogLib.prototype['group'] = PostHogLib.prototype.group
 PostHogLib.prototype['alias'] = PostHogLib.prototype.alias
 PostHogLib.prototype['set_config'] = PostHogLib.prototype.set_config
 PostHogLib.prototype['get_config'] = PostHogLib.prototype.get_config
