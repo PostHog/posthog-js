@@ -7,7 +7,6 @@ describe('Decide', () => {
     given('posthog', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
-        persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
         _prepare_callback: jest.fn().mockImplementation((callback) => callback),
