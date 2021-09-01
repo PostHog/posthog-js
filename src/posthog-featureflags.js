@@ -133,13 +133,18 @@ export class PostHogFeatureFlags {
     }
 
     /*
-     * Override feature flags for debugging.
+     * Override feature flags for debugging. Overridden flags are merged on top of enabled flags.
      *
      * ### Usage:
      *
-     *     posthog.feature_flags.override(['beta-feature']) or posthog.feature_flags.override(false)
+     *     posthog.feature_flags.override({
+     *         'beta-feature': true,       // enable
+     *         'with-variant': 'variant1', // set variant
+     *         'flag-to-disable': false    // disable
+     *     })
+     *     posthog.feature_flags.override(false)
      *
-     * @param {Object|String} prop Flags to override with.
+     * @param {Object|Boolean} prop Flags to override with.
      */
     override(flags) {
         if (flags === false) return this.instance.persistence.unregister('$override_feature_flags')

@@ -83,8 +83,8 @@ PostHogPersistence.prototype.addFeatureFlagsHandler = function (handler) {
     return true
 }
 
-PostHogPersistence.prototype.receivedFeatureFlags = function (flags) {
-    this.featureFlagEventHandlers.forEach((handler) => handler(flags))
+PostHogPersistence.prototype.receivedFeatureFlags = function (flags, variants) {
+    this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
 }
 
 PostHogPersistence.prototype.properties = function () {
@@ -141,8 +141,8 @@ PostHogPersistence.prototype.register_once = function (props, default_value, day
             default_value = 'None'
         }
         this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
-        if (props && props.$active_feature_flags) {
-            this.receivedFeatureFlags(props.$active_feature_flags)
+        if (props && props.$active_feature_flags && props.$enabled_feature_flags) {
+            this.receivedFeatureFlags(props.$active_feature_flags, props.$enabled_feature_flags)
         }
 
         _.each(
@@ -169,8 +169,8 @@ PostHogPersistence.prototype.register_once = function (props, default_value, day
 PostHogPersistence.prototype.register = function (props, days) {
     if (_.isObject(props)) {
         this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
-        if (props && props.$active_feature_flags) {
-            this.receivedFeatureFlags(props.$active_feature_flags)
+        if (props && props.$active_feature_flags && props.$enabled_feature_flags) {
+            this.receivedFeatureFlags(props.$active_feature_flags, props.$enabled_feature_flags)
         }
 
         _.extend(this['props'], props)
@@ -187,8 +187,8 @@ PostHogPersistence.prototype.unregister = function (prop) {
         delete this['props'][prop]
         this.save()
 
-        if (prop === '$active_feature_flags') {
-            this.receivedFeatureFlags([])
+        if (prop === '$active_feature_flags' || prop === '$enabled_feature_flags') {
+            this.receivedFeatureFlags([], {})
         }
     }
 }
