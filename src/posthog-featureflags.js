@@ -1,5 +1,30 @@
 import { _ } from './utils'
 
+export const parseFeatureFlagDecideResponse = (response, persistence) => {
+    const flags = response['featureFlags']
+    if (flags) {
+        const uses_v1_api = Array.isArray(flags)
+        const $active_feature_flags = uses_v1_api ? flags : Object.keys(flags)
+        const $enabled_feature_flags = uses_v1_api ? {} : flags
+        if (uses_v1_api && $active_feature_flags) {
+            for (let i = 0; i < $active_feature_flags.length; i++) {
+                $enabled_feature_flags[$active_feature_flags[i]] = true
+            }
+        }
+
+        persistence &&
+            persistence.register({
+                $active_feature_flags,
+                $enabled_feature_flags,
+            })
+    } else {
+        if (persistence) {
+            persistence.unregister('$active_feature_flags')
+            persistence.unregister('$enabled_feature_flags')
+        }
+    }
+}
+
 export class PostHogFeatureFlags {
     constructor(instance) {
         this.instance = instance
@@ -8,39 +33,50 @@ export class PostHogFeatureFlags {
     }
 
     getFlags() {
-        if (this.instance.get_property('$override_feature_flags')) {
-            if (!this._override_warning)
-                console.warn(
-                    '[PostHog] Overriding feature flags! Feature flags from server were: ' +
-                        JSON.stringify(this.instance.get_property('$active_feature_flags'))
-                )
-            this._override_warning = true
-            return this.instance.get_property('$override_feature_flags')
-        }
-        return this.instance.get_config('decide_api_version') < 2
-            ? this.instance.get_property('$active_feature_flags')
-            : this.instance.get_property('$enabled_feature_flags')
+        return Object.keys(this.getFlagVariants())
     }
 
-    reloadFeatureFlags() {
-        const parseDecideResponse = (response) => {
-            const flags = response['featureFlags']
-            if (flags) {
-                const uses_v1_api = Array.isArray(flags)
-                const $active_feature_flags = uses_v1_api ? flags : Object.keys(flags)
-                this.instance.persistence &&
-                    this.instance.persistence.register({
-                        $active_feature_flags,
-                        $enabled_feature_flags: uses_v1_api ? undefined : flags,
-                    })
-            } else {
-                if (this.instance.persistence) {
-                    this.instance.persistence.unregister('$active_feature_flags')
-                    this.instance.persistence.unregister('$enabled_feature_flags')
+    getFlagVariants() {
+        const enabledFlags = this.instance.get_property('$enabled_feature_flags')
+        const overriddenFlags = this.instance.get_property('$override_feature_flags')
+
+        if (!overriddenFlags) {
+            return enabledFlags || {}
+        }
+
+        if (!this._override_warning) {
+            console.warn(
+                '[PostHog] Overriding feature flags! Feature flags from server were: ' + JSON.stringify(enabledFlags)
+            )
+        }
+        this._override_warning = true
+
+        const flags = {}
+        if (Array.isArray(overriddenFlags)) {
+            // /decide?v=1 array (replace all)
+            for (let i = 0; i < overriddenFlags.length; i++) {
+                flags[overriddenFlags[i]] = true
+            }
+        } else {
+            // /decide?v=2 object (merge objects... with IE11 compatibility)
+            const existingKeys = Object.keys(enabledFlags)
+            for (let i = 0; i < existingKeys.length; i++) {
+                flags[existingKeys[i]] = enabledFlags[existingKeys[i]]
+            }
+
+            const overriddenKeys = Object.keys(overriddenFlags)
+            for (let i = 0; i < overriddenKeys.length; i++) {
+                if (overriddenFlags[overriddenKeys[i]] === false) {
+                    delete flags[overriddenKeys[i]]
+                } else {
+                    flags[overriddenKeys[i]] = overriddenFlags[overriddenKeys[i]]
                 }
             }
         }
+        return flags
+    }
 
+    reloadFeatureFlags() {
         const token = this.instance.get_config('token')
         const json_data = JSON.stringify({
             token: token,
@@ -48,10 +84,10 @@ export class PostHogFeatureFlags {
         })
         const encoded_data = _.base64Encode(json_data)
         this.instance._send_request(
-            this.instance.get_config('api_host') + '/decide/',
+            this.instance.get_config('api_host') + '/decide/?v=2',
             { data: encoded_data },
             { method: 'POST' },
-            this.instance._prepare_callback(parseDecideResponse)
+            this.instance._prepare_callback(parseFeatureFlagDecideResponse)
         )
     }
 
@@ -70,8 +106,7 @@ export class PostHogFeatureFlags {
             console.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
         }
-        const decide_api_version = this.instance.get_config('decide_api_version')
-        const flagValue = decide_api_version < 2 ? this.getFlags().indexOf(key) > -1 : this.getFlags()[key]
+        const flagValue = this.getFlagVariants()[key]
         if ((options.send_event || !('send_event' in options)) && !this.flagCallReported[key]) {
             this.flagCallReported[key] = true
             this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })

@@ -293,9 +293,6 @@ declare class posthog {
      *      // autocapture, feature flags, compression and session recording will be disabled when set to `true`
      *      advanced_disable_decide: false
      *
-     *      // use a different major version of the decide API (v2 changes the feature flag return type)
-     *      decide_api_version: 1
-     *
      *     }
      *
      *
@@ -604,7 +601,6 @@ declare namespace posthog {
         mask_all_element_attributes?: boolean
         mask_all_text?: boolean
         advanced_disable_decide?: boolean
-        decide_api_version?: number
     }
 
     interface OptInOutCapturingOptions {
@@ -753,16 +749,18 @@ declare namespace posthog {
     }
 
     export class featureFlags {
-        static getFlags(): string[] | Record<string, boolean | string>
+        static getFlags(): string[]
+        static getFlagVariants(): Record<string, boolean | string>
 
         static reloadFeatureFlags(): void
 
         /*
-         * Get feature flag value for user (supports multivariate flags).
+         * Get feature flag variant for user
          *
          * ### Usage:
          *
-         *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') { // do something }
+         *     if(posthog.getFeatureFlag('beta-feature')) { // do something }
+         *     if(posthog.getFeatureFlag('feature-with-variant') === 'some-value') { // do something }
          *
          * @param {Object|String} prop Key of the feature flag.
          * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
@@ -790,7 +788,9 @@ declare namespace posthog {
          *
          * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
          */
-        static onFeatureFlags(callback: (flags: string[] | Record<string, boolean | string>) => void): false | undefined
+        static onFeatureFlags(
+            callback: (flags: string[], variants: Record<string, boolean | string>) => void
+        ): false | undefined
     }
 
     export class feature_flags extends featureFlags {}

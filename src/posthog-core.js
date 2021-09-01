@@ -100,7 +100,6 @@ const defaultConfig = () => ({
     mask_all_element_attributes: false,
     mask_all_text: false,
     advanced_disable_decide: false,
-    decide_api_version: 1,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
@@ -767,8 +766,9 @@ PostHogLib.prototype.reloadFeatureFlags = function () {
 PostHogLib.prototype.onFeatureFlags = function (callback) {
     this.persistence.addFeatureFlagsHandler(callback)
     const flags = this.feature_flags.getFlags()
+    const flagVariants = this.feature_flags.getFlagVariants()
     if (flags) {
-        callback(flags)
+        callback(flags, flagVariants)
     }
 }
 

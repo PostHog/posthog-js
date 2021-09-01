@@ -44,7 +44,7 @@ describe('Decide', () => {
             given.subject()
 
             expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/',
+                'https://test.com/decide/?v=2',
                 {
                     data: _.base64Encode(
                         JSON.stringify({
@@ -79,28 +79,19 @@ describe('Decide', () => {
             expect(given.posthog.compression['lz64']).toBe(true)
         })
 
-        it('enables feature flags from decide response', () => {
-            given('decideResponse', () => ({ featureFlags: ['beta-feature', 'alpha-feature-2'] }))
-            given.subject()
-
-            expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
-                $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
-            })
-        })
-
-        it('enables feature flags from decide response (v2 backwards compatibility)', () => {
+        it('enables feature flags from decide response (v1 backwards compatibility)', () => {
             // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
-            given('config', () => ({ api_host: 'https://test.com', decide_api_version: 2 }))
             given('decideResponse', () => ({ featureFlags: ['beta-feature', 'alpha-feature-2'] }))
             given.subject()
 
             expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
                 $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
+                $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
             })
         })
 
         it('enables multivariate feature flags from decide v2 response', () => {
-            given('config', () => ({ api_host: 'https://test.com', decide_api_version: 2 }))
+            given('config', () => ({ api_host: 'https://test.com' }))
             given('decideResponse', () => ({
                 featureFlags: {
                     'beta-feature': true,

@@ -1,9 +1,11 @@
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 describe('featureflags', () => {
-    given('properties', () => ({ $override_feature_flags: false, $active_feature_flags: ['beta-feature'] }))
-
-    given('config', () => ({ decide_api_version: 1 }))
+    given('properties', () => ({
+        $override_feature_flags: false,
+        $active_feature_flags: ['beta-feature'],
+        $enabled_feature_flags: { 'beta-feature': true },
+    }))
 
     given('instance', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
@@ -45,8 +47,6 @@ describe('featureflags - with decide v2', () => {
         },
     }))
 
-    given('config', () => ({ decide_api_version: 2 }))
-
     given('instance', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         get_property: (key) => given.properties[key],
@@ -60,7 +60,8 @@ describe('featureflags - with decide v2', () => {
     })
 
     it('should return the right feature flag and call capture', () => {
-        expect(given.featureFlags.getFlags()).toEqual({
+        expect(given.featureFlags.getFlags()).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+        expect(given.featureFlags.getFlagVariants()).toEqual({
             'alpha-feature-2': true,
             'beta-feature': true,
             'multivariate-flag': 'variant-1',
