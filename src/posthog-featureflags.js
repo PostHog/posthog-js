@@ -48,6 +48,7 @@ export class PostHogFeatureFlags {
         this.instance = instance
         this._override_warning = false
         this.flagCallReported = {}
+        this.featureFlagEventHandlers = []
     }
 
     getFlags() {
@@ -105,7 +106,9 @@ export class PostHogFeatureFlags {
             this.instance.get_config('api_host') + '/decide/?v=2',
             { data: encoded_data },
             { method: 'POST' },
-            this.instance._prepare_callback(parseFeatureFlagDecideResponse)
+            this.instance._prepare_callback((response) =>
+                parseFeatureFlagDecideResponse(response, this.instance.persistence)
+            )
         )
     }
 
@@ -165,7 +168,18 @@ export class PostHogFeatureFlags {
      * @param {Object|Boolean} prop Flags to override with.
      */
     override(flags) {
-        if (flags === false) return this.instance.persistence.unregister('$override_feature_flags')
-        this.instance.persistence.register('$override_feature_flags', flags)
+        this.instance.people.set('$override_feature_flags', flags || {})
+        this.instance.persistence.register({ $override_feature_flags: flags || {} })
+        this.receivedFeatureFlags()
+    }
+
+    addFeatureFlagsHandler(handler) {
+        this.featureFlagEventHandlers.push(handler)
+    }
+
+    receivedFeatureFlags() {
+        const flags = this.getFlags()
+        const variants = this.getFlagVariants()
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
     }
 }
