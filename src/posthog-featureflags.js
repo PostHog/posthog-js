@@ -3,20 +3,38 @@ import { _ } from './utils'
 export const parseFeatureFlagDecideResponse = (response, persistence) => {
     const flags = response['featureFlags']
     if (flags) {
-        const uses_v1_api = Array.isArray(flags)
-        const $active_feature_flags = uses_v1_api ? flags : Object.keys(flags)
-        const $enabled_feature_flags = uses_v1_api ? {} : flags
-        if (uses_v1_api && $active_feature_flags) {
-            for (let i = 0; i < $active_feature_flags.length; i++) {
-                $enabled_feature_flags[$active_feature_flags[i]] = true
+        // using the v1 api
+        if (Array.isArray(flags)) {
+            const $active_feature_flags = flags
+            const $enabled_feature_flags = {}
+            if (flags) {
+                for (let i = 0; i < flags.length; i++) {
+                    $enabled_feature_flags[flags[i]] = true
+                }
             }
-        }
+            persistence &&
+                persistence.register({
+                    $active_feature_flags,
+                    $enabled_feature_flags,
+                })
+        } else {
+            // using the v2 api
+            let $enabled_feature_flags = flags
+            let $override_feature_flags = {}
 
-        persistence &&
-            persistence.register({
-                $active_feature_flags,
-                $enabled_feature_flags,
-            })
+            // separately store the original flags + overridden flags
+            if (response['originalFeatureFlags']) {
+                $enabled_feature_flags = response['originalFeatureFlags']
+                $override_feature_flags = response['overrideFeatureFlags'] || {}
+            }
+
+            persistence &&
+                persistence.register({
+                    $active_feature_flags: Object.keys($enabled_feature_flags),
+                    $enabled_feature_flags,
+                    $override_feature_flags,
+                })
+        }
     } else {
         if (persistence) {
             persistence.unregister('$active_feature_flags')

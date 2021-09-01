@@ -1,12 +1,6 @@
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 describe('featureflags', () => {
-    given('properties', () => ({
-        $override_feature_flags: false,
-        $active_feature_flags: ['beta-feature'],
-        $enabled_feature_flags: { 'beta-feature': true },
-    }))
-
     given('instance', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         get_property: (key) => given.properties[key],
@@ -19,66 +13,76 @@ describe('featureflags', () => {
         jest.spyOn(given.instance, 'capture').mockReturnValue()
     })
 
-    it('should return the right feature flag and call capture', () => {
-        expect(given.featureFlags.getFlags()).toEqual(['beta-feature'])
-        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
-        expect(given.featureFlags.isFeatureEnabled('random')).toEqual(false)
-        expect(given.instance.capture).toHaveBeenCalledTimes(2)
+    describe('without override', () => {
+        given('properties', () => ({
+            $override_feature_flags: false,
+            $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+            $enabled_feature_flags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            },
+        }))
 
-        // It should not call `capture` on subsequent calls
-        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
-        expect(given.instance.capture).toHaveBeenCalledTimes(2)
-    })
+        it('should return the right feature flag and call capture', () => {
+            expect(given.featureFlags.getFlags()).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'multivariate-flag': 'variant-1',
+            })
+            expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(given.featureFlags.isFeatureEnabled('random')).toEqual(false)
+            expect(given.featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
 
-    it('should return the right feature flag and not call capture', () => {
-        expect(given.featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
-        expect(given.instance.capture).not.toHaveBeenCalled()
-    })
-})
+            expect(given.instance.capture).toHaveBeenCalledTimes(3)
 
-describe('featureflags - with decide v2', () => {
-    given('properties', () => ({
-        $override_feature_flags: false,
-        $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
-        $enabled_feature_flags: {
-            'beta-feature': true,
-            'alpha-feature-2': true,
-            'multivariate-flag': 'variant-1',
-        },
-    }))
-
-    given('instance', () => ({
-        get_config: jest.fn().mockImplementation((key) => given.config[key]),
-        get_property: (key) => given.properties[key],
-        capture: () => {},
-    }))
-
-    given('featureFlags', () => new PostHogFeatureFlags(given.instance))
-
-    beforeEach(() => {
-        jest.spyOn(given.instance, 'capture').mockReturnValue()
-    })
-
-    it('should return the right feature flag and call capture', () => {
-        expect(given.featureFlags.getFlags()).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
-        expect(given.featureFlags.getFlagVariants()).toEqual({
-            'alpha-feature-2': true,
-            'beta-feature': true,
-            'multivariate-flag': 'variant-1',
+            // It should not call `capture` on subsequent calls
+            expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+            expect(given.instance.capture).toHaveBeenCalledTimes(3)
         })
-        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
-        expect(given.featureFlags.isFeatureEnabled('random')).toEqual(false)
-        expect(given.featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
 
-        expect(given.instance.capture).toHaveBeenCalledTimes(3)
+        it('should propertly merge overridden feature flags', () => {})
 
-        // It should not call `capture` on subsequent calls
-        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
-        expect(given.instance.capture).toHaveBeenCalledTimes(3)
+        it('should return the right feature flag and not call capture', () => {
+            expect(given.featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
+            expect(given.instance.capture).not.toHaveBeenCalled()
+        })
     })
 
-    it('should return the right feature flag and not call capture', () => {
-        expect(given.featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
-        expect(given.instance.capture).not.toHaveBeenCalled()
+    describe('with override', () => {
+        given('properties', () => ({
+            $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+            $enabled_feature_flags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            },
+            $override_feature_flags: {
+                'beta-feature': false,
+                'random-feature': true,
+                'multivariate-flag': 'variant-3',
+            },
+        }))
+
+        it('should return the right feature flag and call capture', () => {
+            expect(given.featureFlags.getFlags()).toEqual(['alpha-feature-2', 'multivariate-flag', 'random-feature'])
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-3',
+                'random-feature': true,
+            })
+            expect(given.featureFlags.isFeatureEnabled('alpha-feature-2')).toEqual(true)
+            expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(false)
+            expect(given.featureFlags.isFeatureEnabled('random')).toEqual(false)
+            expect(given.featureFlags.isFeatureEnabled('random-feature')).toEqual(true)
+            expect(given.featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
+
+            expect(given.instance.capture).toHaveBeenCalledTimes(5)
+
+            // It should not call `capture` on subsequent calls
+            expect(given.featureFlags.isFeatureEnabled('random-feature')).toEqual(true)
+            expect(given.instance.capture).toHaveBeenCalledTimes(5)
+        })
     })
 })
