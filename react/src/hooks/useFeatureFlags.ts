@@ -17,7 +17,7 @@ export function useFeatureFlags(props: { refreshInterval?: number; sendEvent?: b
                 const flagValue = posthog?.getFeatureFlag(flag, {
                     send_event: sendEvent,
                 })
-                if (flagValue !== undefined) {
+                if (typeof flagValue !== 'undefined') {
                     result[flag] = flagValue
                 }
                 return result

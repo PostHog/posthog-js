@@ -482,11 +482,13 @@ declare class posthog {
      *
      * ### Usage:
      *
-     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+     *     posthog.onFeatureFlags(function(flags, variants) { // do something })
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
      */
-    static onFeatureFlags(callback: (flags: string[] | Record<string, boolean | string>) => void): false | undefined
+    static onFeatureFlags(
+        callback: (flags: string[], variants: Record<string, boolean | string>) => void
+    ): false | undefined
 
     /*
      * Reload all feature flags for the user.
