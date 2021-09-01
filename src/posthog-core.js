@@ -853,7 +853,8 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
     this.reloadFeatureFlags()
 }
 
-PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet) {
+PostHogLib.prototype.group = function (
+    , groupKey, groupPropertiesToSet) {
     if (!groupType || !groupKey) {
         console.error('posthog.group requires a group type and group key')
         return
@@ -869,7 +870,7 @@ PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet
         return
     }
 
-    this.register({ $groups: { ...existingGroups, groupType: groupKey } })
+    this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
     this.capture('$group', {
         distinct_id: this.get_distinct_id(),
