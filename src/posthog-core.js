@@ -878,7 +878,7 @@ PostHogLib.prototype.__group = function (groupType, groupKey, groupPropertiesToS
 
     var existingGroups = this.getGroups()
 
-    this.register({ $groups: { ...existingGroups, groupType: groupKey } })
+    this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
     this.capture('$group', {
         distinct_id: this.get_distinct_id(),
