@@ -154,11 +154,6 @@ declare class posthog {
     ): void
 
     /**
-     * Feature under development! Do not use in production!
-     */
-    static group(groupType: string, groupKey: string, groupPropertiesToSet?: posthog.Properties): void
-
-    /**
      * Create an alias, which PostHog will use to link two distinct_ids going forward (not retroactively).
      * Multiple aliases can map to the same original ID, but not vice-versa. Aliases can also be chained - the
      * following is a valid scenario:
