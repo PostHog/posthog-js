@@ -107,42 +107,6 @@ describe('Decide', () => {
                     'alpha-feature-2': true,
                     'multivariate-flag': 'variant-1',
                 },
-                $override_feature_flags: {},
-            })
-        })
-
-        it('consumes overridden feature flags in decide v2 response', () => {
-            given('decideResponse', () => ({
-                featureFlags: {
-                    'alpha-feature-2': true,
-                    'multivariate-flag': 'variant-3',
-                    'random-feature': true,
-                },
-                originalFeatureFlags: {
-                    'beta-feature': true,
-                    'alpha-feature-2': true,
-                    'multivariate-flag': 'variant-1',
-                },
-                overrideFeatureFlags: {
-                    'beta-feature': false,
-                    'random-feature': true,
-                    'multivariate-flag': 'variant-3',
-                },
-            }))
-            given.subject()
-
-            expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
-                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
-                $enabled_feature_flags: {
-                    'beta-feature': true,
-                    'alpha-feature-2': true,
-                    'multivariate-flag': 'variant-1',
-                },
-                $override_feature_flags: {
-                    'beta-feature': false,
-                    'random-feature': true,
-                    'multivariate-flag': 'variant-3',
-                },
             })
         })
     })

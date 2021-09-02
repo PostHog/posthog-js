@@ -5,7 +5,6 @@ export const parseFeatureFlagDecideResponse = (response, persistence) => {
     if (flags) {
         // using the v1 api
         if (Array.isArray(flags)) {
-            const $active_feature_flags = flags
             const $enabled_feature_flags = {}
             if (flags) {
                 for (let i = 0; i < flags.length; i++) {
@@ -14,25 +13,15 @@ export const parseFeatureFlagDecideResponse = (response, persistence) => {
             }
             persistence &&
                 persistence.register({
-                    $active_feature_flags,
+                    $active_feature_flags: flags,
                     $enabled_feature_flags,
                 })
         } else {
             // using the v2 api
-            let $enabled_feature_flags = flags
-            let $override_feature_flags = {}
-
-            // separately store the original flags + overridden flags
-            if (response['originalFeatureFlags']) {
-                $enabled_feature_flags = response['originalFeatureFlags']
-                $override_feature_flags = response['overrideFeatureFlags'] || {}
-            }
-
             persistence &&
                 persistence.register({
-                    $active_feature_flags: Object.keys($enabled_feature_flags),
-                    $enabled_feature_flags,
-                    $override_feature_flags,
+                    $active_feature_flags: Object.keys(flags),
+                    $enabled_feature_flags: flags,
                 })
         }
     } else {
@@ -56,43 +45,7 @@ export class PostHogFeatureFlags {
     }
 
     getFlagVariants() {
-        const enabledFlags = this.instance.get_property('$enabled_feature_flags')
-        const overriddenFlags = this.instance.get_property('$override_feature_flags')
-
-        if (!overriddenFlags) {
-            return enabledFlags || {}
-        }
-
-        if (!this._override_warning) {
-            console.warn(
-                '[PostHog] Overriding feature flags! Feature flags from server were: ' + JSON.stringify(enabledFlags)
-            )
-        }
-        this._override_warning = true
-
-        const flags = {}
-        if (Array.isArray(overriddenFlags)) {
-            // /decide?v=1 array (replace all)
-            for (let i = 0; i < overriddenFlags.length; i++) {
-                flags[overriddenFlags[i]] = true
-            }
-        } else {
-            // /decide?v=2 object (merge objects... with IE11 compatibility)
-            const existingKeys = Object.keys(enabledFlags)
-            for (let i = 0; i < existingKeys.length; i++) {
-                flags[existingKeys[i]] = enabledFlags[existingKeys[i]]
-            }
-
-            const overriddenKeys = Object.keys(overriddenFlags)
-            for (let i = 0; i < overriddenKeys.length; i++) {
-                if (overriddenFlags[overriddenKeys[i]] === false) {
-                    delete flags[overriddenKeys[i]]
-                } else {
-                    flags[overriddenKeys[i]] = overriddenFlags[overriddenKeys[i]]
-                }
-            }
-        }
-        return flags
+        return this.instance.get_property('$enabled_feature_flags')
     }
 
     reloadFeatureFlags() {
@@ -151,26 +104,6 @@ export class PostHogFeatureFlags {
             return false
         }
         return !!this.getFeatureFlag(key, options)
-    }
-
-    /*
-     * Override feature flags for debugging. Overridden flags are merged on top of enabled flags.
-     *
-     * ### Usage:
-     *
-     *     posthog.feature_flags.override({
-     *         'beta-feature': true,       // enable
-     *         'with-variant': 'variant1', // set variant
-     *         'flag-to-disable': false    // disable
-     *     })
-     *     posthog.feature_flags.override(false)
-     *
-     * @param {Object|Boolean} prop Flags to override with.
-     */
-    override(flags) {
-        this.instance.people.set('$override_feature_flags', flags || {})
-        this.instance.persistence.register({ $override_feature_flags: flags || {} })
-        this.receivedFeatureFlags()
     }
 
     addFeatureFlagsHandler(handler) {
