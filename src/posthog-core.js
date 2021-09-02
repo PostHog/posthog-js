@@ -749,7 +749,7 @@ PostHogLib.prototype.isFeatureEnabled = function (key, options = {}) {
 }
 
 PostHogLib.prototype.reloadFeatureFlags = function () {
-    return this.feature_flags.reloadFeatureFlags()
+    return this.featureFlags.reloadFeatureFlags()
 }
 
 /*
@@ -764,12 +764,10 @@ PostHogLib.prototype.reloadFeatureFlags = function () {
  *                              It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
-    this.persistence.addFeatureFlagsHandler(callback)
-    const flags = this.feature_flags.getFlags()
-    const flagVariants = this.feature_flags.getFlagVariants()
-    if (flags) {
-        callback(flags, flagVariants)
-    }
+    this.featureFlags.addFeatureFlagsHandler(callback)
+    const flags = this.featureFlags.getFlags()
+    const flagVariants = this.featureFlags.getFlagVariants()
+    callback(flags, flagVariants)
 }
 
 /**

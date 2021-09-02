@@ -91,7 +91,6 @@ describe('Decide', () => {
         })
 
         it('enables multivariate feature flags from decide v2 response', () => {
-            given('config', () => ({ api_host: 'https://test.com' }))
             given('decideResponse', () => ({
                 featureFlags: {
                     'beta-feature': true,

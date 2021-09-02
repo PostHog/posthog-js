@@ -3,20 +3,27 @@ import { _ } from './utils'
 export const parseFeatureFlagDecideResponse = (response, persistence) => {
     const flags = response['featureFlags']
     if (flags) {
-        const uses_v1_api = Array.isArray(flags)
-        const $active_feature_flags = uses_v1_api ? flags : Object.keys(flags)
-        const $enabled_feature_flags = uses_v1_api ? {} : flags
-        if (uses_v1_api && $active_feature_flags) {
-            for (let i = 0; i < $active_feature_flags.length; i++) {
-                $enabled_feature_flags[$active_feature_flags[i]] = true
+        // using the v1 api
+        if (Array.isArray(flags)) {
+            const $enabled_feature_flags = {}
+            if (flags) {
+                for (let i = 0; i < flags.length; i++) {
+                    $enabled_feature_flags[flags[i]] = true
+                }
             }
+            persistence &&
+                persistence.register({
+                    $active_feature_flags: flags,
+                    $enabled_feature_flags,
+                })
+        } else {
+            // using the v2 api
+            persistence &&
+                persistence.register({
+                    $active_feature_flags: Object.keys(flags || {}),
+                    $enabled_feature_flags: flags || {},
+                })
         }
-
-        persistence &&
-            persistence.register({
-                $active_feature_flags,
-                $enabled_feature_flags,
-            })
     } else {
         if (persistence) {
             persistence.unregister('$active_feature_flags')
@@ -30,6 +37,7 @@ export class PostHogFeatureFlags {
         this.instance = instance
         this._override_warning = false
         this.flagCallReported = {}
+        this.featureFlagEventHandlers = []
     }
 
     getFlags() {
@@ -37,43 +45,7 @@ export class PostHogFeatureFlags {
     }
 
     getFlagVariants() {
-        const enabledFlags = this.instance.get_property('$enabled_feature_flags')
-        const overriddenFlags = this.instance.get_property('$override_feature_flags')
-
-        if (!overriddenFlags) {
-            return enabledFlags || {}
-        }
-
-        if (!this._override_warning) {
-            console.warn(
-                '[PostHog] Overriding feature flags! Feature flags from server were: ' + JSON.stringify(enabledFlags)
-            )
-        }
-        this._override_warning = true
-
-        const flags = {}
-        if (Array.isArray(overriddenFlags)) {
-            // /decide?v=1 array (replace all)
-            for (let i = 0; i < overriddenFlags.length; i++) {
-                flags[overriddenFlags[i]] = true
-            }
-        } else {
-            // /decide?v=2 object (merge objects... with IE11 compatibility)
-            const existingKeys = Object.keys(enabledFlags)
-            for (let i = 0; i < existingKeys.length; i++) {
-                flags[existingKeys[i]] = enabledFlags[existingKeys[i]]
-            }
-
-            const overriddenKeys = Object.keys(overriddenFlags)
-            for (let i = 0; i < overriddenKeys.length; i++) {
-                if (overriddenFlags[overriddenKeys[i]] === false) {
-                    delete flags[overriddenKeys[i]]
-                } else {
-                    flags[overriddenKeys[i]] = overriddenFlags[overriddenKeys[i]]
-                }
-            }
-        }
-        return flags
+        return this.instance.get_property('$enabled_feature_flags')
     }
 
     reloadFeatureFlags() {
@@ -87,7 +59,10 @@ export class PostHogFeatureFlags {
             this.instance.get_config('api_host') + '/decide/?v=2',
             { data: encoded_data },
             { method: 'POST' },
-            this.instance._prepare_callback(parseFeatureFlagDecideResponse)
+            this.instance._prepare_callback((response) => {
+                parseFeatureFlagDecideResponse(response, this.instance.persistence)
+                this.receivedFeatureFlags()
+            })
         )
     }
 
@@ -132,17 +107,13 @@ export class PostHogFeatureFlags {
         return !!this.getFeatureFlag(key, options)
     }
 
-    /*
-     * Override feature flags for debugging.
-     *
-     * ### Usage:
-     *
-     *     posthog.feature_flags.override(['beta-feature']) or posthog.feature_flags.override(false)
-     *
-     * @param {Object|String} prop Flags to override with.
-     */
-    override(flags) {
-        if (flags === false) return this.instance.persistence.unregister('$override_feature_flags')
-        this.instance.persistence.register('$override_feature_flags', flags)
+    addFeatureFlagsHandler(handler) {
+        this.featureFlagEventHandlers.push(handler)
+    }
+
+    receivedFeatureFlags() {
+        const flags = this.getFlags()
+        const variants = this.getFlagVariants()
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
     }
 }
