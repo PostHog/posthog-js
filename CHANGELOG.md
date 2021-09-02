@@ -1,3 +1,7 @@
+## 1.13.3 - 2021-09-02
+
+- add posthog.group (#270)
+
 ## 1.13.2 - 2021-09-02
 
 - fix "undefined is not an object" error (#272)
