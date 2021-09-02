@@ -45,7 +45,7 @@ export class PostHogFeatureFlags {
     }
 
     getFlagVariants() {
-        return this.instance.get_property('$enabled_feature_flags')
+        return this.instance.get_property('$enabled_feature_flags') || {}
     }
 
     reloadFeatureFlags() {
