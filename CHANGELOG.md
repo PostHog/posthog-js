@@ -1,3 +1,7 @@
+## 1.13.4 - 2021-09-02
+
+- console.warn to error (#273)
+
 ## 1.13.3 - 2021-09-02
 
 - add posthog.group (#270)
