@@ -868,7 +868,7 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
 
 // Alpha feature, still under development, do not use!
 PostHogLib.prototype.__group = function (groupType, groupKey, groupPropertiesToSet) {
-    console.warn('posthog.__group is still under development and should not be used in production!')
+    console.error('posthog.__group is still under development and should not be used in production!')
     if (!groupType || !groupKey) {
         console.error('posthog.group requires a group type and group key')
         return
