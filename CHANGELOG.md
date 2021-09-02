@@ -1,3 +1,7 @@
+## 1.13.2 - 2021-09-02
+
+- fix "undefined is not an object" error (#272)
+
 ## 1.13.1 - 2021-09-02
 
 - Deprecate client-side feature flag overrides (#271)
