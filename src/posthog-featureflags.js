@@ -16,12 +16,12 @@ export const parseFeatureFlagDecideResponse = (response, persistence) => {
                     $active_feature_flags: flags,
                     $enabled_feature_flags,
                 })
-        } else if (flags) {
+        } else {
             // using the v2 api
             persistence &&
                 persistence.register({
-                    $active_feature_flags: Object.keys(flags),
-                    $enabled_feature_flags: flags,
+                    $active_feature_flags: Object.keys(flags || {}),
+                    $enabled_feature_flags: flags || {},
                 })
         }
     } else {
