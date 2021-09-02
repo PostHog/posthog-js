@@ -1,3 +1,7 @@
+## 1.13.1 - 2021-09-02
+
+- Deprecate client-side feature flag overrides (#271)
+
 ## 1.13.0 - 2021-09-01
 
 - Feature flags API v2 (#268)
