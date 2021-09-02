@@ -40,8 +40,6 @@ describe('featureflags', () => {
         expect(given.instance.capture).toHaveBeenCalledTimes(3)
     })
 
-    it('should propertly merge overridden feature flags', () => {})
-
     it('should return the right feature flag and not call capture', () => {
         expect(given.featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
         expect(given.instance.capture).not.toHaveBeenCalled()

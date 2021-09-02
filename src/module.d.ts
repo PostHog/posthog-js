@@ -793,17 +793,6 @@ declare namespace posthog {
         static onFeatureFlags(
             callback: (flags: string[], variants: Record<string, boolean | string>) => void
         ): false | undefined
-
-        /*
-         * Override feature flags.
-         *
-         * ### Usage:
-         *
-         *     posthog.override({ 'flag-to-enable': true, 'to-disable': false, 'with-variant': 'variant1' })
-         *
-         * @param {Object} [flags] Flags to merge on top of the user's flags
-         */
-        static override(flags: Record<string, boolean | string> | false): void
     }
 
     export class feature_flags extends featureFlags {}
