@@ -27,4 +27,13 @@ describe('persistence', () => {
         expect(given.lib.props['$referring_domain']).toBe('www.facebook.com')
         expect(given.lib.props['$referrer']).toBe('https://www.facebook.com')
     })
+
+    it('extracts enabled feature flags', () => {
+        given.lib.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
+        expect(given.lib.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
+        expect(given.lib.properties()).toEqual({
+            '$feature/flag': 'variant',
+            '$feature/other': true,
+        })
+    })
 })

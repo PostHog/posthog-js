@@ -20,6 +20,7 @@ import { cookieStore, localStore, memoryStore } from './storage'
 /** @const */ var EVENT_TIMERS_KEY = '__timers'
 /** @const */ var SESSION_RECORDING_ENABLED = '$session_recording_enabled'
 /** @const */ var SESSION_ID = '$sesid'
+/** @const */ var ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 /** @const */ var RESERVED_PROPERTIES = [
     SET_QUEUE_KEY,
     SET_ONCE_QUEUE_KEY,
@@ -34,6 +35,7 @@ import { cookieStore, localStore, memoryStore } from './storage'
     EVENT_TIMERS_KEY,
     SESSION_RECORDING_ENABLED,
     SESSION_ID,
+    ENABLED_FEATURE_FLAGS,
 ]
 
 /**
@@ -81,7 +83,12 @@ PostHogPersistence.prototype.properties = function () {
     var p = {}
     // Filter out reserved properties
     _.each(this['props'], function (v, k) {
-        if (!_.include(RESERVED_PROPERTIES, k)) {
+        if (k === ENABLED_FEATURE_FLAGS && typeof v === 'object') {
+            var keys = Object.keys(v)
+            for (var i = 0; i < keys.length; i++) {
+                p[`$feature/${keys[i]}`] = v[keys[i]]
+            }
+        } else if (!_.include(RESERVED_PROPERTIES, k)) {
             p[k] = v
         }
     })
