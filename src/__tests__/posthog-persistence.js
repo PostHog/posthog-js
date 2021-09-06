@@ -1,8 +1,12 @@
 import { PostHogPersistence } from '../posthog-persistence'
 
-given('lib', () => new PostHogPersistence({ name: 'bla', persistence: 'cookie' }))
+let i = 0
 
 describe('persistence', () => {
+    beforeEach(() => {
+        given('lib', () => new PostHogPersistence({ name: 'bla', persistence: 'cookie', token: `${i++}` }))
+    })
+
     it('should set referrer', () => {
         // Initial visit
         given.lib.update_referrer_info('https://www.google.com')
