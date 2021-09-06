@@ -6,7 +6,7 @@ export class Toolbar {
         this.instance = instance
     }
 
-    afterDecideResponse(response, localStorage = window.localStorage) {
+    afterDecideResponse(response) {
         const editorParams =
             response['editorParams'] ||
             (response['toolbarVersion'] ? { toolbarVersion: response['toolbarVersion'] } : {})
@@ -19,9 +19,7 @@ export class Toolbar {
                 ...editorParams,
                 apiURL: this.instance.get_config('api_host'),
             })
-            localStorage.setItem('toolbar_enabled_by_user', '1')
-        } else {
-            localStorage.removeItem('toolbar_enabled_by_user')
+            this.instance.set_config({ debug: true })
         }
     }
 
@@ -75,24 +73,24 @@ export class Toolbar {
         }
     }
 
-    _loadEditor(editorParams, localStorage = window.localStorage) {
-        if (!localStorage.getItem('toolbar_enabled_by_user') || window['_postHogToolbarLoaded']) {
-            return false
+    _loadEditor(editorParams) {
+        if (!window['_postHogToolbarLoaded']) {
+            // only load the codeless event editor once, even if there are multiple instances of PostHogLib
+            window['_postHogToolbarLoaded'] = true
+            const host = editorParams['jsURL'] || editorParams['apiURL'] || this.instance.get_config('api_host')
+            const toolbarScript = 'toolbar.js'
+            const editorUrl =
+                host + (host.endsWith('/') ? '' : '/') + 'static/' + toolbarScript + '?_ts=' + new Date().getTime()
+            loadScript(editorUrl, () => {
+                window['ph_load_editor'](editorParams)
+            })
+            // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
+            _.register_event(window, 'turbolinks:load', () => {
+                window['_postHogToolbarLoaded'] = false
+                this._loadEditor(editorParams)
+            })
+            return true
         }
-        // only load the codeless event editor once, even if there are multiple instances of PostHogLib
-        window['_postHogToolbarLoaded'] = true
-        const host = editorParams['jsURL'] || editorParams['apiURL'] || this.instance.get_config('api_host')
-        const toolbarScript = 'toolbar.js'
-        const editorUrl =
-            host + (host.endsWith('/') ? '' : '/') + 'static/' + toolbarScript + '?_ts=' + new Date().getTime()
-        loadScript(editorUrl, () => {
-            window['ph_load_editor'](editorParams)
-        })
-        // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
-        _.register_event(window, 'turbolinks:load', () => {
-            window['_postHogToolbarLoaded'] = false
-            this._loadEditor(editorParams)
-        })
-        return true
+        return false
     }
 }
