@@ -1,3 +1,7 @@
+## 1.13.6 - 2021-09-06
+
+- add gclid to campaign params (#277)
+
 ## 1.13.5 - 2021-09-02
 
 - fix groupKey (#274)
