@@ -1,3 +1,7 @@
+## 1.13.7 - 2021-09-06
+
+- Revert "Do not load toolbar when disabled (#264)" (#276)
+
 ## 1.13.6 - 2021-09-06
 
 - add gclid to campaign params (#277)
