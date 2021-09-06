@@ -1,10 +1,10 @@
 import { PostHogPersistence } from '../posthog-persistence'
 
-let i = 0
+given('lib', () => new PostHogPersistence({ name: 'bla', persistence: 'cookie' }))
 
 describe('persistence', () => {
-    beforeEach(() => {
-        given('lib', () => new PostHogPersistence({ name: 'bla', persistence: 'cookie', token: `${i++}` }))
+    afterEach(() => {
+        given.lib.clear()
     })
 
     it('should set referrer', () => {
