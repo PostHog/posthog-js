@@ -1,3 +1,7 @@
+## 1.13.8 - 2021-09-09
+
+- Restore feature flag client-side override method (#280)
+
 ## 1.13.7 - 2021-09-06
 
 - Revert "Do not load toolbar when disabled (#264)" (#276)
