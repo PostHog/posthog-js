@@ -793,6 +793,19 @@ declare namespace posthog {
         static onFeatureFlags(
             callback: (flags: string[], variants: Record<string, boolean | string>) => void
         ): false | undefined
+
+        /*
+         * Override flags locally.
+         *
+         * ### Usage:
+         *
+         *     - posthog.feature_flags.override(false)
+         *     - posthog.feature_flags.override(['beta-feature'])
+         *     - posthog.feature_flags.override({'beta-feature': 'variant', 'other-feature': True})
+         *
+         * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
+         */
+        static override(flags: false | string[] | Record<string, boolean | string>): void
     }
 
     export class feature_flags extends featureFlags {}
