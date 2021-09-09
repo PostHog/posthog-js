@@ -45,7 +45,30 @@ export class PostHogFeatureFlags {
     }
 
     getFlagVariants() {
-        return this.instance.get_property('$enabled_feature_flags') || {}
+        const enabledFlags = this.instance.get_property('$enabled_feature_flags')
+        const overriddenFlags = this.instance.get_property('$override_feature_flags')
+        if (!overriddenFlags) {
+            return enabledFlags || {}
+        }
+
+        const finalFlags = _.extend({}, enabledFlags)
+        const overriddenKeys = Object.keys(overriddenFlags)
+        for (let i = 0; i < overriddenKeys.length; i++) {
+            if (overriddenFlags[overriddenKeys[i]] === false) {
+                delete finalFlags[overriddenKeys[i]]
+            } else {
+                finalFlags[overriddenKeys[i]] = overriddenFlags[overriddenKeys[i]]
+            }
+        }
+        if (!this._override_warning) {
+            console.warn('[PostHog] Overriding feature flags!', {
+                enabledFlags,
+                overriddenFlags,
+                finalFlags,
+            })
+            this._override_warning = true
+        }
+        return finalFlags
     }
 
     reloadFeatureFlags() {
@@ -115,5 +138,32 @@ export class PostHogFeatureFlags {
         const flags = this.getFlags()
         const variants = this.getFlagVariants()
         this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
+    }
+
+    /*
+     * Override feature flags for debugging.
+     *
+     * ### Usage:
+     *
+     *     - posthog.feature_flags.override(false)
+     *     - posthog.feature_flags.override(['beta-feature'])
+     *     - posthog.feature_flags.override({'beta-feature': 'variant', 'other-feature': True})
+     *
+     * @param {Object|String} prop Flags to override with.
+     */
+    override(flags) {
+        this._override_warning = false
+
+        if (flags === false) {
+            this.instance.persistence.unregister('$override_feature_flags')
+        } else if (Array.isArray(flags)) {
+            const flagsObj = {}
+            for (let i = 0; i < flags.length; i++) {
+                flagsObj[flags[i]] = true
+            }
+            this.instance.persistence.register('$override_feature_flags', flagsObj)
+        } else {
+            this.instance.persistence.register('$override_feature_flags', flags)
+        }
     }
 }
