@@ -20,6 +20,7 @@ describe('featureflags', () => {
             'alpha-feature-2': true,
             'multivariate-flag': 'variant-1',
         },
+        $override_feature_flags: false,
     }))
 
     it('should return the right feature flag and call capture', () => {
@@ -43,5 +44,25 @@ describe('featureflags', () => {
     it('should return the right feature flag and not call capture', () => {
         expect(given.featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
         expect(given.instance.capture).not.toHaveBeenCalled()
+    })
+
+    it('supports overrides', () => {
+        given('properties', () => ({
+            $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+            $enabled_feature_flags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            },
+            $override_feature_flags: {
+                'beta-feature': false,
+                'alpha-feature-2': 'as-a-variant',
+            },
+        }))
+        expect(given.featureFlags.getFlags()).toEqual(['alpha-feature-2', 'multivariate-flag'])
+        expect(given.featureFlags.getFlagVariants()).toEqual({
+            'alpha-feature-2': 'as-a-variant',
+            'multivariate-flag': 'variant-1',
+        })
     })
 })
