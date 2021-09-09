@@ -96,7 +96,7 @@ export class PostHogFeatureFlags {
      *
      *     if(posthog.getFeatureFlag('my-flag') === 'some-variant') { // do something }
      *
-     * @param {Object|String} prop Key of the feature flag.
+     * @param {Object|String} key Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     getFeatureFlag(key, options = {}) {
@@ -119,7 +119,7 @@ export class PostHogFeatureFlags {
      *
      *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
      *
-     * @param {Object|String} prop Key of the feature flag.
+     * @param {Object|String} key Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     isFeatureEnabled(key, options = {}) {
@@ -149,7 +149,7 @@ export class PostHogFeatureFlags {
      *     - posthog.feature_flags.override(['beta-feature'])
      *     - posthog.feature_flags.override({'beta-feature': 'variant', 'other-feature': True})
      *
-     * @param {Object|String} prop Flags to override with.
+     * @param {Object|Array|String} flags Flags to override with.
      */
     override(flags) {
         this._override_warning = false
