@@ -1,3 +1,7 @@
+## 1.13.9 - 2021-09-10
+
+- Split feature flags into `$feature/*` properties (#278)
+
 ## 1.13.8 - 2021-09-09
 
 - Restore feature flag client-side override method (#280)
