@@ -432,3 +432,9 @@ describe('init()', () => {
         expect(given.lib['compression']).toBe(undefined)
     })
 })
+
+describe('skipped init()', () => {
+    it('capture() does not throw', () => {
+        expect(() => given.lib.capture('$pageview')).not.toThrow()
+    })
+})
