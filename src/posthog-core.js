@@ -531,6 +531,12 @@ PostHogLib.prototype.push = function (item) {
  * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
  */
 PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options) {
+    // While developing, a developer might purposefully _not_ call init(),
+    // in this case, we could like capture to be a noop
+    if (!this['__loaded']) {
+        return
+    }
+
     this._captureMetrics.incr('capture')
     if (event_name === '$snapshot') {
         this._captureMetrics.incr('snapshot')

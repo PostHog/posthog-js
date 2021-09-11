@@ -141,6 +141,7 @@ describe('capture()', () => {
     )
 
     given('overrides', () => ({
+        __loaded: true,
         get_config: (key) => given.config?.[key],
         config: {
             _onCapture: jest.fn(),
