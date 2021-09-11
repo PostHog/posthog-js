@@ -532,7 +532,7 @@ PostHogLib.prototype.push = function (item) {
  */
 PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options) {
     // While developing, a developer might purposefully _not_ call init(),
-    // in this case, we could like capture to be a noop
+    // in this case, we would like capture to be a noop.
     if (!this['__loaded']) {
         return
     }
