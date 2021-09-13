@@ -161,9 +161,9 @@ export class PostHogFeatureFlags {
             for (let i = 0; i < flags.length; i++) {
                 flagsObj[flags[i]] = true
             }
-            this.instance.persistence.register('$override_feature_flags', flagsObj)
+            this.instance.persistence.register({ '$override_feature_flags': flagsObj })
         } else {
-            this.instance.persistence.register('$override_feature_flags', flags)
+            this.instance.persistence.register({ '$override_feature_flags': flags })
         }
     }
 }
