@@ -182,7 +182,7 @@ PostHogPersistence.prototype.unregister = function (prop) {
 
 PostHogPersistence.prototype.update_campaign_params = function () {
     if (!this.campaign_params_saved) {
-        this.register_once(_.info.campaignParams())
+        this.register(_.info.campaignParams())
         this.campaign_params_saved = true
     }
 }
