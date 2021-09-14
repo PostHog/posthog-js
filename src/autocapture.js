@@ -231,7 +231,6 @@ var autocapture = {
 
     _customProperties: {},
     init: function (instance) {
-        instance.toolbar.maybeLoadEditor()
         this.rageclicks = new RageClick(instance)
     },
 
