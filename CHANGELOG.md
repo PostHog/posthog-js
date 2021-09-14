@@ -1,3 +1,7 @@
+## 1.13.11 - 2021-09-14
+
+- Do not load toobar only if autocapture enabled (#285)
+
 ## 1.13.9 - 2021-09-10
 
 - Split feature flags into `$feature/*` properties (#278)
