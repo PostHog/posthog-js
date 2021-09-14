@@ -897,12 +897,6 @@ describe('Autocapture system', () => {
 
             jest.spyOn(autocapture, '_addDomEventHandlers')
         })
-
-        it('should check whether to load the editor', () => {
-            given.subject()
-
-            expect(given.lib.toolbar.maybeLoadEditor).toHaveBeenCalled()
-        })
     })
 
     describe('afterDecideResponse()', () => {

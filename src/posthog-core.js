@@ -142,6 +142,7 @@ var create_mplib = function (token, config, name) {
     instance.feature_flags = instance.featureFlags
 
     instance.toolbar = new Toolbar(instance)
+    instance.toolbar.maybeLoadEditor()
 
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
