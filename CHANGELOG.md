@@ -1,3 +1,7 @@
+## 1.13.12 - 2021-09-15
+
+- Change UTM tags from first touch to last touch (#286)
+
 ## 1.13.11 - 2021-09-14
 
 - Do not load toobar only if autocapture enabled (#285)
