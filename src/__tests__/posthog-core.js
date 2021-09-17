@@ -141,6 +141,7 @@ describe('capture()', () => {
     )
 
     given('overrides', () => ({
+        __loaded: true,
         get_config: (key) => given.config?.[key],
         config: {
             _onCapture: jest.fn(),
@@ -430,5 +431,11 @@ describe('init()', () => {
 
         // Compression
         expect(given.lib['compression']).toBe(undefined)
+    })
+})
+
+describe('skipped init()', () => {
+    it('capture() does not throw', () => {
+        expect(() => given.lib.capture('$pageview')).not.toThrow()
     })
 })
