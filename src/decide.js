@@ -1,5 +1,6 @@
 import { autocapture } from './autocapture'
 import { _ } from './utils'
+import { parseFeatureFlagDecideResponse } from './posthog-featureflags'
 
 export class Decide {
     constructor(instance) {
@@ -17,7 +18,7 @@ export class Decide {
 
         const encoded_data = _.base64Encode(json_data)
         this.instance._send_request(
-            this.instance.get_config('api_host') + '/decide/',
+            `${this.instance.get_config('api_host')}/decide/?v=2`,
             { data: encoded_data },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response)
@@ -37,12 +38,7 @@ export class Decide {
         this.instance.sessionRecording.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
 
-        if (response['featureFlags']) {
-            this.instance.persistence &&
-                this.instance.persistence.register({ $active_feature_flags: response['featureFlags'] })
-        } else {
-            this.instance.persistence && this.instance.persistence.unregister('$active_feature_flags')
-        }
+        parseFeatureFlagDecideResponse(response, this.instance.persistence)
 
         if (response['supportedCompression']) {
             const compression = {}

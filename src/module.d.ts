@@ -454,6 +454,18 @@ declare class posthog {
     static clear_opt_in_out_capturing(options?: posthog.ClearOptInOutCapturingOptions): void
 
     /*
+     * Get feature flag value for user (supports multivariate flags).
+     *
+     * ### Usage:
+     *
+     *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') { // do something }
+     *
+     * @param {Object|String} prop Key of the feature flag.
+     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     */
+    static getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined
+
+    /*
      * See if feature flag is enabled for user.
      *
      * ### Usage:
@@ -470,11 +482,13 @@ declare class posthog {
      *
      * ### Usage:
      *
-     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+     *     posthog.onFeatureFlags(function(flags, variants) { // do something })
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
      */
-    static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
+    static onFeatureFlags(
+        callback: (flags: string[], variants: Record<string, boolean | string>) => void
+    ): false | undefined
 
     /*
      * Reload all feature flags for the user.
@@ -738,8 +752,22 @@ declare namespace posthog {
 
     export class featureFlags {
         static getFlags(): string[]
+        static getFlagVariants(): Record<string, boolean | string>
 
         static reloadFeatureFlags(): void
+
+        /*
+         * Get feature flag variant for user
+         *
+         * ### Usage:
+         *
+         *     if(posthog.getFeatureFlag('beta-feature')) { // do something }
+         *     if(posthog.getFeatureFlag('feature-with-variant') === 'some-value') { // do something }
+         *
+         * @param {Object|String} prop Key of the feature flag.
+         * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+         */
+        static getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined
 
         /*
          * See if feature flag is enabled for user.
@@ -762,7 +790,22 @@ declare namespace posthog {
          *
          * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
          */
-        static onFeatureFlags(callback: (flags: string[]) => void): false | undefined
+        static onFeatureFlags(
+            callback: (flags: string[], variants: Record<string, boolean | string>) => void
+        ): false | undefined
+
+        /*
+         * Override flags locally.
+         *
+         * ### Usage:
+         *
+         *     - posthog.feature_flags.override(false)
+         *     - posthog.feature_flags.override(['beta-feature'])
+         *     - posthog.feature_flags.override({'beta-feature': 'variant', 'other-feature': True})
+         *
+         * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
+         */
+        static override(flags: false | string[] | Record<string, boolean | string>): void
     }
 
     export class feature_flags extends featureFlags {}

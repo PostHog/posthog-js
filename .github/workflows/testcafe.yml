@@ -1,4 +1,4 @@
-name: Chrome/IE11/Safari E2E test
+name: TestCafe
 on: [pull_request]
 env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
@@ -14,7 +14,8 @@ env:
   DISABLE_MMDB: 'true'
 
 jobs:
-  testcafe:
+  browsers:
+    name: Test on Chrome, IE11, and Safari
     runs-on: ubuntu-latest
     services:
         postgres:

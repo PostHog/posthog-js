@@ -1,3 +1,65 @@
+## 1.13.9 - 2021-09-10
+
+- Split feature flags into `$feature/*` properties (#278)
+
+## 1.13.8 - 2021-09-09
+
+- Restore feature flag client-side override method (#280)
+
+## 1.13.7 - 2021-09-06
+
+- Revert "Do not load toolbar when disabled (#264)" (#276)
+
+## 1.13.6 - 2021-09-06
+
+- add gclid to campaign params (#277)
+
+## 1.13.5 - 2021-09-02
+
+- fix groupKey (#274)
+
+## 1.13.4 - 2021-09-02
+
+- console.warn to error (#273)
+
+## 1.13.3 - 2021-09-02
+
+- add posthog.group (#270)
+
+## 1.13.2 - 2021-09-02
+
+- fix "undefined is not an object" error (#272)
+
+## 1.13.1 - 2021-09-02
+
+- Deprecate client-side feature flag overrides (#271)
+
+## 1.13.0 - 2021-09-01
+
+- Feature flags API v2 (#268)
+
+## 1.12.7 - 2021-08-29
+
+- Update `rrweb` to 1.0.3 (#269)
+
+## 1.12.6 - 2021-08-20
+
+- Update `@sentry/types` to 6.11 (#267)
+
+## 1.12.5 - 2021-08-17
+
+- Do not load toolbar when disabled (#264)
+- Bump path-parse from 1.0.6 to 1.0.7 in /react (#266)
+
+## 1.12.4 - 2021-08-16
+
+- Fix deps containing types not being installed (#265)
+
+## 1.12.3 - 2021-08-04
+
+- Add `rrweb-snapshot` to dev deps (#262)
+- Don't retry 500 responses (#260)
+
 ## 1.12.2 - 2021-08-02
 
 - Update decide.js (#258)

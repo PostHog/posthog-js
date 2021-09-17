@@ -393,7 +393,8 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     args['ip'] = this.get_config('ip') ? 1 : 0
     args['_'] = new Date().getTime().toString()
 
-    url += '?' + _.HTTPBuildQuery(args)
+    const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
+    url += argSeparator + _.HTTPBuildQuery(args)
 
     if (_.isObject(data) && this.get_config('img')) {
         var img = document.createElement('img')
@@ -720,6 +721,20 @@ PostHogLib.prototype._register_single = function (prop, value) {
 }
 
 /*
+ * Get feature flag value for user (supports multivariate flags).
+ *
+ * ### Usage:
+ *
+ *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') { // do something }
+ *
+ * @param {Object|String} prop Key of the feature flag.
+ * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+ */
+PostHogLib.prototype.getFeatureFlag = function (key, options = {}) {
+    return this.featureFlags.getFeatureFlag(key, options)
+}
+
+/*
  * See if feature flag is enabled for user.
  *
  * ### Usage:
@@ -734,7 +749,7 @@ PostHogLib.prototype.isFeatureEnabled = function (key, options = {}) {
 }
 
 PostHogLib.prototype.reloadFeatureFlags = function () {
-    return this.feature_flags.reloadFeatureFlags()
+    return this.featureFlags.reloadFeatureFlags()
 }
 
 /*
@@ -749,12 +764,10 @@ PostHogLib.prototype.reloadFeatureFlags = function () {
  *                              It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
-    this.persistence.addFeatureFlagsHandler(callback)
-
-    const flags = this.feature_flags.getFlags()
-    if (flags) {
-        callback(flags)
-    }
+    this.featureFlags.addFeatureFlagsHandler(callback)
+    const flags = this.featureFlags.getFlags()
+    const flagVariants = this.featureFlags.getFlagVariants()
+    callback(flags, flagVariants)
 }
 
 /**
@@ -853,6 +866,32 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
     this.reloadFeatureFlags()
 }
 
+// Alpha feature, still under development, do not use!
+PostHogLib.prototype.__group = function (groupType, groupKey, groupPropertiesToSet) {
+    console.error('posthog.__group is still under development and should not be used in production!')
+    if (!groupType || !groupKey) {
+        console.error('posthog.group requires a group type and group key')
+        return
+    }
+
+    this._captureMetrics.incr('group')
+
+    var existingGroups = this.getGroups()
+
+    this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
+
+    this.capture('$group', {
+        distinct_id: this.get_distinct_id(),
+        $group: {
+            type: groupType,
+            key: groupKey,
+            $set: groupPropertiesToSet,
+        },
+    })
+
+    this.reloadFeatureFlags()
+}
+
 /**
  * Clears super properties and generates a new random distinct_id for this instance.
  * Useful for clearing data when a user logs out.
@@ -891,6 +930,10 @@ PostHogLib.prototype.reset = function (reset_device_id) {
  */
 PostHogLib.prototype.get_distinct_id = function () {
     return this.get_property('distinct_id')
+}
+
+PostHogLib.prototype.getGroups = function () {
+    return this.get_property('groups')
 }
 
 /**
@@ -1460,6 +1503,7 @@ PostHogLib.prototype['register'] = PostHogLib.prototype.register
 PostHogLib.prototype['register_once'] = PostHogLib.prototype.register_once
 PostHogLib.prototype['unregister'] = PostHogLib.prototype.unregister
 PostHogLib.prototype['identify'] = PostHogLib.prototype.identify
+PostHogLib.prototype['__group'] = PostHogLib.prototype.__group
 PostHogLib.prototype['alias'] = PostHogLib.prototype.alias
 PostHogLib.prototype['set_config'] = PostHogLib.prototype.set_config
 PostHogLib.prototype['get_config'] = PostHogLib.prototype.get_config
@@ -1476,6 +1520,7 @@ PostHogLib.prototype['opt_in_capturing'] = PostHogLib.prototype.opt_in_capturing
 PostHogLib.prototype['has_opted_out_capturing'] = PostHogLib.prototype.has_opted_out_capturing
 PostHogLib.prototype['has_opted_in_capturing'] = PostHogLib.prototype.has_opted_in_capturing
 PostHogLib.prototype['clear_opt_in_out_capturing'] = PostHogLib.prototype.clear_opt_in_out_capturing
+PostHogLib.prototype['getFeatureFlag'] = PostHogLib.prototype.getFeatureFlag
 PostHogLib.prototype['isFeatureEnabled'] = PostHogLib.prototype.isFeatureEnabled
 PostHogLib.prototype['reloadFeatureFlags'] = PostHogLib.prototype.reloadFeatureFlags
 PostHogLib.prototype['onFeatureFlags'] = PostHogLib.prototype.onFeatureFlags

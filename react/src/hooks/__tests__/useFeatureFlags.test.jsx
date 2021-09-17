@@ -5,11 +5,12 @@ import { useFeatureFlags } from '..'
 
 jest.useFakeTimers()
 
-const ACTIVE_FEATURE_FLAGS = ['example_feature_1', 'example_feature_2', 'example_feature_3']
+const ACTIVE_FEATURE_FLAGS = ['example_feature_1', 'example_feature_2', 'example_feature_3', 'multivariate_feature']
 const ENABLED_FEATURE_FLAGS = {
     example_feature_1: true,
     example_feature_2: true,
     example_feature_3: false,
+    multivariate_feature: 'string-value',
 }
 
 describe('useFeatureFlags hook', () => {
@@ -26,6 +27,7 @@ describe('useFeatureFlags hook', () => {
     given('posthog', () => ({
         onFeatureFlags: given.onFeatureFlags,
         isFeatureEnabled: (flag) => flag !== 'example_feature_3',
+        getFeatureFlag: (flag) => ENABLED_FEATURE_FLAGS[flag],
         featureFlags: { reloadFeatureFlags: jest.fn() },
     }))
 

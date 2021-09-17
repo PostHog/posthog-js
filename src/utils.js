@@ -629,7 +629,7 @@ _.register_event = (function () {
 
 _.info = {
     campaignParams: function () {
-        var campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term'.split(' '),
+        var campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term gclid'.split(' '),
             kw = '',
             params = {}
         _.each(campaign_keywords, function (kwkey) {

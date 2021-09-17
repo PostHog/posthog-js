@@ -7,7 +7,6 @@ describe('Decide', () => {
     given('posthog', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
-        persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
         _prepare_callback: jest.fn().mockImplementation((callback) => callback),
@@ -45,7 +44,7 @@ describe('Decide', () => {
             given.subject()
 
             expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/',
+                'https://test.com/decide/?v=2',
                 {
                     data: _.base64Encode(
                         JSON.stringify({
@@ -80,12 +79,34 @@ describe('Decide', () => {
             expect(given.posthog.compression['lz64']).toBe(true)
         })
 
-        it('enables feature flags from decide response', () => {
+        it('enables feature flags from decide response (v1 backwards compatibility)', () => {
+            // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
             given('decideResponse', () => ({ featureFlags: ['beta-feature', 'alpha-feature-2'] }))
             given.subject()
 
             expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
                 $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
+                $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
+            })
+        })
+
+        it('enables multivariate feature flags from decide v2 response', () => {
+            given('decideResponse', () => ({
+                featureFlags: {
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                    'multivariate-flag': 'variant-1',
+                },
+            }))
+            given.subject()
+
+            expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                    'multivariate-flag': 'variant-1',
+                },
             })
         })
     })

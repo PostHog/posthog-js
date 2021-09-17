@@ -20,6 +20,7 @@ import { cookieStore, localStore, memoryStore } from './storage'
 /** @const */ var EVENT_TIMERS_KEY = '__timers'
 /** @const */ var SESSION_RECORDING_ENABLED = '$session_recording_enabled'
 /** @const */ var SESSION_ID = '$sesid'
+/** @const */ var ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 /** @const */ var RESERVED_PROPERTIES = [
     SET_QUEUE_KEY,
     SET_ONCE_QUEUE_KEY,
@@ -34,6 +35,7 @@ import { cookieStore, localStore, memoryStore } from './storage'
     EVENT_TIMERS_KEY,
     SESSION_RECORDING_ENABLED,
     SESSION_ID,
+    ENABLED_FEATURE_FLAGS,
 ]
 
 /**
@@ -51,7 +53,6 @@ var PostHogPersistence = function (config) {
 
     this['props'] = {}
     this.campaign_params_saved = false
-    this['featureFlagEventHandlers'] = []
 
     if (config['persistence_name']) {
         this.name = 'ph_' + config['persistence_name']
@@ -78,20 +79,16 @@ var PostHogPersistence = function (config) {
     this.save()
 }
 
-PostHogPersistence.prototype.addFeatureFlagsHandler = function (handler) {
-    this.featureFlagEventHandlers.push(handler)
-    return true
-}
-
-PostHogPersistence.prototype.receivedFeatureFlags = function (flags) {
-    this.featureFlagEventHandlers.forEach((handler) => handler(flags))
-}
-
 PostHogPersistence.prototype.properties = function () {
     var p = {}
     // Filter out reserved properties
     _.each(this['props'], function (v, k) {
-        if (!_.include(RESERVED_PROPERTIES, k)) {
+        if (k === ENABLED_FEATURE_FLAGS && typeof v === 'object') {
+            var keys = Object.keys(v)
+            for (var i = 0; i < keys.length; i++) {
+                p[`$feature/${keys[i]}`] = v[keys[i]]
+            }
+        } else if (!_.include(RESERVED_PROPERTIES, k)) {
             p[k] = v
         }
     })
@@ -141,9 +138,6 @@ PostHogPersistence.prototype.register_once = function (props, default_value, day
             default_value = 'None'
         }
         this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
-        if (props && props.$active_feature_flags) {
-            this.receivedFeatureFlags(props.$active_feature_flags)
-        }
 
         _.each(
             props,
@@ -169,9 +163,6 @@ PostHogPersistence.prototype.register_once = function (props, default_value, day
 PostHogPersistence.prototype.register = function (props, days) {
     if (_.isObject(props)) {
         this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
-        if (props && props.$active_feature_flags) {
-            this.receivedFeatureFlags(props.$active_feature_flags)
-        }
 
         _.extend(this['props'], props)
 
@@ -186,10 +177,6 @@ PostHogPersistence.prototype.unregister = function (prop) {
     if (prop in this['props']) {
         delete this['props'][prop]
         this.save()
-
-        if (prop === '$active_feature_flags') {
-            this.receivedFeatureFlags([])
-        }
     }
 }
 
