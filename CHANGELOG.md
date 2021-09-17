@@ -1,3 +1,8 @@
+## 1.13.13 - 2021-09-17
+
+- Trigger onFeatureFlags on reset (#263)
+- Do not crash when calling capture() after skipping init(), fixes #281 (#282)
+
 ## 1.13.12 - 2021-09-15
 
 - Change UTM tags from first touch to last touch (#286)
