@@ -839,12 +839,6 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
         )
     }
 
-    // identify only changes the distinct id if it doesn't match either the existing or the alias;
-    // if it's new, blow away the alias as well.
-    if (new_distinct_id !== previous_distinct_id && new_distinct_id !== this.get_property(ALIAS_ID_KEY)) {
-        this.unregister(ALIAS_ID_KEY)
-        this.register({ distinct_id: new_distinct_id })
-    }
 
     // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
     // - logic on the server will determine whether or not to do anything with it.
@@ -852,6 +846,8 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
         new_distinct_id !== previous_distinct_id &&
         (!this.get_property('$device_id') || previous_distinct_id === this.get_property('$device_id'))
     ) {
+        this.unregister(ALIAS_ID_KEY)
+        this.register({ distinct_id: new_distinct_id })
         this.capture(
             '$identify',
             {
