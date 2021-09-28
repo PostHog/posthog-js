@@ -1,3 +1,7 @@
+## 1.13.14 - 2021-09-28
+
+- Revert "Trigger onFeatureFlags on reset (#263)" (#292)
+
 ## 1.13.13 - 2021-09-17
 
 - Trigger onFeatureFlags on reset (#263)
