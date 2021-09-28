@@ -280,7 +280,7 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        this.capture_pageview()
+        this.capture('$pageview', {}, {})
     }
 }
 
@@ -649,21 +649,6 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     }
 
     return properties
-}
-
-/**
- * Capture a page view event.
- * This function is called by default on page load unless the
- * capture_pageview configuration variable is false.
- *
- * @param {String} [page] The url of the page to record. If you don't include this, it defaults to the current url.
- * @api private
- */
-PostHogLib.prototype.capture_pageview = function (page) {
-    if (_.isUndefined(page)) {
-        page = document.location.href
-    }
-    this.capture('$pageview')
 }
 
 /**
@@ -1502,7 +1487,6 @@ PostHogLib.prototype.decodeLZ64 = LZString.decompressFromBase64
 PostHogLib.prototype['init'] = PostHogLib.prototype.init
 PostHogLib.prototype['reset'] = PostHogLib.prototype.reset
 PostHogLib.prototype['capture'] = PostHogLib.prototype.capture
-PostHogLib.prototype['capture_pageview'] = PostHogLib.prototype.capture_pageview
 PostHogLib.prototype['register'] = PostHogLib.prototype.register
 PostHogLib.prototype['register_once'] = PostHogLib.prototype.register_once
 PostHogLib.prototype['unregister'] = PostHogLib.prototype.unregister
