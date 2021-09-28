@@ -242,7 +242,11 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'), _.bind(this.capture, this))
+    this._captureMetrics = new CaptureMetrics(
+        this.get_config('_capture_metrics'),
+        _.bind(this.capture, this),
+        this.get_config('debug')
+    )
 
     this._requestQueue = new RequestQueue(this._captureMetrics, _.bind(this._handle_queued_event, this))
 

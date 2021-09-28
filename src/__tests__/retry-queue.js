@@ -9,7 +9,7 @@ const defaultRequestOptions = {
 
 describe('RetryQueue', () => {
     given('retryQueue', () => new RetryQueue(given.captureMetrics))
-    given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
+    given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), true, jest.fn()))
 
     const xhrMockClass = () => ({
         open: jest.fn(),

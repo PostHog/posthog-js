@@ -5,11 +5,11 @@ import { _ } from '../utils'
 jest.mock('../utils')
 
 describe('CaptureMetrics()', () => {
-    given('captureMetrics', () => new CaptureMetrics(given.enabled, given.capture, given.getTime))
+    given('captureMetrics', () => new CaptureMetrics(given.enabled, given.capture, given.debugEnabled, given.getTime))
 
     given('enabled', () => true)
+    given('debugEnabled', () => false)
     given('capture', () => jest.fn())
-
     given('getTime', () => jest.fn())
 
     describe('incr() and decr()', () => {
@@ -85,8 +85,43 @@ describe('CaptureMetrics()', () => {
             given.captureMetrics.captureInProgressRequests()
             given.captureMetrics.markRequestFailed({ foo: 'bar' })
             given.captureMetrics.finishRequest(null)
+            given.captureMetrics.addDebugMessage('tomato', 'potato')
 
             expect(given.capture).not.toHaveBeenCalled()
+        })
+
+        describe('logging debug messages via metrics', () => {
+            it('does nothing if not enabled', () => {
+                given('enabled', () => false)
+                given('debugEnabled', () => false)
+
+                given.captureMetrics.addDebugMessage('tomato', 'potato')
+
+                expect(given.captureMetrics.metrics).toEqual({})
+            })
+
+            it('does nothing if debug is not enabled', () => {
+                given('enabled', () => true)
+                given('debugEnabled', () => false)
+
+                given.captureMetrics.addDebugMessage('tomato', 'potato')
+
+                expect(given.captureMetrics.metrics).toEqual({})
+            })
+
+            it('does something if capture metrics and debug are enabled', () => {
+                given('enabled', () => true)
+                given('debugEnabled', () => true)
+
+                given.captureMetrics.addDebugMessage('tomato', 'potato')
+                given.captureMetrics.addDebugMessage('potato', 'salad')
+                given.captureMetrics.addDebugMessage('potato', 'chips')
+
+                expect(given.captureMetrics.metrics).toEqual({
+                    'phjs-debug-tomato': ['potato'],
+                    'phjs-debug-potato': ['salad', 'chips'],
+                })
+            })
         })
     })
 })

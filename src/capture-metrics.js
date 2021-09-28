@@ -1,9 +1,10 @@
 import { _ } from './utils'
 
 export class CaptureMetrics {
-    constructor(enabled, capture, getTime = () => new Date().getTime()) {
+    constructor(enabled, capture, debugEnabled, getTime = () => new Date().getTime()) {
         this.enabled = enabled
         this.capture = capture
+        this.debugEnabled = debugEnabled
         this.getTime = getTime
         this.metrics = {}
         this.requests = {}
@@ -24,7 +25,7 @@ export class CaptureMetrics {
     }
 
     addDebugMessage(key, payload) {
-        if (this.enabled) {
+        if (this.enabled && this.debugEnabled) {
             key = `phjs-debug-${key}`
             if (!this.metrics[key]) {
                 this.metrics[key] = []
