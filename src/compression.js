@@ -22,7 +22,7 @@ function hasMagicGzipHeader(compressionResultElement) {
     }
 }
 
-export function compressData(compression, jsonData, options) {
+export function compressData(compression, jsonData, options, captureMetrics) {
     if (compression === 'lz64') {
         return [{ data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options]
     } else if (compression === 'gzip-js') {
@@ -39,7 +39,7 @@ export function compressData(compression, jsonData, options) {
             !compressionResult[0] ||
             !hasMagicGzipHeader(compressionResult[0])
         ) {
-            posthog.capture('PostHogJSCompressionCannotBeDecompressed', {
+            captureMetrics.addDebugMessage('PostHogJSCompressionCannotBeDecompressed', {
                 jsonData,
                 compressionResult: compressionResult[0],
             })
