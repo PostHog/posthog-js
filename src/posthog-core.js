@@ -914,9 +914,6 @@ PostHogLib.prototype.reset = function (reset_device_id) {
         },
         ''
     )
-
-    // trigger onFeatureFlags callback
-    this.persistence.receivedFeatureFlags()
 }
 
 /**
