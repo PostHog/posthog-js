@@ -1,10 +1,9 @@
 import { _ } from './utils'
 
 export class CaptureMetrics {
-    constructor(enabled, capture, debugEnabled, getTime = () => new Date().getTime()) {
+    constructor(enabled, capture, getTime = () => new Date().getTime()) {
         this.enabled = enabled
         this.capture = capture
-        this.debugEnabled = debugEnabled
         this.getTime = getTime
         this.metrics = {}
         this.requests = {}

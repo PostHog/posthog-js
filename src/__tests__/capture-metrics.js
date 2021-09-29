@@ -5,7 +5,7 @@ import { _ } from '../utils'
 jest.mock('../utils')
 
 describe('CaptureMetrics()', () => {
-    given('captureMetrics', () => new CaptureMetrics(given.enabled, given.capture, given.debugEnabled, given.getTime))
+    given('captureMetrics', () => new CaptureMetrics(given.enabled, given.capture, given.getTime))
 
     given('enabled', () => true)
     given('capture', () => jest.fn())
