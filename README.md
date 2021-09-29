@@ -54,7 +54,14 @@ In the posthog repo
 * run `yarn`
 * run `yarn copy-scripts`
 
-### Developing with main PostHog repo
+### To remove the local package
+
+In the posthog repo
+
+* run `yalc remove posthog-js`
+* run `yarn install`
+
+## Developing with main PostHog repo
 
 The `posthog-js` snippet for a website loads static js from the main `PostHog/posthog` repo. Which means, when testing the snippet with a website, there's a bit of extra setup required:
 
