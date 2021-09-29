@@ -25,7 +25,7 @@ export class CaptureMetrics {
     }
 
     addDebugMessage(key, payload) {
-        if (this.enabled && this.debugEnabled) {
+        if (this.enabled) {
             key = `phjs-debug-${key}`
             if (!this.metrics[key]) {
                 this.metrics[key] = []
