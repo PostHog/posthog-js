@@ -33,15 +33,18 @@ export function compressData(compression, jsonData, options, captureMetrics) {
         ]
 
         // temporary logging to identify source of https://github.com/PostHog/posthog/issues/4816
-        if (
-            !jsonData ||
-            jsonData === 'undefined' ||
-            !compressionResult[0] ||
-            !hasMagicGzipHeader(compressionResult[0])
-        ) {
-            captureMetrics.addDebugMessage('PostHogJSCompressionCannotBeDecompressed', {
-                jsonData,
-                compressionResult: compressionResult[0],
+        try {
+            const jsonDataIsUnexpected = !jsonData || jsonData === 'undefined'
+            if (jsonDataIsUnexpected || !compressionResult[0] || !hasMagicGzipHeader(compressionResult[0])) {
+                captureMetrics.addDebugMessage('PostHogJSCompressionCannotBeDecompressed', {
+                    jsonData,
+                    compressionResult: compressionResult[0],
+                })
+            }
+        } catch (e) {
+            captureMetrics.addDebugMessage('PostHogJSCompressionCannotBeDecompressed-error', {
+                error: e,
+                message: e.message,
             })
         }
 
