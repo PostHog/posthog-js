@@ -23,6 +23,16 @@ export class CaptureMetrics {
         }
     }
 
+    addDebugMessage(key, payload) {
+        if (this.enabled) {
+            key = `phjs-debug-${key}`
+            if (!this.metrics[key]) {
+                this.metrics[key] = []
+            }
+            this.metrics[key].push(payload)
+        }
+    }
+
     startRequest(payload) {
         if (this.enabled) {
             const requestId = _.UUID()

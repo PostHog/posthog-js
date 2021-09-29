@@ -368,7 +368,7 @@ PostHogLib.prototype._handle_queued_event = function (url, data, options) {
 }
 
 PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData, options, callback) {
-    const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
+    const [data, _options] = compressData(decideCompression(this.compression), jsonData, options, this._captureMetrics)
     this._send_request(url, data, _options, callback)
 }
 

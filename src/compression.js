@@ -12,15 +12,43 @@ export function decideCompression(compressionSupport) {
     }
 }
 
-export function compressData(compression, jsonData, options) {
+function hasMagicGzipHeader(compressionResultElement) {
+    try {
+        const a = compressionResultElement[0]
+        const b = compressionResultElement[1]
+        return a === 31 && b === 139
+    } catch (e) {
+        return false
+    }
+}
+
+export function compressData(compression, jsonData, options, captureMetrics) {
     if (compression === 'lz64') {
         return [{ data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options]
     } else if (compression === 'gzip-js') {
         // :TRICKY: This returns an UInt8Array. We don't encode this to a string - returning a blob will do this for us.
-        return [
+        const compressionResult = [
             gzipSync(strToU8(jsonData), { mtime: 0 }),
             { ...options, blob: true, urlQueryArgs: { compression: 'gzip-js' } },
         ]
+
+        // temporary logging to identify source of https://github.com/PostHog/posthog/issues/4816
+        try {
+            const jsonDataIsUnexpected = !jsonData || jsonData === 'undefined'
+            if (jsonDataIsUnexpected || !compressionResult[0] || !hasMagicGzipHeader(compressionResult[0])) {
+                captureMetrics.addDebugMessage('PostHogJSCompressionCannotBeDecompressed', {
+                    jsonData,
+                    compressionResult: compressionResult[0],
+                })
+            }
+        } catch (e) {
+            captureMetrics.addDebugMessage('PostHogJSCompressionCannotBeDecompressed-error', {
+                error: e,
+                message: e.message,
+            })
+        }
+
+        return compressionResult
     } else {
         return [{ data: _.base64Encode(jsonData) }, options]
     }
