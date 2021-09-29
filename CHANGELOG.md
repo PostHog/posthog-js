@@ -1,3 +1,9 @@
+## 1.13.15 - 2021-09-29
+
+- Speculative logging for PostHog/posthog#4816 (#293)
+- Bump tmpl from 1.0.4 to 1.0.5 in /react (#287)
+- Bump ansi-regex from 5.0.0 to 5.0.1 in /react (#294)
+
 ## 1.13.14 - 2021-09-28
 
 - Revert "Trigger onFeatureFlags on reset (#263)" (#292)
