@@ -7,6 +7,7 @@ import {
     isSensitiveElement,
     shouldCaptureValue,
     loadScript,
+    isAngularContentAttr,
 } from '../autocapture-utils'
 
 describe(`Autocapture utility functions`, () => {
@@ -354,6 +355,19 @@ describe(`Autocapture utility functions`, () => {
             expect(new_script.type).toBe('text/javascript')
             expect(new_script.src).toBe('https://fake_url/')
             expect(new_script.onload).toBe(callback)
+        })
+    })
+
+    describe('isAngularContentAttr', () => {
+        it('should detect attribute names that match _ngcontent*', () => {
+            expect(isAngularContentAttr('_ngcontent')).toBe(true)
+            expect(isAngularContentAttr('_ngcontent-c1')).toBe(true)
+            expect(isAngularContentAttr('_ngcontent-dpm-c448')).toBe(true)
+        })
+        it('should not detect attribute names that dont start with _ngcontent', () => {
+            expect(isAngularContentAttr('_ng-attr')).toBe(false)
+            expect(isAngularContentAttr('style')).toBe(false)
+            expect(isAngularContentAttr('class-name')).toBe(false)
         })
     })
 })

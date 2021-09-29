@@ -21,7 +21,7 @@ describe('Autocapture system', () => {
     })
 
     describe('_getPropertiesFromElement', () => {
-        let div, div2, input, sensitiveInput, hidden, password
+        let div, div2, input, sensitiveInput, hidden, password, angularDiv
         beforeEach(() => {
             div = document.createElement('div')
             div.className = 'class1 class2 class3          ' // Lots of spaces might mess things up
@@ -41,6 +41,9 @@ describe('Autocapture system', () => {
             password = document.createElement('div')
             password.setAttribute('type', 'password')
             password.value = 'password val'
+
+            angularDiv = document.createElement('div')
+            angularDiv.setAttribute('_ngcontent-dpm-c448', '')
 
             const divSibling = document.createElement('div')
             const divSibling2 = document.createElement('span')
@@ -94,6 +97,11 @@ describe('Autocapture system', () => {
         it('should contain nth-child', () => {
             const props = autocapture._getPropertiesFromElement(password)
             expect(props['nth_child']).toBe(7)
+        })
+
+        it('should filter out Angular content attributes', () => {
+            const props = autocapture._getPropertiesFromElement(angularDiv)
+            expect(props['_ngcontent-dpm-c448']).toBeUndefined()
         })
     })
 
