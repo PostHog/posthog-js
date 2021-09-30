@@ -104,4 +104,10 @@ describe('encodePostData()', () => {
 
         expect(given.subject).toMatchSnapshot()
     })
+
+    it('handles sendBeacon when blob is also true', () => {
+        given('options', () => ({ method: 'POST', sendBeacon: true, blob: true }))
+
+        expect(given.subject).toMatchSnapshot()
+    })
 })

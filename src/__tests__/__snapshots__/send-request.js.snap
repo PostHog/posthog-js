@@ -29,3 +29,15 @@ Array [
   },
 ]
 `;
+
+exports[`encodePostData() handles sendBeacon when blob is also true 1`] = `
+Array [
+  "Blob",
+  Array [
+    "data=content",
+  ],
+  Object {
+    "type": "application/x-www-form-urlencoded",
+  },
+]
+`;
