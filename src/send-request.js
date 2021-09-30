@@ -72,7 +72,7 @@ export const xhr = ({ url, data, headers, options, captureMetrics, callback, ret
             } else {
                 const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
                 console.error(error)
-                if (window.Sentry && url.startsWith('https://app.posthog.com')) {
+                if (window.Sentry && window.location.host === 'app.posthog.com') {
                     Sentry.captureException({
                         name: 'ErrorSendingToPostHog',
                         message: `failed with status ${req.status} while sending to ${url}`,

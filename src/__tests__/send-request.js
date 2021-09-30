@@ -12,8 +12,8 @@ const generateXmlHttpRequestMock = (status = 502) => ({
     status: status,
 })
 
-const generateXhrParams = (url, markRequestFailed) => ({
-    url,
+const generateXhrParams = (markRequestFailed) => ({
+    url: 'https://any.posthog-instance.com',
     data: '',
     headers: {},
     options: {},
@@ -32,35 +32,41 @@ const generateXhrParams = (url, markRequestFailed) => ({
 })
 
 describe('sending data with xhr', () => {
-    let mockSentry
-    beforeEach(() => {
-        mockSentry = { captureException: jest.fn() }
-        window.Sentry = mockSentry
-    })
-
-    let xhrMock = generateXmlHttpRequestMock()
+    given('mockSentry', () => ({ captureException: jest.fn() }))
+    given('mockXHR', () => generateXmlHttpRequestMock())
 
     beforeEach(() => {
-        window.XMLHttpRequest = jest.fn(() => xhrMock)
+        window.Sentry = given.mockSentry
+        window.XMLHttpRequest = jest.fn(() => given.mockXHR)
     })
 
     it('does not call Sentry when not on posthog when there is an error', () => {
-        const url = 'https://anything.but.posthog.com'
         const markRequestFailed = jest.fn()
-        xhr(generateXhrParams(url, markRequestFailed))
-        xhrMock.onreadystatechange()
+        xhr(generateXhrParams(markRequestFailed))
+        given.mockXHR.onreadystatechange()
 
-        expect(mockSentry.captureException).not.toHaveBeenCalled()
+        expect(given.mockSentry.captureException).not.toHaveBeenCalled()
         expect(markRequestFailed).toHaveBeenCalled()
     })
 
     it('does call Sentry when not on posthog when there is an error', () => {
-        const url = 'https://app.posthog.com'
-        const markRequestFailed = jest.fn()
-        xhr(generateXhrParams(url, markRequestFailed))
-        xhrMock.onreadystatechange()
+        delete window.location
+        window.location = Object.defineProperties(
+            {},
+            {
+                // overwrite a mocked method for `window.location.assign`
+                host: {
+                    configurable: true,
+                    value: 'app.posthog.com',
+                },
+            }
+        )
 
-        expect(mockSentry.captureException).toHaveBeenCalledWith(
+        const markRequestFailed = jest.fn()
+        xhr(generateXhrParams(markRequestFailed))
+        given.mockXHR.onreadystatechange()
+
+        expect(given.mockSentry.captureException).toHaveBeenCalledWith(
             expect.objectContaining({
                 name: 'ErrorSendingToPostHog',
             })
