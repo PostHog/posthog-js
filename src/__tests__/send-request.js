@@ -10,7 +10,7 @@ const generateXmlHttpRequestMock = (status = 502) => ({
     status: status,
 })
 
-const generateXhrParams = (markRequestFailed, onXHRError) => ({
+const generateXhrParams = (markRequestFailed, onXHRError = () => {}) => ({
     url: 'https://any.posthog-instance.com',
     data: '',
     headers: {},
@@ -30,7 +30,7 @@ const generateXhrParams = (markRequestFailed, onXHRError) => ({
     onXHRError,
 })
 
-describe('sending data with xhr', () => {
+describe('when xhr requests fail', () => {
     given('mockXHR', generateXmlHttpRequestMock)
     given('markRequestFailed', jest.fn)
 
@@ -42,12 +42,20 @@ describe('sending data with xhr', () => {
         const onXHRError = {}
         xhr(generateXhrParams(given.markRequestFailed, onXHRError))
 
+        expect(() => {
+            given.mockXHR.onreadystatechange()
+        }).not.toThrow()
+    })
+
+    it('marks the request as failed', () => {
+        xhr(generateXhrParams(given.markRequestFailed))
+
         given.mockXHR.onreadystatechange()
 
         expect(given.markRequestFailed).toHaveBeenCalled()
     })
 
-    it('calls the XHR error handler when there is an error', () => {
+    it('calls the injected XHR error handler', () => {
         //cannot use an auto-mock from jest as the code checks if onXHRError is a Function
         let requestFromError
         const onXHRError = (req) => (requestFromError = req)
@@ -57,7 +65,6 @@ describe('sending data with xhr', () => {
         given.mockXHR.onreadystatechange()
 
         expect(requestFromError).toHaveProperty('status', 502)
-        expect(given.markRequestFailed).toHaveBeenCalled()
     })
 })
 
