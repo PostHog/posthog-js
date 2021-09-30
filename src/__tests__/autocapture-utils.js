@@ -369,5 +369,9 @@ describe(`Autocapture utility functions`, () => {
             expect(isAngularContentAttr('style')).toBe(false)
             expect(isAngularContentAttr('class-name')).toBe(false)
         })
+        it('should be safe for non-string attribute names', () => {
+            expect(isAngularContentAttr(1)).toBe(false)
+            expect(isAngularContentAttr(null)).toBe(false)
+        })
     })
 })

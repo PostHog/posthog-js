@@ -246,7 +246,10 @@ export function shouldCaptureValue(value) {
  * @returns {boolean} whether the element is an angular tag
  */
 export function isAngularContentAttr(attributeName) {
-    return attributeName.substring(0, 10) === '_ngcontent'
+    if (typeof attributeName === 'string') {
+        return attributeName.substring(0, 10) === '_ngcontent'
+    }
+    return false
 }
 
 export function loadScript(scriptUrlToLoad, callback) {
