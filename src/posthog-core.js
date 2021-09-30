@@ -100,6 +100,10 @@ const defaultConfig = () => ({
     mask_all_element_attributes: false,
     mask_all_text: false,
     advanced_disable_decide: false,
+    on_xhr_error: (req) => {
+        const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
+        console.error(error)
+    },
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
@@ -418,6 +422,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                 callback,
                 retriesPerformedSoFar: 0,
                 retryQueue: this._retryQueue,
+                onXHRError: this.get_config('on_xhr_error'),
             })
         } catch (e) {
             console.error(e)

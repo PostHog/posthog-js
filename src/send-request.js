@@ -24,7 +24,17 @@ export const encodePostData = (data, options) => {
     return body_data
 }
 
-export const xhr = ({ url, data, headers, options, captureMetrics, callback, retriesPerformedSoFar, retryQueue }) => {
+export const xhr = ({
+    url,
+    data,
+    headers,
+    options,
+    captureMetrics,
+    callback,
+    retriesPerformedSoFar,
+    retryQueue,
+    onXHRError,
+}) => {
     const req = new XMLHttpRequest()
     req.open(options.method, url, true)
 
@@ -70,16 +80,8 @@ export const xhr = ({ url, data, headers, options, captureMetrics, callback, ret
                     callback(response)
                 }
             } else {
-                const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
-                console.error(error)
-                if (window.Sentry && window.location.host === 'app.posthog.com') {
-                    Sentry.captureException({
-                        name: 'ErrorSendingToPostHog',
-                        message: `failed with status ${req.status} while sending to ${url}`,
-                        status: req.status,
-                        text: req.statusText,
-                        context: req,
-                    })
+                if (onXHRError instanceof Function) {
+                    onXHRError(req)
                 }
 
                 // don't retry certain errors
