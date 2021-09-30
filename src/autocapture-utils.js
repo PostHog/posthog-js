@@ -238,6 +238,20 @@ export function shouldCaptureValue(value) {
     return true
 }
 
+/*
+ * Check whether an attribute name is an Angular content attr
+ * These update on each build and lead to noise in the element chain
+ * https://stackoverflow.com/questions/45082129/what-does-ngcontent-c-mean-in-angular
+ * @param {string} attributeName - string value to check
+ * @returns {boolean} whether the element is an angular tag
+ */
+export function isAngularContentAttr(attributeName) {
+    if (typeof attributeName === 'string') {
+        return attributeName.substring(0, 10) === '_ngcontent'
+    }
+    return false
+}
+
 export function loadScript(scriptUrlToLoad, callback) {
     var scriptTag = document.createElement('script')
     scriptTag.type = 'text/javascript'

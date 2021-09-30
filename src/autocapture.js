@@ -10,6 +10,7 @@ import {
     shouldCaptureElement,
     shouldCaptureValue,
     usefulElements,
+    isAngularContentAttr,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 
@@ -46,7 +47,7 @@ var autocapture = {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
 
-            if (!maskInputs && shouldCaptureValue(attr.value)) {
+            if (!maskInputs && shouldCaptureValue(attr.value) && !isAngularContentAttr(attr.name)) {
                 props['attr__' + attr.name] = attr.value
             }
         })

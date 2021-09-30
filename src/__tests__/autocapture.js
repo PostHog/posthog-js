@@ -95,6 +95,13 @@ describe('Autocapture system', () => {
             const props = autocapture._getPropertiesFromElement(password)
             expect(props['nth_child']).toBe(7)
         })
+
+        it('should filter out Angular content attributes', () => {
+            const angularDiv = document.createElement('div')
+            angularDiv.setAttribute('_ngcontent-dpm-c448', '')
+            const props = autocapture._getPropertiesFromElement(angularDiv)
+            expect(props['_ngcontent-dpm-c448']).toBeUndefined()
+        })
     })
 
     describe('isBrowserSupported', () => {
