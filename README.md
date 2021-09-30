@@ -28,40 +28,8 @@ Use [`yarn link`](https://classic.yarnpkg.com/en/docs/cli/link/). Run `yarn link
 
 An alternative is to update dependency in package.json to e.g. `"posthog-js": "link:../posthog-js"`, `yarn` and run `yarn build && yarn build-module`
 
-## Alternative to yarn link
 
-Run `npm install -g yalc`
-
-In the posthog-js repo
-
-* run `yalc publish`
-
-In the posthog repo
-
-* run `yalc add posthog-js`
-* run `yarn`
-* run `yarn copy-scripts`
-
-### When making changes
-
-In the posthog-js repo
-
-* run `yalc publish`
-
-In the posthog repo
-
-* run `yalc update`
-* run `yarn`
-* run `yarn copy-scripts`
-
-### To remove the local package
-
-In the posthog repo
-
-* run `yalc remove posthog-js`
-* run `yarn install`
-
-## Developing with main PostHog repo
+### Developing with main PostHog repo
 
 The `posthog-js` snippet for a website loads static js from the main `PostHog/posthog` repo. Which means, when testing the snippet with a website, there's a bit of extra setup required:
 
