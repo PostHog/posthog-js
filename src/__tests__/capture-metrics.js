@@ -9,6 +9,7 @@ describe('CaptureMetrics()', () => {
 
     given('enabled', () => true)
     given('capture', () => jest.fn())
+
     given('getTime', () => jest.fn())
 
     describe('incr() and decr()', () => {
@@ -84,32 +85,8 @@ describe('CaptureMetrics()', () => {
             given.captureMetrics.captureInProgressRequests()
             given.captureMetrics.markRequestFailed({ foo: 'bar' })
             given.captureMetrics.finishRequest(null)
-            given.captureMetrics.addDebugMessage('tomato', 'potato')
 
             expect(given.capture).not.toHaveBeenCalled()
-        })
-
-        describe('logging debug messages via metrics', () => {
-            it('does nothing if not enabled', () => {
-                given('enabled', () => false)
-
-                given.captureMetrics.addDebugMessage('tomato', 'potato')
-
-                expect(given.captureMetrics.metrics).toEqual({})
-            })
-
-            it('does something if capture metrics is enabled', () => {
-                given('enabled', () => true)
-
-                given.captureMetrics.addDebugMessage('tomato', 'potato')
-                given.captureMetrics.addDebugMessage('potato', 'salad')
-                given.captureMetrics.addDebugMessage('potato', 'chips')
-
-                expect(given.captureMetrics.metrics).toEqual({
-                    'phjs-debug-tomato': ['potato'],
-                    'phjs-debug-potato': ['salad', 'chips'],
-                })
-            })
         })
     })
 })
