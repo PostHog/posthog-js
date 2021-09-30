@@ -18,9 +18,9 @@ describe('decideCompression()', () => {
     })
 
     it('returns lz64 if supported', () => {
-        given('compressionSupport', () => ({ lz64: true, 'gzip-js': true }))
+        given('compressionSupport', () => ({ lz64: true, 'gzip-js': false }))
 
-        expect(given.subject).toEqual('gzip-js')
+        expect(given.subject).toEqual('lz64')
     })
 })
 
