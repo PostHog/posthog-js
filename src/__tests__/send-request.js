@@ -1,4 +1,5 @@
-import { encodePostData, xhr } from '../send-request'
+import { encodePostData } from '../send-request'
+import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 
 describe('when xhr requests fail', () => {
     given('mockXHR', () => ({
@@ -60,6 +61,25 @@ describe('when xhr requests fail', () => {
     })
 })
 
+describe('using property based testing to identify edge cases in encodePostData', () => {
+    it('can use many combinations of typed arrays and options to detect if the method generates undefined', () => {
+        assert(
+            property(uint8Array(), boolean(), boolean(), (data, blob, sendBeacon) => {
+                const encodedData = encodePostData(data, { blob, sendBeacon, method: 'POST' })
+                // returns blob or string - ignore when it is not a string response
+                return (encodedData.indexOf && encodedData.indexOf('undefined') < 0) || true
+            }),
+            { numRuns: 1000, verbose: VerbosityLevel.VeryVerbose }
+        )
+    })
+
+    it('does not return undefined when blob and send beacon are false and the input is an empty uint8array', () => {
+        const encodedData = encodePostData(new Uint8Array([]), { method: 'POST' })
+        expect(typeof encodedData).toBe('string')
+        expect(encodedData).toBe('data=')
+    })
+})
+
 describe('encodePostData()', () => {
     given('subject', () => encodePostData(given.data, given.options))
 
@@ -105,7 +125,14 @@ describe('encodePostData()', () => {
         expect(given.subject).toMatchSnapshot()
     })
 
-    it('handles sendBeacon when blob is also true', () => {
+    it('handles sendBeacon when data is not a typed array and blob is also true', () => {
+        given('options', () => ({ method: 'POST', sendBeacon: true, blob: true }))
+
+        expect(given.subject).toMatchSnapshot()
+    })
+
+    it('handles sendBeacon when data is a typed array and blob is also true', () => {
+        given('data', () => new Uint8Array([1, 2, 3, 4]))
         given('options', () => ({ method: 'POST', sendBeacon: true, blob: true }))
 
         expect(given.subject).toMatchSnapshot()

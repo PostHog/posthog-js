@@ -1,17 +1,23 @@
 import { _, console } from './utils'
 
 export const encodePostData = (data, options) => {
-    if (options.sendBeacon) {
+    if (options.blob) {
+        if (data.buffer) {
+            return new Blob([data.buffer], { type: 'text/plain' })
+        } else {
+            const body = encodePostData(data, { method: 'POST' })
+            return new Blob([body], { type: 'application/x-www-form-urlencoded' })
+        }
+    } else if (options.sendBeacon) {
         const body = encodePostData(data, { method: 'POST' })
         return new Blob([body], { type: 'application/x-www-form-urlencoded' })
-    } else if (options.blob) {
-        return new Blob([data.buffer], { type: 'text/plain' })
     } else if (options.method !== 'POST') {
         return null
     }
 
     let body_data
-    if (Array.isArray(data)) {
+    const isTypedArray = (d) => ArrayBuffer.isView(d) && Object.prototype.toString.call(d) !== '[object DataView]'
+    if (Array.isArray(data) || isTypedArray(data)) {
         body_data = 'data=' + encodeURIComponent(data)
     } else {
         body_data = 'data=' + encodeURIComponent(data['data'])
