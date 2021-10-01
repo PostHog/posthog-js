@@ -282,9 +282,9 @@ PostHogLib.prototype._loaded = function () {
     if (this.get_config('capture_pageview')) {
         // Testing, need to replace this with production code in #295 after testing
         if (window && window.location.hostname === 'posthog.com') {
-            posthog.capture('$pageview', {}, {})
+            this.capture('$pageview', {}, {})
         } else {
-            posthog.capture('$pageview')
+            this.capture('$pageview')
         }
     }
 }
