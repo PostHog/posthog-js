@@ -280,7 +280,7 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        this.capture('$pageview', {}, {})
+        this.capture('$pageview', {}, { send_instantly: true })
     }
 }
 
@@ -589,7 +589,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
 
     const has_unique_traits = options !== __NOOPTIONS
 
-    if (this.get_config('request_batching') && (!has_unique_traits || options._batchKey)) {
+    if (this.get_config('request_batching') && (!has_unique_traits || options._batchKey) && !options.send_instantly) {
         data['timestamp'] = new Date()
         this._requestQueue.enqueue(url, data, options)
     } else {
