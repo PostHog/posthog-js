@@ -280,7 +280,12 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        this.capture_pageview()
+        // Testing, need to replace this with production code in #295 after testing
+        if (window && window.location.hostname === 'posthog.com') {
+            posthog.capture('$pageview', {}, {})
+        } else {
+            posthog.capture('$pageview')
+        }
     }
 }
 
