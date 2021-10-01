@@ -80,7 +80,7 @@ export const xhr = ({
                     callback(response)
                 }
             } else {
-                if (onXHRError instanceof Function) {
+                if (typeof onXHRError === 'function') {
                     onXHRError(req)
                 }
 

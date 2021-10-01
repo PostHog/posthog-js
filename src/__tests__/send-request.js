@@ -1,15 +1,5 @@
 import { encodePostData, xhr } from '../send-request'
 
-const generateXmlHttpRequestMock = (status = 502) => ({
-    open: jest.fn(),
-    setRequestHeader: jest.fn(),
-    onreadystatechange: jest.fn(),
-    send: jest.fn(),
-    readyState: 4,
-    responseText: JSON.stringify('something here'),
-    status: status,
-})
-
 const generateXhrParams = (markRequestFailed, onXHRError = () => {}) => ({
     url: 'https://any.posthog-instance.com',
     data: '',
@@ -31,7 +21,15 @@ const generateXhrParams = (markRequestFailed, onXHRError = () => {}) => ({
 })
 
 describe('when xhr requests fail', () => {
-    given('mockXHR', generateXmlHttpRequestMock)
+    given('mockXHR', () => ({
+        open: jest.fn(),
+        setRequestHeader: jest.fn(),
+        onreadystatechange: jest.fn(),
+        send: jest.fn(),
+        readyState: 4,
+        responseText: JSON.stringify('something here'),
+        status: 502,
+    }))
     given('markRequestFailed', jest.fn)
 
     beforeEach(() => {
@@ -39,8 +37,7 @@ describe('when xhr requests fail', () => {
     })
 
     it('does not error if the configured onXHRError is not a function', () => {
-        const onXHRError = {}
-        xhr(generateXhrParams(given.markRequestFailed, onXHRError))
+        xhr(generateXhrParams(given.markRequestFailed, () => 'not a function'))
 
         expect(() => {
             given.mockXHR.onreadystatechange()

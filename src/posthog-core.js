@@ -250,7 +250,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this._requestQueue = new RequestQueue(this._captureMetrics, _.bind(this._handle_queued_event, this))
 
-    this._retryQueue = new RetryQueue(this._captureMetrics)
+    this._retryQueue = new RetryQueue(this._captureMetrics, this.get_config('on_xhr_error'))
     this.__captureHooks = []
     this.__request_queue = []
 
