@@ -114,7 +114,12 @@ describe('Event capture', () => {
             cy.phCaptures().should('have.length', 2)
             cy.phCaptures().should('include', '$pageview')
             cy.phCaptures().should('include', 'custom-event')
-            cy.get('@consoleError').should('not.be.called')
+            cy.get('@capture').should(({ request }) => {
+                const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
+                const captures = JSON.parse(Buffer.from(data, 'base64'))
+
+                expect(captures['event']).to.equal('$pageview')
+            })
         })
     })
 
@@ -163,21 +168,36 @@ describe('Event capture', () => {
         it('contains the correct headers and payload after an event', () => {
             start()
 
+            // Pageview will be sent immediately
+            cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            })
+            cy.get('@capture').should(({ request }) => {
+                const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
+                const captures = JSON.parse(Buffer.from(data, 'base64'))
+
+                expect(captures['event']).to.equal('$pageview')
+            })
+
             cy.get('[data-cy-custom-event-button]').click()
-            cy.phCaptures().should('have.length', 3)
-            cy.phCaptures().should('include', '$pageview')
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 5)
             cy.phCaptures().should('include', '$autocapture')
             cy.phCaptures().should('include', 'custom-event')
 
             cy.wait('@capture').its('request.headers').should('deep.equal', {
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
-
             cy.get('@capture').should(({ request }) => {
                 const data = decodeURIComponent(request.body.match(/data=(.*)&compression=lz64/)[1])
                 const captures = JSON.parse(LZString.decompressFromBase64(data))
 
-                expect(captures.map(({ event }) => event)).to.deep.equal(['$pageview', '$autocapture', 'custom-event'])
+                expect(captures.map(({ event }) => event)).to.deep.equal([
+                    '$autocapture',
+                    'custom-event',
+                    '$autocapture',
+                    'custom-event',
+                ])
             })
         })
 
@@ -186,6 +206,17 @@ describe('Event capture', () => {
 
             it('contains the correct payload after an event', () => {
                 start()
+                // Pageview will be sent immediately
+                cy.wait('@capture').its('request.headers').should('deep.equal', {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                })
+                cy.get('@capture').should(({ request }) => {
+                    console.log(request.body)
+                    const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
+                    const captures = JSON.parse(Buffer.from(data, 'base64'))
+
+                    expect(captures['event']).to.equal('$pageview')
+                })
 
                 cy.get('[data-cy-custom-event-button]').click()
                 cy.phCaptures().should('have.length', 3)
@@ -200,11 +231,7 @@ describe('Event capture', () => {
                     const decoded = fflate.strFromU8(fflate.decompressSync(data))
                     const captures = JSON.parse(decoded)
 
-                    expect(captures.map(({ event }) => event)).to.deep.equal([
-                        '$pageview',
-                        '$autocapture',
-                        'custom-event',
-                    ])
+                    expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event'])
                 })
             })
         })
