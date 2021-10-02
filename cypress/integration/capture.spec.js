@@ -211,7 +211,6 @@ describe('Event capture', () => {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 })
                 cy.get('@capture').should(({ request }) => {
-                    console.log(request.body)
                     const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
                     const captures = JSON.parse(Buffer.from(data, 'base64'))
 
