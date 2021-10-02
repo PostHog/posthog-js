@@ -37,7 +37,7 @@ describe('when xhr requests fail', () => {
     })
 
     it('does not error if the configured onXHRError is not a function', () => {
-        xhr(generateXhrParams(given.markRequestFailed, () => 'not a function'))
+        xhr(generateXhrParams(given.markRequestFailed, 'not a function'))
 
         expect(() => {
             given.mockXHR.onreadystatechange()
