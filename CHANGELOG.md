@@ -1,3 +1,11 @@
+## 1.13.16 - 2021-10-04
+
+- Allow injection from config of a function to call when xhr requests fail (#296)
+- add instructions for developing with Yalc (#303)
+- Revert "Speculative logging for PostHog/posthog#4816 (#293)" (#302)
+- Filter out _ngcontent attributes in autocapture (#298)
+- corrects a test where assertion and setup didn't match test name (#299)
+
 ## 1.13.15 - 2021-09-29
 
 - Speculative logging for PostHog/posthog#4816 (#293)
