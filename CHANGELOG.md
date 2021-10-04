@@ -1,3 +1,7 @@
+## 1.13.17 - 2021-10-04
+
+- corrects exported type which got out of sync with core.js file (#307)
+
 ## 1.13.16 - 2021-10-04
 
 - Allow injection from config of a function to call when xhr requests fail (#296)
