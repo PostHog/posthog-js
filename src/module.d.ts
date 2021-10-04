@@ -594,6 +594,7 @@ declare namespace posthog {
         respect_dnt?: boolean
         property_blacklist?: string[]
         xhr_headers?: { [header_name: string]: string }
+        onXHRError?: (failedRequest: XMLHttpRequest) => void
         inapp_protocol?: string
         inapp_link_new_window?: boolean
         request_batching?: boolean

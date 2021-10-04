@@ -24,7 +24,17 @@ export const encodePostData = (data, options) => {
     return body_data
 }
 
-export const xhr = ({ url, data, headers, options, captureMetrics, callback, retriesPerformedSoFar, retryQueue }) => {
+export const xhr = ({
+    url,
+    data,
+    headers,
+    options,
+    captureMetrics,
+    callback,
+    retriesPerformedSoFar,
+    retryQueue,
+    onXHRError,
+}) => {
     const req = new XMLHttpRequest()
     req.open(options.method, url, true)
 
@@ -70,8 +80,9 @@ export const xhr = ({ url, data, headers, options, captureMetrics, callback, ret
                     callback(response)
                 }
             } else {
-                const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
-                console.error(error)
+                if (typeof onXHRError === 'function') {
+                    onXHRError(req)
+                }
 
                 // don't retry certain errors
                 if ([401, 403, 404, 500].indexOf(req.status) < 0) {

@@ -2,12 +2,13 @@ import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
 
 export class RetryQueue extends RequestQueueScaffold {
-    constructor(captureMetrics) {
+    constructor(captureMetrics, onXHRError) {
         super()
         this.captureMetrics = captureMetrics
         this.isPolling = false
         this.queue = []
         this.areWeOnline = true
+        this.onXHRError = onXHRError
 
         if ('onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
@@ -76,6 +77,7 @@ export class RetryQueue extends RequestQueueScaffold {
             callback,
             captureMetrics: this.captureMetrics,
             retryQueue: this,
+            onXHRError: this.onXHRError,
         })
     }
 

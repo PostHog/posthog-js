@@ -1,5 +1,6 @@
 import { CaptureMetrics } from '../capture-metrics'
 import { RetryQueue } from '../retry-queue'
+import * as SendRequest from '../send-request'
 
 const EPOCH = 1_600_000_000
 const defaultRequestOptions = {
@@ -8,8 +9,9 @@ const defaultRequestOptions = {
 }
 
 describe('RetryQueue', () => {
-    given('retryQueue', () => new RetryQueue(given.captureMetrics))
+    given('retryQueue', () => new RetryQueue(given.captureMetrics, given.onXHRError))
     given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
+    given('onXHRError', () => jest.fn().mockImplementation(console.error))
 
     const xhrMockClass = () => ({
         open: jest.fn(),
@@ -21,13 +23,17 @@ describe('RetryQueue', () => {
     window.XMLHttpRequest = jest.fn().mockImplementation(xhrMockClass)
     window.navigator.sendBeacon = jest.fn()
 
-    function fastForwardTimeAndRunTimer() {
-        jest.spyOn(global.Date, 'now').mockImplementationOnce(() => new Date().getTime() + 3500)
+    beforeEach(() => {
+        jest.useFakeTimers()
+        jest.spyOn(given.retryQueue, 'getTime').mockReturnValue(EPOCH)
+    })
 
+    const fastForwardTimeAndRunTimer = () => {
+        jest.spyOn(global.Date, 'now').mockImplementationOnce(() => new Date().getTime() + 3500)
         jest.runOnlyPendingTimers()
     }
 
-    function enqueueRequests() {
+    const enqueueRequests = () => {
         given.retryQueue.enqueue({
             url: '/e',
             data: { event: 'foo', timestamp: EPOCH - 3000 },
@@ -49,11 +55,6 @@ describe('RetryQueue', () => {
             options: defaultRequestOptions,
         })
     }
-
-    beforeEach(() => {
-        jest.useFakeTimers()
-        jest.spyOn(given.retryQueue, 'getTime').mockReturnValue(EPOCH)
-    })
 
     it('processes retry requests', () => {
         enqueueRequests()
@@ -103,6 +104,7 @@ describe('RetryQueue', () => {
         expect(given.retryQueue.queue.length).toEqual(0)
 
         expect(window.XMLHttpRequest).toHaveBeenCalledTimes(4)
+        expect(given.onXHRError).toHaveBeenCalledTimes(0)
     })
 
     it('tries to send requests via beacon on unload', () => {
@@ -115,6 +117,14 @@ describe('RetryQueue', () => {
         expect(window.navigator.sendBeacon).toHaveBeenCalledTimes(4)
     })
 
+    it('when you flush the queue onXHRError is passed to xhr', () => {
+        const xhrSpy = jest.spyOn(SendRequest, 'xhr')
+        enqueueRequests()
+        given.retryQueue.flush()
+        fastForwardTimeAndRunTimer()
+        expect(xhrSpy).toHaveBeenCalledWith(expect.objectContaining({ onXHRError: given.onXHRError }))
+    })
+
     it('enqueues requests when offline and flushes immediately when online again', () => {
         given.retryQueue.areWeOnline = false
         expect(given.retryQueue.areWeOnline).toEqual(false)
@@ -125,6 +135,8 @@ describe('RetryQueue', () => {
 
         // requests aren't attempted when we're offline
         expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
+        // doesn't log that it is offline from the retry queue
+        expect(given.onXHRError).toHaveBeenCalledTimes(0)
 
         // queue stays the same
         expect(given.retryQueue.queue.length).toEqual(4)
