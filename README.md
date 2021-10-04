@@ -43,34 +43,27 @@ Further, it's a good idea to modify `start-http` script to add development mode:
 
 Run `npm install -g yalc`
 
-##### In the posthog-js repo
-
-* run `yalc publish`
-
-##### In the posthog repo
-
-* run `yalc add posthog-js`
-* run `yarn`
-* run `yarn copy-scripts`
+* In the posthog-js repo
+    * run `yalc publish`
+* In the posthog repo
+    * run `yalc add posthog-js`
+    * run `yarn`
+    * run `yarn copy-scripts`
 
 #### When making changes
 
-##### In the posthog-js repo
-
-* run `yalc publish`
-
-##### In the posthog repo
-
-* run `yalc update`
-* run `yarn`
-* run `yarn copy-scripts`
+* In the posthog-js repo
+    * run `yalc publish`
+* In the posthog repo
+    * run `yalc update`
+    * run `yarn`
+    * run `yarn copy-scripts`
 
 #### To remove the local package
 
-##### In the posthog repo
-
-* run `yalc remove posthog-js`
-* run `yarn install`
+* In the posthog repo
+    * run `yalc remove posthog-js`
+    * run `yarn install`
 
 
 ## Releasing a new version
