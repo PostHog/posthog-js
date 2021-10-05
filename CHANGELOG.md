@@ -1,3 +1,10 @@
+## 1.14.0 - 2021-10-05
+
+- Bump build and a readme change (#306)
+- Add posthog.people.increment (#254)
+- Send initial pageview immediately (#295)
+- add a test for init-ing and reading the on xhr error handler (#308)
+
 ## 1.13.17 - 2021-10-04
 
 - corrects exported type which got out of sync with core.js file (#307)
