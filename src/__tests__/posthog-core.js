@@ -1,4 +1,4 @@
-import { PostHogLib } from '../posthog-core'
+import { PostHogLib, init_as_module } from '../posthog-core'
 import { CaptureMetrics } from '../capture-metrics'
 import { _ } from '../utils'
 import { autocapture } from '../autocapture'
@@ -387,6 +387,21 @@ describe('init()', () => {
     })
 
     given('advanced_disable_decide', () => true)
+
+    it('can set an xhr error handler', () => {
+        init_as_module()
+        const fakeOnXHRError = 'configured error'
+        given('subject', () =>
+            given.lib.init(
+                'a-token',
+                {
+                    on_xhr_error: fakeOnXHRError,
+                },
+                'a-name'
+            )
+        )
+        expect(given.subject.get_config('on_xhr_error')).toBe(fakeOnXHRError)
+    })
 
     it('does not load decide enpoint on advanced_disable_decide', () => {
         given.subject()
