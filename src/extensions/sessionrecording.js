@@ -141,9 +141,9 @@ export class SessionRecording {
         })
     }
 
-    _captureSnapshot(properties, $snapshot = '$snapshot') {
+    _captureSnapshot(properties, eventName = '$snapshot') {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
-        this.instance.capture($snapshot, properties, {
+        this.instance.capture(eventName, properties, {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
