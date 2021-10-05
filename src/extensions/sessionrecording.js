@@ -55,7 +55,7 @@ export class SessionRecording {
     submitRecordings() {
         this.emit = true
         this._startCapture()
-        this.snapshots.forEach((properties) => this._captureSnapshot(properties, '$snapshot'))
+        this.snapshots.forEach((properties) => this._captureSnapshot(properties))
     }
 
     _startCapture() {
@@ -112,7 +112,7 @@ export class SessionRecording {
                 this.instance._captureMetrics.incr(`rrweb-record-${data.type}`)
 
                 if (this.emit) {
-                    this._captureSnapshot(properties, '$snapshot')
+                    this._captureSnapshot(properties)
                 } else {
                     this.snapshots.push(properties)
                 }
@@ -128,22 +128,16 @@ export class SessionRecording {
             }
         })
 
-        const visibilityEventGenerator = () => {
-            return (isActive) => {
-                const sessionId = sessionIdGenerator(this.instance.persistence, data.timestamp)
-                const event = isActive === 'hidden' ? '$session_became_inactive' : '$session_became_active'
-                this.instance._captureSnapshot(
-                    {
-                        session_id: sessionId,
-                    },
-                    event
-                )
-            }
-        }
-
-        document.addEventListener('visibilitychange', function () {
-            isActive = document.visibilityState || document.hasFocus()
-            visibilityEventGenerator(isActive)
+        document.addEventListener('visibilitychange', () => {
+            const isActive = document.visibilityState || document.hasFocus()
+            const sessionId = sessionIdGenerator(this.instance.persistence, data.timestamp)
+            const event = isActive === 'hidden' ? '$session_became_inactive' : '$session_became_active'
+            this.instance._captureSnapshot(
+                {
+                    session_id: sessionId,
+                },
+                event
+            )
         })
     }
 
