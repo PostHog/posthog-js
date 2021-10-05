@@ -16,8 +16,8 @@ export const encodePostData = (data, options) => {
     }
 
     let body_data
-    const isTypedArray = (d) => ArrayBuffer.isView(d) && Object.prototype.toString.call(d) !== '[object DataView]'
-    if (Array.isArray(data) || isTypedArray(data)) {
+    const isUint8Array = (d) => Object.prototype.toString.call(d) === '[object Uint8Array]'
+    if (Array.isArray(data) || isUint8Array(data)) {
         body_data = 'data=' + encodeURIComponent(data)
     } else {
         body_data = 'data=' + encodeURIComponent(data['data'])
