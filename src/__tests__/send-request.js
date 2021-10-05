@@ -1,4 +1,4 @@
-import { encodePostData } from '../send-request'
+import { encodePostData, xhr } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 
 describe('when xhr requests fail', () => {
