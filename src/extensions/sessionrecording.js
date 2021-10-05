@@ -55,7 +55,7 @@ export class SessionRecording {
     submitRecordings() {
         this.emit = true
         this._startCapture()
-        this.snapshots.forEach((properties) => this._captureSnapshot(properties))
+        this.snapshots.forEach((properties) => this._captureSnapshot(properties, '$snapshot'))
     }
 
     _startCapture() {
@@ -112,7 +112,7 @@ export class SessionRecording {
                 this.instance._captureMetrics.incr(`rrweb-record-${data.type}`)
 
                 if (this.emit) {
-                    this._captureSnapshot(properties)
+                    this._captureSnapshot(properties, '$snapshot')
                 } else {
                     this.snapshots.push(properties)
                 }
@@ -127,11 +127,29 @@ export class SessionRecording {
                 window.rrweb.record.addCustomEvent('$pageview', { href: window.location.href })
             }
         })
+
+        const visibilityEventGenerator = () => {
+            return (isActive) => {
+                const sessionId = sessionIdGenerator(this.instance.persistence, data.timestamp)
+                const event = isActive === 'hidden' ? '$session_became_inactive' : '$session_became_active'
+                this.instance._captureSnapshot(
+                    {
+                        session_id: sessionId,
+                    },
+                    event
+                )
+            }
+        }
+
+        document.addEventListener('visibilitychange', function () {
+            isActive = document.visibilityState || document.hasFocus()
+            visibilityEventGenerator(isActive)
+        })
     }
 
-    _captureSnapshot(properties) {
+    _captureSnapshot(properties, $snapshot = '$snapshot') {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
-        this.instance.capture('$snapshot', properties, {
+        this.instance.capture($snapshot, properties, {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
