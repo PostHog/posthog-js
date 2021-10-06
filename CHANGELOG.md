@@ -1,3 +1,7 @@
+## 1.14.1 - 2021-10-06
+
+- Reduce code paths that could encode post data as the string undefined (#300)
+
 ## 1.14.0 - 2021-10-05
 
 - Bump build and a readme change (#306)
