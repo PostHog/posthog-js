@@ -1,17 +1,22 @@
 import { _, console } from './utils'
 
 export const encodePostData = (data, options) => {
-    if (options.blob) {
+    if (options.blob && data.buffer) {
         return new Blob([data.buffer], { type: 'text/plain' })
-    } else if (options.sendBeacon) {
+    }
+
+    if (options.sendBeacon || options.blob) {
         const body = encodePostData(data, { method: 'POST' })
         return new Blob([body], { type: 'application/x-www-form-urlencoded' })
-    } else if (options.method !== 'POST') {
+    }
+
+    if (options.method !== 'POST') {
         return null
     }
 
     let body_data
-    if (Array.isArray(data)) {
+    const isUint8Array = (d) => Object.prototype.toString.call(d) === '[object Uint8Array]'
+    if (Array.isArray(data) || isUint8Array(data)) {
         body_data = 'data=' + encodeURIComponent(data)
     } else {
         body_data = 'data=' + encodeURIComponent(data['data'])

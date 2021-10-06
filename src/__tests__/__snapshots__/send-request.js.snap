@@ -29,3 +29,27 @@ Array [
   },
 ]
 `;
+
+exports[`encodePostData() handles sendBeacon when data is a typed array and blob is also true 1`] = `
+Array [
+  "Blob",
+  Array [
+    ArrayBuffer [],
+  ],
+  Object {
+    "type": "text/plain",
+  },
+]
+`;
+
+exports[`encodePostData() handles sendBeacon when data is not a typed array and blob is also true 1`] = `
+Array [
+  "Blob",
+  Array [
+    "data=content",
+  ],
+  Object {
+    "type": "application/x-www-form-urlencoded",
+  },
+]
+`;
