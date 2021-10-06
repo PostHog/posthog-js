@@ -1,17 +1,16 @@
 import { _, console } from './utils'
 
 export const encodePostData = (data, options) => {
-    if (options.blob) {
-        if (data.buffer) {
-            return new Blob([data.buffer], { type: 'text/plain' })
-        } else {
-            const body = encodePostData(data, { method: 'POST' })
-            return new Blob([body], { type: 'application/x-www-form-urlencoded' })
-        }
-    } else if (options.sendBeacon) {
+    if (options.blob && data.buffer) {
+        return new Blob([data.buffer], { type: 'text/plain' })
+    }
+
+    if (options.sendBeacon || options.blob) {
         const body = encodePostData(data, { method: 'POST' })
         return new Blob([body], { type: 'application/x-www-form-urlencoded' })
-    } else if (options.method !== 'POST') {
+    }
+
+    if (options.method !== 'POST') {
         return null
     }
 
