@@ -67,7 +67,7 @@ describe('using property based testing to identify edge cases in encodePostData'
             property(uint8Array(), boolean(), boolean(), (data, blob, sendBeacon) => {
                 const encodedData = encodePostData(data, { blob, sendBeacon, method: 'POST' })
                 // returns blob or string - ignore when it is not a string response
-                return (encodedData.indexOf && encodedData.indexOf('undefined') < 0) || true
+                return encodedData.indexOf && encodedData.indexOf('undefined') < 0
             }),
             { numRuns: 1000, verbose: VerbosityLevel.VeryVerbose }
         )
