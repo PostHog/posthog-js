@@ -36,7 +36,6 @@ export class Toolbar {
                     window.localStorage.setItem('test', 'test')
                     window.localStorage.removeItem('test')
                 } catch (error) {
-                    console.log('Error occurred with message:', error.message, error)
                     return false
                 }
 
