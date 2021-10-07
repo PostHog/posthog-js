@@ -2,6 +2,11 @@ import { PostHogPersistence } from '../posthog-persistence'
 
 given('lib', () => new PostHogPersistence({ name: 'bla', persistence: 'cookie' }))
 
+function forPersistenceTypes(runTests) {
+    ;[`cookie`, `localStorage`, `localStorage+cookie`].forEach(function (persistenceType) {
+        describe(persistenceType, runTests.bind(null, persistenceType))
+    })
+}
 describe('persistence', () => {
     afterEach(() => {
         given.lib.clear()
@@ -49,10 +54,24 @@ describe('persistence', () => {
         )
         let lib2 = new PostHogPersistence({ name: 'bla', persistence: 'localStorage+cookie' })
         expect(document.cookie).toEqual('ph__posthog=%7B%22distinct_id%22%3A%22testy%22%7D')
-        lib2.register_once({ test_prop2: 'test_val' })
-        expect(lib2.props).toEqual({ distinct_id: 'testy', test_prop: 'test_value', test_prop2: 'test_val' })
+        lib2.register({ test_prop2: 'test_val', distinct_id: 'test2' })
+        expect(document.cookie).toEqual('ph__posthog=%7B%22distinct_id%22%3A%22test2%22%7D')
+        expect(lib2.props).toEqual({ distinct_id: 'test2', test_prop: 'test_value', test_prop2: 'test_val' })
         lib2.remove('ph__posthog')
         expect(localStorage.getItem('ph__posthog')).toEqual(null)
         expect(document.cookie).toEqual('')
+    })
+
+    forPersistenceTypes(function (persistenceType) {
+        it(`should register once`, () => {
+            let lib = new PostHogPersistence({ name: 'test', persistence: persistenceType })
+            lib.register_once({ distinct_id: 'hi', test_prop: 'test_val' })
+
+            let lib2 = new PostHogPersistence({ name: 'test', persistence: persistenceType })
+            expect(lib2.props).toEqual({ distinct_id: 'hi', test_prop: 'test_val' })
+            lib.clear()
+            lib2.clear()
+        })
+        // Need to add more tests here
     })
 })

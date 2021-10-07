@@ -171,7 +171,7 @@ export const localPlusCookieStore = {
         try {
             localStore.set(name, value)
             if (value.distinct_id) {
-                cookieStore.set(this.name, { distinct_id: extend['distinct_id'] })
+                cookieStore.set(name, { distinct_id: value.distinct_id })
             }
         } catch (err) {
             localStore.error(err)
