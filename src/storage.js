@@ -1,4 +1,5 @@
 import { console } from './utils'
+import { _ } from './utils'
 
 var DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
 
@@ -54,7 +55,8 @@ export const cookieStore = {
                 secure = '; secure'
             }
 
-            var new_cookie_val = name + '=' + encodeURIComponent(value) + expires + '; path=/' + cdomain + secure
+            var new_cookie_val =
+                name + '=' + encodeURIComponent(JSON.stringify(value)) + expires + '; path=/' + cdomain + secure
             document.cookie = new_cookie_val
             return new_cookie_val
         } catch (err) {
@@ -79,15 +81,19 @@ export const localStore = {
         }
 
         var supported = true
-        try {
-            var key = '__mplssupport__',
-                val = 'xyz'
-            localStore.set(key, val)
-            if (localStore.get(key) !== val) {
+        if (window) {
+            try {
+                var key = '__mplssupport__',
+                    val = 'xyz'
+                localStore.set(key, val)
+                if (localStore.get(key) !== '"xyz"') {
+                    supported = false
+                }
+                localStore.remove(key)
+            } catch (err) {
                 supported = false
             }
-            localStore.remove(key)
-        } catch (err) {
+        } else {
             supported = false
         }
         if (!supported) {
@@ -122,7 +128,7 @@ export const localStore = {
 
     set: function (name, value) {
         try {
-            window.localStorage.setItem(name, value)
+            window.localStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
             localStore.error(err)
         }
@@ -131,6 +137,51 @@ export const localStore = {
     remove: function (name) {
         try {
             window.localStorage.removeItem(name)
+        } catch (err) {
+            localStore.error(err)
+        }
+    },
+}
+
+// Use localstorage for most data but still use cookie for distinct_id
+// This solves issues with cookies having too much data in them causing headers too large
+// Also makes sure we don't have to send a ton of data to the server
+export const localPlusCookieStore = {
+    ...localStore,
+    parse: function (name) {
+        try {
+            let extend = {}
+            try {
+                // See if there's a cookie stored with data.
+                extend = cookieStore.parse(name) || {}
+                if (extend['distinct_id']) {
+                    cookieStore.set(name, { distinct_id: extend['distinct_id'] })
+                }
+            } catch (err) {}
+            const value = _.extend(extend, JSON.parse(localStore.get(name) || '{}'))
+            localStore.set(name, value)
+            return value
+        } catch (err) {
+            // noop
+        }
+        return null
+    },
+
+    set: function (name, value) {
+        try {
+            localStore.set(name, value)
+            if (value.distinct_id) {
+                cookieStore.set(this.name, { distinct_id: extend['distinct_id'] })
+            }
+        } catch (err) {
+            localStore.error(err)
+        }
+    },
+
+    remove: function (name) {
+        try {
+            window.localStorage.removeItem(name)
+            cookieStore.remove(name)
         } catch (err) {
             localStore.error(err)
         }

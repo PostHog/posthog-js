@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 
 import { _, console } from './utils'
-import { cookieStore, localStore, memoryStore } from './storage'
+import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
 
 /*
  * Constants
@@ -61,13 +61,16 @@ var PostHogPersistence = function (config) {
     }
 
     var storage_type = config['persistence']
-    if (storage_type !== 'cookie' && storage_type !== 'localStorage' && storage_type !== 'memory') {
+    if (storage_type !== 'cookie' && storage_type.indexOf('localStorage') === -1 && storage_type !== 'memory') {
         console.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
     }
-
+    const test = localPlusCookieStore
+    const test2 = localPlusCookieStore.is_supported()
     if (storage_type === 'localStorage' && localStore.is_supported()) {
         this.storage = localStore
+    } else if (storage_type === 'localStorage+cookie' && localPlusCookieStore.is_supported()) {
+        this.storage = localPlusCookieStore
     } else if (storage_type === 'memory') {
         this.storage = memoryStore
     } else {
@@ -111,7 +114,7 @@ PostHogPersistence.prototype.save = function () {
     if (this.disabled) {
         return
     }
-    this.storage.set(this.name, JSON.stringify(this['props']), this.expire_days, this.cross_subdomain, this.secure)
+    this.storage.set(this.name, this['props'], this.expire_days, this.cross_subdomain, this.secure)
 }
 
 PostHogPersistence.prototype.remove = function () {
