@@ -1,5 +1,4 @@
 import { PostHogPersistence } from '../posthog-persistence'
-import { cookieStore } from '../storage'
 
 given('lib', () => new PostHogPersistence({ name: 'bla', persistence: 'cookie' }))
 

@@ -65,8 +65,6 @@ var PostHogPersistence = function (config) {
         console.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
     }
-    const test = localPlusCookieStore
-    const test2 = localPlusCookieStore.is_supported()
     if (storage_type === 'localStorage' && localStore.is_supported()) {
         this.storage = localStore
     } else if (storage_type === 'localStorage+cookie' && localPlusCookieStore.is_supported()) {
