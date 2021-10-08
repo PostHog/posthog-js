@@ -28,8 +28,21 @@ export class Toolbar {
      * 1. In the URL hash params if the customer is using an old snippet
      * 2. From session storage under the key `editorParams` if the editor was initialized on a previous page
      */
-    maybeLoadEditor(location = window.location, localStorage = window.localStorage, history = window.history) {
+    maybeLoadEditor(location = window.location, localStorage, history = window.history) {
         try {
+            // Before running the code we check if we can access localStorage, if not we opt-out
+            if (!localStorage) {
+                try {
+                    window.localStorage.setItem('test', 'test')
+                    window.localStorage.removeItem('test')
+                } catch (error) {
+                    return false
+                }
+
+                // If localStorage was undefined, and localStorage is supported we set the default value
+                localStorage = window.localStorage
+            }
+
             const stateHash = _.getHashParam(location.hash, '__posthog') || _.getHashParam(location.hash, 'state')
             const state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
             const parseFromUrl = state && (state['action'] === 'mpeditor' || state['action'] === 'ph_authorize')
