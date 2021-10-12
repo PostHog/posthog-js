@@ -196,8 +196,9 @@ export function shouldCaptureElement(el) {
 export function isSensitiveElement(el) {
     // don't send data from inputs or similar elements since there will always be
     // a risk of clientside javascript placing sensitive data in attributes
+    const allowedInputTypes = ['button', 'checkbox', 'submit', 'reset']
     if (
-        (isTag(el, 'input') && el.type != 'button') ||
+        (isTag(el, 'input') && !allowedInputTypes.includes(el.type)) ||
         isTag(el, 'select') ||
         isTag(el, 'textarea') ||
         el.getAttribute('contenteditable') === 'true'
