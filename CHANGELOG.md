@@ -1,3 +1,8 @@
+## 1.14.2 - 2021-10-12
+
+- dont mind me, just bumping versions (#316)
+- fix: localStorage access denied error being thrown (#312)
+
 ## 1.14.1 - 2021-10-06
 
 - Reduce code paths that could encode post data as the string undefined (#300)
