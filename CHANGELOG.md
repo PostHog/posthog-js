@@ -1,3 +1,7 @@
+## 1.14.3 - 2021-10-12
+
+- Expand allowed input types to 'button', 'checkbox', 'submit', 'reset' (#315)
+
 ## 1.14.2 - 2021-10-12
 
 - dont mind me, just bumping versions (#316)
