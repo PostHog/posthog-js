@@ -82,7 +82,8 @@
         "testPathIgnorePatterns": [
             "/node_modules/",
             "/cypress/",
-            "/react/"
+            "/react/",
+            "/test_data/"
         ],
         "moduleFileExtensions": [
             "js",

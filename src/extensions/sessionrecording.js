@@ -3,6 +3,7 @@ import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
 import sessionIdGenerator from './sessionid'
 import Config from '../config'
+import { filterDataURLsFromLargeDataObjects } from './sessionrecording-utils'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -103,6 +104,8 @@ export class SessionRecording {
 
         this.stopRrweb = window.rrweb.record({
             emit: (data) => {
+                data = filterDataURLsFromLargeDataObjects(data)
+
                 const properties = {
                     $snapshot_data: data,
                     $session_id: sessionIdGenerator(this.instance.persistence, data.timestamp),
