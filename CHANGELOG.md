@@ -1,3 +1,7 @@
+## 1.14.4 - 2021-10-14
+
+- filter data urls out of large payloads (#317)
+
 ## 1.14.3 - 2021-10-12
 
 - Expand allowed input types to 'button', 'checkbox', 'submit', 'reset' (#315)
