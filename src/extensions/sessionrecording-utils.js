@@ -16,6 +16,10 @@ export function filterDataURLsFromLargeDataObjects(data) {
         // but we're assuming most of the size is from a data uri which
         // is unlikely to be compressed further
         if (stringifiedData.length > 19000000) {
+            // Regex that matches the pattern for a dataURI with the shape 'data:{mime type};{encoding},{data}'. It:
+            // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
+            // 2) Extracts the mime type of the data uri in the first group
+            // 3) Determines when the data URI ends.Depending on if it's used in the src tag or css, it can end with a ) or "
             var dataURIRegex = /data:([\w\/\-\.]+);(\w+),([^)"]*)/gim
             var matches = stringifiedData.matchAll(dataURIRegex)
             for (var match of matches) {
