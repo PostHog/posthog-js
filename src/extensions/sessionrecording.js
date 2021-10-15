@@ -106,9 +106,15 @@ export class SessionRecording {
             emit: (data) => {
                 data = filterDataURLsFromLargeDataObjects(data)
 
+                const sessionIdObject = sessionIdGenerator(this.instance.persistence, data.timestamp)
+
+                if (sessionIdObject.isNewSessionId) {
+                    window.rrweb.record.takeFullSnapshot()
+                }
+
                 const properties = {
                     $snapshot_data: data,
-                    $session_id: sessionIdGenerator(this.instance.persistence, data.timestamp),
+                    $session_id: sessionIdObject.sessionId,
                 }
 
                 this.instance._captureMetrics.incr('rrweb-record')

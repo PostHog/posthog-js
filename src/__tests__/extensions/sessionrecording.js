@@ -93,9 +93,11 @@ describe('SessionRecording', () => {
                     return () => {}
                 }),
             }
-
             loadScript.mockImplementation((path, callback) => callback())
-            sessionIdGenerator.mockReturnValue('sid')
+            sessionIdGenerator.mockReturnValue({
+                isNewSessionId: true,
+                sessionId: 'sid',
+            })
         })
 
         it('calls rrweb.record with the right options', () => {
