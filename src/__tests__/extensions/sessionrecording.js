@@ -165,11 +165,6 @@ describe('SessionRecording', () => {
             )
         })
 
-        it('records events emitted before and after starting recording', () => {
-            given.sessionRecording.startRecordingIfEnabled()
-            expect(loadScript).toHaveBeenCalled()
-        })
-
         it('loads recording script from right place', () => {
             given.sessionRecording.startRecordingIfEnabled()
 
@@ -220,7 +215,7 @@ describe('SessionRecording', () => {
             given.sessionRecording.startRecordingIfEnabled()
             given.sessionRecording.submitRecordings()
 
-            _emit({ event: 4, type: 3 })
+            _emit({ event: 123, type: 3 })
             expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
         })
 
@@ -233,7 +228,7 @@ describe('SessionRecording', () => {
             given.sessionRecording.startRecordingIfEnabled()
             given.sessionRecording.submitRecordings()
 
-            _emit({ event: 4, type: 4 })
+            _emit({ event: 123, type: 4 })
             expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
         })
 
@@ -246,7 +241,7 @@ describe('SessionRecording', () => {
             given.sessionRecording.startRecordingIfEnabled()
             given.sessionRecording.submitRecordings()
 
-            _emit({ event: 4, type: 3 })
+            _emit({ event: 123, type: 3 })
             expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
         })
     })

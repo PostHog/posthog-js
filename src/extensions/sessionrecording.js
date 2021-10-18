@@ -108,8 +108,8 @@ export class SessionRecording {
 
                 const sessionIdObject = sessionIdGenerator(this.instance.persistence, data.timestamp)
 
-                // Data type 2 and 4 are FullSnapshot and Meta and mean we're already
-                // sending a full snapshot
+                // Data type 2 and 4 are FullSnapshot and Meta and they mean we're already
+                // in the process of sending a full snapshot
                 if (sessionIdObject.isNewSessionId && [2, 4].indexOf(data.type) === -1) {
                     window.rrweb.record.takeFullSnapshot()
                 }
