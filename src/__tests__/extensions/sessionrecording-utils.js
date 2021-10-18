@@ -1,5 +1,5 @@
 import { filterDataURLsFromLargeDataObjects, replacementImageURI } from '../../extensions/sessionrecording-utils'
-import { tenMBAudioURI, tenMBImageURI } from './test_data/sessionrecording-utils-test-data'
+import { threeMBAudioURI, threeMBImageURI } from './test_data/sessionrecording-utils-test-data'
 
 describe(`SessionRecording utility functions`, () => {
     describe(`filterLargeDataURLs`, () => {
@@ -7,13 +7,13 @@ describe(`SessionRecording utility functions`, () => {
             expect(filterDataURLsFromLargeDataObjects(null)).toBe(null)
         })
 
-        it(`should not touch an object under 20mb`, () => {
+        it(`should not touch an object under 5mb`, () => {
             var data = {
                 attributes: [
                     {
                         node: {
                             attributes: {
-                                src: tenMBImageURI,
+                                src: threeMBImageURI,
                             },
                         },
                     },
@@ -22,13 +22,13 @@ describe(`SessionRecording utility functions`, () => {
             expect(filterDataURLsFromLargeDataObjects(data)).toMatchObject(data)
         })
 
-        it(`should replace image data urls if the object is over 20mb`, () => {
+        it(`should replace image data urls if the object is over 5mb`, () => {
             var data = {
                 attributes: [
                     {
                         node: {
                             attributes: {
-                                src: tenMBImageURI,
+                                src: threeMBImageURI,
                             },
                         },
                     },
@@ -37,7 +37,7 @@ describe(`SessionRecording utility functions`, () => {
                             attributes: {
                                 attributes: {
                                     style: {
-                                        background: `url(${tenMBImageURI})`,
+                                        background: `url(${threeMBImageURI})`,
                                     },
                                 },
                             },
@@ -70,20 +70,20 @@ describe(`SessionRecording utility functions`, () => {
             })
         })
 
-        it(`should remove non-image data urls if the object is over 20mb`, () => {
+        it(`should remove non-image data urls if the object is over 5mb`, () => {
             var data = {
                 attributes: [
                     {
                         node: {
                             attributes: {
-                                src: tenMBAudioURI,
+                                src: threeMBAudioURI,
                             },
                         },
                     },
                     {
                         node: {
                             attributes: {
-                                src: tenMBAudioURI,
+                                src: threeMBAudioURI,
                             },
                         },
                     },
