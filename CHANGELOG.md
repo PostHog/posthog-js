@@ -1,3 +1,7 @@
+## 1.15.0 - 2021-10-18
+
+- Revert "Add posthog.people.increment" (#320)
+
 ## 1.14.4 - 2021-10-14
 
 - filter data urls out of large payloads (#317)
