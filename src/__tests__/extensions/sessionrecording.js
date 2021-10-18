@@ -87,15 +87,19 @@ describe('SessionRecording', () => {
         given('$session_recording_enabled', () => true)
 
         beforeEach(() => {
+            const mockFullSnapshot = jest.fn()
             window.rrweb = {
                 record: jest.fn(({ emit }) => {
                     _emit = emit
                     return () => {}
                 }),
             }
-
+            window.rrweb.record.takeFullSnapshot = mockFullSnapshot
             loadScript.mockImplementation((path, callback) => callback())
-            sessionIdGenerator.mockReturnValue('sid')
+            sessionIdGenerator.mockReturnValue({
+                isNewSessionId: false,
+                sessionId: 'sid',
+            })
         })
 
         it('calls rrweb.record with the right options', () => {
@@ -200,6 +204,45 @@ describe('SessionRecording', () => {
 
             expect(given.sessionRecording.stopRrweb).toEqual(null)
             expect(given.sessionRecording.captureStarted).toEqual(false)
+        })
+
+        it('sends a full snapshot if there is a new session id and its not type 2 or 4', () => {
+            sessionIdGenerator.mockReturnValue({
+                isNewSessionId: true,
+                sessionId: 'new-sid',
+            })
+
+            given.sessionRecording.startRecordingIfEnabled()
+            given.sessionRecording.submitRecordings()
+
+            _emit({ event: 123, type: 3 })
+            expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
+        })
+
+        it('does not send a full snapshot if there is a new session id and its type 2 or 4', () => {
+            sessionIdGenerator.mockReturnValue({
+                isNewSessionId: true,
+                sessionId: 'new-sid',
+            })
+
+            given.sessionRecording.startRecordingIfEnabled()
+            given.sessionRecording.submitRecordings()
+
+            _emit({ event: 123, type: 4 })
+            expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
+        })
+
+        it('does not send a full snapshot if there is not a new session', () => {
+            sessionIdGenerator.mockReturnValue({
+                isNewSessionId: false,
+                sessionId: 'sid',
+            })
+
+            given.sessionRecording.startRecordingIfEnabled()
+            given.sessionRecording.submitRecordings()
+
+            _emit({ event: 123, type: 3 })
+            expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
         })
     })
 })

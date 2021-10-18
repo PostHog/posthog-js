@@ -106,9 +106,17 @@ export class SessionRecording {
             emit: (data) => {
                 data = filterDataURLsFromLargeDataObjects(data)
 
+                const sessionIdObject = sessionIdGenerator(this.instance.persistence, data.timestamp)
+
+                // Data type 2 and 4 are FullSnapshot and Meta and they mean we're already
+                // in the process of sending a full snapshot
+                if (sessionIdObject.isNewSessionId && [2, 4].indexOf(data.type) === -1) {
+                    window.rrweb.record.takeFullSnapshot()
+                }
+
                 const properties = {
                     $snapshot_data: data,
-                    $session_id: sessionIdGenerator(this.instance.persistence, data.timestamp),
+                    $session_id: sessionIdObject.sessionId,
                 }
 
                 this.instance._captureMetrics.incr('rrweb-record')
