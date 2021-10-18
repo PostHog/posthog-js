@@ -11,7 +11,7 @@ const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
 const CUSTOM_PERSISTENCE_PREFIX = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
 
 function forPersistenceTypes(runTests) {
-    ;[`cookie`, `localStorage`].forEach(function (persistenceType) {
+    ;[`cookie`, `localStorage`, `localStorage+cookie`].forEach(function (persistenceType) {
         describe(persistenceType, runTests.bind(null, persistenceType))
     })
 }
