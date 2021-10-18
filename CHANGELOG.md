@@ -1,3 +1,7 @@
+## 1.15.2 - 2021-10-18
+
+- drop data uri filter limit from 20mb to 5mb (#322)
+
 ## 1.15.1 - 2021-10-18
 
 - Take a full recording snapshot when session ids update (a fix for missing recordings) (#318)
