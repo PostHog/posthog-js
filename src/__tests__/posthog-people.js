@@ -34,18 +34,4 @@ describe('posthog.people', () => {
         given.people.set_once({ set_me_once: 'set once' })
         expect(given.people._send_request).toHaveBeenCalledWith({ $set_once: { set_me_once: 'set once' } }, undefined)
     })
-
-    it('should process increment correctly', () => {
-        given.people.increment({ a: 1 })
-        expect(given.people._send_request).toHaveBeenCalledWith(
-            expect.objectContaining({
-                properties: {
-                    $increment: {
-                        a: 1,
-                    },
-                },
-            }),
-            undefined
-        )
-    })
 })

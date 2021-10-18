@@ -738,30 +738,6 @@ declare namespace posthog {
             callback?: posthog.CaptureCallback
         ): posthog.Properties
 
-        /*
-         * Increment numerical properties on a user record
-         *
-         * ### Usage:
-         *
-         *     posthog.people.increment('times visited platform', 1);
-         *
-         *     // or set multiple properties at once
-         *     posthog.people.increment({
-         *         'times visited platform': 1,
-         *         'total amount spent': 100
-         *     });
-         *
-         *
-         * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
-         * @param {*} [to] A value to set on the given property name
-         * @param {Function} [callback] If provided, the callback will be called after captureing the event.
-         */
-        static increment(
-            prop: posthog.Properties | string,
-            to?: posthog.Property,
-            callback?: posthog.CaptureCallback
-        ): posthog.Properties
-
         static toString(): string
     }
 
