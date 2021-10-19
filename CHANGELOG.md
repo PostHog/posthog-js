@@ -1,3 +1,7 @@
+## 1.15.3 - 2021-10-19
+
+- Add localStorage+cookie as persistence type (#324)
+
 ## 1.15.2 - 2021-10-18
 
 - drop data uri filter limit from 20mb to 5mb (#322)
