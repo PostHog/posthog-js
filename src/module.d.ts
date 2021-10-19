@@ -559,7 +559,7 @@ declare namespace posthog {
         rageclick?: boolean
         cdn?: string
         cross_subdomain_cookie?: boolean
-        persistence?: 'localStorage' | 'cookie' | 'memory'
+        persistence?: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie'
         persistence_name?: string
         cookie_name?: string
         loaded?: (posthog_instance: typeof posthog) => void
