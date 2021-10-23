@@ -212,3 +212,74 @@ export const memoryStore = {
         delete memoryStorage[name]
     },
 }
+
+var _sessionStorage_supported = null
+// Storage that only lasts the length of a tab/window. Survives page refreshes
+export const sessionStore = {
+    is_supported: function () {
+        if (_sessionStorage_supported !== null) {
+            return _sessionStorage_supported
+        }
+
+        var supported = true
+        if (window) {
+            try {
+                var key = '__mplssupport__',
+                    val = 'xyz'
+                sessionStore.set(key, val)
+                if (sessionStore.get(key) !== '"xyz"') {
+                    supported = false
+                }
+                sessionStore.remove(key)
+            } catch (err) {
+                supported = false
+            }
+        } else {
+            supported = false
+        }
+        if (!supported) {
+            console.error('sessionStorage is unsupported;')
+        }
+
+        _sessionStorage_supported = supported
+        return supported
+    },
+
+    error: function (msg) {
+        console.error('sessionStorage error: ' + msg)
+    },
+
+    get: function (name) {
+        try {
+            return window.sessionStorage.getItem(name)
+        } catch (err) {
+            sessionStore.error(err)
+        }
+        return null
+    },
+
+    parse: function (name) {
+        try {
+            return JSON.parse(sessionStore.get(name)) || {}
+        } catch (err) {
+            // noop
+        }
+        return null
+    },
+
+    set: function (name, value) {
+        try {
+            window.sessionStorage.setItem(name, JSON.stringify(value))
+        } catch (err) {
+            sessionStore.error(err)
+        }
+    },
+
+    remove: function (name) {
+        try {
+            window.sessionStorage.removeItem(name)
+        } catch (err) {
+            sessionStore.error(err)
+        }
+    },
+}

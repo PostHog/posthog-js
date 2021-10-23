@@ -16,6 +16,7 @@ import { CaptureMetrics } from './capture-metrics'
 import { compressData, decideCompression } from './compression'
 import { xhr, encodePostData } from './send-request'
 import { RetryQueue } from './retry-queue'
+import { SessionIdManager } from './sessionid'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -255,6 +256,8 @@ PostHogLib.prototype._init = function (token, config, name) {
     this.__request_queue = []
 
     this['persistence'] = new PostHogPersistence(this['config'])
+    this['_sessionIdManager'] = new SessionIdManager(this['config'], this['persistence'])
+
     this._gdpr_init()
 
     var uuid = _.UUID()
@@ -632,6 +635,9 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
         properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
     }
 
+    const { sessionId, windowId } = this['_sessionIdManager'].getSessionAndWindowId()
+    properties['session_id'] = sessionId
+    properties['window_id'] = windowId
     // note: extend writes to the first object, so lets make sure we
     // don't write to the persistence properties object and info
     // properties object by passing in a new object

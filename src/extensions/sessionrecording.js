@@ -1,7 +1,6 @@
 import { loadScript } from '../autocapture-utils'
 import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
-import sessionIdGenerator from './sessionid'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects } from './sessionrecording-utils'
 
@@ -15,6 +14,8 @@ export class SessionRecording {
         this.emit = false
         this.endpoint = BASE_ENDPOINT
         this.stopRrweb = null
+        this.windowId = null
+        this.sessionId = null
     }
 
     startRecordingIfEnabled() {
@@ -79,6 +80,22 @@ export class SessionRecording {
         }
     }
 
+    _updateWindowAndSessionIds(data) {
+        shouldRefreshIfExpired = True // TODO: Check for events that are actual human interactions
+
+        const { windowId, sessionId } = this.instance['_sessionIdManager'].getSessionAndWindowId(
+            (shouldRefreshIfExpired = shouldRefreshIfExpired)
+        )
+
+        // Data type 2 and 4 are FullSnapshot and Meta and they mean we're already
+        // in the process of sending a full snapshot
+        if ((this.windowId !== windowId || this.sessionId !== sessionId) && [2, 4].indexOf(data.type) === -1) {
+            window.rrweb.record.takeFullSnapshot()
+        }
+        this.windowId = windowId
+        this.sessionId = sessionId
+    }
+
     _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
         const sessionRecordingOptions = {
@@ -106,17 +123,12 @@ export class SessionRecording {
             emit: (data) => {
                 data = filterDataURLsFromLargeDataObjects(data)
 
-                const sessionIdObject = sessionIdGenerator(this.instance.persistence, data.timestamp)
-
-                // Data type 2 and 4 are FullSnapshot and Meta and they mean we're already
-                // in the process of sending a full snapshot
-                if (sessionIdObject.isNewSessionId && [2, 4].indexOf(data.type) === -1) {
-                    window.rrweb.record.takeFullSnapshot()
-                }
+                this._updateWindowAndSessionIds(data)
 
                 const properties = {
                     $snapshot_data: data,
-                    $session_id: sessionIdObject.sessionId,
+                    $session_id: this.sessionId,
+                    $window_id: this.windowId,
                 }
 
                 this.instance._captureMetrics.incr('rrweb-record')
