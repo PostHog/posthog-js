@@ -1,7 +1,13 @@
 import { PostHogLib, init_as_module } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
 import { _ } from '../utils'
 import { autocapture } from '../autocapture'
+
+jest.mock('../gdpr-utils', () => ({
+    addOptOutCheckPostHogLib: (fn) => fn,
+    addOptOutCheckPostHogPeople: (fn) => fn,
+}))
 
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
@@ -452,5 +458,101 @@ describe('init()', () => {
 describe('skipped init()', () => {
     it('capture() does not throw', () => {
         expect(() => given.lib.capture('$pageview')).not.toThrow()
+    })
+})
+
+describe('group()', () => {
+    given('captureQueue', () => jest.fn())
+    given('overrides', () => ({
+        persistence: new PostHogPersistence(given.config),
+        capture: jest.fn(),
+        _captureMetrics: {
+            incr: jest.fn(),
+        },
+    }))
+    given('config', () => ({
+        request_batching: true,
+        persistence: 'memory',
+        property_blacklist: [],
+        _onCapture: jest.fn(),
+    }))
+
+    it('records info on groups', () => {
+        given.lib.group('organization', 'org::5')
+        expect(given.lib.getGroups()).toEqual({ organization: 'org::5' })
+
+        given.lib.group('organization', 'org::6')
+        expect(given.lib.getGroups()).toEqual({ organization: 'org::6' })
+
+        given.lib.group('instance', 'app.posthog.com')
+        expect(given.lib.getGroups()).toEqual({ organization: 'org::6', instance: 'app.posthog.com' })
+    })
+
+    it('does not result in a capture call', () => {
+        given.lib.group('organization', 'org::5')
+
+        expect(given.overrides.capture).not.toHaveBeenCalled()
+    })
+
+    it('captures $groupidentify event', () => {
+        given.lib.group('organization', 'org::5', { group: 'property', foo: 5 })
+
+        expect(given.overrides.capture).toHaveBeenCalledWith('$groupidentify', {
+            $group_type: 'organization',
+            $group_key: 'org::5',
+            $group_set: {
+                group: 'property',
+                foo: 5,
+            },
+        })
+    })
+
+    describe('subsequent capture calls', () => {
+        given('overrides', () => ({
+            __loaded: true,
+            config: given.config,
+            persistence: new PostHogPersistence(given.config),
+            _requestQueue: {
+                enqueue: given.captureQueue,
+            },
+            _captureMetrics: {
+                incr: jest.fn(),
+            },
+        }))
+
+        it('sends group information in event properties', () => {
+            given.lib.group('organization', 'org::5')
+            given.lib.group('instance', 'app.posthog.com')
+
+            given.lib.capture('some_event', { prop: 5 })
+
+            expect(given.captureQueue).toHaveBeenCalledTimes(1)
+
+            const [_endpoint, eventPayload] = given.captureQueue.mock.calls[0]
+            expect(eventPayload.event).toEqual('some_event')
+            expect(eventPayload.properties.$groups).toEqual({
+                organization: 'org::5',
+                instance: 'app.posthog.com',
+            })
+        })
+    })
+
+    describe('error handling', () => {
+        given('overrides', () => ({
+            register: jest.fn(),
+        }))
+
+        it('handles blank keys being passed', () => {
+            window.console.error = jest.fn()
+
+            given.lib.group(null, 'foo')
+            given.lib.group('organization', null)
+            given.lib.group('organization', undefined)
+            given.lib.group('organization', '')
+            given.lib.group('', 'foo')
+
+            expect(given.overrides.register).not.toHaveBeenCalled()
+            expect(window.console.error).toHaveBeenCalledTimes(5)
+        })
     })
 })
