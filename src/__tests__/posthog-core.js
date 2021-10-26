@@ -5,6 +5,7 @@ import { _ } from '../utils'
 import { autocapture } from '../autocapture'
 
 jest.mock('../gdpr-utils', () => ({
+    ...jest.requireActual('../gdpr-utils'),
     addOptOutCheckPostHogLib: (fn) => fn,
     addOptOutCheckPostHogPeople: (fn) => fn,
 }))
@@ -388,6 +389,7 @@ describe('init()', () => {
 
     beforeEach(() => {
         jest.spyOn(window.console, 'warn').mockImplementation()
+        jest.spyOn(window.console, 'error').mockImplementation()
         jest.spyOn(autocapture, 'init').mockImplementation()
         jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
     })
@@ -552,7 +554,6 @@ describe('group()', () => {
             given.lib.group('', 'foo')
 
             expect(given.overrides.register).not.toHaveBeenCalled()
-            expect(window.console.error).toHaveBeenCalledTimes(5)
         })
     })
 })
