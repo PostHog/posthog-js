@@ -601,7 +601,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         this.__compress_and_send_json_request(url, jsonData, options)
     }
 
-    this._invokeCaptureHooks(event_name)
+    this._invokeCaptureHooks(event_name, data)
 
     return data
 })
@@ -610,8 +610,8 @@ PostHogLib.prototype._addCaptureHook = function (callback) {
     this.__captureHooks.push(callback)
 }
 
-PostHogLib.prototype._invokeCaptureHooks = function (eventName) {
-    this.config._onCapture(eventName)
+PostHogLib.prototype._invokeCaptureHooks = function (eventName, eventData) {
+    this.config._onCapture(eventName, eventData)
     _.each(this.__captureHooks, (callback) => callback(eventName))
 }
 

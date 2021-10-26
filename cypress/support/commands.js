@@ -24,18 +24,20 @@
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite("visit", (originalFn, url, options) => { ... })
 
-let $captures
+let $captures, $fullCaptures
 
 Cypress.Commands.add('posthog', () => cy.window().then(($window) => $window.posthog))
 
 Cypress.Commands.add('posthogInit', (options) => {
     $captures = []
+    $fullCaptures = []
 
     cy.posthog().invoke('init', 'test_token', {
         api_host: location.origin,
         debug: true,
-        _onCapture: (data) => {
-            $captures.push(data)
+        _onCapture: (event, eventData) => {
+            $captures.push(event)
+            $fullCaptures.push(eventData)
         },
         ...options,
     })
@@ -43,7 +45,8 @@ Cypress.Commands.add('posthogInit', (options) => {
 
 Cypress.Commands.add('phCaptures', (options = {}) => {
     function resolve() {
-        return cy.verifyUpcomingAssertions($captures, options, {
+        const result = options.full ? $fullCaptures : $captures
+        return cy.verifyUpcomingAssertions(result, options, {
             onRetry: resolve,
         })
     }
@@ -53,4 +56,5 @@ Cypress.Commands.add('phCaptures', (options = {}) => {
 
 Cypress.Commands.add('resetPhCaptures', () => {
     $captures = []
+    $fullCaptures = []
 })
