@@ -222,16 +222,24 @@ describe('capture()', () => {
 
 describe('_calculate_event_properties()', () => {
     given('subject', () =>
-        given.lib._calculate_event_properties(given.event_name, given.properties, given.start_timestamp)
+        given.lib._calculate_event_properties(given.event_name, given.properties, given.start_timestamp, given.options)
     )
 
     given('event_name', () => 'custom_event')
     given('properties', () => ({ event: 'prop' }))
 
+    given('options', () => ({}))
+
     given('overrides', () => ({
         get_config: (key) => given.config[key],
         persistence: {
             properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+        },
+        _sessionIdManager: {
+            getSessionAndWindowId: jest.fn().mockReturnValue({
+                windowId: 'windowId',
+                sessionId: 'sessionId',
+            }),
         },
     }))
 
@@ -252,6 +260,8 @@ describe('_calculate_event_properties()', () => {
             $lib: 'web',
             distinct_id: 'abc',
             persistent: 'prop',
+            $window_id: 'windowId',
+            $session_id: 'sessionId',
         })
     })
 
@@ -262,7 +272,19 @@ describe('_calculate_event_properties()', () => {
             token: 'testtoken',
             event: 'prop',
             distinct_id: 'abc',
+            $window_id: 'windowId',
+            $session_id: 'sessionId',
         })
+    })
+
+    it('only adds token and distinct_id if event_name is $snapshot', () => {
+        given('event_name', () => '$snapshot')
+        expect(given.subject).toEqual({
+            token: 'testtoken',
+            event: 'prop',
+            distinct_id: 'abc',
+        })
+        expect(given.overrides._sessionIdManager.getSessionAndWindowId).not.toHaveBeenCalled()
     })
 
     it('calls sanitize_properties', () => {

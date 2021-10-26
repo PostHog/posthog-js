@@ -80,16 +80,23 @@ export class SessionRecording {
         }
     }
 
-    _updateWindowAndSessionIds(data) {
-        shouldRefreshIfExpired = True // TODO: Check for events that are actual human interactions
+    _updateWindowAndSessionIds(event) {
+        let canTriggerIDRefresh = true
+        // Event type 3 is incremental update, and source 0 is a mutation.
+        // These events are not caused by user interaction, so they should not
+        // trigger a new session to start
+        if (event.type === 3 && event.data?.source === 0) {
+            canTriggerIDRefresh = false
+        }
 
         const { windowId, sessionId } = this.instance['_sessionIdManager'].getSessionAndWindowId(
-            (shouldRefreshIfExpired = shouldRefreshIfExpired)
+            event.timestamp || new Date(),
+            canTriggerIDRefresh
         )
 
         // Data type 2 and 4 are FullSnapshot and Meta and they mean we're already
         // in the process of sending a full snapshot
-        if ((this.windowId !== windowId || this.sessionId !== sessionId) && [2, 4].indexOf(data.type) === -1) {
+        if ((this.windowId !== windowId || this.sessionId !== sessionId) && [2, 4].indexOf(event.type) === -1) {
             window.rrweb.record.takeFullSnapshot()
         }
         this.windowId = windowId
@@ -120,19 +127,19 @@ export class SessionRecording {
         }
 
         this.stopRrweb = window.rrweb.record({
-            emit: (data) => {
-                data = filterDataURLsFromLargeDataObjects(data)
+            emit: (event) => {
+                event = filterDataURLsFromLargeDataObjects(event)
 
-                this._updateWindowAndSessionIds(data)
+                this._updateWindowAndSessionIds(event)
 
                 const properties = {
-                    $snapshot_data: data,
+                    $snapshot_data: event,
                     $session_id: this.sessionId,
                     $window_id: this.windowId,
                 }
 
                 this.instance._captureMetrics.incr('rrweb-record')
-                this.instance._captureMetrics.incr(`rrweb-record-${data.type}`)
+                this.instance._captureMetrics.incr(`rrweb-record-${event.type}`)
 
                 if (this.emit) {
                     this._captureSnapshot(properties)

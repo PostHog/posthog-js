@@ -6,46 +6,50 @@ const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
 
 export class SessionIdManager {
     constructor(config, persistence) {
-        this.config = config
         this.persistence = persistence
 
-        if (this.config['persistence_name']) {
-            this.window_id_key = 'ph_' + this.config['persistence_name'] + '_window_id'
+        if (config['persistence_name']) {
+            this.window_id_storage_key = 'ph_' + config['persistence_name'] + '_window_id'
         } else {
-            this.window_id_key = 'ph_' + this.config['token'] + '_posthog_window_id'
+            this.window_id_storage_key = 'ph_' + config['token'] + '_window_id'
         }
     }
 
-    getWindowId() {
+    _getWindowId() {
         if (this.windowId) {
             return this.windowId
         }
-        return sessionStore.get(this.window_id_key)
+        return sessionStore.parse(this.window_id_storage_key)
     }
 
-    setWindowId(windowId) {
+    _setWindowId(windowId) {
         if (windowId !== this.windowId) {
             this.windowId = windowId
-            sessionStore.set(this.window_id_key, windowId)
+            sessionStore.set(this.window_id_storage_key, windowId)
         }
     }
 
-    getSessionAndWindowId(timestamp = null, shouldRefreshIfExpired = true) {
+    getSessionAndWindowId(timestamp = null, canTriggerIDRefresh = true) {
         if (timestamp === null) {
             timestamp = new Date()
         }
         let [lastTimestamp, sessionId] = this.persistence['props'][SESSION_ID] || [0, null]
-        let windowId = this.getWindowId()
+        let windowId = this._getWindowId()
 
-        if (shouldRefreshIfExpired && Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD) {
+        if (!sessionId || (canTriggerIDRefresh && Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD)) {
             sessionId = _.UUID()
             windowId = _.UUID()
         } else if (!windowId) {
             windowId = _.UUID()
         }
 
-        this.persistence.register({ [SESSION_ID]: [timestamp, sessionId] })
-        this.setWindowId(windowId)
+        let updatedTimestamp = timestamp
+        if (!canTriggerIDRefresh && lastTimestamp !== 0) {
+            updatedTimestamp = lastTimestamp
+        }
+
+        this.persistence.register({ [SESSION_ID]: [updatedTimestamp, sessionId] })
+        this._setWindowId(windowId)
 
         return {
             sessionId: sessionId,

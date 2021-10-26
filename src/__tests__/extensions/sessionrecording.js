@@ -1,10 +1,8 @@
 import { loadScript } from '../../autocapture-utils'
 import { SessionRecording } from '../../extensions/sessionrecording'
 import { SESSION_RECORDING_ENABLED } from '../../posthog-persistence'
-import sessionIdGenerator from '../../extensions/sessionid'
 
 jest.mock('../../autocapture-utils')
-jest.mock('../../extensions/sessionid')
 jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
 
 describe('SessionRecording', () => {
@@ -18,8 +16,15 @@ describe('SessionRecording', () => {
         capture: jest.fn(),
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
+        _sessionIdManager: {
+            getSessionAndWindowId: jest.fn().mockReturnValue({
+                sessionId: 'sessionId',
+                windowId: 'windowId',
+            }),
+        },
         _addCaptureHook: jest.fn(),
     }))
+
     given('config', () => ({
         api_host: 'https://test.com',
         disable_session_recording: given.disabled,
@@ -96,10 +101,6 @@ describe('SessionRecording', () => {
             }
             window.rrweb.record.takeFullSnapshot = mockFullSnapshot
             loadScript.mockImplementation((path, callback) => callback())
-            sessionIdGenerator.mockReturnValue({
-                isNewSessionId: false,
-                sessionId: 'sid',
-            })
         })
 
         it('calls rrweb.record with the right options', () => {
@@ -134,7 +135,8 @@ describe('SessionRecording', () => {
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $session_id: 'sid',
+                    $session_id: 'sessionId',
+                    $window_id: 'windowId',
                     $snapshot_data: { event: 1 },
                 },
                 {
@@ -150,7 +152,8 @@ describe('SessionRecording', () => {
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $session_id: 'sid',
+                    $session_id: 'sessionId',
+                    $window_id: 'windowId',
                     $snapshot_data: { event: 2 },
                 },
                 {
@@ -207,9 +210,28 @@ describe('SessionRecording', () => {
         })
 
         it('sends a full snapshot if there is a new session id and its not type 2 or 4', () => {
-            sessionIdGenerator.mockReturnValue({
-                isNewSessionId: true,
-                sessionId: 'new-sid',
+            given.sessionRecording.sessionId = 'old-session-id'
+            given.sessionRecording.windowId = 'old-window-id'
+
+            given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
+                sessionId: 'new-session-id',
+                windowId: 'new-window-id',
+            })
+
+            given.sessionRecording.startRecordingIfEnabled()
+            given.sessionRecording.submitRecordings()
+
+            _emit({ event: 123, type: 3 })
+            expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
+        })
+
+        it('sends a full snapshot if there is a new window id and its not type 2 or 4', () => {
+            given.sessionRecording.sessionId = 'old-session-id'
+            given.sessionRecording.windowId = 'old-window-id'
+
+            given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
+                sessionId: 'old-session-id',
+                windowId: 'new-window-id',
             })
 
             given.sessionRecording.startRecordingIfEnabled()
@@ -220,9 +242,12 @@ describe('SessionRecording', () => {
         })
 
         it('does not send a full snapshot if there is a new session id and its type 2 or 4', () => {
-            sessionIdGenerator.mockReturnValue({
-                isNewSessionId: true,
-                sessionId: 'new-sid',
+            given.sessionRecording.sessionId = 'old-session-id'
+            given.sessionRecording.windowId = 'old-window-id'
+
+            given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
+                sessionId: 'new-session-id',
+                windowId: 'new-window-id',
             })
 
             given.sessionRecording.startRecordingIfEnabled()
@@ -232,10 +257,13 @@ describe('SessionRecording', () => {
             expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
         })
 
-        it('does not send a full snapshot if there is not a new session', () => {
-            sessionIdGenerator.mockReturnValue({
-                isNewSessionId: false,
-                sessionId: 'sid',
+        it('does not send a full snapshot if there is not a new session or window id', () => {
+            given.sessionRecording.sessionId = 'old-session-id'
+            given.sessionRecording.windowId = 'old-window-id'
+
+            given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
+                sessionId: 'old-session-id',
+                windowId: 'old-window-id',
             })
 
             given.sessionRecording.startRecordingIfEnabled()
@@ -243,6 +271,14 @@ describe('SessionRecording', () => {
 
             _emit({ event: 123, type: 3 })
             expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
+        })
+
+        it('calls getSessionAndWindowId with canTriggerIDRefresh=false if its not an actual user interaction', () => {
+            given.sessionRecording.startRecordingIfEnabled()
+            given.sessionRecording.submitRecordings()
+
+            _emit({ event: 123, type: 3, data: { source: 0 }, timestamp: 1602107460000 })
+            expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, false)
         })
     })
 })

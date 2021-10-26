@@ -580,7 +580,9 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
 
     var data = {
         event: event_name,
-        properties: this._calculate_event_properties(event_name, properties, start_timestamp),
+        properties: this._calculate_event_properties(event_name, properties, start_timestamp, {
+            dontAddSessionAndWindowId: options._dontAddSessionAndWindowId,
+        }),
     }
 
     if (event_name === '$identify' && options.$set) {
@@ -635,9 +637,11 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
         properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
     }
 
-    const { sessionId, windowId } = this['_sessionIdManager'].getSessionAndWindowId()
-    properties['session_id'] = sessionId
-    properties['window_id'] = windowId
+    if (this._sessionIdManager) {
+        const { sessionId, windowId } = this._sessionIdManager.getSessionAndWindowId()
+        properties['$session_id'] = sessionId
+        properties['$window_id'] = windowId
+    }
     // note: extend writes to the first object, so lets make sure we
     // don't write to the persistence properties object and info
     // properties object by passing in a new object
