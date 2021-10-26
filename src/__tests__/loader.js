@@ -11,6 +11,7 @@ import sinon from 'sinon'
 describe(`Module-based loader in Node env`, () => {
     beforeEach(() => {
         jest.spyOn(posthog, '_send_request').mockReturnValue()
+        jest.spyOn(window.console, 'log').mockImplementation()
     })
 
     it('should load and capture the pageview event', () => {

@@ -20,12 +20,13 @@ describe('RetryQueue', () => {
         status: 418,
     })
 
-    window.XMLHttpRequest = jest.fn().mockImplementation(xhrMockClass)
-    window.navigator.sendBeacon = jest.fn()
-
     beforeEach(() => {
+        window.XMLHttpRequest = jest.fn().mockImplementation(xhrMockClass)
+        window.navigator.sendBeacon = jest.fn()
+
         jest.useFakeTimers()
         jest.spyOn(given.retryQueue, 'getTime').mockReturnValue(EPOCH)
+        jest.spyOn(window.console, 'warn').mockImplementation()
     })
 
     const fastForwardTimeAndRunTimer = () => {

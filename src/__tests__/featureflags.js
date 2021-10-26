@@ -11,6 +11,7 @@ describe('featureflags', () => {
 
     beforeEach(() => {
         jest.spyOn(given.instance, 'capture').mockReturnValue()
+        jest.spyOn(window.console, 'warn').mockImplementation()
     })
 
     given('properties', () => ({

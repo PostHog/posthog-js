@@ -12,6 +12,7 @@ describe('RequestQueue', () => {
         jest.useFakeTimers()
 
         jest.spyOn(given.queue, 'getTime').mockReturnValue(EPOCH)
+        jest.spyOn(console, 'warn').mockImplementation(() => {})
     })
 
     it('handles poll after enqueueing requests', () => {
