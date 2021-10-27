@@ -95,7 +95,7 @@ export class Toolbar {
             const editorUrl =
                 host + (host.endsWith('/') ? '' : '/') + 'static/' + toolbarScript + '?_ts=' + new Date().getTime()
             loadScript(editorUrl, () => {
-                window['ph_load_editor'](editorParams)
+                window['ph_load_editor'](editorParams, this.instance)
             })
             // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
             _.register_event(window, 'turbolinks:load', () => {
