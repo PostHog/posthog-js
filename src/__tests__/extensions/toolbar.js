@@ -150,7 +150,7 @@ describe('Toolbar', () => {
 
         it('should load if not previously loaded', () => {
             expect(given.subject()).toBe(true)
-            expect(window.ph_load_editor).toHaveBeenCalledWith(given.editorParams)
+            expect(window.ph_load_editor).toHaveBeenCalledWith(given.editorParams, given.lib)
         })
 
         it('should NOT load if previously loaded', () => {
