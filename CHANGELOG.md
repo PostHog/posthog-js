@@ -1,3 +1,7 @@
+## 1.15.4 - 2021-10-27
+
+- pass toolbar to posthog (#327)
+
 ## 1.15.3 - 2021-10-19
 
 - Add localStorage+cookie as persistence type (#324)
