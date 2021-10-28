@@ -1,3 +1,7 @@
+## 1.16.0 - 2021-10-28
+
+- Group analytics support (#325)
+
 ## 1.15.4 - 2021-10-27
 
 - pass toolbar to posthog (#327)
