@@ -167,6 +167,17 @@ declare class posthog {
     static alias(alias: string, original?: string): posthog.CaptureResult | number
 
     /**
+     * Alpha feature: don't use unless you know what you're doing!
+     *
+     * Sets group analytics information for subsequent events.
+     *
+     * @param {String} groupType Group type (example: 'organization')
+     * @param {String} groupKey Group key (example: 'org::5')
+     * @param {Object} groupPropertiesToSet Optional properties to set for group
+     */
+    static group(groupType: string, groupKey: string, groupPropertiesToSet?: posthog.Properties): void
+
+    /**
      * Update the configuration of a posthog library instance.
      *
      * The default config is:

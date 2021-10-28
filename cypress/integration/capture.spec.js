@@ -69,6 +69,24 @@ describe('Event capture', () => {
         cy.phCaptures().should('include', '$rageclick')
     })
 
+    describe('group analytics', () => {
+        given('options', () => ({
+            loaded: (posthog) => {
+                posthog.group('company', 'id:5')
+            },
+        }))
+
+        it('includes group information in all event payloads', () => {
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+
+            cy.phCaptures({ full: true })
+                .should('have.length', 3)
+                .should('satisfy', (payloads) => payloads.every(({ properties }) => !!properties.$groups))
+        })
+    })
+
     it('doesnt capture rage clicks when autocapture is disabled', () => {
         given('options', () => ({ rageclick: true, autocapture: false }))
 

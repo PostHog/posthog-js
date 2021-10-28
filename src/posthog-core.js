@@ -601,7 +601,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         this.__compress_and_send_json_request(url, jsonData, options)
     }
 
-    this._invokeCaptureHooks(event_name)
+    this._invokeCaptureHooks(event_name, data)
 
     return data
 })
@@ -610,8 +610,8 @@ PostHogLib.prototype._addCaptureHook = function (callback) {
     this.__captureHooks.push(callback)
 }
 
-PostHogLib.prototype._invokeCaptureHooks = function (eventName) {
-    this.config._onCapture(eventName)
+PostHogLib.prototype._invokeCaptureHooks = function (eventName, eventData) {
+    this.config._onCapture(eventName, eventData)
     _.each(this.__captureHooks, (callback) => callback(eventName))
 }
 
@@ -863,9 +863,17 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
     this.reloadFeatureFlags()
 }
 
-// Alpha feature, still under development, do not use!
-PostHogLib.prototype.__group = function (groupType, groupKey, groupPropertiesToSet) {
-    console.error('posthog.__group is still under development and should not be used in production!')
+/**
+ * Alpha feature: don't use unless you know what you're doing!
+ *
+ * Sets group analytics information for subsequent events.
+ *
+ * @param {String} groupType Group type (example: 'organization')
+ * @param {String} groupKey Group key (example: 'org::5')
+ * @param {Object} groupPropertiesToSet Optional properties to set for group
+ */
+PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet) {
+    // console.error('posthog.group is still under development and should not be used in production!')
     if (!groupType || !groupKey) {
         console.error('posthog.group requires a group type and group key')
         return
@@ -877,16 +885,13 @@ PostHogLib.prototype.__group = function (groupType, groupKey, groupPropertiesToS
 
     this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
-    this.capture('$group', {
-        distinct_id: this.get_distinct_id(),
-        $group: {
-            type: groupType,
-            key: groupKey,
-            $set: groupPropertiesToSet,
-        },
-    })
-
-    this.reloadFeatureFlags()
+    if (groupPropertiesToSet) {
+        this.capture('$groupidentify', {
+            $group_type: groupType,
+            $group_key: groupKey,
+            $group_set: groupPropertiesToSet,
+        })
+    }
 }
 
 /**
@@ -927,7 +932,7 @@ PostHogLib.prototype.get_distinct_id = function () {
 }
 
 PostHogLib.prototype.getGroups = function () {
-    return this.get_property('groups')
+    return this.get_property('$groups') || {}
 }
 
 /**
@@ -1496,7 +1501,7 @@ PostHogLib.prototype['register'] = PostHogLib.prototype.register
 PostHogLib.prototype['register_once'] = PostHogLib.prototype.register_once
 PostHogLib.prototype['unregister'] = PostHogLib.prototype.unregister
 PostHogLib.prototype['identify'] = PostHogLib.prototype.identify
-PostHogLib.prototype['__group'] = PostHogLib.prototype.__group
+PostHogLib.prototype['group'] = PostHogLib.prototype.group
 PostHogLib.prototype['alias'] = PostHogLib.prototype.alias
 PostHogLib.prototype['set_config'] = PostHogLib.prototype.set_config
 PostHogLib.prototype['get_config'] = PostHogLib.prototype.get_config

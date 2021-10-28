@@ -16,6 +16,10 @@ const simulateClick = function (el) {
 }
 
 describe('Autocapture system', () => {
+    beforeEach(() => {
+        jest.spyOn(window.console, 'log').mockImplementation()
+    })
+
     afterEach(() => {
         document.getElementsByTagName('html')[0].innerHTML = ''
     })
