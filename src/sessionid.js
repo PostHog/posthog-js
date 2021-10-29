@@ -1,3 +1,4 @@
+import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE } from './extensions/sessionrecording'
 import { SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
 import { _ } from './utils'
@@ -58,8 +59,12 @@ export class SessionIdManager {
     getSessionAndWindowId(timestamp = null, recordingEvent = false) {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to update the session and window ids in these cases. These events are designated by event
-        // type 3 (incremental update), and source 0 (mutation).
-        let isUserInteraction = !(recordingEvent && recordingEvent.type === 3 && recordingEvent.data?.source === 0)
+        // type -> incremental update, and source -> mutation.
+        let isUserInteraction = !(
+            recordingEvent &&
+            recordingEvent.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
+            recordingEvent.data?.source === MUTATION_SOURCE_TYPE
+        )
 
         let [lastTimestamp, sessionId] = this._getSessionId()
         let windowId = this._getWindowId()

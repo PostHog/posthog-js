@@ -6,6 +6,11 @@ import { filterDataURLsFromLargeDataObjects } from './sessionrecording-utils'
 
 const BASE_ENDPOINT = '/e/'
 
+export const FULL_SNAPSHOT_EVENT_TYPE = 2
+export const META_EVENT_TYPE = 4
+export const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
+export const MUTATION_SOURCE_TYPE = 3
+
 export class SessionRecording {
     constructor(instance) {
         this.instance = instance
@@ -86,9 +91,11 @@ export class SessionRecording {
             event
         )
 
-        // Data type 2 and 4 are FullSnapshot and Meta and they mean we're already
-        // in the process of sending a full snapshot
-        if ((this.windowId !== windowId || this.sessionId !== sessionId) && [2, 4].indexOf(event.type) === -1) {
+        // Event types FullSnapshot and Meta mean we're already in the process of sending a full snapshot
+        if (
+            (this.windowId !== windowId || this.sessionId !== sessionId) &&
+            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1
+        ) {
             window.rrweb.record.takeFullSnapshot()
         }
         this.windowId = windowId
@@ -161,7 +168,7 @@ export class SessionRecording {
             _noTruncate: true,
             _batchKey: 'sessionRecording',
             _metrics: {
-                rrweb_full_snapshot: properties.$snapshot_data.type === 2,
+                rrweb_full_snapshot: properties.$snapshot_data.type === FULL_SNAPSHOT_EVENT_TYPE,
             },
         })
     }
