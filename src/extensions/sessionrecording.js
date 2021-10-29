@@ -87,7 +87,7 @@ export class SessionRecording {
 
     _updateWindowAndSessionIds(event) {
         const { windowId, sessionId } = this.instance._sessionIdManager.getSessionAndWindowId(
-            event.timestamp || new Date(),
+            event.timestamp || new Date().getTime(),
             event
         )
 

@@ -249,10 +249,10 @@ describe('SessionRecording', () => {
                 const mockDate = new Date(1602107460000)
                 jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
-                expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(
-                    new Date(1602107460000),
-                    { event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE }
-                )
+                expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                })
             })
 
             it('sends its timestamp and event data to getSessionAndWindowId', () => {

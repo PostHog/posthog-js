@@ -30,6 +30,8 @@ describe('Session ID manager', () => {
     beforeEach(() => {
         _.UUID.mockReturnValue('newUUID')
         sessionStore.is_supported.mockReturnValue(true)
+        const mockDate = new Date(1603107460000)
+        jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
     })
 
     describe('new session id manager', () => {
@@ -99,6 +101,17 @@ describe('Session ID manager', () => {
             })
             expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [given.timestamp, 'newUUID'] })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
+        })
+
+        it('uses the current time if no timestamp is provided', () => {
+            const old_timestamp = 1601107460000
+            given('storedSessionIdData', () => [old_timestamp, 'oldSessionID'])
+            given('timestamp', () => null)
+            expect(given.subject).toEqual({
+                windowId: 'newUUID',
+                sessionId: 'newUUID',
+            })
+            expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [1603107460000, 'newUUID'] })
         })
     })
 

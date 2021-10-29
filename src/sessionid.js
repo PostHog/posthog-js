@@ -66,6 +66,8 @@ export class SessionIdManager {
             recordingEvent.data?.source === MUTATION_SOURCE_TYPE
         )
 
+        timestamp = timestamp || new Date().getTime()
+
         let [lastTimestamp, sessionId] = this._getSessionId()
         let windowId = this._getWindowId()
 
@@ -76,7 +78,7 @@ export class SessionIdManager {
             windowId = _.UUID()
         }
 
-        const newTimestamp = lastTimestamp === 0 || isUserInteraction ? timestamp || new Date() : lastTimestamp
+        const newTimestamp = lastTimestamp === 0 || isUserInteraction ? timestamp : lastTimestamp
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newTimestamp)
