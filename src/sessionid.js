@@ -39,7 +39,7 @@ export class SessionIdManager {
     }
 
     // Note: 'this.persistence.register' can be disabled in the config.
-    // In that case, this this works by storing sessionId and the timestamp in memory.
+    // In that case, this works by storing sessionId and the timestamp in memory.
     _setSessionId(sessionId, timestamp) {
         if (sessionId !== this.sessionId || timestamp !== this.timestamp) {
             this.timestamp = timestamp
