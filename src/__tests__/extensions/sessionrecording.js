@@ -14,6 +14,7 @@ describe('SessionRecording', () => {
     let _emit
 
     given('sessionRecording', () => new SessionRecording(given.posthog))
+    given('incomingSessionAndWindowId', () => ({ sessionId: 'sessionId', windowId: 'windowId' }))
 
     given('posthog', () => ({
         get_property: () => given.$session_recording_enabled,
@@ -22,10 +23,7 @@ describe('SessionRecording', () => {
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         _sessionIdManager: {
-            getSessionAndWindowId: jest.fn().mockReturnValue({
-                sessionId: 'sessionId',
-                windowId: 'windowId',
-            }),
+            getSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
         },
         _addCaptureHook: jest.fn(),
     }))
@@ -223,44 +221,38 @@ describe('SessionRecording', () => {
                 given.sessionRecording.submitRecordings()
             })
 
-            it('sends a full snapshot if there is a new session id and the event is not type FullSnapshot or Meta', () => {
-                given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
-                    sessionId: 'new-session-id',
-                    windowId: 'old-window-id',
-                })
-
+            it('sends a full snapshot if there is a new session/window id and the event is not type FullSnapshot or Meta', () => {
+                given('incomingSessionAndWindowId', () => ({ sessionId: 'new-session-id', windowId: 'new-window-id' }))
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
                 expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('sends a full snapshot if there is a new window id and the event is not type FullSnapshot or Meta', () => {
-                given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
-                    sessionId: 'old-session-id',
-                    windowId: 'new-window-id',
-                })
-
+                given('incomingSessionAndWindowId', () => ({ sessionId: 'old-session-id', windowId: 'new-window-id' }))
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
                 expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is a new session/window id and the event is type FullSnapshot or Meta', () => {
-                given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
-                    sessionId: 'new-session-id',
-                    windowId: 'new-window-id',
-                })
-
+                given('incomingSessionAndWindowId', () => ({ sessionId: 'new-session-id', windowId: 'new-window-id' }))
                 _emit({ event: 123, type: META_EVENT_TYPE })
                 expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is not a new session or window id', () => {
-                given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
-                    sessionId: 'old-session-id',
-                    windowId: 'old-window-id',
-                })
-
+                given('incomingSessionAndWindowId', () => ({ sessionId: 'old-session-id', windowId: 'old-window-id' }))
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
                 expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
+            })
+
+            it('it uses the current timestamp if the event does not have one', () => {
+                const mockDate = new Date(1602107460000)
+                const spy = jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
+                expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(
+                    new Date(1602107460000),
+                    { event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE }
+                )
             })
 
             it('sends its timestamp and event data to getSessionAndWindowId', () => {
