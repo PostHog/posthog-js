@@ -29,6 +29,7 @@ describe('sessionStore', () => {
     describe('sessionStore.is_supported', () => {
         let sessionStore
         beforeEach(() => {
+            // Reset the module before each test to make sure the module's variable 'sessionStorageSupported' is reset
             jest.resetModules()
             sessionStore = require('../storage').sessionStore
         })
