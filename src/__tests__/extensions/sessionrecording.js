@@ -247,7 +247,7 @@ describe('SessionRecording', () => {
 
             it('it uses the current timestamp if the event does not have one', () => {
                 const mockDate = new Date(1602107460000)
-                const spy = jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
+                jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
                 expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(
                     new Date(1602107460000),
