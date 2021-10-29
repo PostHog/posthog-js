@@ -214,29 +214,29 @@ export const memoryStore = {
 }
 
 // Storage that only lasts the length of a tab/window. Survives page refreshes
-let sessionStorageSupported = null
 export const sessionStore = {
+    sessionStorageSupported: null,
     is_supported: function () {
-        if (sessionStorageSupported !== null) {
-            return sessionStorageSupported
+        if (sessionStore.sessionStorageSupported !== null) {
+            return sessionStore.sessionStorageSupported
         }
-        sessionStorageSupported = true
+        sessionStore.sessionStorageSupported = true
         if (window) {
             try {
                 let key = '__support__',
                     val = 'xyz'
                 sessionStore.set(key, val)
                 if (sessionStore.get(key) !== '"xyz"') {
-                    sessionStorageSupported = false
+                    sessionStore.sessionStorageSupported = false
                 }
                 sessionStore.remove(key)
             } catch (err) {
-                sessionStorageSupported = false
+                sessionStore.sessionStorageSupported = false
             }
         } else {
-            sessionStorageSupported = false
+            sessionStore.sessionStorageSupported = false
         }
-        return sessionStorageSupported
+        return sessionStore.sessionStorageSupported
     },
     error: function (msg) {
         if (Config.DEBUG) {

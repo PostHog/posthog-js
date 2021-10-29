@@ -27,11 +27,9 @@ describe('sessionStore', () => {
     })
 
     describe('sessionStore.is_supported', () => {
-        let sessionStore
         beforeEach(() => {
-            // Reset the module before each test to make sure the module's variable 'sessionStorageSupported' is reset
-            jest.resetModules()
-            sessionStore = require('../storage').sessionStore
+            // Reset the sessionStorageSupported before each test. Otherwise, we'd just be testing the cached value.
+            sessionStore.sessionStorageSupported = null
         })
         it('returns false if sessionStorage is undefined', () => {
             const sessionStorage = global.window.sessionStorage
