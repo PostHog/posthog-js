@@ -2,8 +2,7 @@ import { sessionStore } from '../storage'
 
 describe('sessionStore', () => {
     it('stores objects as strings', () => {
-        const obj = { bar: 'baz' }
-        sessionStore.set('foo', obj)
+        sessionStore.set('foo', { bar: 'baz' })
         expect(sessionStore.get('foo')).toEqual('{"bar":"baz"}')
     })
     it('stores and retrieves an object untouched', () => {
@@ -26,7 +25,21 @@ describe('sessionStore', () => {
         sessionStore.remove('foo')
         expect(sessionStore.parse('foo')).toEqual(null)
     })
-    it('is_supported returns true by default', () => {
-        expect(sessionStore.is_supported()).toEqual(true)
+
+    describe('sessionStore.is_supported', () => {
+        let sessionStore
+        beforeEach(() => {
+            jest.resetModules()
+            sessionStore = require('../storage').sessionStore
+        })
+        it('returns false if sessionStorage is undefined', () => {
+            const sessionStorage = global.window.sessionStorage
+            delete global.window.sessionStorage
+            expect(sessionStore.is_supported()).toEqual(false)
+            global.window.sessionStorage = sessionStorage
+        })
+        it('returns true by default', () => {
+            expect(sessionStore.is_supported()).toEqual(true)
+        })
     })
 })
