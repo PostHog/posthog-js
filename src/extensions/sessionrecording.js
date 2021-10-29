@@ -9,6 +9,7 @@ const BASE_ENDPOINT = '/e/'
 export class SessionRecording {
     constructor(instance) {
         this.instance = instance
+        this.sessionIdManager = this.instance._sessionIdManager
         this.captureStarted = false
         this.snapshots = []
         this.emit = false
@@ -81,17 +82,9 @@ export class SessionRecording {
     }
 
     _updateWindowAndSessionIds(event) {
-        let canTriggerIDRefresh = true
-        // Event type 3 is incremental update, and source 0 is a mutation.
-        // These events are not caused by user interaction, so they should not
-        // trigger a new session to start
-        if (event.type === 3 && event.data?.source === 0) {
-            canTriggerIDRefresh = false
-        }
-
-        const { windowId, sessionId } = this.instance['_sessionIdManager'].getSessionAndWindowId(
+        const { windowId, sessionId } = this.sessionIdManager.getSessionAndWindowId(
             event.timestamp || new Date(),
-            canTriggerIDRefresh
+            event
         )
 
         // Data type 2 and 4 are FullSnapshot and Meta and they mean we're already

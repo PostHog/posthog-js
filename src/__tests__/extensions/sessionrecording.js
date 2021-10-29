@@ -209,76 +209,64 @@ describe('SessionRecording', () => {
             expect(given.sessionRecording.captureStarted).toEqual(false)
         })
 
-        it('sends a full snapshot if there is a new session id and its not type 2 or 4', () => {
-            given.sessionRecording.sessionId = 'old-session-id'
-            given.sessionRecording.windowId = 'old-window-id'
+        describe('session and window ids', () => {
+            beforeEach(() => {
+                given.sessionRecording.sessionId = 'old-session-id'
+                given.sessionRecording.windowId = 'old-window-id'
 
-            given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
-                sessionId: 'new-session-id',
-                windowId: 'new-window-id',
+                given.sessionRecording.startRecordingIfEnabled()
+                given.sessionRecording.submitRecordings()
             })
 
-            given.sessionRecording.startRecordingIfEnabled()
-            given.sessionRecording.submitRecordings()
+            it('sends a full snapshot if there is a new session id and the event is not type 2 or 4', () => {
+                given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
+                    sessionId: 'new-session-id',
+                    windowId: 'old-window-id',
+                })
 
-            _emit({ event: 123, type: 3 })
-            expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
-        })
-
-        it('sends a full snapshot if there is a new window id and its not type 2 or 4', () => {
-            given.sessionRecording.sessionId = 'old-session-id'
-            given.sessionRecording.windowId = 'old-window-id'
-
-            given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
-                sessionId: 'old-session-id',
-                windowId: 'new-window-id',
+                _emit({ event: 123, type: 3 })
+                expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
             })
 
-            given.sessionRecording.startRecordingIfEnabled()
-            given.sessionRecording.submitRecordings()
+            it('sends a full snapshot if there is a new window id and the event is not type 2 or 4', () => {
+                given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
+                    sessionId: 'old-session-id',
+                    windowId: 'new-window-id',
+                })
 
-            _emit({ event: 123, type: 3 })
-            expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
-        })
-
-        it('does not send a full snapshot if there is a new session id and its type 2 or 4', () => {
-            given.sessionRecording.sessionId = 'old-session-id'
-            given.sessionRecording.windowId = 'old-window-id'
-
-            given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
-                sessionId: 'new-session-id',
-                windowId: 'new-window-id',
+                _emit({ event: 123, type: 3 })
+                expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
             })
 
-            given.sessionRecording.startRecordingIfEnabled()
-            given.sessionRecording.submitRecordings()
+            it('does not send a full snapshot if there is a new session/window id and the event is type 2 or 4', () => {
+                given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
+                    sessionId: 'new-session-id',
+                    windowId: 'new-window-id',
+                })
 
-            _emit({ event: 123, type: 4 })
-            expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
-        })
-
-        it('does not send a full snapshot if there is not a new session or window id', () => {
-            given.sessionRecording.sessionId = 'old-session-id'
-            given.sessionRecording.windowId = 'old-window-id'
-
-            given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
-                sessionId: 'old-session-id',
-                windowId: 'old-window-id',
+                _emit({ event: 123, type: 4 })
+                expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
-            given.sessionRecording.startRecordingIfEnabled()
-            given.sessionRecording.submitRecordings()
+            it('does not send a full snapshot if there is not a new session or window id', () => {
+                given.posthog._sessionIdManager.getSessionAndWindowId.mockReturnValue({
+                    sessionId: 'old-session-id',
+                    windowId: 'old-window-id',
+                })
 
-            _emit({ event: 123, type: 3 })
-            expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
-        })
+                _emit({ event: 123, type: 3 })
+                expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
+            })
 
-        it('calls getSessionAndWindowId with canTriggerIDRefresh=false if its not an actual user interaction', () => {
-            given.sessionRecording.startRecordingIfEnabled()
-            given.sessionRecording.submitRecordings()
-
-            _emit({ event: 123, type: 3, data: { source: 0 }, timestamp: 1602107460000 })
-            expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, false)
+            it('sends its timestamp and event data to getSessionAndWindowId', () => {
+                _emit({ event: 123, type: 3, data: { source: 0 }, timestamp: 1602107460000 })
+                expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
+                    event: 123,
+                    type: 3,
+                    data: { source: 0 },
+                    timestamp: 1602107460000,
+                })
+            })
         })
     })
 })

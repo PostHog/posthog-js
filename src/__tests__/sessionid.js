@@ -7,10 +7,14 @@ jest.mock('../utils')
 jest.mock('../storage')
 
 describe('Session ID generation', () => {
+    given('subject', () => given.sessionIdManager.getSessionAndWindowId(given.timestamp, given.recordingEvent))
+
     given('persistence', () => ({
         props: { [SESSION_ID]: given.storedSessionIdData },
         register: jest.fn(),
+        disabled: given.disable_persistence,
     }))
+    given('given.disable_persistence', () => false)
 
     given('config', () => ({
         persistence_name: 'persistance-name',
@@ -20,10 +24,9 @@ describe('Session ID generation', () => {
 
     given('timestamp', () => 1603107479471)
 
-    given('subject', () => given.sessionIdManager.getSessionAndWindowId(given.timestamp))
-
     beforeEach(() => {
         _.UUID.mockReturnValue('newUUID')
+        sessionStore.is_supported.mockReturnValue(true)
     })
 
     describe('new session id manager', () => {
@@ -38,7 +41,7 @@ describe('Session ID generation', () => {
 
         it('generates an initial session id and window id, and saves them even if canTriggerIDRefresh is false', () => {
             given('subject', () => given.sessionIdManager.getSessionAndWindowId(given.timestamp, false))
-
+            given('recordingEvent', () => ({ type: 3, data: { source: 0 } }))
             expect(given.subject).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
@@ -49,6 +52,8 @@ describe('Session ID generation', () => {
     })
 
     describe('stored session data', () => {
+        given('storedSessionIdData', () => [1603107460000, 'oldSessionID'])
+
         it('reuses old ids and updates the session timestamp if not much time has passed', () => {
             given('storedSessionIdData', () => [1603107460000, 'oldSessionID'])
             sessionStore.parse.mockReturnValue('oldWindowID')
@@ -60,11 +65,11 @@ describe('Session ID generation', () => {
             expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [given.timestamp, 'oldSessionID'] })
         })
 
-        it('reuses old ids and does not update the session timestamp if  > 30m pass and canTriggerIDRefresh is false', () => {
+        it('reuses old ids and does not update the session timestamp if  > 30m pass and its a non-user interaction event', () => {
             const old_timestamp = 1602107460000
             given('storedSessionIdData', () => [old_timestamp, 'oldSessionID'])
+            given('recordingEvent', () => ({ type: 3, data: { source: 0 } }))
             sessionStore.parse.mockReturnValue('oldWindowID')
-            given('subject', () => given.sessionIdManager.getSessionAndWindowId(given.timestamp, false))
 
             expect(given.subject).toEqual({
                 windowId: 'oldWindowID',
@@ -74,7 +79,6 @@ describe('Session ID generation', () => {
         })
 
         it('generates only a new window id, and saves it when there is no previous window id set', () => {
-            given('storedSessionIdData', () => [1603107460000, 'oldSessionID'])
             sessionStore.parse.mockReturnValue(null)
 
             expect(given.subject).toEqual({
