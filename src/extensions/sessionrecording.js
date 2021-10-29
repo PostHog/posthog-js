@@ -9,7 +9,6 @@ const BASE_ENDPOINT = '/e/'
 export class SessionRecording {
     constructor(instance) {
         this.instance = instance
-        this.sessionIdManager = this.instance._sessionIdManager
         this.captureStarted = false
         this.snapshots = []
         this.emit = false
@@ -82,7 +81,7 @@ export class SessionRecording {
     }
 
     _updateWindowAndSessionIds(event) {
-        const { windowId, sessionId } = this.sessionIdManager.getSessionAndWindowId(
+        const { windowId, sessionId } = this.instance._sessionIdManager.getSessionAndWindowId(
             event.timestamp || new Date(),
             event
         )
