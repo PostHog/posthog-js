@@ -1,3 +1,7 @@
+## 1.16.1 - 2021-11-02
+
+- Add window_id and session_id to all events (#326)
+
 ## 1.16.0 - 2021-10-28
 
 - Group analytics support (#325)
