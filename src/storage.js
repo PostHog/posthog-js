@@ -212,3 +212,69 @@ export const memoryStore = {
         delete memoryStorage[name]
     },
 }
+
+// Storage that only lasts the length of a tab/window. Survives page refreshes
+export const sessionStore = {
+    sessionStorageSupported: null,
+    is_supported: function () {
+        if (sessionStore.sessionStorageSupported !== null) {
+            return sessionStore.sessionStorageSupported
+        }
+        sessionStore.sessionStorageSupported = true
+        if (window) {
+            try {
+                let key = '__support__',
+                    val = 'xyz'
+                sessionStore.set(key, val)
+                if (sessionStore.get(key) !== '"xyz"') {
+                    sessionStore.sessionStorageSupported = false
+                }
+                sessionStore.remove(key)
+            } catch (err) {
+                sessionStore.sessionStorageSupported = false
+            }
+        } else {
+            sessionStore.sessionStorageSupported = false
+        }
+        return sessionStore.sessionStorageSupported
+    },
+    error: function (msg) {
+        if (Config.DEBUG) {
+            console.error('sessionStorage error: ', msg)
+        }
+    },
+
+    get: function (name) {
+        try {
+            return window.sessionStorage.getItem(name)
+        } catch (err) {
+            sessionStore.error(err)
+        }
+        return null
+    },
+
+    parse: function (name) {
+        try {
+            return JSON.parse(sessionStore.get(name)) || null
+        } catch (err) {
+            // noop
+        }
+        return null
+    },
+
+    set: function (name, value) {
+        try {
+            window.sessionStorage.setItem(name, JSON.stringify(value))
+        } catch (err) {
+            sessionStore.error(err)
+        }
+    },
+
+    remove: function (name) {
+        try {
+            window.sessionStorage.removeItem(name)
+        } catch (err) {
+            sessionStore.error(err)
+        }
+    },
+}

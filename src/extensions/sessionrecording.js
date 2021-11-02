@@ -1,11 +1,15 @@
 import { loadScript } from '../autocapture-utils'
 import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
-import sessionIdGenerator from './sessionid'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects } from './sessionrecording-utils'
 
 const BASE_ENDPOINT = '/e/'
+
+export const FULL_SNAPSHOT_EVENT_TYPE = 2
+export const META_EVENT_TYPE = 4
+export const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
+export const MUTATION_SOURCE_TYPE = 3
 
 export class SessionRecording {
     constructor(instance) {
@@ -15,6 +19,8 @@ export class SessionRecording {
         this.emit = false
         this.endpoint = BASE_ENDPOINT
         this.stopRrweb = null
+        this.windowId = null
+        this.sessionId = null
     }
 
     startRecordingIfEnabled() {
@@ -79,6 +85,23 @@ export class SessionRecording {
         }
     }
 
+    _updateWindowAndSessionIds(event) {
+        const { windowId, sessionId } = this.instance._sessionIdManager.getSessionAndWindowId(
+            event.timestamp || new Date().getTime(),
+            event
+        )
+
+        // Event types FullSnapshot and Meta mean we're already in the process of sending a full snapshot
+        if (
+            (this.windowId !== windowId || this.sessionId !== sessionId) &&
+            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1
+        ) {
+            window.rrweb.record.takeFullSnapshot()
+        }
+        this.windowId = windowId
+        this.sessionId = sessionId
+    }
+
     _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
         const sessionRecordingOptions = {
@@ -103,24 +126,19 @@ export class SessionRecording {
         }
 
         this.stopRrweb = window.rrweb.record({
-            emit: (data) => {
-                data = filterDataURLsFromLargeDataObjects(data)
+            emit: (event) => {
+                event = filterDataURLsFromLargeDataObjects(event)
 
-                const sessionIdObject = sessionIdGenerator(this.instance.persistence, data.timestamp)
-
-                // Data type 2 and 4 are FullSnapshot and Meta and they mean we're already
-                // in the process of sending a full snapshot
-                if (sessionIdObject.isNewSessionId && [2, 4].indexOf(data.type) === -1) {
-                    window.rrweb.record.takeFullSnapshot()
-                }
+                this._updateWindowAndSessionIds(event)
 
                 const properties = {
-                    $snapshot_data: data,
-                    $session_id: sessionIdObject.sessionId,
+                    $snapshot_data: event,
+                    $session_id: this.sessionId,
+                    $window_id: this.windowId,
                 }
 
                 this.instance._captureMetrics.incr('rrweb-record')
-                this.instance._captureMetrics.incr(`rrweb-record-${data.type}`)
+                this.instance._captureMetrics.incr(`rrweb-record-${event.type}`)
 
                 if (this.emit) {
                     this._captureSnapshot(properties)
@@ -150,7 +168,7 @@ export class SessionRecording {
             _noTruncate: true,
             _batchKey: 'sessionRecording',
             _metrics: {
-                rrweb_full_snapshot: properties.$snapshot_data.type === 2,
+                rrweb_full_snapshot: properties.$snapshot_data.type === FULL_SNAPSHOT_EVENT_TYPE,
             },
         })
     }
