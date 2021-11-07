@@ -1,3 +1,7 @@
+## 1.16.2 - 2021-11-07
+
+- update rrweb (#328)
+
 ## 1.16.1 - 2021-11-02
 
 - Add window_id and session_id to all events (#326)
