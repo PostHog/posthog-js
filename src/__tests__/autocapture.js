@@ -103,8 +103,10 @@ describe('Autocapture system', () => {
         it('should filter out Angular content attributes', () => {
             const angularDiv = document.createElement('div')
             angularDiv.setAttribute('_ngcontent-dpm-c448', '')
+            angularDiv.setAttribute('_nghost-dpm-c448', '')
             const props = autocapture._getPropertiesFromElement(angularDiv)
             expect(props['_ngcontent-dpm-c448']).toBeUndefined()
+            expect(props['_nghost-dpm-c448']).toBeUndefined()
         })
     })
 

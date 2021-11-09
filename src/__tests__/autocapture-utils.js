@@ -7,7 +7,7 @@ import {
     isSensitiveElement,
     shouldCaptureValue,
     loadScript,
-    isAngularContentAttr,
+    isAngularStyleAttr,
 } from '../autocapture-utils'
 
 describe(`Autocapture utility functions`, () => {
@@ -358,20 +358,25 @@ describe(`Autocapture utility functions`, () => {
         })
     })
 
-    describe('isAngularContentAttr', () => {
+    describe('isAngularStyleAttr', () => {
         it('should detect attribute names that match _ngcontent*', () => {
-            expect(isAngularContentAttr('_ngcontent')).toBe(true)
-            expect(isAngularContentAttr('_ngcontent-c1')).toBe(true)
-            expect(isAngularContentAttr('_ngcontent-dpm-c448')).toBe(true)
+            expect(isAngularStyleAttr('_ngcontent')).toBe(true)
+            expect(isAngularStyleAttr('_ngcontent-c1')).toBe(true)
+            expect(isAngularStyleAttr('_ngcontent-dpm-c448')).toBe(true)
         })
-        it('should not detect attribute names that dont start with _ngcontent', () => {
-            expect(isAngularContentAttr('_ng-attr')).toBe(false)
-            expect(isAngularContentAttr('style')).toBe(false)
-            expect(isAngularContentAttr('class-name')).toBe(false)
+        it('should detect attribute names that match _nghost*', () => {
+            expect(isAngularStyleAttr('_nghost')).toBe(true)
+            expect(isAngularStyleAttr('_nghost-c1')).toBe(true)
+            expect(isAngularStyleAttr('_nghost-dpm-c448')).toBe(true)
+        })
+        it('should not detect attribute names that dont start with _ngcontent or _nghost', () => {
+            expect(isAngularStyleAttr('_ng-attr')).toBe(false)
+            expect(isAngularStyleAttr('style')).toBe(false)
+            expect(isAngularStyleAttr('class-name')).toBe(false)
         })
         it('should be safe for non-string attribute names', () => {
-            expect(isAngularContentAttr(1)).toBe(false)
-            expect(isAngularContentAttr(null)).toBe(false)
+            expect(isAngularStyleAttr(1)).toBe(false)
+            expect(isAngularStyleAttr(null)).toBe(false)
         })
     })
 })
