@@ -242,7 +242,7 @@ export function shouldCaptureValue(value) {
 /*
  * Check whether an attribute name is an Angular style attr (either _ngcontent or _nghost)
  * These update on each build and lead to noise in the element chain
- * https://stackoverflow.com/questions/45082129/what-does-ngcontent-c-mean-in-angular
+ * More details on the attributes here: https://angular.io/guide/view-encapsulation
  * @param {string} attributeName - string value to check
  * @returns {boolean} whether the element is an angular tag
  */
