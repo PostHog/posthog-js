@@ -240,15 +240,15 @@ export function shouldCaptureValue(value) {
 }
 
 /*
- * Check whether an attribute name is an Angular content attr
+ * Check whether an attribute name is an Angular style attr (either _ngcontent or _nghost)
  * These update on each build and lead to noise in the element chain
  * https://stackoverflow.com/questions/45082129/what-does-ngcontent-c-mean-in-angular
  * @param {string} attributeName - string value to check
  * @returns {boolean} whether the element is an angular tag
  */
-export function isAngularContentAttr(attributeName) {
+export function isAngularStyleAttr(attributeName) {
     if (typeof attributeName === 'string') {
-        return attributeName.substring(0, 10) === '_ngcontent'
+        return attributeName.substring(0, 10) === '_ngcontent' || attributeName.substring(0, 7) === '_nghost'
     }
     return false
 }
