@@ -1,3 +1,8 @@
+## 1.16.3 - 2021-11-12
+
+- Bumping the build for a release (#334)
+- Filter out _nghost attributes from autocapture (#332)
+
 ## 1.16.2 - 2021-11-07
 
 - update rrweb (#328)
