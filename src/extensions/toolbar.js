@@ -7,6 +7,9 @@ export class Toolbar {
     }
 
     afterDecideResponse(response) {
+        const disableToolbarMetrics =
+            this.instance.get_config('api_host') !== 'https://app.posthog.com' &&
+            this.instance.get_config('advanced_disable_toolbar_metrics')
         const editorParams =
             response['editorParams'] ||
             (response['toolbarVersion'] ? { toolbarVersion: response['toolbarVersion'] } : {})
@@ -18,6 +21,7 @@ export class Toolbar {
             this._loadEditor({
                 ...editorParams,
                 apiURL: this.instance.get_config('api_host'),
+                instrument: !!editorParams['instrument'] && !disableToolbarMetrics,
             })
             this.instance.set_config({ debug: true })
         }
