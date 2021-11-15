@@ -21,7 +21,7 @@ export class Toolbar {
             this._loadEditor({
                 ...editorParams,
                 apiURL: this.instance.get_config('api_host'),
-                instrument: !!editorParams['instrument'] && !disableToolbarMetrics,
+                ...(disableToolbarMetrics ? { instrument: false } : {}),
             })
             this.instance.set_config({ debug: true })
         }
