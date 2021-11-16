@@ -1,3 +1,7 @@
+## 1.16.4 - 2021-11-16
+
+- allow disabling toolbar tracking for self-hosted users (#335)
+
 ## 1.16.3 - 2021-11-12
 
 - Bumping the build for a release (#334)
