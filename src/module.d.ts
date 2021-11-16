@@ -294,6 +294,12 @@ declare class posthog {
      *      // autocapture, feature flags, compression and session recording will be disabled when set to `true`
      *      advanced_disable_decide: false
      *
+     *
+     *      // disable capturing of metrics about toolbar usage
+     *      // only available to self-hosted users, changing this
+     *      // setting will not do  anything if you use PostHog Cloud
+     *      advanced_disable_toolbar_metrics: false
+     *
      *     }
      *
      *
@@ -605,6 +611,7 @@ declare namespace posthog {
         mask_all_element_attributes?: boolean
         mask_all_text?: boolean
         advanced_disable_decide?: boolean
+        advanced_disable_toolbar_metrics?: boolean
     }
 
     interface OptInOutCapturingOptions {
