@@ -62,7 +62,13 @@ export class RetryQueue extends RequestQueueScaffold {
         clearTimeout(this._poller)
         for (const { requestData } of this.queue) {
             const { url, data, options } = requestData
-            window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+            try {
+                window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+            } catch (e) {
+                if (this.get_config('debug')) {
+                    console.error(e)
+                }
+            }
         }
         this.queue = []
     }

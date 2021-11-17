@@ -413,7 +413,13 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
         // beacons format the message and use the type property
         // also no need to try catch as sendBeacon does not report errors
         //   and is defined as best effort attempt
-        window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+        try {
+            window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+        } catch (e) {
+            if (this.get_config('debug')) {
+                console.error(e)
+            }
+        }
     } else if (USE_XHR) {
         try {
             xhr({
