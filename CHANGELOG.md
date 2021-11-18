@@ -1,3 +1,7 @@
+## 1.16.5 - 2021-11-18
+
+- try sendbeacon (#337)
+
 ## 1.16.4 - 2021-11-16
 
 - allow disabling toolbar tracking for self-hosted users (#335)
