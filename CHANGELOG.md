@@ -1,3 +1,7 @@
+## 1.16.6 - 2021-11-18
+
+- Avoid needless double /decide calls (#340)
+
 ## 1.16.5 - 2021-11-18
 
 - try sendbeacon (#337)
