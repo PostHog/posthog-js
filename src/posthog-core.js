@@ -892,7 +892,6 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
  * @param {Object} groupPropertiesToSet Optional properties to set for group
  */
 PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet) {
-    // console.error('posthog.group is still under development and should not be used in production!')
     if (!groupType || !groupKey) {
         console.error('posthog.group requires a group type and group key')
         return
@@ -912,7 +911,10 @@ PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet
         })
     }
 
-    this.reloadFeatureFlags()
+    // If groups change, reload feature flags.
+    if (existingGroups[groupType] !== groupKey) {
+        this.reloadFeatureFlags()
+    }
 }
 
 /**
