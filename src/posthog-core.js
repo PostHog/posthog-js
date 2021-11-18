@@ -875,7 +875,11 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
         }
     }
 
-    this.reloadFeatureFlags()
+    // Reload active feature flags if the user identity changes.
+    // Note we don't reload this on property changes as these get processed async
+    if (new_distinct_id !== previous_distinct_id) {
+        this.reloadFeatureFlags()
+    }
 }
 
 /**

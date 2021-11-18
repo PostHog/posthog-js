@@ -138,6 +138,32 @@ describe('identify()', () => {
             expect(given.overrides.register).not.toHaveBeenCalled()
         })
     })
+
+    describe('reloading feature flags', () => {
+        it('reloads when identity changes', () => {
+            given.subject()
+
+            expect(given.overrides.reloadFeatureFlags).toHaveBeenCalled()
+        })
+
+        it('does not reload feature flags if identity does not change', () => {
+            given('oldIdentity', () => given.identity)
+
+            given.subject()
+
+            expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('does not reload feature flags if identity does not change but properties do', () => {
+            given('oldIdentity', () => given.identity)
+            given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
+            given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
+
+            given.subject()
+
+            expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+    })
 })
 
 describe('capture()', () => {
