@@ -76,6 +76,7 @@ export class PostHogFeatureFlags {
         const json_data = JSON.stringify({
             token: token,
             distinct_id: this.instance.get_distinct_id(),
+            groups: this.instance.getGroups(),
         })
         const encoded_data = _.base64Encode(json_data)
         this.instance._send_request(

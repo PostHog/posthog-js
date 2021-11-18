@@ -911,6 +911,8 @@ PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet
             $group_set: groupPropertiesToSet,
         })
     }
+
+    this.reloadFeatureFlags()
 }
 
 /**
