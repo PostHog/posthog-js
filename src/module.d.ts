@@ -178,6 +178,13 @@ declare class posthog {
     static group(groupType: string, groupKey: string, groupPropertiesToSet?: posthog.Properties): void
 
     /**
+     * Alpha feature: don't use unless you know what you're doing!
+     *
+     * Returns currently active groups
+     */
+    static getGroups(): Record<string, any>
+
+    /**
      * Update the configuration of a posthog library instance.
      *
      * The default config is:
