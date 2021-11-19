@@ -182,7 +182,7 @@ declare class posthog {
      *
      * Returns currently active groups
      */
-    static getGroups(): Record<string, any>
+    static getGroups(): Record<string, any> /* eslint-disable @typescript-eslint/no-explicit-any */
 
     /**
      * Update the configuration of a posthog library instance.
