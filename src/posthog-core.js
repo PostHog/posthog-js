@@ -885,7 +885,7 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
 /**
  * Alpha feature: don't use unless you know what you're doing!
  *
- * Sets group analytics information for subsequent events.
+ * Sets group analytics information for subsequent events and reloads feature flags.
  *
  * @param {String} groupType Group type (example: 'organization')
  * @param {String} groupKey Group key (example: 'org::5')
