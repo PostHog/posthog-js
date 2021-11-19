@@ -21,6 +21,7 @@ describe('Decide', () => {
         sessionRecording: {
             afterDecideResponse: jest.fn(),
         },
+        getGroups: () => ({ organization: '5' }),
         persistence: { register: jest.fn(), unregister: jest.fn() },
     }))
 
@@ -50,6 +51,7 @@ describe('Decide', () => {
                         JSON.stringify({
                             token: 'testtoken',
                             distinct_id: 'distinctid',
+                            groups: { organization: '5' },
                         })
                     ),
                 },

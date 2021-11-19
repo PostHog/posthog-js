@@ -530,6 +530,10 @@ describe('group()', () => {
         _onCapture: jest.fn(),
     }))
 
+    beforeEach(() => {
+        given.overrides.persistence.clear()
+    })
+
     it('records info on groups', () => {
         given.lib.group('organization', 'org::5')
         expect(given.lib.getGroups()).toEqual({ organization: 'org::5' })
@@ -549,7 +553,7 @@ describe('group()', () => {
 
     it('results in a reloadFeatureFlags call if group changes', () => {
         given.lib.group('organization', 'org::5')
-        given.lib.group('company', 'id::6')
+        given.lib.group('instance', 'app.posthog.com')
         given.lib.group('organization', 'org::5')
 
         expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(2)
@@ -579,6 +583,7 @@ describe('group()', () => {
             _captureMetrics: {
                 incr: jest.fn(),
             },
+            reloadFeatureFlags: jest.fn(),
         }))
 
         it('sends group information in event properties', () => {
