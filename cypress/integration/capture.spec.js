@@ -97,6 +97,21 @@ describe('Event capture', () => {
         cy.phCaptures().should('not.include', '$rageclick')
     })
 
+    it('makes a single decide request', () => {
+        start()
+
+        cy.wait(200)
+        cy.shouldBeCalled('decide', 1)
+
+        cy.phCaptures().should('include', '$pageview')
+        cy.get('@decide').should(({ request }) => {
+            const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
+            const payload = JSON.parse(Buffer.from(data, 'base64'))
+            expect(payload.token).to.equal('test_token')
+            expect(payload.groups).to.deep.equal({})
+        })
+    })
+
     describe('session recording enabled from API', () => {
         given('sessionRecording', () => ({
             endpoint: '/ses/',
@@ -282,6 +297,36 @@ describe('Event capture', () => {
                         .filter(({ alias }) => alias === 'session-recording' || alias === 'recorder')
                     expect(requests.length).to.be.equal(0)
                 })
+        })
+    })
+
+    describe('loaded option which changes identity and group', () => {
+        given('options', () => ({
+            loaded: (posthog) => {
+                posthog.identify('new-id')
+                posthog.group('company', 'id:5', { id: 5, company_name: 'Awesome Inc' })
+                posthog.group('playlist', 'id:77', { length: 8 })
+            },
+        }))
+
+        it('makes a single decide request', () => {
+            start()
+
+            cy.wait(200)
+            cy.shouldBeCalled('decide', 1)
+
+            cy.get('@decide').should(({ request }) => {
+                const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
+                const payload = JSON.parse(Buffer.from(data, 'base64'))
+                expect(payload).to.deep.equal({
+                    token: 'test_token',
+                    distinct_id: 'new-id',
+                    groups: {
+                        company: 'id:5',
+                        playlist: 'id:77',
+                    },
+                })
+            })
         })
     })
 })

@@ -58,3 +58,8 @@ Cypress.Commands.add('resetPhCaptures', () => {
     $captures = []
     $fullCaptures = []
 })
+
+Cypress.Commands.add('shouldBeCalled', (alias, timesCalled) => {
+    const calls = cy.state('requests').filter((call) => call.alias === alias)
+    expect(calls).to.have.length(timesCalled, `${alias} should have been called ${timesCalled} times`)
+})
