@@ -281,7 +281,11 @@ PostHogLib.prototype._init = function (token, config, name) {
 // Private methods
 
 PostHogLib.prototype._loaded = function () {
-    this.get_config('loaded')(this)
+    try {
+        this.get_config('loaded')(this)
+    } catch (err) {
+        console.error('`loaded` function failed', err)
+    }
 
     this._start_queue_if_opted_in()
 
