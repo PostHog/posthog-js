@@ -1,7 +1,6 @@
 /// <reference types="cypress" />
 
-import * as fflate from 'fflate'
-import { LZString } from '../../src/lz-string'
+import { getBase64EncodedPayload, getGzipEncodedPayload, getLZStringEncodedPayload } from '../support/compression'
 
 describe('Event capture', () => {
     given('options', () => ({}))
@@ -105,8 +104,7 @@ describe('Event capture', () => {
 
         cy.phCaptures().should('include', '$pageview')
         cy.get('@decide').should(({ request }) => {
-            const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-            const payload = JSON.parse(Buffer.from(data, 'base64'))
+            const payload = getBase64EncodedPayload(request)
             expect(payload.token).to.equal('test_token')
             expect(payload.groups).to.deep.equal({})
         })
@@ -148,8 +146,7 @@ describe('Event capture', () => {
             cy.phCaptures().should('include', '$pageview')
             cy.phCaptures().should('include', 'custom-event')
             cy.get('@capture').should(({ request }) => {
-                const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-                const captures = JSON.parse(Buffer.from(data, 'base64'))
+                const captures = getBase64EncodedPayload(request)
 
                 expect(captures['event']).to.equal('$pageview')
             })
@@ -206,8 +203,7 @@ describe('Event capture', () => {
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             cy.get('@capture').should(({ request }) => {
-                const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-                const captures = JSON.parse(Buffer.from(data, 'base64'))
+                const captures = getBase64EncodedPayload(request)
 
                 expect(captures['event']).to.equal('$pageview')
             })
@@ -222,8 +218,7 @@ describe('Event capture', () => {
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             cy.get('@capture').should(({ request }) => {
-                const data = decodeURIComponent(request.body.match(/data=(.*)&compression=lz64/)[1])
-                const captures = JSON.parse(LZString.decompressFromBase64(data))
+                const captures = getLZStringEncodedPayload(request)
 
                 expect(captures.map(({ event }) => event)).to.deep.equal([
                     '$autocapture',
@@ -259,9 +254,7 @@ describe('Event capture', () => {
                 cy.wait('@capture').its('requestBody.type').should('deep.equal', 'text/plain')
 
                 cy.get('@capture').should(async ({ requestBody }) => {
-                    const data = new Uint8Array(await requestBody.arrayBuffer())
-                    const decoded = fflate.strFromU8(fflate.decompressSync(data))
-                    const captures = JSON.parse(decoded)
+                    const captures = await getGzipEncodedPayload(requestBody)
 
                     expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event'])
                 })
@@ -316,8 +309,7 @@ describe('Event capture', () => {
             cy.shouldBeCalled('decide', 1)
 
             cy.get('@decide').should(({ request }) => {
-                const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-                const payload = JSON.parse(Buffer.from(data, 'base64'))
+                const payload = getBase64EncodedPayload(request)
                 expect(payload).to.deep.equal({
                     token: 'test_token',
                     distinct_id: 'new-id',
