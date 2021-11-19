@@ -168,12 +168,6 @@ var create_mplib = function (token, config, name) {
         }
     }
 
-    if (!instance.get_config('advanced_disable_decide')) {
-        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
-        // and compression will not be available.
-        new Decide(instance).call()
-    }
-
     // if any instance on the page has debug = true, we set the
     // global debug to be true
     Config.DEBUG = Config.DEBUG || instance.get_config('debug')
@@ -218,7 +212,7 @@ PostHogLib.prototype.init = function (token, config, name) {
         return
     }
 
-    var instance = create_mplib(token, config, name)
+    const instance = create_mplib(token, config, name)
     posthog_master[name] = instance
     instance._loaded()
 
@@ -281,6 +275,10 @@ PostHogLib.prototype._init = function (token, config, name) {
 // Private methods
 
 PostHogLib.prototype._loaded = function () {
+    // Pause `reloadFeatureFlags` calls in config.loaded callback.
+    // These feature flags are loaded in the decide call made right afterwards
+    this.featureFlags.setReloadingPaused(true)
+
     try {
         this.get_config('loaded')(this)
     } catch (err) {
@@ -294,6 +292,16 @@ PostHogLib.prototype._loaded = function () {
     if (this.get_config('capture_pageview')) {
         this.capture('$pageview', {}, { send_instantly: true })
     }
+
+    // Call decide to get what features are enabled and other settings.
+    // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
+    // and compression will not be available.
+    if (!this.get_config('advanced_disable_decide')) {
+        new Decide(this).call()
+    }
+
+    this.featureFlags.resetRequestQueue()
+    this.featureFlags.setReloadingPaused(false)
 }
 
 PostHogLib.prototype._start_queue_if_opted_in = function () {

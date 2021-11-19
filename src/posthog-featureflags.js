@@ -38,6 +38,9 @@ export class PostHogFeatureFlags {
         this._override_warning = false
         this.flagCallReported = {}
         this.featureFlagEventHandlers = []
+
+        this.reloadFeatureFlagsQueued = false
+        this.reloadFeatureFlagsInAction = false
     }
 
     getFlags() {
@@ -71,7 +74,44 @@ export class PostHogFeatureFlags {
         return finalFlags
     }
 
+    /**
+     * Reloads feature flags asynchronously.
+     *
+     * Constraints:
+     *
+     * 1. Avoid parallel requests
+     * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
+     * 3. Don't call this during initial load (as /decide will be called instead), see posthog-core.js
+     */
+
     reloadFeatureFlags() {
+        if (!this.reloadFeatureFlagsQueued) {
+            this.reloadFeatureFlagsQueued = true
+            this._startReloadTimer()
+        }
+    }
+
+    setReloadingPaused(isPaused) {
+        this.reloadFeatureFlagsInAction = isPaused
+    }
+
+    resetRequestQueue() {
+        this.reloadFeatureFlagsQueued = false
+    }
+
+    _startReloadTimer() {
+        if (this.reloadFeatureFlagsQueued && !this.reloadFeatureFlagsInAction) {
+            setTimeout(() => {
+                if (!this.reloadFeatureFlagsInAction && this.reloadFeatureFlagsQueued) {
+                    this.reloadFeatureFlagsQueued = false
+                    this._reloadFeatureFlagsRequest()
+                }
+            }, 5)
+        }
+    }
+
+    _reloadFeatureFlagsRequest() {
+        this.setReloadingPaused(true)
         const token = this.instance.get_config('token')
         const json_data = JSON.stringify({
             token: token,
@@ -86,6 +126,10 @@ export class PostHogFeatureFlags {
             this.instance._prepare_callback((response) => {
                 parseFeatureFlagDecideResponse(response, this.instance.persistence)
                 this.receivedFeatureFlags()
+
+                // :TRICKY: Reload - start another request if queued!
+                this.setReloadingPaused(false)
+                this._startReloadTimer()
             })
         )
     }
