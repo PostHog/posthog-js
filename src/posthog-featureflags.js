@@ -83,7 +83,6 @@ export class PostHogFeatureFlags {
      * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
      * 3. Don't call this during initial load (as /decide will be called instead), see posthog-core.js
      */
-
     reloadFeatureFlags() {
         if (!this.reloadFeatureFlagsQueued) {
             this.reloadFeatureFlagsQueued = true

@@ -293,7 +293,7 @@ describe('Event capture', () => {
         })
     })
 
-    describe('loaded option which changes identity and group', () => {
+    describe('subsequent decide calls', () => {
         given('options', () => ({
             loaded: (posthog) => {
                 posthog.identify('new-id')
@@ -302,7 +302,7 @@ describe('Event capture', () => {
             },
         }))
 
-        it('makes a single decide request', () => {
+        it('makes a single decide request on start', () => {
             start()
 
             cy.wait(200)
@@ -319,6 +319,20 @@ describe('Event capture', () => {
                     },
                 })
             })
+        })
+
+        it('does a single decide call on following changes', () => {
+            start()
+
+            cy.wait(200)
+            cy.shouldBeCalled('decide', 1)
+
+            cy.posthog().invoke('group', 'company', 'id:6')
+            cy.posthog().invoke('group', 'playlist', 'id:77')
+            cy.posthog().invoke('group', 'anothergroup', 'id:99')
+
+            cy.wait('@decide')
+            cy.shouldBeCalled('decide', 2)
         })
     })
 })
