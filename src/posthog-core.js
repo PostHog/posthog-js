@@ -1536,6 +1536,7 @@ PostHogLib.prototype['register'] = PostHogLib.prototype.register
 PostHogLib.prototype['register_once'] = PostHogLib.prototype.register_once
 PostHogLib.prototype['unregister'] = PostHogLib.prototype.unregister
 PostHogLib.prototype['identify'] = PostHogLib.prototype.identify
+PostHogLib.prototype['getGroups'] = PostHogLib.prototype.getGroups
 PostHogLib.prototype['group'] = PostHogLib.prototype.group
 PostHogLib.prototype['alias'] = PostHogLib.prototype.alias
 PostHogLib.prototype['set_config'] = PostHogLib.prototype.set_config
