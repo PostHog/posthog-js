@@ -1,3 +1,7 @@
+## 1.16.7 - 2021-11-25
+
+- Feature flags groups support & /decide refactor (#341)
+
 ## 1.16.6 - 2021-11-18
 
 - Avoid needless double /decide calls (#340)
