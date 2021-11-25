@@ -168,12 +168,6 @@ var create_mplib = function (token, config, name) {
         }
     }
 
-    if (!instance.get_config('advanced_disable_decide')) {
-        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
-        // and compression will not be available.
-        new Decide(instance).call()
-    }
-
     // if any instance on the page has debug = true, we set the
     // global debug to be true
     Config.DEBUG = Config.DEBUG || instance.get_config('debug')
@@ -218,7 +212,7 @@ PostHogLib.prototype.init = function (token, config, name) {
         return
     }
 
-    var instance = create_mplib(token, config, name)
+    const instance = create_mplib(token, config, name)
     posthog_master[name] = instance
     instance._loaded()
 
@@ -281,7 +275,15 @@ PostHogLib.prototype._init = function (token, config, name) {
 // Private methods
 
 PostHogLib.prototype._loaded = function () {
-    this.get_config('loaded')(this)
+    // Pause `reloadFeatureFlags` calls in config.loaded callback.
+    // These feature flags are loaded in the decide call made right afterwards
+    this.featureFlags.setReloadingPaused(true)
+
+    try {
+        this.get_config('loaded')(this)
+    } catch (err) {
+        console.error('`loaded` function failed', err)
+    }
 
     this._start_queue_if_opted_in()
 
@@ -290,6 +292,16 @@ PostHogLib.prototype._loaded = function () {
     if (this.get_config('capture_pageview')) {
         this.capture('$pageview', {}, { send_instantly: true })
     }
+
+    // Call decide to get what features are enabled and other settings.
+    // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
+    // and compression will not be available.
+    if (!this.get_config('advanced_disable_decide')) {
+        new Decide(this).call()
+    }
+
+    this.featureFlags.resetRequestQueue()
+    this.featureFlags.setReloadingPaused(false)
 }
 
 PostHogLib.prototype._start_queue_if_opted_in = function () {
@@ -885,14 +897,13 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
 /**
  * Alpha feature: don't use unless you know what you're doing!
  *
- * Sets group analytics information for subsequent events.
+ * Sets group analytics information for subsequent events and reloads feature flags.
  *
  * @param {String} groupType Group type (example: 'organization')
  * @param {String} groupKey Group key (example: 'org::5')
  * @param {Object} groupPropertiesToSet Optional properties to set for group
  */
 PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet) {
-    // console.error('posthog.group is still under development and should not be used in production!')
     if (!groupType || !groupKey) {
         console.error('posthog.group requires a group type and group key')
         return
@@ -910,6 +921,11 @@ PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet
             $group_key: groupKey,
             $group_set: groupPropertiesToSet,
         })
+    }
+
+    // If groups change, reload feature flags.
+    if (existingGroups[groupType] !== groupKey) {
+        this.reloadFeatureFlags()
     }
 }
 
@@ -1520,6 +1536,7 @@ PostHogLib.prototype['register'] = PostHogLib.prototype.register
 PostHogLib.prototype['register_once'] = PostHogLib.prototype.register_once
 PostHogLib.prototype['unregister'] = PostHogLib.prototype.unregister
 PostHogLib.prototype['identify'] = PostHogLib.prototype.identify
+PostHogLib.prototype['getGroups'] = PostHogLib.prototype.getGroups
 PostHogLib.prototype['group'] = PostHogLib.prototype.group
 PostHogLib.prototype['alias'] = PostHogLib.prototype.alias
 PostHogLib.prototype['set_config'] = PostHogLib.prototype.set_config

@@ -1,7 +1,6 @@
 /// <reference types="cypress" />
 
-import * as fflate from 'fflate'
-import { LZString } from '../../src/lz-string'
+import { getBase64EncodedPayload, getGzipEncodedPayload, getLZStringEncodedPayload } from '../support/compression'
 
 describe('Event capture', () => {
     given('options', () => ({}))
@@ -97,6 +96,20 @@ describe('Event capture', () => {
         cy.phCaptures().should('not.include', '$rageclick')
     })
 
+    it('makes a single decide request', () => {
+        start()
+
+        cy.wait(200)
+        cy.shouldBeCalled('decide', 1)
+
+        cy.phCaptures().should('include', '$pageview')
+        cy.get('@decide').should(({ request }) => {
+            const payload = getBase64EncodedPayload(request)
+            expect(payload.token).to.equal('test_token')
+            expect(payload.groups).to.deep.equal({})
+        })
+    })
+
     describe('session recording enabled from API', () => {
         given('sessionRecording', () => ({
             endpoint: '/ses/',
@@ -133,8 +146,7 @@ describe('Event capture', () => {
             cy.phCaptures().should('include', '$pageview')
             cy.phCaptures().should('include', 'custom-event')
             cy.get('@capture').should(({ request }) => {
-                const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-                const captures = JSON.parse(Buffer.from(data, 'base64'))
+                const captures = getBase64EncodedPayload(request)
 
                 expect(captures['event']).to.equal('$pageview')
             })
@@ -191,8 +203,7 @@ describe('Event capture', () => {
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             cy.get('@capture').should(({ request }) => {
-                const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-                const captures = JSON.parse(Buffer.from(data, 'base64'))
+                const captures = getBase64EncodedPayload(request)
 
                 expect(captures['event']).to.equal('$pageview')
             })
@@ -207,8 +218,7 @@ describe('Event capture', () => {
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             cy.get('@capture').should(({ request }) => {
-                const data = decodeURIComponent(request.body.match(/data=(.*)&compression=lz64/)[1])
-                const captures = JSON.parse(LZString.decompressFromBase64(data))
+                const captures = getLZStringEncodedPayload(request)
 
                 expect(captures.map(({ event }) => event)).to.deep.equal([
                     '$autocapture',
@@ -244,9 +254,7 @@ describe('Event capture', () => {
                 cy.wait('@capture').its('requestBody.type').should('deep.equal', 'text/plain')
 
                 cy.get('@capture').should(async ({ requestBody }) => {
-                    const data = new Uint8Array(await requestBody.arrayBuffer())
-                    const decoded = fflate.strFromU8(fflate.decompressSync(data))
-                    const captures = JSON.parse(decoded)
+                    const captures = await getGzipEncodedPayload(requestBody)
 
                     expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event'])
                 })
@@ -282,6 +290,49 @@ describe('Event capture', () => {
                         .filter(({ alias }) => alias === 'session-recording' || alias === 'recorder')
                     expect(requests.length).to.be.equal(0)
                 })
+        })
+    })
+
+    describe('subsequent decide calls', () => {
+        given('options', () => ({
+            loaded: (posthog) => {
+                posthog.identify('new-id')
+                posthog.group('company', 'id:5', { id: 5, company_name: 'Awesome Inc' })
+                posthog.group('playlist', 'id:77', { length: 8 })
+            },
+        }))
+
+        it('makes a single decide request on start', () => {
+            start()
+
+            cy.wait(200)
+            cy.shouldBeCalled('decide', 1)
+
+            cy.get('@decide').should(({ request }) => {
+                const payload = getBase64EncodedPayload(request)
+                expect(payload).to.deep.equal({
+                    token: 'test_token',
+                    distinct_id: 'new-id',
+                    groups: {
+                        company: 'id:5',
+                        playlist: 'id:77',
+                    },
+                })
+            })
+        })
+
+        it('does a single decide call on following changes', () => {
+            start()
+
+            cy.wait(200)
+            cy.shouldBeCalled('decide', 1)
+
+            cy.posthog().invoke('group', 'company', 'id:6')
+            cy.posthog().invoke('group', 'playlist', 'id:77')
+            cy.posthog().invoke('group', 'anothergroup', 'id:99')
+
+            cy.wait('@decide')
+            cy.shouldBeCalled('decide', 2)
         })
     })
 })

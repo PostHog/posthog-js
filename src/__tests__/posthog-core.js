@@ -2,6 +2,7 @@ import { PostHogLib, init_as_module } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
 import { _ } from '../utils'
+import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
 
 jest.mock('../gdpr-utils', () => ({
@@ -9,6 +10,7 @@ jest.mock('../gdpr-utils', () => ({
     addOptOutCheckPostHogLib: (fn) => fn,
     addOptOutCheckPostHogPeople: (fn) => fn,
 }))
+jest.mock('../decide')
 
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
@@ -519,6 +521,7 @@ describe('group()', () => {
         _captureMetrics: {
             incr: jest.fn(),
         },
+        reloadFeatureFlags: jest.fn(),
     }))
     given('config', () => ({
         request_batching: true,
@@ -526,6 +529,10 @@ describe('group()', () => {
         property_blacklist: [],
         _onCapture: jest.fn(),
     }))
+
+    beforeEach(() => {
+        given.overrides.persistence.clear()
+    })
 
     it('records info on groups', () => {
         given.lib.group('organization', 'org::5')
@@ -542,6 +549,14 @@ describe('group()', () => {
         given.lib.group('organization', 'org::5')
 
         expect(given.overrides.capture).not.toHaveBeenCalled()
+    })
+
+    it('results in a reloadFeatureFlags call if group changes', () => {
+        given.lib.group('organization', 'org::5')
+        given.lib.group('instance', 'app.posthog.com')
+        given.lib.group('organization', 'org::5')
+
+        expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(2)
     })
 
     it('captures $groupidentify event', () => {
@@ -568,6 +583,7 @@ describe('group()', () => {
             _captureMetrics: {
                 incr: jest.fn(),
             },
+            reloadFeatureFlags: jest.fn(),
         }))
 
         it('sends group information in event properties', () => {
@@ -603,5 +619,89 @@ describe('group()', () => {
 
             expect(given.overrides.register).not.toHaveBeenCalled()
         })
+    })
+})
+
+describe('_loaded()', () => {
+    given('subject', () => () => given.lib._loaded())
+
+    given('overrides', () => ({
+        get_config: (key) => given.config?.[key],
+        capture: jest.fn(),
+        featureFlags: {
+            setReloadingPaused: jest.fn(),
+            resetRequestQueue: jest.fn(),
+        },
+        _start_queue_if_opted_in: jest.fn(),
+    }))
+    given('config', () => ({}))
+
+    it('calls loafed config option', () => {
+        given('config', () => ({ loaded: jest.fn() }))
+
+        given.subject()
+
+        expect(given.config.loaded).toHaveBeenCalledWith(given.lib)
+    })
+
+    it('handles loaded config option throwing gracefully', () => {
+        given('config', () => ({
+            loaded: () => {
+                throw Error()
+            },
+        }))
+
+        given.subject()
+    })
+
+    describe('/decide', () => {
+        beforeEach(() => {
+            const call = jest.fn()
+            Decide.mockImplementation(() => ({ call }))
+        })
+
+        it('is called by default', () => {
+            given.subject()
+
+            expect(new Decide().call).toHaveBeenCalled()
+        })
+
+        it('does not call decide if disabled', () => {
+            given('config', () => ({
+                advanced_disable_decide: true,
+            }))
+
+            given.subject()
+
+            expect(new Decide().call).not.toHaveBeenCalled()
+        })
+    })
+
+    it('captures pageview', () => {
+        given('config', () => ({
+            capture_pageview: true,
+        }))
+
+        given.subject()
+
+        expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
+    })
+
+    it('captures not capture pageview if disabled', () => {
+        given('config', () => ({
+            capture_pageview: false,
+        }))
+
+        given.subject()
+
+        expect(given.overrides.capture).not.toHaveBeenCalled()
+    })
+
+    it('toggles feature flags on and off', () => {
+        given.subject()
+
+        expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
+        expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
+        expect(given.overrides.featureFlags.resetRequestQueue).toHaveBeenCalled()
     })
 })

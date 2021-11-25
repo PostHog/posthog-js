@@ -83,6 +83,7 @@ describe('Payload Compression', () => {
                 get_distinct_id() {
                     return 'distinctid'
                 },
+                getGroups: () => ({}),
 
                 toolbar: {
                     maybeLoadEditor: jest.fn(),

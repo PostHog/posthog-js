@@ -14,6 +14,7 @@ export class Decide {
         const json_data = JSON.stringify({
             token: this.instance.get_config('token'),
             distinct_id: this.instance.get_distinct_id(),
+            groups: this.instance.getGroups(),
         })
 
         const encoded_data = _.base64Encode(json_data)
