@@ -915,13 +915,11 @@ PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet
 
     this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
-    if (groupPropertiesToSet) {
-        this.capture('$groupidentify', {
-            $group_type: groupType,
-            $group_key: groupKey,
-            $group_set: groupPropertiesToSet,
-        })
-    }
+    this.capture('$groupidentify', {
+        $group_type: groupType,
+        $group_key: groupKey,
+        $group_set: groupPropertiesToSet || {},
+    })
 
     // If groups change, reload feature flags.
     if (existingGroups[groupType] !== groupKey) {
