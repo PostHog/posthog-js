@@ -106,6 +106,7 @@ const defaultConfig = () => ({
         const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
         console.error(error)
     },
+    capture_performance: false,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
@@ -290,8 +291,11 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        // TRICKY: without stringification performance results are variable
-        const properties = { performance: JSON.stringify(window.performance.toJSON()) }
+        let properties = {}
+        if (this.get_config('capture_performance')) {
+            // TRICKY: without stringification performance results are variable
+            properties = { performance: JSON.stringify(window.performance.toJSON()) }
+        }
         this.capture('$pageview', properties, { send_instantly: true })
     }
 
