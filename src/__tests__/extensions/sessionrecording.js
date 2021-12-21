@@ -22,7 +22,7 @@ describe('SessionRecording', () => {
         capture: jest.fn(),
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
-        _sessionIdManager: {
+        sessionManager: {
             getSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
         },
         _addCaptureHook: jest.fn(),
@@ -249,7 +249,7 @@ describe('SessionRecording', () => {
                 const mockDate = new Date(1602107460000)
                 jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
-                expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
+                expect(given.posthog.sessionManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
                     event: 123,
                     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 })
@@ -262,7 +262,7 @@ describe('SessionRecording', () => {
                     data: { source: MUTATION_SOURCE_TYPE },
                     timestamp: 1602107460000,
                 })
-                expect(given.posthog._sessionIdManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
+                expect(given.posthog.sessionManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
                     event: 123,
                     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                     data: { source: MUTATION_SOURCE_TYPE },
