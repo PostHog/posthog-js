@@ -290,7 +290,9 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        this.capture('$pageview', {}, { send_instantly: true })
+        // TRICKY: without stringification performance results are variable
+        const properties = { performance: JSON.stringify(window.performance.toJSON()) }
+        this.capture('$pageview', properties, { send_instantly: true })
     }
 
     // Call decide to get what features are enabled and other settings.
@@ -605,6 +607,13 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     if (event_name === '$identify' && options.$set) {
         data['$set'] = options['$set']
     }
+
+    // if (event_name === '$pageview') {
+    //     const jsonStringPerformance = JSON.stringify(window.performance.toJSON())
+    //     if (jsonStringPerformance.length > 2) {
+    //         data.properties.performance = jsonStringPerformance
+    //     }
+    // }
 
     data = _.copyAndTruncateStrings(data, options._noTruncate ? null : this.get_config('properties_string_max_length'))
     if (this.get_config('debug')) {

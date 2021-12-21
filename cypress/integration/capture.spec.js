@@ -195,6 +195,21 @@ describe('Event capture', () => {
     })
 
     describe('decoding the payload', () => {
+        it.only('sends performance timing with the pageview', () => {
+            start()
+
+            // Pageview will be sent immediately
+            cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            })
+            cy.get('@capture').should(({ request }) => {
+                const captures = getBase64EncodedPayload(request)
+
+                expect(captures['event']).to.equal('$pageview')
+                expect(captures?.properties?.performance).to.contain('"timing":{"')
+            })
+        })
+
         it('contains the correct headers and payload after an event', () => {
             start()
 
