@@ -270,7 +270,7 @@ describe('_calculate_event_properties()', () => {
         persistence: {
             properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
         },
-        _sessionIdManager: {
+        sessionManager: {
             getSessionAndWindowId: jest.fn().mockReturnValue({
                 windowId: 'windowId',
                 sessionId: 'sessionId',
@@ -319,7 +319,7 @@ describe('_calculate_event_properties()', () => {
             event: 'prop',
             distinct_id: 'abc',
         })
-        expect(given.overrides._sessionIdManager.getSessionAndWindowId).not.toHaveBeenCalled()
+        expect(given.overrides.sessionManager.getSessionAndWindowId).not.toHaveBeenCalled()
     })
 
     it('calls sanitize_properties', () => {

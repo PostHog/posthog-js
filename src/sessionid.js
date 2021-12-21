@@ -56,6 +56,12 @@ export class SessionIdManager {
         return this.persistence['props'][SESSION_ID] || [0, null]
     }
 
+    // Resets the session id by setting it to null. On the subsequent call to getSessionAndWindowId,
+    // new ids will be generated.
+    resetSessionId() {
+        this._setSessionId(null, null)
+    }
+
     getSessionAndWindowId(timestamp = null, recordingEvent = false) {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to update the session and window ids in these cases. These events are designated by event

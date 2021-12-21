@@ -251,7 +251,7 @@ PostHogLib.prototype._init = function (token, config, name) {
     this.__request_queue = []
 
     this['persistence'] = new PostHogPersistence(this['config'])
-    this['_sessionIdManager'] = new SessionIdManager(this['config'], this['persistence'])
+    this['sessionManager'] = new SessionIdManager(this['config'], this['persistence'])
 
     this._gdpr_init()
 
@@ -654,8 +654,8 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
         properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
     }
 
-    if (this._sessionIdManager) {
-        const { sessionId, windowId } = this._sessionIdManager.getSessionAndWindowId()
+    if (this.sessionManager) {
+        const { sessionId, windowId } = this.sessionManager.getSessionAndWindowId()
         properties['$session_id'] = sessionId
         properties['$window_id'] = windowId
     }

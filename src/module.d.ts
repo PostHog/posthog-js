@@ -766,6 +766,20 @@ declare namespace posthog {
         static toString(): string
     }
 
+    export class sessionManager {
+        /*
+         * Allows you to manually reset the current session id. By default, the session id is reset after 30 minutes
+         * of inactivity, but with this function, you can reset it earlier. This will also result in a new session recording.
+         *
+         *
+         * ### Usage:
+         *
+         *     posthog.sessionManager.resetSessionId()
+         *
+         */
+        static resetSessionId(): void
+    }
+
     export class featureFlags {
         static getFlags(): string[]
         static getFlagVariants(): Record<string, boolean | string>

@@ -142,4 +142,19 @@ describe('Session ID manager', () => {
             expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [1603107460000, 'newSessionId'] })
         })
     })
+
+    describe('reset session id', () => {
+        it('clears the existing session id', () => {
+            given.sessionIdManager.resetSessionId()
+            expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null] })
+        })
+        it('a new session id is generated when called', () => {
+            given('storedSessionIdData', () => [null, null])
+            expect(given.sessionIdManager._getSessionId()).toEqual([null, null])
+            expect(given.subject).toMatchObject({
+                windowId: 'newUUID',
+                sessionId: 'newUUID',
+            })
+        })
+    })
 })
