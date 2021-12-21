@@ -203,12 +203,10 @@ describe('Event capture', () => {
             cy.wait('@capture').its('request.headers').should('deep.equal', {
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
-            // then $performance
-            cy.wait('@capture')
             cy.get('@capture').should(({ request }) => {
-                const captures = getLZStringEncodedPayload(request)[0]
+                const captures = getBase64EncodedPayload(request)
 
-                expect(captures['event']).to.equal('$performance')
+                expect(captures['event']).to.equal('$pageview')
 
                 expect(captures?.properties).to.have.property('performance')
                 expect(captures?.properties?.performance).to.have.property('navigation')
@@ -221,8 +219,17 @@ describe('Event capture', () => {
             given('options', () => ({ capture_pageview: true, capture_performance: false }))
             start()
 
-            cy.wait(150)
-            cy.phCaptures().should('not.include', '$performance')
+            // Pageview will be sent immediately
+            cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            })
+            cy.get('@capture').should(({ request }) => {
+                const captures = getBase64EncodedPayload(request)
+
+                expect(captures['event']).to.equal('$pageview')
+
+                expect(captures?.properties).not.to.have.property('performance')
+            })
         })
     })
 

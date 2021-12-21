@@ -291,7 +291,16 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        this.capture('$pageview', {}, { send_instantly: true })
+        const props = {}
+        if (this.get_config('capture_performance')) {
+            // TRICKY: without the JSON stringing and parsing less perf data is sent
+            props.performance = {
+                navigation: JSON.parse(JSON.stringify(window.performance.getEntriesByType('navigation'))),
+                paint: JSON.parse(JSON.stringify(window.performance.getEntriesByType('paint'))),
+                resource: JSON.parse(JSON.stringify(window.performance.getEntriesByType('resource'))),
+            }
+        }
+        this.capture('$pageview', props, { send_instantly: true })
     }
 
     // Call decide to get what features are enabled and other settings.
@@ -322,16 +331,6 @@ PostHogLib.prototype._dom_loaded = function () {
             },
             this
         )
-
-        if (this.get_config('capture_performance')) {
-            // TRICKY: without the JSON stringing and parsing less perf data is sent
-            const performance = {
-                navigation: JSON.parse(JSON.stringify(window.performance.getEntriesByType('navigation'))),
-                paint: JSON.parse(JSON.stringify(window.performance.getEntriesByType('paint'))),
-                resource: JSON.parse(JSON.stringify(window.performance.getEntriesByType('resource'))),
-            }
-            this.capture('$performance', { performance })
-        }
     }
 
     delete this.__request_queue
