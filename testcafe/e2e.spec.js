@@ -56,8 +56,7 @@ test('Pageview has performance object when configured', async (t) => {
     const pageViews = results.filter(({ event }) => event === '$pageview')
     await t.expect(pageViews.length).eql(1)
     const pageView = pageViews[0]
-    console.log(pageView)
-    await t.expect(pageView.performance).contains('"timing"')
+    await t.expect(pageView.properties.performance).contains('"timing"')
 })
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
