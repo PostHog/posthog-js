@@ -38,6 +38,16 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     await t.expect(results.filter(({ event }) => event === '$autocapture').length).eql(1)
 })
 
+test('Pageview has performance object when configured', async (t) => {
+    await initPosthog({ capture_performance: true })
+    const results = await retryUntilResults(queryAPI, 3)
+    const pageViews = results.filter(({ event }) => event === '$pageview')
+    await t.expect(pageViews.length).eql(1)
+    const pageView = pageViews[0]
+    console.log(pageView)
+    await t.expect(pageView.performance).contains('"timing"')
+})
+
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
     await initPosthog()
     await t
