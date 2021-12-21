@@ -203,11 +203,17 @@ describe('Event capture', () => {
             cy.wait('@capture').its('request.headers').should('deep.equal', {
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
+            // then $performance
+            cy.wait('@capture')
             cy.get('@capture').should(({ request }) => {
-                const captures = getBase64EncodedPayload(request)
+                const captures = getLZStringEncodedPayload(request)[0]
 
-                expect(captures['event']).to.equal('$pageview')
-                expect(captures?.properties?.performance).to.contain('"timing":{"')
+                expect(captures['event']).to.equal('$performance')
+
+                expect(captures?.properties).to.have.property('performance')
+                expect(captures?.properties?.performance).to.have.property('navigation')
+                expect(captures?.properties?.performance).to.have.property('resource')
+                expect(captures?.properties?.performance).to.have.property('paint')
             })
         })
 
@@ -215,16 +221,8 @@ describe('Event capture', () => {
             given('options', () => ({ capture_pageview: true, capture_performance: false }))
             start()
 
-            // Pageview will be sent immediately
-            cy.wait('@capture').its('request.headers').should('deep.equal', {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            })
-            cy.get('@capture').should(({ request }) => {
-                const captures = getBase64EncodedPayload(request)
-
-                expect(captures['event']).to.equal('$pageview')
-                expect(captures?.properties?.performance).to.be.undefined
-            })
+            cy.wait(150)
+            cy.phCaptures().should('not.include', '$performance')
         })
     })
 

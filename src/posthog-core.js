@@ -1,20 +1,20 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
 import Config from './config'
-import { _, console, userAgent, window, document } from './utils'
+import { _, console, document, userAgent, window } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
+import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
-import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
+import { addOptOutCheckPostHogLib, clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
 import { compressData, decideCompression } from './compression'
-import { xhr, encodePostData } from './send-request'
+import { encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 
@@ -291,12 +291,7 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        let properties = {}
-        if (this.get_config('capture_performance')) {
-            // TRICKY: without stringification performance results are variable
-            properties = { performance: JSON.stringify(window.performance.toJSON()) }
-        }
-        this.capture('$pageview', properties, { send_instantly: true })
+        this.capture('$pageview', {}, { send_instantly: true })
     }
 
     // Call decide to get what features are enabled and other settings.
@@ -327,6 +322,16 @@ PostHogLib.prototype._dom_loaded = function () {
             },
             this
         )
+
+        if (this.get_config('capture_performance')) {
+            // TRICKY: without the JSON stringing and parsing less perf data is sent
+            const performance = {
+                navigation: JSON.parse(JSON.stringify(window.performance.getEntriesByType('navigation'))),
+                paint: JSON.parse(JSON.stringify(window.performance.getEntriesByType('paint'))),
+                resource: JSON.parse(JSON.stringify(window.performance.getEntriesByType('resource'))),
+            }
+            this.capture('$performance', { performance })
+        }
     }
 
     delete this.__request_queue

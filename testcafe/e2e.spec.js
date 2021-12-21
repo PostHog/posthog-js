@@ -53,10 +53,12 @@ test('Pageview has performance object when configured', async (t) => {
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
     const results = await retryUntilResults(queryAPI, 3)
-    const pageViews = results.filter(({ event }) => event === '$pageview')
-    await t.expect(pageViews.length).eql(1)
-    const pageView = pageViews[0]
-    await t.expect(pageView.properties.performance).contains('"timing"')
+    const performances = results.filter(({ event }) => event === '$performance')
+    await t.expect(performances.length).eql(1)
+    const performance = performances[0]
+    await t.expect(performance.properties.performance).contains('navigation')
+    await t.expect(performance.properties.performance).contains('paint')
+    await t.expect(performance.properties.performance).contains('resource')
 })
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
