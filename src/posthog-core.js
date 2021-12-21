@@ -608,13 +608,6 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         data['$set'] = options['$set']
     }
 
-    // if (event_name === '$pageview') {
-    //     const jsonStringPerformance = JSON.stringify(window.performance.toJSON())
-    //     if (jsonStringPerformance.length > 2) {
-    //         data.properties.performance = jsonStringPerformance
-    //     }
-    // }
-
     data = _.copyAndTruncateStrings(data, options._noTruncate ? null : this.get_config('properties_string_max_length'))
     if (this.get_config('debug')) {
         console.log('PostHog.js send', data)
