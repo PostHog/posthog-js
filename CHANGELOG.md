@@ -1,3 +1,7 @@
+## 1.16.8 - 2021-12-21
+
+- add resetSessionId function (#345)
+
 ## 1.16.7 - 2021-11-25
 
 - Feature flags groups support & /decide refactor (#341)
