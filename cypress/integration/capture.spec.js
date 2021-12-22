@@ -208,10 +208,10 @@ describe('Event capture', () => {
 
                 expect(captures['event']).to.equal('$pageview')
 
-                expect(captures?.properties).to.have.property('performance')
-                expect(captures?.properties?.performance).to.have.property('navigation')
-                expect(captures?.properties?.performance).to.have.property('resource')
-                expect(captures?.properties?.performance).to.have.property('paint')
+                expect(captures.properties).to.have.property('performance')
+                expect(captures.properties.performance).to.have.property('navigation')
+                expect(captures.properties.performance).to.have.property('resource')
+                expect(captures.properties.performance).to.have.property('paint')
             })
         })
 
@@ -228,7 +228,7 @@ describe('Event capture', () => {
 
                 expect(captures['event']).to.equal('$pageview')
 
-                expect(captures?.properties).not.to.have.property('performance')
+                expect(captures.properties).not.to.have.property('performance')
             })
         })
     })
