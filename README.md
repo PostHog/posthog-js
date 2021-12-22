@@ -21,6 +21,12 @@ Testing on IE11 requires a bit more setup.
 4. Export browserstack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`.
 5. Run tests: `npx testcafe "browserstack:ie" testcafe/e2e.spec.js`.
 
+### Tiers of testing
+
+1. Unit tests - this verifies the behavior of the library in bite-sized chunks. Keep this coverage close to 100%, test corner cases and internal behavior here
+2. Cypress tests - integrates with a real chrome browser and is capable of testing timing, browser requests, etc. Useful for testing high-level library behavior, ordering and verifying requests. We shouldn't aim for 100% coverage here as it's impossible to test all possible combinations.
+3. TestCafe E2E tests - integrates with a real posthog instance sends data to it. Hardest to write and maintain - keep these very high level
+
 ## Developing together with another repo
 
 ### Using Yarn link
