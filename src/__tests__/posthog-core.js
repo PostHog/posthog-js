@@ -710,6 +710,52 @@ describe('_loaded()', () => {
             expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
         })
 
+        it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
+            const performance = { ...window.performance }
+            delete window.performance
+
+            try {
+                given('config', () => ({
+                    capture_pageview: true,
+                    capture_performance: true,
+                }))
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+                expect(performance.getEntriesByType).not.toHaveBeenCalled()
+            } finally {
+                window.performance = performance
+            }
+        })
+
+        it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
+            const performance = { ...window.performance }
+            delete window.performance.getEntriesByType
+
+            try {
+                given('config', () => ({
+                    capture_pageview: true,
+                    capture_performance: true,
+                }))
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+                expect(performance.getEntriesByType).not.toHaveBeenCalled()
+            } finally {
+                window.performance = performance
+            }
+        })
+
         it('captures not capture pageview if disabled', () => {
             given('config', () => ({
                 capture_pageview: false,

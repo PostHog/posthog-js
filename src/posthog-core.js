@@ -275,6 +275,15 @@ PostHogLib.prototype._init = function (token, config, name) {
 
 // Private methods
 
+function getPerformanceEntriesByType(type) {
+    // wide support but not available pre IE 10
+    if ('performance' in window && window.performance && window.performance.getEntriesByType) {
+        return JSON.parse(JSON.stringify(window.performance.getEntriesByType(type)))
+    } else {
+        return []
+    }
+}
+
 PostHogLib.prototype._loaded = function () {
     // Pause `reloadFeatureFlags` calls in config.loaded callback.
     // These feature flags are loaded in the decide call made right afterwards
@@ -295,9 +304,9 @@ PostHogLib.prototype._loaded = function () {
         if (this.get_config('capture_performance')) {
             // TRICKY: without the JSON stringing and parsing less perf data is sent
             props.performance = {
-                navigation: JSON.parse(JSON.stringify(window.performance.getEntriesByType('navigation'))),
-                paint: JSON.parse(JSON.stringify(window.performance.getEntriesByType('paint'))),
-                resource: JSON.parse(JSON.stringify(window.performance.getEntriesByType('resource'))),
+                navigation: getPerformanceEntriesByType('navigation'),
+                paint: getPerformanceEntriesByType('paint'),
+                resource: getPerformanceEntriesByType('resource'),
             }
         }
         this.capture('$pageview', props, { send_instantly: true })
