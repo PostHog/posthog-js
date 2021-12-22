@@ -757,7 +757,8 @@ describe('_loaded()', () => {
         })
 
         it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
-            // e.g. IE does not implement performance paint timing https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
+            // e.g. IE does not implement performance paint timing
+            // https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
             // even though it implements getEntriesByType
 
             const performance = { ...window.performance }

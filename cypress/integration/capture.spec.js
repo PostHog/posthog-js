@@ -145,6 +145,8 @@ describe('Event capture', () => {
             cy.phCaptures().should('have.length', 2)
             cy.phCaptures().should('include', '$pageview')
             cy.phCaptures().should('include', 'custom-event')
+
+            cy.wait('@capture')
             cy.get('@capture').should(({ request }) => {
                 const captures = getBase64EncodedPayload(request)
 
