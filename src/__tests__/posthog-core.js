@@ -1,3 +1,4 @@
+import './__mocks__/window-performance.mock'
 import { PostHogLib, init_as_module } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
@@ -461,7 +462,7 @@ describe('init()', () => {
         expect(given.subject.get_config('on_xhr_error')).toBe(fakeOnXHRError)
     })
 
-    it('does not load decide enpoint on advanced_disable_decide', () => {
+    it('does not load decide endpoint on advanced_disable_decide', () => {
         given.subject()
         expect(given.decide).toBe(undefined)
         expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
@@ -677,24 +678,44 @@ describe('_loaded()', () => {
         })
     })
 
-    it('captures pageview', () => {
-        given('config', () => ({
-            capture_pageview: true,
-        }))
+    describe('capturing pageviews', () => {
+        it('captures pageview', () => {
+            given('config', () => ({
+                capture_pageview: true,
+                capture_performance: false, // the default
+            }))
 
-        given.subject()
+            given.subject()
 
-        expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
-    })
+            expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
+            expect(window.performance.getEntriesByType).not.toHaveBeenCalled()
+        })
 
-    it('captures not capture pageview if disabled', () => {
-        given('config', () => ({
-            capture_pageview: false,
-        }))
+        it('captures pageview with performance when enabled', () => {
+            given('config', () => ({
+                capture_pageview: true,
+                capture_performance: true,
+            }))
 
-        given.subject()
+            given.subject()
 
-        expect(given.overrides.capture).not.toHaveBeenCalled()
+            expect(given.overrides.capture).toHaveBeenCalledWith(
+                '$pageview',
+                { performance: { navigation: [], paint: [], resource: [] } },
+                { send_instantly: true }
+            )
+            expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
+        })
+
+        it('captures not capture pageview if disabled', () => {
+            given('config', () => ({
+                capture_pageview: false,
+            }))
+
+            given.subject()
+
+            expect(given.overrides.capture).not.toHaveBeenCalled()
+        })
     })
 
     it('toggles feature flags on and off', () => {
