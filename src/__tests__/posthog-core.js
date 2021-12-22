@@ -756,6 +756,40 @@ describe('_loaded()', () => {
             }
         })
 
+        it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
+            // e.g. IE does not implement performance paint timing https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
+            // even though it implements getEntriesByType
+
+            const performance = { ...window.performance }
+            delete window.performance.getEntriesByType
+
+            window.performance.getEntriesByType = jest.fn().mockImplementation((type) => {
+                if (type === 'paint') {
+                    throw new Error('IE does not implement this')
+                } else {
+                    return []
+                }
+            })
+
+            try {
+                given('config', () => ({
+                    capture_pageview: true,
+                    capture_performance: true,
+                }))
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+                expect(performance.getEntriesByType).not.toHaveBeenCalled()
+            } finally {
+                window.performance = performance
+            }
+        })
+
         it('captures not capture pageview if disabled', () => {
             given('config', () => ({
                 capture_pageview: false,

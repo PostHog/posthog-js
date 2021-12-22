@@ -277,9 +277,9 @@ PostHogLib.prototype._init = function (token, config, name) {
 
 function getPerformanceEntriesByType(type) {
     // wide support but not available pre IE 10
-    if ('performance' in window && window.performance && window.performance.getEntriesByType) {
+    try {
         return JSON.parse(JSON.stringify(window.performance.getEntriesByType(type)))
-    } else {
+    } catch {
         return []
     }
 }
