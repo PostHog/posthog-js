@@ -705,6 +705,9 @@ describe('_loaded()', () => {
                 { send_instantly: true }
             )
             expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
+            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
+            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
+            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
         })
 
         it('captures not capture pageview if disabled', () => {
