@@ -38,29 +38,6 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     await t.expect(results.filter(({ event }) => event === '$autocapture').length).eql(1)
 })
 
-test('Pageview has performance object when configured', async (t) => {
-    await initPosthog({ capture_performance: true })
-
-    await t
-        .wait(1000)
-        .click('[data-cy-link-mask-text]')
-        .click('[data-cy-button-sensitive-attributes]')
-        .wait(5000)
-        .expect(captureLogger.count(() => true))
-        .gte(2)
-
-    // Check no requests failed
-    await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
-
-    const results = await retryUntilResults(queryAPI, 3)
-    const pageviews = results.filter(({ event }) => event === '$pageview')
-    await t.expect(pageviews.length).eql(1)
-    const pageview = pageviews[0]
-    await t.expect(pageview.properties.performance).contains('navigation')
-    await t.expect(pageview.properties.performance).contains('paint')
-    await t.expect(pageview.properties.performance).contains('resource')
-})
-
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
     await initPosthog()
     await t
