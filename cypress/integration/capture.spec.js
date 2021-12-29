@@ -245,23 +245,6 @@ describe('Event capture', () => {
                 }
             })
         })
-
-        it('does not send performance timing with the pageview when disabled', () => {
-            given('options', () => ({ capture_pageview: true, _capture_performance: false }))
-            start()
-
-            // Pageview will be sent immediately
-            cy.wait('@capture').its('request.headers').should('deep.equal', {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            })
-            cy.get('@capture').should(({ request }) => {
-                const captures = getBase64EncodedPayload(request)
-
-                expect(captures['event']).to.equal('$pageview')
-
-                expect(captures.properties).not.to.have.property('performance')
-            })
-        })
     })
 
     describe('decoding the payload', () => {
