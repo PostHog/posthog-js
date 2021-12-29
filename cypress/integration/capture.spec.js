@@ -238,6 +238,7 @@ describe('Event capture', () => {
                 expect(performance.paint).to.be.instanceof(Array)
                 if (performance.paint.length > 0) {
                     // we can't guarantee we run early enough to capture paint results
+                    // so, we check if they are present before asserting on them
                     performance.paint.forEach((paintResult) => {
                         expect(paintResult).to.have.property('startTime')
                         expect(paintResult.startTime).to.be.greaterThan(0)
