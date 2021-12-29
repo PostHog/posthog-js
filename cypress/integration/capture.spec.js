@@ -198,7 +198,7 @@ describe('Event capture', () => {
 
     describe('capturing performance', () => {
         it('sends performance timing with the pageview when enabled', () => {
-            given('options', () => ({ capture_pageview: true, capture_performance: true }))
+            given('options', () => ({ capture_pageview: true, _capture_performance: true }))
             start()
 
             // Pageview will be sent immediately
@@ -247,7 +247,7 @@ describe('Event capture', () => {
         })
 
         it('does not send performance timing with the pageview when disabled', () => {
-            given('options', () => ({ capture_pageview: true, capture_performance: false }))
+            given('options', () => ({ capture_pageview: true, _capture_performance: false }))
             start()
 
             // Pageview will be sent immediately

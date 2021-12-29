@@ -106,10 +106,10 @@ const defaultConfig = () => ({
         const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
         console.error(error)
     },
-    capture_performance: false,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
+    _capture_performance: false,
 })
 
 /**
@@ -301,7 +301,7 @@ PostHogLib.prototype._loaded = function () {
     // the loaded callback
     if (this.get_config('capture_pageview')) {
         const props = {}
-        if (this.get_config('capture_performance')) {
+        if (this.get_config('_capture_performance')) {
             props.performance = {
                 navigation: getPerformanceEntriesByType('navigation'),
                 paint: getPerformanceEntriesByType('paint'),
