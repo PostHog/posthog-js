@@ -208,12 +208,41 @@ describe('Event capture', () => {
             cy.get('@capture').should(({ request }) => {
                 const captures = getBase64EncodedPayload(request)
 
-                expect(captures['event']).to.equal('$pageview')
+                expect(captures.event).to.equal('$pageview')
 
-                expect(captures.properties).to.have.property('performance')
-                expect(captures.properties.performance).to.have.property('navigation')
-                expect(captures.properties.performance).to.have.property('resource')
-                expect(captures.properties.performance).to.have.property('paint')
+                const performance = captures.properties.performance
+
+                /**
+                 * The performance propery holds three items.
+                 * The result of asking window.performance for entries by type of navigation, resource, and paint
+                 * We cannot guarantee what is available in resource and paint when it runs
+                 *
+                 * Navigation will be a list with exactly one `PerformanceEntry` object
+                 *
+                 * Each of resource and paint will be a list with zero or more `PerformanceEntry` objects
+                 *
+                 * https://developer.mozilla.org/en-US/docs/Web/API/Performance/getEntriesByType
+                 */
+
+                expect(performance).to.have.property('navigation')
+                expect(performance.navigation).to.be.instanceof(Array).and.to.have.length(1)
+                expect(performance.navigation[0]).to.have.property('domContentLoadedEventEnd')
+                expect(performance.navigation[0].domContentLoadedEventEnd).to.be.greaterThan(0)
+
+                expect(performance).to.have.property('resource')
+                expect(performance.resource).to.be.instanceof(Array).and.to.have.length.greaterThan(0)
+                expect(performance.resource[0]).to.have.property('entryType', 'resource')
+                expect(performance.resource[0]).to.have.property('connectEnd')
+
+                expect(performance).to.have.property('paint')
+                expect(performance.paint).to.be.instanceof(Array)
+                if (performance.paint.length > 0) {
+                    // we can't guarantee we run early enough to capture paint results
+                    performance.paint.forEach((paintResult) => {
+                        expect(paintResult).to.have.property('startTime')
+                        expect(paintResult.startTime).to.be.greaterThan(0)
+                    })
+                }
             })
         })
 

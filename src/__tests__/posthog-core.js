@@ -679,126 +679,119 @@ describe('_loaded()', () => {
     })
 
     describe('capturing pageviews', () => {
-        it('captures pageview', () => {
+        beforeEach(() => {
             given('config', () => ({
-                capture_pageview: true,
+                capture_pageview: false,
                 capture_performance: false, // the default
             }))
-
-            given.subject()
-
-            expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
-            expect(window.performance.getEntriesByType).not.toHaveBeenCalled()
-        })
-
-        it('captures pageview with performance when enabled', () => {
-            given('config', () => ({
-                capture_pageview: true,
-                capture_performance: true,
-            }))
-
-            given.subject()
-
-            expect(given.overrides.capture).toHaveBeenCalledWith(
-                '$pageview',
-                { performance: { navigation: [], paint: [], resource: [] } },
-                { send_instantly: true }
-            )
-            expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
-            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
-            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
-            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
-        })
-
-        it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
-            const performance = { ...window.performance }
-            delete window.performance
-
-            try {
-                given('config', () => ({
-                    capture_pageview: true,
-                    capture_performance: true,
-                }))
-
-                given.subject()
-
-                expect(given.overrides.capture).toHaveBeenCalledWith(
-                    '$pageview',
-                    { performance: { navigation: [], paint: [], resource: [] } },
-                    { send_instantly: true }
-                )
-                expect(performance.getEntriesByType).not.toHaveBeenCalled()
-            } finally {
-                window.performance = performance
-            }
-        })
-
-        it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
-            const performance = { ...window.performance }
-            delete window.performance.getEntriesByType
-
-            try {
-                given('config', () => ({
-                    capture_pageview: true,
-                    capture_performance: true,
-                }))
-
-                given.subject()
-
-                expect(given.overrides.capture).toHaveBeenCalledWith(
-                    '$pageview',
-                    { performance: { navigation: [], paint: [], resource: [] } },
-                    { send_instantly: true }
-                )
-                expect(performance.getEntriesByType).not.toHaveBeenCalled()
-            } finally {
-                window.performance = performance
-            }
-        })
-
-        it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
-            // e.g. IE does not implement performance paint timing
-            // https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
-            // even though it implements getEntriesByType
-
-            const performance = { ...window.performance }
-            delete window.performance.getEntriesByType
-
-            window.performance.getEntriesByType = jest.fn().mockImplementation((type) => {
-                if (type === 'paint') {
-                    throw new Error('IE does not implement this')
-                } else {
-                    return []
-                }
-            })
-
-            try {
-                given('config', () => ({
-                    capture_pageview: true,
-                    capture_performance: true,
-                }))
-
-                given.subject()
-
-                expect(given.overrides.capture).toHaveBeenCalledWith(
-                    '$pageview',
-                    { performance: { navigation: [], paint: [], resource: [] } },
-                    { send_instantly: true }
-                )
-                expect(performance.getEntriesByType).not.toHaveBeenCalled()
-            } finally {
-                window.performance = performance
-            }
         })
 
         it('captures not capture pageview if disabled', () => {
-            given('config', () => ({
-                capture_pageview: false,
-            }))
-
             given.subject()
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
+        })
+
+        describe('when window performance is available', () => {
+            it('captures pageview', () => {
+                given('config', () => ({
+                    capture_pageview: true,
+                }))
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
+                expect(window.performance.getEntriesByType).not.toHaveBeenCalled()
+            })
+
+            it('captures pageview with performance when enabled', () => {
+                given('config', () => ({
+                    capture_pageview: true,
+                    capture_performance: true,
+                }))
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+                expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
+                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
+                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
+                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
+            })
+        })
+
+        describe('when window performance is not available', () => {
+            let performance
+            beforeEach(() => {
+                performance = { ...window.performance }
+
+                given('config', () => ({
+                    capture_pageview: true,
+                    capture_performance: true,
+                }))
+            })
+
+            afterEach(() => {
+                window.performance = performance
+            })
+
+            it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
+                delete window.performance
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+                expect(performance.getEntriesByType).not.toHaveBeenCalled()
+            })
+
+            it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
+                delete window.performance.getEntriesByType
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+                expect(performance.getEntriesByType).not.toHaveBeenCalled()
+            })
+
+            it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
+                // e.g. IE does not implement performance paint timing
+                // https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
+                // even though it implements getEntriesByType
+
+                delete window.performance.getEntriesByType
+
+                /**
+                 * We cannot spy on getEntriesByType directly. Track at https://github.com/jsdom/jsdom/issues/3309
+                 */
+                window.performance.getEntriesByType = jest.fn().mockImplementation((type) => {
+                    if (type === 'paint') {
+                        throw new Error('IE does not implement this')
+                    } else {
+                        return []
+                    }
+                })
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+                expect(performance.getEntriesByType).not.toHaveBeenCalled()
+            })
         })
     })
 

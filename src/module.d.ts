@@ -619,6 +619,7 @@ declare namespace posthog {
         mask_all_text?: boolean
         advanced_disable_decide?: boolean
         advanced_disable_toolbar_metrics?: boolean
+        capture_performance?: boolean
     }
 
     interface OptInOutCapturingOptions {

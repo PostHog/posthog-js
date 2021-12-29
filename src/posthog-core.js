@@ -302,7 +302,6 @@ PostHogLib.prototype._loaded = function () {
     if (this.get_config('capture_pageview')) {
         const props = {}
         if (this.get_config('capture_performance')) {
-            // TRICKY: without the JSON stringing and parsing less perf data is sent
             props.performance = {
                 navigation: getPerformanceEntriesByType('navigation'),
                 paint: getPerformanceEntriesByType('paint'),
