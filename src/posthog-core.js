@@ -1,20 +1,20 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
 import Config from './config'
-import { _, console, userAgent, window, document } from './utils'
+import { _, console, document, userAgent, window } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import { PostHogPersistence, PEOPLE_DISTINCT_ID_KEY, ALIAS_ID_KEY } from './posthog-persistence'
+import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
-import { optIn, optOut, hasOptedIn, hasOptedOut, clearOptInOut, addOptOutCheckPostHogLib } from './gdpr-utils'
+import { addOptOutCheckPostHogLib, clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
 import { compressData, decideCompression } from './compression'
-import { xhr, encodePostData } from './send-request'
+import { encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 
@@ -109,6 +109,7 @@ const defaultConfig = () => ({
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
+    _capture_performance: false,
 })
 
 /**
@@ -274,6 +275,15 @@ PostHogLib.prototype._init = function (token, config, name) {
 
 // Private methods
 
+function getPerformanceEntriesByType(type) {
+    // wide support but not available pre IE 10
+    try {
+        return JSON.parse(JSON.stringify(window.performance.getEntriesByType(type)))
+    } catch {
+        return []
+    }
+}
+
 PostHogLib.prototype._loaded = function () {
     // Pause `reloadFeatureFlags` calls in config.loaded callback.
     // These feature flags are loaded in the decide call made right afterwards
@@ -290,7 +300,15 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        this.capture('$pageview', {}, { send_instantly: true })
+        const props = {}
+        if (this.get_config('_capture_performance')) {
+            props.performance = {
+                navigation: getPerformanceEntriesByType('navigation'),
+                paint: getPerformanceEntriesByType('paint'),
+                resource: getPerformanceEntriesByType('resource'),
+            }
+        }
+        this.capture('$pageview', props, { send_instantly: true })
     }
 
     // Call decide to get what features are enabled and other settings.

@@ -1,4 +1,4 @@
-import { PostHogLib, init_as_module } from '../posthog-core'
+import { init_as_module, PostHogLib } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
 import { _ } from '../utils'
@@ -461,7 +461,7 @@ describe('init()', () => {
         expect(given.subject.get_config('on_xhr_error')).toBe(fakeOnXHRError)
     })
 
-    it('does not load decide enpoint on advanced_disable_decide', () => {
+    it('does not load decide endpoint on advanced_disable_decide', () => {
         given.subject()
         expect(given.decide).toBe(undefined)
         expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
@@ -677,24 +677,134 @@ describe('_loaded()', () => {
         })
     })
 
-    it('captures pageview', () => {
-        given('config', () => ({
-            capture_pageview: true,
-        }))
+    describe('capturing pageviews', () => {
+        it('captures not capture pageview if disabled', () => {
+            given('config', () => ({
+                capture_pageview: false,
+            }))
 
-        given.subject()
+            given.subject()
 
-        expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
-    })
+            expect(given.overrides.capture).not.toHaveBeenCalled()
+        })
 
-    it('captures not capture pageview if disabled', () => {
-        given('config', () => ({
-            capture_pageview: false,
-        }))
+        it('captures pageview if enabled', () => {
+            given('config', () => ({
+                capture_pageview: true,
+            }))
 
-        given.subject()
+            given.subject()
 
-        expect(given.overrides.capture).not.toHaveBeenCalled()
+            expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
+        })
+
+        describe('capturing window performance', () => {
+            given('config', () => ({
+                capture_pageview: true,
+                _capture_performance: true,
+            }))
+
+            given('performanceEntries', () => ({
+                navigation: ['a', 'b', 'c'],
+                resource: ['d', 'e', 'f'],
+                paint: ['g', 'h', 'i'],
+            }))
+
+            given('paintTimingsImplemented', () => true)
+
+            beforeEach(() => {
+                /*
+                    window.performance is not a complete implementation in jsdom
+                    see github issue https://github.com/jsdom/jsdom/issues/3309
+                    while it is not completely implemented we can follow the Jest instructions
+                    here: https://jestjs.io/docs/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom
+                 */
+
+                Object.defineProperty(window, 'performance', {
+                    writable: true,
+                    value: {
+                        getEntriesByType: jest.fn().mockImplementation((type) => {
+                            if (!given.paintTimingsImplemented && type === 'paint') {
+                                throw new Error('IE does not implement this')
+                            } else {
+                                return given.performanceEntries[type]
+                            }
+                        }),
+                    },
+                })
+            })
+
+            it('does not capture performance when disabled', () => {
+                given('config', () => ({
+                    capture_pageview: true,
+                    _capture_performance: false,
+                }))
+
+                given.subject()
+
+                expect(window.performance.getEntriesByType).not.toHaveBeenCalled()
+            })
+
+            it('captures pageview with performance when enabled', () => {
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: given.performanceEntries },
+                    { send_instantly: true }
+                )
+
+                expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
+                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
+                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
+                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
+            })
+
+            it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
+                delete window.performance
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+            })
+
+            it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
+                delete window.performance.getEntriesByType
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    { performance: { navigation: [], paint: [], resource: [] } },
+                    { send_instantly: true }
+                )
+            })
+
+            it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
+                // e.g. IE does not implement performance paint timing
+                // https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
+                // even though it implements getEntriesByType
+                given('paintTimingsImplemented', () => false)
+
+                given.subject()
+
+                expect(given.overrides.capture).toHaveBeenCalledWith(
+                    '$pageview',
+                    {
+                        performance: {
+                            navigation: given.performanceEntries.navigation,
+                            resource: given.performanceEntries.resource,
+                            paint: [],
+                        },
+                    },
+                    { send_instantly: true }
+                )
+            })
+        })
     })
 
     it('toggles feature flags on and off', () => {
