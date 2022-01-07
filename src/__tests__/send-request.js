@@ -1,10 +1,13 @@
 import { encodePostData, xhr } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 
-describe('when xhr requests fail', () => {
+jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
+
+describe('xhr', () => {
+    given('setRequestHeader', jest.fn)
     given('mockXHR', () => ({
         open: jest.fn(),
-        setRequestHeader: jest.fn(),
+        setRequestHeader: given.setRequestHeader,
         onreadystatechange: jest.fn(),
         send: jest.fn(),
         readyState: 4,
@@ -41,23 +44,33 @@ describe('when xhr requests fail', () => {
         window.XMLHttpRequest = jest.fn(() => given.mockXHR)
     })
 
-    it('does not error if the configured onXHRError is not a function', () => {
-        given('onXHRError', () => 'not a function')
-        expect(() => given.subject()).not.toThrow()
+    describe('when xhr requests fail', () => {
+        given('responseStatus', () => 502)
+
+        it('does not error if the configured onXHRError is not a function', () => {
+            given('onXHRError', () => 'not a function')
+            expect(() => given.subject()).not.toThrow()
+        })
+
+        it('marks the request as failed', () => {
+            given('onXHRError', () => undefined)
+            given.subject()
+            expect(given.markRequestFailed).toHaveBeenCalled()
+        })
+
+        it('calls the injected XHR error handler', () => {
+            //cannot use an auto-mock from jest as the code checks if onXHRError is a Function
+            let requestFromError
+            given('onXHRError', () => (req) => (requestFromError = req))
+            given.subject()
+            expect(requestFromError).toHaveProperty('status', 502)
+        })
     })
 
-    it('marks the request as failed', () => {
-        given('onXHRError', () => undefined)
+    it('adds lib version to request headers', () => {
         given.subject()
-        expect(given.markRequestFailed).toHaveBeenCalled()
-    })
 
-    it('calls the injected XHR error handler', () => {
-        //cannot use an auto-mock from jest as the code checks if onXHRError is a Function
-        let requestFromError
-        given('onXHRError', () => (req) => (requestFromError = req))
-        given.subject()
-        expect(requestFromError).toHaveProperty('status', 502)
+        expect(given.setRequestHeader).toHaveBeenCalledWith('PostHog-Lib-Version', '1.23.45')
     })
 })
 

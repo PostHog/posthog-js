@@ -1,4 +1,5 @@
 import { _, console } from './utils'
+import Config from './config'
 
 export const encodePostData = (data, options) => {
     if (options.blob && data.buffer) {
@@ -57,6 +58,8 @@ export const xhr = ({
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
+    req.setRequestHeader('PostHog-Lib-Version', Config.LIB_VERSION)
+
     if (options.method === 'POST' && !options.blob) {
         req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     }
