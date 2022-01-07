@@ -45,8 +45,6 @@ describe('xhr', () => {
     })
 
     describe('when xhr requests fail', () => {
-        given('responseStatus', () => 502)
-
         it('does not error if the configured onXHRError is not a function', () => {
             given('onXHRError', () => 'not a function')
             expect(() => given.subject()).not.toThrow()
