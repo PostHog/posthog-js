@@ -1,4 +1,5 @@
 /// <reference types="cypress" />
+import { version } from '../../package.json'
 
 import { getBase64EncodedPayload, getGzipEncodedPayload, getLZStringEncodedPayload } from '../support/compression'
 
@@ -203,6 +204,7 @@ describe('Event capture', () => {
 
             // Pageview will be sent immediately
             cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'PostHog-Lib-Version': version,
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             cy.get('@capture').should(({ request }) => {
@@ -254,6 +256,7 @@ describe('Event capture', () => {
 
             // Pageview will be sent immediately
             cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'PostHog-Lib-Version': version,
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             cy.get('@capture').should(({ request }) => {
@@ -269,6 +272,7 @@ describe('Event capture', () => {
             cy.phCaptures().should('include', 'custom-event')
 
             cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'PostHog-Lib-Version': version,
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             cy.get('@capture').should(({ request }) => {
@@ -290,6 +294,7 @@ describe('Event capture', () => {
                 start()
                 // Pageview will be sent immediately
                 cy.wait('@capture').its('request.headers').should('deep.equal', {
+                    'PostHog-Lib-Version': version,
                     'Content-Type': 'application/x-www-form-urlencoded',
                 })
                 cy.get('@capture').should(({ request }) => {
