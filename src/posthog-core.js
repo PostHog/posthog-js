@@ -682,6 +682,7 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
             paint: getPerformanceEntriesByType('paint'),
             resource: getPerformanceEntriesByType('resource'),
         }
+
         properties['$performance_raw'] = JSON.stringify(performanceEntries)
         if (performanceEntries.navigation.length > 0 && performanceEntries.navigation[0].duration >= 0) {
             properties['$performance_pageLoaded'] = performanceEntries.navigation[0].duration
