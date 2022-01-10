@@ -210,7 +210,7 @@ describe('Event capture', () => {
 
                 expect(captures.event).to.equal('$pageview')
 
-                const performance = captures.properties.performance
+                const performance = captures.properties.$performance
 
                 /**
                  * The performance propery holds three items.

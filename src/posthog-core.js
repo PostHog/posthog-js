@@ -300,15 +300,7 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        const props = {}
-        if (this.get_config('_capture_performance')) {
-            props.performance = {
-                navigation: getPerformanceEntriesByType('navigation'),
-                paint: getPerformanceEntriesByType('paint'),
-                resource: getPerformanceEntriesByType('resource'),
-            }
-        }
-        this.capture('$pageview', props, { send_instantly: true })
+        this.capture('$pageview', {}, { send_instantly: true })
     }
 
     // Call decide to get what features are enabled and other settings.
@@ -683,6 +675,14 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
 
     // update properties with pageview info and super-properties
     properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
+
+    if (event_name === '$pageview' && this.get_config('_capture_performance')) {
+        properties['$performance'] = {
+            navigation: getPerformanceEntriesByType('navigation'),
+            paint: getPerformanceEntriesByType('paint'),
+            resource: getPerformanceEntriesByType('resource'),
+        }
+    }
 
     var property_blacklist = this.get_config('property_blacklist')
     if (_.isArray(property_blacklist)) {
