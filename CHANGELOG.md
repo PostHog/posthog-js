@@ -1,3 +1,11 @@
+## 1.17.0 - 2022-01-10
+
+- Send APM data so that we don't need a plugin (#352)
+- Allow APM performance on all $pageview events (#350)
+- Include browser performance values on $pageview (#347)
+- add more advice to pull request template (#349)
+- Update README.md (#348)
+
 ## 1.16.8 - 2021-12-21
 
 - add resetSessionId function (#345)
