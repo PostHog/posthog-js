@@ -677,10 +677,15 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
 
     if (event_name === '$pageview' && this.get_config('_capture_performance')) {
-        properties['$performance'] = {
+        const performanceEntries = {
             navigation: getPerformanceEntriesByType('navigation'),
             paint: getPerformanceEntriesByType('paint'),
             resource: getPerformanceEntriesByType('resource'),
+        }
+
+        properties['$performance_raw'] = JSON.stringify(performanceEntries)
+        if (performanceEntries.navigation.length > 0 && performanceEntries.navigation[0].duration >= 0) {
+            properties['$performance_pageLoaded'] = performanceEntries.navigation[0].duration
         }
     }
 

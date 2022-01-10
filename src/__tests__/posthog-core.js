@@ -262,9 +262,9 @@ describe('capture()', () => {
         }))
 
         given('performanceEntries', () => ({
-            navigation: ['a', 'b', 'c'],
-            resource: ['d', 'e', 'f'],
+            navigation: [{ duration: 1234 }],
             paint: ['g', 'h', 'i'],
+            resource: ['d', 'e', 'f'],
         }))
 
         // e.g. IE does not implement performance paint timing
@@ -307,7 +307,12 @@ describe('capture()', () => {
         it('captures pageview with performance when enabled', () => {
             const captured_event = given.subject()
 
-            expect(captured_event.properties).toHaveProperty('$performance', given.performanceEntries)
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                JSON.stringify(given.performanceEntries)
+            )
+
+            expect(captured_event.properties).toHaveProperty('$performance_pageLoaded', 1234)
 
             expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
             expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
@@ -315,16 +320,36 @@ describe('capture()', () => {
             expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
         })
 
+        it('captures pageview with performance even if duration is not available', () => {
+            given('performanceEntries', () => ({
+                navigation: [{}],
+                paint: ['g', 'h', 'i'],
+                resource: ['d', 'e', 'f'],
+            }))
+
+            const captured_event = given.subject()
+
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                JSON.stringify(given.performanceEntries)
+            )
+
+            expect(captured_event.properties).not.toHaveProperty('$performance_pageLoaded')
+        })
+
         it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
             delete window.performance
 
             const captured_event = given.subject()
 
-            expect(captured_event.properties).toHaveProperty('$performance', {
-                navigation: [],
-                paint: [],
-                resource: [],
-            })
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                JSON.stringify({
+                    navigation: [],
+                    paint: [],
+                    resource: [],
+                })
+            )
         })
 
         it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
@@ -332,11 +357,14 @@ describe('capture()', () => {
 
             const captured_event = given.subject()
 
-            expect(captured_event.properties).toHaveProperty('$performance', {
-                navigation: [],
-                paint: [],
-                resource: [],
-            })
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                JSON.stringify({
+                    navigation: [],
+                    paint: [],
+                    resource: [],
+                })
+            )
         })
 
         it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
@@ -344,11 +372,14 @@ describe('capture()', () => {
 
             const captured_event = given.subject()
 
-            expect(captured_event.properties).toHaveProperty('$performance', {
-                navigation: given.performanceEntries.navigation,
-                resource: given.performanceEntries.resource,
-                paint: [],
-            })
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                JSON.stringify({
+                    navigation: given.performanceEntries.navigation,
+                    paint: [],
+                    resource: given.performanceEntries.resource,
+                })
+            )
         })
     })
 })
