@@ -17,6 +17,7 @@ import { compressData, decideCompression } from './compression'
 import { encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
+import { getPerformanceEntriesByType, optimisePerformanceData } from './apm'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -274,15 +275,6 @@ PostHogLib.prototype._init = function (token, config, name) {
 }
 
 // Private methods
-
-function getPerformanceEntriesByType(type) {
-    // wide support but not available pre IE 10
-    try {
-        return JSON.parse(JSON.stringify(window.performance.getEntriesByType(type)))
-    } catch {
-        return []
-    }
-}
 
 PostHogLib.prototype._loaded = function () {
     // Pause `reloadFeatureFlags` calls in config.loaded callback.
@@ -683,9 +675,9 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
             resource: getPerformanceEntriesByType('resource'),
         }
 
-        properties['$performance_raw'] = JSON.stringify(performanceEntries)
+        properties['$performance_raw'] = JSON.stringify(optimisePerformanceData(performanceEntries))
         if (performanceEntries.navigation.length > 0 && performanceEntries.navigation[0].duration >= 0) {
-            properties['$performance_pageLoaded'] = performanceEntries.navigation[0].duration
+            properties['$performance_page_loaded'] = performanceEntries.navigation[0].duration
         }
     }
 
