@@ -223,10 +223,10 @@ describe('Event capture', () => {
                  *
                  * These are stringified so that the PostHog UI doesn't try to process them in the EventsTable
                  *
-                 * The second item is the time of the pageLoaded event
+                 * The second item is the time of the page loaded event
                  */
 
-                const pageLoad = captures.properties.$performance_pageLoaded
+                const pageLoad = captures.properties.$performance_page_loaded
                 expect(pageLoad).to.be.a('number')
 
                 const rawPerformance = JSON.parse(captures.properties.$performance_raw)
@@ -238,7 +238,6 @@ describe('Event capture', () => {
 
                 expect(rawPerformance).to.have.property('resource')
                 expect(rawPerformance.resource).to.be.instanceof(Array).and.to.have.length.greaterThan(0)
-                expect(rawPerformance.resource[0]).to.have.property('entryType', 'resource')
                 expect(rawPerformance.resource[0]).to.have.property('connectEnd')
 
                 expect(rawPerformance).to.have.property('paint')
