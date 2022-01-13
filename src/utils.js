@@ -336,7 +336,7 @@ const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
 
 _.copyAndTruncateStrings = (object, maxStringLength) =>
     deepCircularCopy(object, (value, key) => {
-        if (key && LONG_STRINGS_ALLOW_LIST.includes(key)) {
+        if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key) > -1) {
             return value
         }
         if (typeof value === 'string' && maxStringLength !== null) {
