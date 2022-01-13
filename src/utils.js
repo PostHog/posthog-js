@@ -294,14 +294,21 @@ _.strip_empty_properties = function (p) {
     return ret
 }
 
-// Deep copies an object.
-// It handles cycles by replacing all references to them with `undefined`
-// Also supports customizing native values
 const COPY_IN_PROGRESS_ATTRIBUTE =
     typeof Symbol !== 'undefined' ? Symbol('__deepCircularCopyInProgress__') : '__deepCircularCopyInProgress__'
 
-function deepCircularCopy(value, customizer) {
-    if (value !== Object(value)) return customizer ? customizer(value) : value // primitive value
+/**
+ * Deep copies an object.
+ * It handles cycles by replacing all references to them with `undefined`
+ * Also supports customizing native values
+ *
+ * @param value
+ * @param customizer
+ * @param [key] if provided this is the object key associated with the value to be copied. It allows the customizer function to have context when it runs
+ * @returns {{}|undefined|*}
+ */
+function deepCircularCopy(value, customizer, key) {
+    if (value !== Object(value)) return customizer ? customizer(value, key) : value // primitive value
 
     if (value[COPY_IN_PROGRESS_ATTRIBUTE]) return undefined
 
@@ -317,7 +324,7 @@ function deepCircularCopy(value, customizer) {
         result = {}
         _.each(value, (val, key) => {
             if (key !== COPY_IN_PROGRESS_ATTRIBUTE) {
-                result[key] = deepCircularCopy(val, customizer)
+                result[key] = deepCircularCopy(val, customizer, key)
             }
         })
     }
@@ -325,17 +332,18 @@ function deepCircularCopy(value, customizer) {
     return result
 }
 
+const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
+
 _.copyAndTruncateStrings = (object, maxStringLength) =>
-    deepCircularCopy(
-        object,
-        (value) => {
-            if (typeof value === 'string' && maxStringLength !== null) {
-                value = value.slice(0, maxStringLength)
-            }
+    deepCircularCopy(object, (value, key) => {
+        if (key && LONG_STRINGS_ALLOW_LIST.includes(key)) {
             return value
-        },
-        {}
-    )
+        }
+        if (typeof value === 'string' && maxStringLength !== null) {
+            value = value.slice(0, maxStringLength)
+        }
+        return value
+    })
 
 _.base64Encode = function (data) {
     var b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
