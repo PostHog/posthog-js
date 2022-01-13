@@ -1,24 +1,22 @@
 import { deduplicateKeys, optimisePerformanceData, pageLoadFrom } from '../apm'
-import veryLargePerfJson from './vary-large-performance-data.json'
-import optimised_vary_large_performance_data from './optimised-vary-large-performance-data.json'
+import veryLargePerfJson from './very-large-performance-data.json'
+import optimisedVeryLargePerfJson from './optimised-very-large-performance-data.json'
 
 describe('when capturing performance data', () => {
     it('reduces the size of very large payloads of navigation objects', () => {
         const processedPerformanceJson = optimisePerformanceData(veryLargePerfJson.navigation)
-        expect(processedPerformanceJson).toEqual(optimised_vary_large_performance_data.navigation)
+        expect(processedPerformanceJson).toEqual(optimisedVeryLargePerfJson.navigation)
     })
 
     it('reduces the size of very large payloads of paint objects', () => {
         const processedPerformanceJson = optimisePerformanceData(veryLargePerfJson.paint)
-        expect(processedPerformanceJson).toEqual(optimised_vary_large_performance_data.paint)
+        expect(processedPerformanceJson).toEqual(optimisedVeryLargePerfJson.paint)
     })
 
     it('reduces the size of very large payloads of resource objects', () => {
         const processedPerformanceJson = optimisePerformanceData(veryLargePerfJson.resource)
         //stringifying to get around toEqual's odd behaviour comparing null/undefined array contents
-        expect(JSON.stringify(processedPerformanceJson)).toEqual(
-            JSON.stringify(optimised_vary_large_performance_data.resource)
-        )
+        expect(JSON.stringify(processedPerformanceJson)).toEqual(JSON.stringify(optimisedVeryLargePerfJson.resource))
     })
 
     it('can read page load duration from optimised data', () => {
