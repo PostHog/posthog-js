@@ -309,7 +309,7 @@ describe('capture()', () => {
 
             expect(captured_event.properties).toHaveProperty(
                 '$performance_raw',
-                JSON.stringify(given.performanceEntries)
+                '{"navigation":[["duration"],[[1234]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
             )
 
             expect(captured_event.properties).toHaveProperty('$performance_page_loaded', 1234)
@@ -331,7 +331,7 @@ describe('capture()', () => {
 
             expect(captured_event.properties).toHaveProperty(
                 '$performance_raw',
-                JSON.stringify(given.performanceEntries)
+                '{"navigation":[[],[[]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
             )
 
             expect(captured_event.properties).not.toHaveProperty('$performance_page_loaded')
@@ -374,11 +374,7 @@ describe('capture()', () => {
 
             expect(captured_event.properties).toHaveProperty(
                 '$performance_raw',
-                JSON.stringify({
-                    navigation: given.performanceEntries.navigation,
-                    paint: [],
-                    resource: given.performanceEntries.resource,
-                })
+                '{"navigation":[["duration"],[[1234]]],"paint":[],"resource":[["c"],[["d"]]]}'
             )
         })
     })
