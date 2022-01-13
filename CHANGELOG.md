@@ -1,3 +1,7 @@
+## 1.17.1 - 2022-01-13
+
+- Reduce the size of the APM performance data payload (#354)
+
 ## 1.17.0 - 2022-01-10
 
 - Send APM data so that we don't need a plugin (#352)
