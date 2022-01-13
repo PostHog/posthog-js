@@ -17,6 +17,7 @@ import { compressData, decideCompression } from './compression'
 import { encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
+import { getPerformanceData } from './apm'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -274,15 +275,6 @@ PostHogLib.prototype._init = function (token, config, name) {
 }
 
 // Private methods
-
-function getPerformanceEntriesByType(type) {
-    // wide support but not available pre IE 10
-    try {
-        return JSON.parse(JSON.stringify(window.performance.getEntriesByType(type)))
-    } catch {
-        return []
-    }
-}
 
 PostHogLib.prototype._loaded = function () {
     // Pause `reloadFeatureFlags` calls in config.loaded callback.
@@ -677,16 +669,7 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
 
     if (event_name === '$pageview' && this.get_config('_capture_performance')) {
-        const performanceEntries = {
-            navigation: getPerformanceEntriesByType('navigation'),
-            paint: getPerformanceEntriesByType('paint'),
-            resource: getPerformanceEntriesByType('resource'),
-        }
-
-        properties['$performance_raw'] = JSON.stringify(performanceEntries)
-        if (performanceEntries.navigation.length > 0 && performanceEntries.navigation[0].duration >= 0) {
-            properties['$performance_pageLoaded'] = performanceEntries.navigation[0].duration
-        }
+        properties = _.extend(properties, getPerformanceData())
     }
 
     var property_blacklist = this.get_config('property_blacklist')

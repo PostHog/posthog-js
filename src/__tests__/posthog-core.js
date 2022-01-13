@@ -263,8 +263,8 @@ describe('capture()', () => {
 
         given('performanceEntries', () => ({
             navigation: [{ duration: 1234 }],
-            paint: ['g', 'h', 'i'],
-            resource: ['d', 'e', 'f'],
+            paint: [{ a: 'b' }],
+            resource: [{ c: 'd' }],
         }))
 
         // e.g. IE does not implement performance paint timing
@@ -309,10 +309,10 @@ describe('capture()', () => {
 
             expect(captured_event.properties).toHaveProperty(
                 '$performance_raw',
-                JSON.stringify(given.performanceEntries)
+                '{"navigation":[["duration"],[[1234]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
             )
 
-            expect(captured_event.properties).toHaveProperty('$performance_pageLoaded', 1234)
+            expect(captured_event.properties).toHaveProperty('$performance_page_loaded', 1234)
 
             expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
             expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
@@ -323,18 +323,18 @@ describe('capture()', () => {
         it('captures pageview with performance even if duration is not available', () => {
             given('performanceEntries', () => ({
                 navigation: [{}],
-                paint: ['g', 'h', 'i'],
-                resource: ['d', 'e', 'f'],
+                paint: [{ a: 'b' }],
+                resource: [{ c: 'd' }],
             }))
 
             const captured_event = given.subject()
 
             expect(captured_event.properties).toHaveProperty(
                 '$performance_raw',
-                JSON.stringify(given.performanceEntries)
+                '{"navigation":[[],[[]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
             )
 
-            expect(captured_event.properties).not.toHaveProperty('$performance_pageLoaded')
+            expect(captured_event.properties).not.toHaveProperty('$performance_page_loaded')
         })
 
         it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
@@ -374,11 +374,7 @@ describe('capture()', () => {
 
             expect(captured_event.properties).toHaveProperty(
                 '$performance_raw',
-                JSON.stringify({
-                    navigation: given.performanceEntries.navigation,
-                    paint: [],
-                    resource: given.performanceEntries.resource,
-                })
+                '{"navigation":[["duration"],[[1234]]],"paint":[],"resource":[["c"],[["d"]]]}'
             )
         })
     })
