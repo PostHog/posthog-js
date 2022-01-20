@@ -1,3 +1,7 @@
+## 1.17.3 - 2022-01-20
+
+- Add an allow list to skip truncating strings when capturing events (#355)
+
 ## 1.17.2 - 2022-01-20
 
 - remove debug option (#357)
