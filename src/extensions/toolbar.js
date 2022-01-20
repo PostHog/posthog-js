@@ -19,7 +19,6 @@ export class Toolbar {
                 ...editorParams,
                 apiURL: this.instance.get_config('api_host'),
             })
-            this.instance.set_config({ debug: true })
         }
     }
 
