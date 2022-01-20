@@ -1,3 +1,7 @@
+## 1.17.2 - 2022-01-20
+
+- remove debug option (#357)
+
 ## 1.17.1 - 2022-01-13
 
 - Reduce the size of the APM performance data payload (#354)
