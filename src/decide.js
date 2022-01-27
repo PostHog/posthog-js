@@ -28,6 +28,7 @@ export class Decide {
 
     parseDecideResponse(response) {
         if (response?.status === 0) {
+            console.error('Failed to fetch feature flags from PostHog.')
             return
         }
         if (!(document && document.body)) {
