@@ -1,3 +1,7 @@
+## 1.17.5 - 2022-01-27
+
+- Only hit onFeatureFlags callback after decide (#360)
+
 ## 1.17.4 - 2022-01-27
 
 - Fix featureflags not working when /decide is down (#359)
