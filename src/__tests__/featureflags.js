@@ -1,10 +1,12 @@
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 describe('featureflags', () => {
+    given('decideEndpointWasHit', () => false)
     given('instance', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         get_property: (key) => given.properties[key],
         capture: () => {},
+        decideEndpointWasHit: given.decideEndpointWasHit,
     }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
@@ -65,5 +67,21 @@ describe('featureflags', () => {
             'alpha-feature-2': 'as-a-variant',
             'multivariate-flag': 'variant-1',
         })
+    })
+
+    it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
+        var called = false
+
+        given.featureFlags.onFeatureFlags(() => (called = true))
+        expect(called).toEqual(false)
+    })
+
+    it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
+        given.featureFlags.instance.decideEndpointWasHit = true
+        var called = false
+        given.featureFlags.onFeatureFlags(() => (called = true))
+        expect(called).toEqual(true)
+
+        called = false
     })
 })
