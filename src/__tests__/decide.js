@@ -54,6 +54,7 @@ describe('Decide', () => {
                             groups: { organization: '5' },
                         })
                     ),
+                    verbose: true,
                 },
                 { method: 'POST' },
                 expect.any(Function)
