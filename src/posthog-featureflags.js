@@ -223,7 +223,6 @@ export class PostHogFeatureFlags {
      */
     onFeatureFlags(callback) {
         this.addFeatureFlagsHandler(callback)
-        console.log(this.instance)
         if (this.instance.decideEndpointWasHit) {
             const flags = this.getFlags()
             const flagVariants = this.getFlagVariants()
