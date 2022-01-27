@@ -794,10 +794,7 @@ PostHogLib.prototype.reloadFeatureFlags = function () {
  *                              It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
-    this.featureFlags.addFeatureFlagsHandler(callback)
-    const flags = this.featureFlags.getFlags()
-    const flagVariants = this.featureFlags.getFlagVariants()
-    callback(flags, flagVariants)
+    this.featureFlags.onFeatureFlags(callback)
 }
 
 /**

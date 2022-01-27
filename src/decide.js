@@ -5,6 +5,7 @@ import { parseFeatureFlagDecideResponse } from './posthog-featureflags'
 export class Decide {
     constructor(instance) {
         this.instance = instance
+        this.instance.decideEndpointWasHit = false
     }
 
     call() {
@@ -31,6 +32,7 @@ export class Decide {
             console.error('Failed to fetch feature flags from PostHog.')
             return
         }
+        this.instance.decideEndpointWasHit = true
         if (!(document && document.body)) {
             console.log('document not ready yet, trying again in 500 milliseconds...')
             setTimeout(() => {
