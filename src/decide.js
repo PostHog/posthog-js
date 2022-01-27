@@ -21,13 +21,17 @@ export class Decide {
         const encoded_data = _.base64Encode(json_data)
         this.instance._send_request(
             `${this.instance.get_config('api_host')}/decide/?v=2`,
-            { data: encoded_data },
+            { data: encoded_data, verbose: true },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response)
         )
     }
 
     parseDecideResponse(response) {
+        if (response?.status === 0) {
+            console.error('Failed to fetch feature flags from PostHog.')
+            return
+        }
         this.instance.decideEndpointWasHit = true
         if (!(document && document.body)) {
             console.log('document not ready yet, trying again in 500 milliseconds...')

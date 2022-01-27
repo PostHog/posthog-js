@@ -54,6 +54,7 @@ describe('Decide', () => {
                             groups: { organization: '5' },
                         })
                     ),
+                    verbose: true,
                 },
                 { method: 'POST' },
                 expect.any(Function)
@@ -109,6 +110,25 @@ describe('Decide', () => {
                     'alpha-feature-2': true,
                     'multivariate-flag': 'variant-1',
                 },
+            })
+        })
+
+        it('Make sure feature flags continue working if decide request fails', () => {
+            given('decideResponse', () => ({ featureFlags: ['beta-feature', 'alpha-feature-2'] }))
+            given.subject()
+
+            expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
+                $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
+            })
+
+            given('decideResponse', () => ({ status: 0 }))
+            given.subject()
+
+            expect(given.posthog.persistence.unregister).not.toHaveBeenCalled()
+            expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
+                $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
             })
         })
     })

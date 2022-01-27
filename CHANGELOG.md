@@ -1,3 +1,7 @@
+## 1.17.4 - 2022-01-27
+
+- Fix featureflags not working when /decide is down (#359)
+
 ## 1.17.3 - 2022-01-20
 
 - Add an allow list to skip truncating strings when capturing events (#355)
