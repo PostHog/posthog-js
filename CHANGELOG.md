@@ -1,3 +1,7 @@
+## 1.17.6 - 2022-01-28
+
+- Remove capture failed request (#362)
+
 ## 1.17.5 - 2022-01-27
 
 - Only hit onFeatureFlags callback after decide (#360)
