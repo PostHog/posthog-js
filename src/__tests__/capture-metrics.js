@@ -5,12 +5,9 @@ import { _ } from '../utils'
 jest.mock('../utils')
 
 describe('CaptureMetrics()', () => {
-    given('captureMetrics', () => new CaptureMetrics(given.enabled, given.capture, given.getTime))
+    given('captureMetrics', () => new CaptureMetrics(given.enabled))
 
     given('enabled', () => true)
-    given('capture', () => jest.fn())
-
-    given('getTime', () => jest.fn())
 
     describe('incr() and decr()', () => {
         it('supports incrementing and decrementing metrics', () => {
@@ -28,65 +25,6 @@ describe('CaptureMetrics()', () => {
             given.captureMetrics.incr('key')
 
             expect(given.captureMetrics.metrics).toEqual({})
-        })
-    })
-
-    describe('tracking requests', () => {
-        beforeEach(() => {
-            let i = 0
-            _.UUID.mockImplementation(() => i++)
-        })
-
-        it('handles starting and finishing a request', () => {
-            given.getTime.mockReturnValue(5000)
-            const id = given.captureMetrics.startRequest({ size: 123 })
-
-            given.getTime.mockReturnValue(5100)
-            const payload = given.captureMetrics.finishRequest(id)
-
-            expect(id).toEqual(0)
-            expect(payload).toEqual({ size: 123, duration: 100 })
-        })
-
-        it('handles marking a request as failed', () => {
-            given.captureMetrics.markRequestFailed({ foo: 'bar' })
-
-            expect(given.capture).toHaveBeenCalledWith('$capture_failed_request', { foo: 'bar' })
-        })
-
-        it('handles marking all in-flight requests as failed', () => {
-            given.getTime.mockReturnValue(5000)
-            given.captureMetrics.startRequest({ size: 100 })
-
-            given.getTime.mockReturnValue(5100)
-            given.captureMetrics.startRequest({ size: 200 })
-
-            given.getTime.mockReturnValue(5500)
-
-            given.captureMetrics.captureInProgressRequests()
-
-            expect(given.capture).toHaveBeenCalledTimes(2)
-            expect(given.capture).toHaveBeenCalledWith('$capture_failed_request', {
-                size: 100,
-                duration: 500,
-                type: 'inflight_at_unload',
-            })
-            expect(given.capture).toHaveBeenCalledWith('$capture_failed_request', {
-                size: 200,
-                duration: 400,
-                type: 'inflight_at_unload',
-            })
-        })
-
-        it('does nothing if not enabled', () => {
-            given('enabled', () => false)
-
-            given.captureMetrics.startRequest({ size: 100 })
-            given.captureMetrics.captureInProgressRequests()
-            given.captureMetrics.markRequestFailed({ foo: 'bar' })
-            given.captureMetrics.finishRequest(null)
-
-            expect(given.capture).not.toHaveBeenCalled()
         })
     })
 })
