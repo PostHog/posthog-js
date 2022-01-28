@@ -244,7 +244,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'), _.bind(this.capture, this))
+    this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
 
     this._requestQueue = new RequestQueue(this._captureMetrics, _.bind(this._handle_queued_event, this))
 
@@ -378,7 +378,6 @@ PostHogLib.prototype._handle_unload = function () {
     if (this.get_config('_capture_metrics')) {
         this._requestQueue.updateUnloadMetrics()
         this.capture('$capture_metrics', this._captureMetrics.metrics)
-        this._captureMetrics.captureInProgressRequests()
     }
     this._requestQueue.unload()
     this._retryQueue.unload()

@@ -11,7 +11,6 @@ describe('when xhr requests fail', () => {
         responseText: JSON.stringify('something here'),
         status: 502,
     }))
-    given('markRequestFailed', jest.fn)
     given('onXHRError', jest.fn)
     given('xhrParams', () => ({
         url: 'https://any.posthog-instance.com',
@@ -20,10 +19,7 @@ describe('when xhr requests fail', () => {
         options: {},
         captureMetrics: {
             incr: () => {},
-            startRequest: () => {},
             decr: () => {},
-            finishRequest: () => {},
-            markRequestFailed: given.markRequestFailed,
         },
         callback: () => {},
         retriesPerformedSoFar: null,
@@ -44,12 +40,6 @@ describe('when xhr requests fail', () => {
     it('does not error if the configured onXHRError is not a function', () => {
         given('onXHRError', () => 'not a function')
         expect(() => given.subject()).not.toThrow()
-    })
-
-    it('marks the request as failed', () => {
-        given('onXHRError', () => undefined)
-        given.subject()
-        expect(given.markRequestFailed).toHaveBeenCalled()
     })
 
     it('calls the injected XHR error handler', () => {

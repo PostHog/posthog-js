@@ -48,12 +48,6 @@ export const xhr = ({
     captureMetrics.incr('_send_request')
     captureMetrics.incr('_send_request_inflight')
 
-    const requestId = captureMetrics.startRequest({
-        data_size: _.isString(data) ? data.length : body.length,
-        endpoint: url.slice(url.length - 2),
-        ...options._metrics,
-    })
-
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
@@ -69,8 +63,6 @@ export const xhr = ({
             captureMetrics.incr(`xhr-response`)
             captureMetrics.incr(`xhr-response-${req.status}`)
             captureMetrics.decr('_send_request_inflight')
-
-            const metricsData = captureMetrics.finishRequest(requestId)
 
             // XMLHttpRequest.DONE == 4, except in safari 4
             if (req.status === 200) {
@@ -100,13 +92,6 @@ export const xhr = ({
                         callback,
                     })
                 }
-
-                captureMetrics.markRequestFailed({
-                    ...metricsData,
-                    type: 'non_200',
-                    status: req.status,
-                    statusText: req.statusText,
-                })
 
                 if (callback) {
                     if (options.verbose) {
