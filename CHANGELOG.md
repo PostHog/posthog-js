@@ -1,3 +1,7 @@
+## 1.17.7 - 2022-02-01
+
+- fix onFeatureFlag (#363)
+
 ## 1.17.6 - 2022-01-28
 
 - Remove capture failed request (#362)
