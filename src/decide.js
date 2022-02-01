@@ -1,6 +1,5 @@
 import { autocapture } from './autocapture'
 import { _ } from './utils'
-import { parseFeatureFlagDecideResponse } from './posthog-featureflags'
 
 export class Decide {
     constructor(instance) {
@@ -45,7 +44,7 @@ export class Decide {
         this.instance.sessionRecording.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
 
-        parseFeatureFlagDecideResponse(response, this.instance.persistence)
+        this.instance.featureFlags.receivedFeatureFlags(response)
 
         if (response['supportedCompression']) {
             const compression = {}

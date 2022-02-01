@@ -1,4 +1,4 @@
-import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { PostHogFeatureFlags, parseFeatureFlagDecideResponse } from '../posthog-featureflags'
 
 describe('featureflags', () => {
     given('decideEndpointWasHit', () => false)
@@ -83,5 +83,42 @@ describe('featureflags', () => {
         expect(called).toEqual(true)
 
         called = false
+    })
+})
+
+describe('parseFeatureFlagDecideResponse', () => {
+    given('decideResponse', () => {})
+    given('persistence', () => ({ register: jest.fn(), unregister: jest.fn() }))
+    given('subject', () => () => parseFeatureFlagDecideResponse(given.decideResponse, given.persistence))
+
+    it('enables multivariate feature flags from decide v2 response', () => {
+        given('decideResponse', () => ({
+            featureFlags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            },
+        }))
+        given.subject()
+
+        expect(given.persistence.register).toHaveBeenCalledWith({
+            $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+            $enabled_feature_flags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            },
+        })
+    })
+
+    it('enables feature flags from decide response (v1 backwards compatibility)', () => {
+        // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
+        given('decideResponse', () => ({ featureFlags: ['beta-feature', 'alpha-feature-2'] }))
+        given.subject()
+
+        expect(given.persistence.register).toHaveBeenLastCalledWith({
+            $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
+            $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
+        })
     })
 })
