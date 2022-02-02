@@ -1,3 +1,7 @@
+## 1.17.8 - 2022-02-02
+
+- Fix for enabling a disabled session recording (#364)
+
 ## 1.17.7 - 2022-02-01
 
 - fix onFeatureFlag (#363)
