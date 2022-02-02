@@ -49,7 +49,7 @@ describe('SessionRecording', () => {
 
     describe('isRecordingEnabled', () => {
         given('subject', () => () => given.sessionRecording.isRecordingEnabled())
-        it('is enabled id both the server and client config says enabled', () => {
+        it('is enabled if both the server and client config says enabled', () => {
             given.subject()
             expect(given.subject()).toBe(true)
         })
