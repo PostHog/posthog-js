@@ -90,8 +90,6 @@ describe('SessionRecording', () => {
     describe('afterDecideResponse()', () => {
         given('subject', () => () => given.sessionRecording.afterDecideResponse(given.response))
         given('response', () => ({ sessionRecording: { endpoint: '/s/' } }))
-        given('$session_recording_enabled_server_side', () => true)
-        given('disabled', () => false)
 
         beforeEach(() => {
             jest.spyOn(given.sessionRecording, 'startRecordingIfEnabled')
@@ -137,9 +135,6 @@ describe('SessionRecording', () => {
     })
 
     describe('recording', () => {
-        given('disabled', () => false)
-        given('$session_recording_enabled_server_side', () => true)
-
         beforeEach(() => {
             const mockFullSnapshot = jest.fn()
             window.rrweb = {
