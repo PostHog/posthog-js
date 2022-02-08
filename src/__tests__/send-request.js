@@ -58,7 +58,7 @@ describe('xhr', () => {
     it('adds lib version to request headers', () => {
         given.subject()
 
-        expect(given.setRequestHeader).toHaveBeenCalledWith('PostHog-Lib-Version', '1.23.45')
+        expect(given.setRequestHeader).toHaveBeenCalledWith('user-agent', 'posthog-js/1.23.45')
     })
 })
 
