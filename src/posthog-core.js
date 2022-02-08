@@ -17,6 +17,7 @@ import { compressData, decideCompression } from './compression'
 import { encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
+import { getPerformanceData } from './apm'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -243,7 +244,7 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this['_jsc'] = function () {}
 
-    this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'), _.bind(this.capture, this))
+    this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
 
     this._requestQueue = new RequestQueue(this._captureMetrics, _.bind(this._handle_queued_event, this))
 
@@ -275,15 +276,6 @@ PostHogLib.prototype._init = function (token, config, name) {
 
 // Private methods
 
-function getPerformanceEntriesByType(type) {
-    // wide support but not available pre IE 10
-    try {
-        return JSON.parse(JSON.stringify(window.performance.getEntriesByType(type)))
-    } catch {
-        return []
-    }
-}
-
 PostHogLib.prototype._loaded = function () {
     // Pause `reloadFeatureFlags` calls in config.loaded callback.
     // These feature flags are loaded in the decide call made right afterwards
@@ -300,15 +292,7 @@ PostHogLib.prototype._loaded = function () {
     // this happens after so a user can call identify in
     // the loaded callback
     if (this.get_config('capture_pageview')) {
-        const props = {}
-        if (this.get_config('_capture_performance')) {
-            props.performance = {
-                navigation: getPerformanceEntriesByType('navigation'),
-                paint: getPerformanceEntriesByType('paint'),
-                resource: getPerformanceEntriesByType('resource'),
-            }
-        }
-        this.capture('$pageview', props, { send_instantly: true })
+        this.capture('$pageview', {}, { send_instantly: true })
     }
 
     // Call decide to get what features are enabled and other settings.
@@ -394,7 +378,6 @@ PostHogLib.prototype._handle_unload = function () {
     if (this.get_config('_capture_metrics')) {
         this._requestQueue.updateUnloadMetrics()
         this.capture('$capture_metrics', this._captureMetrics.metrics)
-        this._captureMetrics.captureInProgressRequests()
     }
     this._requestQueue.unload()
     this._retryQueue.unload()
@@ -684,6 +667,10 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     // update properties with pageview info and super-properties
     properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
 
+    if (event_name === '$pageview' && this.get_config('_capture_performance')) {
+        properties = _.extend(properties, getPerformanceData())
+    }
+
     var property_blacklist = this.get_config('property_blacklist')
     if (_.isArray(property_blacklist)) {
         _.each(property_blacklist, function (blacklisted_prop) {
@@ -806,10 +793,7 @@ PostHogLib.prototype.reloadFeatureFlags = function () {
  *                              It'll return a list of feature flags enabled for the user.
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
-    this.featureFlags.addFeatureFlagsHandler(callback)
-    const flags = this.featureFlags.getFlags()
-    const flagVariants = this.featureFlags.getFlagVariants()
-    callback(flags, flagVariants)
+    this.featureFlags.onFeatureFlags(callback)
 }
 
 /**

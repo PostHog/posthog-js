@@ -253,6 +253,131 @@ describe('capture()', () => {
         const event = given.subject()
         expect(event.properties.key.length).toBe(50000)
     })
+
+    describe('capturing window performance', () => {
+        given('eventName', () => '$pageview')
+
+        given('config', () => ({
+            _capture_performance: true,
+        }))
+
+        given('performanceEntries', () => ({
+            navigation: [{ duration: 1234 }],
+            paint: [{ a: 'b' }],
+            resource: [{ c: 'd' }],
+        }))
+
+        // e.g. IE does not implement performance paint timing
+        // https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
+        // even though it implements getEntriesByType
+        given('paintTimingsImplementedByBrowser', () => true)
+
+        beforeEach(() => {
+            /*
+                window.performance is not a complete implementation in jsdom
+                see github issue https://github.com/jsdom/jsdom/issues/3309
+                while it is not completely implemented we can follow the Jest instructions
+                here: https://jestjs.io/docs/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom
+             */
+
+            Object.defineProperty(window, 'performance', {
+                writable: true,
+                value: {
+                    getEntriesByType: jest.fn().mockImplementation((type) => {
+                        if (!given.paintTimingsImplementedByBrowser && type === 'paint') {
+                            throw new Error('IE does not implement this')
+                        } else {
+                            return given.performanceEntries[type]
+                        }
+                    }),
+                },
+            })
+        })
+
+        it('does not capture performance when disabled', () => {
+            given('config', () => ({
+                _capture_performance: false,
+            }))
+
+            given.subject()
+
+            expect(window.performance.getEntriesByType).not.toHaveBeenCalled()
+        })
+
+        it('captures pageview with performance when enabled', () => {
+            const captured_event = given.subject()
+
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                '{"navigation":[["duration"],[[1234]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
+            )
+
+            expect(captured_event.properties).toHaveProperty('$performance_page_loaded', 1234)
+
+            expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
+            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
+            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
+            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
+        })
+
+        it('captures pageview with performance even if duration is not available', () => {
+            given('performanceEntries', () => ({
+                navigation: [{}],
+                paint: [{ a: 'b' }],
+                resource: [{ c: 'd' }],
+            }))
+
+            const captured_event = given.subject()
+
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                '{"navigation":[[],[[]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
+            )
+
+            expect(captured_event.properties).not.toHaveProperty('$performance_page_loaded')
+        })
+
+        it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
+            delete window.performance
+
+            const captured_event = given.subject()
+
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                JSON.stringify({
+                    navigation: [],
+                    paint: [],
+                    resource: [],
+                })
+            )
+        })
+
+        it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
+            delete window.performance.getEntriesByType
+
+            const captured_event = given.subject()
+
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                JSON.stringify({
+                    navigation: [],
+                    paint: [],
+                    resource: [],
+                })
+            )
+        })
+
+        it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
+            given('paintTimingsImplementedByBrowser', () => false)
+
+            const captured_event = given.subject()
+
+            expect(captured_event.properties).toHaveProperty(
+                '$performance_raw',
+                '{"navigation":[["duration"],[[1234]]],"paint":[],"resource":[["c"],[["d"]]]}'
+            )
+        })
+    })
 })
 
 describe('_calculate_event_properties()', () => {
@@ -696,114 +821,6 @@ describe('_loaded()', () => {
             given.subject()
 
             expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
-        })
-
-        describe('capturing window performance', () => {
-            given('config', () => ({
-                capture_pageview: true,
-                _capture_performance: true,
-            }))
-
-            given('performanceEntries', () => ({
-                navigation: ['a', 'b', 'c'],
-                resource: ['d', 'e', 'f'],
-                paint: ['g', 'h', 'i'],
-            }))
-
-            given('paintTimingsImplemented', () => true)
-
-            beforeEach(() => {
-                /*
-                    window.performance is not a complete implementation in jsdom
-                    see github issue https://github.com/jsdom/jsdom/issues/3309
-                    while it is not completely implemented we can follow the Jest instructions
-                    here: https://jestjs.io/docs/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom
-                 */
-
-                Object.defineProperty(window, 'performance', {
-                    writable: true,
-                    value: {
-                        getEntriesByType: jest.fn().mockImplementation((type) => {
-                            if (!given.paintTimingsImplemented && type === 'paint') {
-                                throw new Error('IE does not implement this')
-                            } else {
-                                return given.performanceEntries[type]
-                            }
-                        }),
-                    },
-                })
-            })
-
-            it('does not capture performance when disabled', () => {
-                given('config', () => ({
-                    capture_pageview: true,
-                    _capture_performance: false,
-                }))
-
-                given.subject()
-
-                expect(window.performance.getEntriesByType).not.toHaveBeenCalled()
-            })
-
-            it('captures pageview with performance when enabled', () => {
-                given.subject()
-
-                expect(given.overrides.capture).toHaveBeenCalledWith(
-                    '$pageview',
-                    { performance: given.performanceEntries },
-                    { send_instantly: true }
-                )
-
-                expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
-                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
-                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
-                expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
-            })
-
-            it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
-                delete window.performance
-
-                given.subject()
-
-                expect(given.overrides.capture).toHaveBeenCalledWith(
-                    '$pageview',
-                    { performance: { navigation: [], paint: [], resource: [] } },
-                    { send_instantly: true }
-                )
-            })
-
-            it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
-                delete window.performance.getEntriesByType
-
-                given.subject()
-
-                expect(given.overrides.capture).toHaveBeenCalledWith(
-                    '$pageview',
-                    { performance: { navigation: [], paint: [], resource: [] } },
-                    { send_instantly: true }
-                )
-            })
-
-            it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
-                // e.g. IE does not implement performance paint timing
-                // https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
-                // even though it implements getEntriesByType
-                given('paintTimingsImplemented', () => false)
-
-                given.subject()
-
-                expect(given.overrides.capture).toHaveBeenCalledWith(
-                    '$pageview',
-                    {
-                        performance: {
-                            navigation: given.performanceEntries.navigation,
-                            resource: given.performanceEntries.resource,
-                            paint: [],
-                        },
-                    },
-                    { send_instantly: true }
-                )
-            })
         })
     })
 

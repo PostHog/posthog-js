@@ -72,6 +72,15 @@ describe('_.copyAndTruncateStrings', () => {
 
         expect(given.subject).toEqual({})
     })
+
+    it('does not truncate the apm raw performance property', () => {
+        const original = {
+            $performance_raw: 'longer_than_the_maximum',
+        }
+        given('target', () => original)
+
+        expect(given.subject).toEqual(original)
+    })
 })
 
 describe('_.info', () => {

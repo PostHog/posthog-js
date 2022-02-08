@@ -1,10 +1,10 @@
 import { autocapture } from './autocapture'
 import { _ } from './utils'
-import { parseFeatureFlagDecideResponse } from './posthog-featureflags'
 
 export class Decide {
     constructor(instance) {
         this.instance = instance
+        this.instance.decideEndpointWasHit = false
     }
 
     call() {
@@ -20,13 +20,18 @@ export class Decide {
         const encoded_data = _.base64Encode(json_data)
         this.instance._send_request(
             `${this.instance.get_config('api_host')}/decide/?v=2`,
-            { data: encoded_data },
+            { data: encoded_data, verbose: true },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response)
         )
     }
 
     parseDecideResponse(response) {
+        if (response?.status === 0) {
+            console.error('Failed to fetch feature flags from PostHog.')
+            return
+        }
+        this.instance.decideEndpointWasHit = true
         if (!(document && document.body)) {
             console.log('document not ready yet, trying again in 500 milliseconds...')
             setTimeout(() => {
@@ -39,7 +44,7 @@ export class Decide {
         this.instance.sessionRecording.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
 
-        parseFeatureFlagDecideResponse(response, this.instance.persistence)
+        this.instance.featureFlags.receivedFeatureFlags(response)
 
         if (response['supportedCompression']) {
             const compression = {}

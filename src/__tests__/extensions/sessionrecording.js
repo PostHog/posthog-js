@@ -5,7 +5,7 @@ import {
     MUTATION_SOURCE_TYPE,
     SessionRecording,
 } from '../../extensions/sessionrecording'
-import { SESSION_RECORDING_ENABLED } from '../../posthog-persistence'
+import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
 
 jest.mock('../../autocapture-utils')
 jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
@@ -17,7 +17,7 @@ describe('SessionRecording', () => {
     given('incomingSessionAndWindowId', () => ({ sessionId: 'sessionId', windowId: 'windowId' }))
 
     given('posthog', () => ({
-        get_property: () => given.$session_recording_enabled,
+        get_property: () => given.$session_recording_enabled_server_side,
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
@@ -38,6 +38,8 @@ describe('SessionRecording', () => {
             someUnregisteredProp: 'abc',
         },
     }))
+    given('$session_recording_enabled_server_side', () => true)
+    given('disabled', () => false)
 
     beforeEach(() => {
         window.rrweb = {
@@ -45,55 +47,94 @@ describe('SessionRecording', () => {
         }
     })
 
-    describe('afterDecideResponse()', () => {
-        given('subject', () => () => given.sessionRecording.afterDecideResponse(given.response))
-
-        beforeEach(() => {
-            jest.spyOn(given.sessionRecording, 'submitRecordings')
+    describe('isRecordingEnabled', () => {
+        given('subject', () => () => given.sessionRecording.isRecordingEnabled())
+        it('is enabled if both the server and client config says enabled', () => {
+            given.subject()
+            expect(given.subject()).toBe(true)
         })
 
-        it('starts session recording, saves setting when enabled', () => {
-            given('response', () => ({ sessionRecording: true }))
+        it('is disabled if the server is disabled', () => {
+            given('$session_recording_enabled_server_side', () => false)
+            given.subject()
+            expect(given.subject()).toBe(false)
+        })
+
+        it('is disabled if the client config is disabled', () => {
+            given('disabled', () => true)
+            given.subject()
+            expect(given.subject()).toBe(false)
+        })
+    })
+
+    describe('startRecordingIfEnabled', () => {
+        given('subject', () => () => given.sessionRecording.startRecordingIfEnabled())
+
+        beforeEach(() => {
+            jest.spyOn(given.sessionRecording, 'startCaptureAndTrySendingQueuedSnapshots')
+            jest.spyOn(given.sessionRecording, 'stopRecording')
+        })
+
+        it('call startCaptureAndTrySendingQueuedSnapshots if its enabled', () => {
+            given.subject()
+            expect(given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots).toHaveBeenCalled()
+        })
+
+        it('call stopRecording if its not enabled', () => {
+            given('disabled', () => true)
+            given.subject()
+            expect(given.sessionRecording.stopRecording).toHaveBeenCalled()
+        })
+    })
+
+    describe('afterDecideResponse()', () => {
+        given('subject', () => () => given.sessionRecording.afterDecideResponse(given.response))
+        given('response', () => ({ sessionRecording: { endpoint: '/s/' } }))
+
+        beforeEach(() => {
+            jest.spyOn(given.sessionRecording, 'startRecordingIfEnabled')
+
+            loadScript.mockImplementation((path, callback) => callback())
+        })
+
+        it('emit is not set to true until decide is called', () => {
+            given.sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+            expect(given.sessionRecording.emit).toBe(false)
 
             given.subject()
+            expect(given.sessionRecording.emit).toBe(true)
+        })
 
-            expect(given.sessionRecording.submitRecordings).toHaveBeenCalled()
-            expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: true })
+        it('stores true in persistence if recording is enabled from the server', () => {
+            given.subject()
+            expect(given.posthog.persistence.register).toHaveBeenCalledWith({
+                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
+            })
+        })
+
+        it('stores false in persistence if recording is not enabled from the server', () => {
+            given('response', () => ({}))
+            given.subject()
+            expect(given.posthog.persistence.register).toHaveBeenCalledWith({
+                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false,
+            })
         })
 
         it('starts session recording, saves setting and endpoint when enabled', () => {
             given('response', () => ({ sessionRecording: { endpoint: '/ses/' } }))
 
             given.subject()
-
-            expect(given.sessionRecording.submitRecordings).toHaveBeenCalled()
-            expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: true })
+            expect(given.sessionRecording.startRecordingIfEnabled).toHaveBeenCalled()
+            expect(loadScript).toHaveBeenCalled()
+            expect(given.posthog.persistence.register).toHaveBeenCalledWith({
+                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
+            })
             expect(given.sessionRecording.endpoint).toEqual('/ses/')
-        })
-
-        it('does not start recording if not allowed', () => {
-            given('response', () => ({}))
-
-            given.subject()
-
-            expect(given.sessionRecording.submitRecordings).not.toHaveBeenCalled()
-            expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: false })
-        })
-
-        it('does not start session recording if enabled via server but not client', () => {
-            given('response', () => ({ sessionRecording: { endpoint: '/ses/' } }))
-            given('disabled', () => true)
-            given.subject()
-
-            expect(given.sessionRecording.submitRecordings).not.toHaveBeenCalled()
-            expect(given.posthog.persistence.register).toHaveBeenCalledWith({ [SESSION_RECORDING_ENABLED]: false })
         })
     })
 
     describe('recording', () => {
-        given('disabled', () => false)
-        given('$session_recording_enabled', () => true)
-
         beforeEach(() => {
             const mockFullSnapshot = jest.fn()
             window.rrweb = {
@@ -131,7 +172,7 @@ describe('SessionRecording', () => {
             _emit({ event: 1 })
             expect(given.posthog.capture).not.toHaveBeenCalled()
 
-            given.sessionRecording.submitRecordings()
+            given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
             _emit({ event: 2 })
 
             expect(given.posthog.capture).toHaveBeenCalledTimes(2)
@@ -177,13 +218,13 @@ describe('SessionRecording', () => {
             expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js?v=v0.0.1', expect.anything())
         })
 
-        it('loads script after `submitRecordings` if not previously loaded', () => {
-            given('$session_recording_enabled', () => false)
+        it('loads script after `startCaptureAndTrySendingQueuedSnapshots` if not previously loaded', () => {
+            given('$session_recording_enabled_server_side', () => false)
 
             given.sessionRecording.startRecordingIfEnabled()
             expect(loadScript).not.toHaveBeenCalled()
 
-            given.sessionRecording.submitRecordings()
+            given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
 
             expect(loadScript).toHaveBeenCalled()
         })
@@ -192,12 +233,27 @@ describe('SessionRecording', () => {
             given('disabled', () => true)
 
             given.sessionRecording.startRecordingIfEnabled()
-            given.sessionRecording.submitRecordings()
+            given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
 
             expect(loadScript).not.toHaveBeenCalled()
         })
 
         it('session recording can be turned on and off', () => {
+            expect(given.sessionRecording.stopRrweb).toEqual(null)
+
+            given.sessionRecording.startRecordingIfEnabled()
+
+            expect(given.sessionRecording.started()).toEqual(true)
+            expect(given.sessionRecording.captureStarted).toEqual(true)
+            expect(given.sessionRecording.stopRrweb).not.toEqual(null)
+
+            given.sessionRecording.stopRecording()
+
+            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.captureStarted).toEqual(false)
+        })
+
+        it('session recording can be turned on after being turned off', () => {
             expect(given.sessionRecording.stopRrweb).toEqual(null)
 
             given.sessionRecording.startRecordingIfEnabled()
@@ -218,7 +274,7 @@ describe('SessionRecording', () => {
                 given.sessionRecording.windowId = 'old-window-id'
 
                 given.sessionRecording.startRecordingIfEnabled()
-                given.sessionRecording.submitRecordings()
+                given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
             })
 
             it('sends a full snapshot if there is a new session/window id and the event is not type FullSnapshot or Meta', () => {

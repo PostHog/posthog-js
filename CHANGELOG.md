@@ -1,3 +1,43 @@
+## 1.17.8 - 2022-02-02
+
+- Fix for enabling a disabled session recording (#364)
+
+## 1.17.7 - 2022-02-01
+
+- fix onFeatureFlag (#363)
+
+## 1.17.6 - 2022-01-28
+
+- Remove capture failed request (#362)
+
+## 1.17.5 - 2022-01-27
+
+- Only hit onFeatureFlags callback after decide (#360)
+
+## 1.17.4 - 2022-01-27
+
+- Fix featureflags not working when /decide is down (#359)
+
+## 1.17.3 - 2022-01-20
+
+- Add an allow list to skip truncating strings when capturing events (#355)
+
+## 1.17.2 - 2022-01-20
+
+- remove debug option (#357)
+
+## 1.17.1 - 2022-01-13
+
+- Reduce the size of the APM performance data payload (#354)
+
+## 1.17.0 - 2022-01-10
+
+- Send APM data so that we don't need a plugin (#352)
+- Allow APM performance on all $pageview events (#350)
+- Include browser performance values on $pageview (#347)
+- add more advice to pull request template (#349)
+- Update README.md (#348)
+
 ## 1.16.8 - 2021-12-21
 
 - add resetSessionId function (#345)
