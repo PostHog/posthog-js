@@ -242,10 +242,12 @@ describe('Event capture', () => {
             start()
 
             // Pageview will be sent immediately
-            cy.wait('@capture').its('request.headers').should('deep.equal', {
-                'PostHog-Lib-Version': version,
-                'Content-Type': 'application/x-www-form-urlencoded',
-            })
+            cy.wait('@capture')
+                .its('request.headers')
+                .should('deep.equal', {
+                    'user-agent': `web/${version}`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                })
             cy.get('@capture').should(({ request }) => {
                 const captures = getBase64EncodedPayload(request)
 
