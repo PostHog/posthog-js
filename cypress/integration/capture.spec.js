@@ -206,7 +206,7 @@ describe('Event capture', () => {
             cy.wait('@capture')
                 .its('request.headers')
                 .should('deep.equal', {
-                    'user-agent': `web/${version}`,
+                    'posthog-user-agent': `web/${version}`,
                     'Content-Type': 'application/x-www-form-urlencoded',
                 })
             cy.get('@capture').should(({ request }) => {
@@ -247,7 +247,7 @@ describe('Event capture', () => {
             cy.wait('@capture')
                 .its('request.headers')
                 .should('deep.equal', {
-                    'user-agent': `web/${version}`,
+                    'posthog-user-agent': `web/${version}`,
                     'Content-Type': 'application/x-www-form-urlencoded',
                 })
             cy.get('@capture').should(({ request }) => {
@@ -265,7 +265,7 @@ describe('Event capture', () => {
             cy.wait('@capture')
                 .its('request.headers')
                 .should('deep.equal', {
-                    'user-agent': `web/${version}`,
+                    'posthog-user-agent': `web/${version}`,
                     'Content-Type': 'application/x-www-form-urlencoded',
                 })
             cy.get('@capture').should(({ request }) => {
@@ -289,7 +289,7 @@ describe('Event capture', () => {
                 cy.wait('@capture')
                     .its('request.headers')
                     .should('deep.equal', {
-                        'user-agent': `web/${version}`,
+                        'posthog-user-agent': `web/${version}`,
                         'Content-Type': 'application/x-www-form-urlencoded',
                     })
                 cy.get('@capture').should(({ request }) => {

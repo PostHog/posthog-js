@@ -52,7 +52,7 @@ export const xhr = ({
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
-    req.setRequestHeader('user-agent', `web/${Config.LIB_VERSION}`)
+    req.setRequestHeader('posthog-user-agent', `web/${Config.LIB_VERSION}`)
 
     if (options.method === 'POST' && !options.blob) {
         req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
