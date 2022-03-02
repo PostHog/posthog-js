@@ -96,7 +96,7 @@ export class SessionRecording {
             (this.windowId !== windowId || this.sessionId !== sessionId) &&
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1
         ) {
-            window.rrweb.record.takeFullSnapshot()
+            this.rrwebRecord.takeFullSnapshot()
         }
         this.windowId = windowId
         this.sessionId = sessionId
@@ -116,6 +116,9 @@ export class SessionRecording {
             slimDOMOptions: {},
             collectFonts: false,
         }
+        // We switched from loading all of rrweb to just the record part, but
+        // keep backwards compatibility if someone hasn't upgraded PostHog
+        this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
 
         // only allows user to set our 'whitelisted' options
         const userSessionRecordingOptions = this.instance.get_config('session_recording')
@@ -125,12 +128,13 @@ export class SessionRecording {
             }
         }
 
-        this.stopRrweb = window.rrweb.record({
+        this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 event = filterDataURLsFromLargeDataObjects(event)
 
                 this._updateWindowAndSessionIds(event)
 
+                delete event.data?.['plugin'] // gets sent on every console.log and is unnecessary
                 const properties = {
                     $snapshot_data: event,
                     $session_id: this.sessionId,
@@ -146,6 +150,7 @@ export class SessionRecording {
                     this.snapshots.push(properties)
                 }
             },
+            plugins: [window.rrwebConsoleRecord && window.rrwebConsoleRecord.getRecordConsolePlugin()],
             ...sessionRecordingOptions,
         })
 
@@ -153,7 +158,7 @@ export class SessionRecording {
         //   Dropping the initial event is fine (it's always captured by rrweb).
         this.instance._addCaptureHook((eventName) => {
             if (eventName === '$pageview') {
-                window.rrweb.record.addCustomEvent('$pageview', { href: window.location.href })
+                this.rrwebRecord.addCustomEvent('$pageview', { href: window.location.href })
             }
         })
     }
