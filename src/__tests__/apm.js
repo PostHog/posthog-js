@@ -2,6 +2,12 @@ import { deduplicateKeys, optimisePerformanceData, pageLoadFrom } from '../apm'
 import veryLargePerfJson from './very-large-performance-data.json'
 import optimisedVeryLargePerfJson from './optimised-very-large-performance-data.json'
 
+const removePerformanceItem = (optimisedNavigationData, name) => {
+    const durationIndex = optimisedNavigationData[0].indexOf(name)
+    optimisedNavigationData[0].splice(durationIndex, 1)
+    optimisedNavigationData[1][0].splice(durationIndex, 1)
+}
+
 describe('when capturing performance data', () => {
     it('reduces the size of very large payloads of navigation objects', () => {
         const processedPerformanceJson = optimisePerformanceData(veryLargePerfJson.navigation)
@@ -26,17 +32,17 @@ describe('when capturing performance data', () => {
 
     it('can read duration even when the duration property is not available', () => {
         const optimisedNavigationData = optimisePerformanceData(veryLargePerfJson.navigation)
-        const durationIndex = optimisedNavigationData[0].indexOf('duration')
-        optimisedNavigationData[0].splice(durationIndex, 1)
-        optimisedNavigationData[1][0].splice(durationIndex, 1)
+        removePerformanceItem(optimisedNavigationData, 'duration')
+
         const pageLoad = pageLoadFrom({ navigation: optimisedNavigationData })
         expect(pageLoad).toBe(938.3)
     })
 
     it('can safely read absent page load duration from optimised data', () => {
         const optimisedNavigationData = optimisePerformanceData(veryLargePerfJson.navigation)
-        optimisedNavigationData[0].splice(optimisedNavigationData[0].indexOf('duration'), 1)
-        optimisedNavigationData[0].splice(optimisedNavigationData[0].indexOf('loadEventEnd'), 1)
+        removePerformanceItem(optimisedNavigationData, 'duration')
+        removePerformanceItem(optimisedNavigationData, 'loadEventEnd')
+
         const pageLoad = pageLoadFrom({ navigation: optimisedNavigationData })
         expect(pageLoad).toBe(undefined)
     })
