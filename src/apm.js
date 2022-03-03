@@ -73,10 +73,31 @@ export function deduplicateKeys(performanceEntries) {
     return [keys, performanceEntries.map((obj) => keys.map((key) => obj[key]))]
 }
 
+/*
+The duration property is on the PerformanceNavigationTiming object.
+
+It is a timestamp that is the difference between the PerformanceNavigationTiming.loadEventEnd
+and PerformanceEntry.startTime properties.
+https://developer.mozilla.org/en-US/docs/Web/API/PerformanceNavigationTiming
+
+Even in browsers that implement it, it is not always available to us
+ */
 export function pageLoadFrom(performanceData) {
-    const keyIndex =
-        performanceData.navigation && performanceData.navigation[0] && performanceData.navigation[0].indexOf('duration')
-    return performanceData.navigation[1] && performanceData.navigation[1][0][keyIndex]
+    const keys = performanceData.navigation && performanceData.navigation[0]
+    const values = performanceData.navigation[1] && performanceData.navigation[1][0]
+
+    const durationIndex = keys && keys.indexOf('duration')
+    if (durationIndex > -1) {
+        return values[durationIndex]
+    } else {
+        const endKeyIndex = keys && keys.indexOf('loadEventEnd')
+        const startKeyIndex = keys && keys.indexOf('startTime') // start key is not present if start is 0
+        if (endKeyIndex > -1) {
+            const end = values && values[endKeyIndex]
+            const start = (values && values[startKeyIndex]) || 0
+            return end - start
+        }
+    }
 }
 
 export function getPerformanceData() {
