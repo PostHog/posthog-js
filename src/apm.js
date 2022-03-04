@@ -84,7 +84,7 @@ Even in browsers that implement it, it is not always available to us
  */
 export function pageLoadFrom(performanceData) {
     const keys = performanceData.navigation && performanceData.navigation[0]
-    const values = performanceData.navigation[1] && performanceData.navigation[1][0]
+    const values = performanceData.navigation && performanceData.navigation[1] && performanceData.navigation[1][0]
 
     const durationIndex = keys && keys.indexOf('duration')
     if (durationIndex > -1) {
