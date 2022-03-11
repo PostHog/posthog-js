@@ -466,6 +466,13 @@ describe('_calculate_event_properties()', () => {
             distinct_id: 'abc',
         })
     })
+
+    it("doesn't modify properties passed into it", () => {
+        const properties = { prop1: 'val1', prop2: 'val2' }
+        given.lib._calculate_event_properties(given.event_name, properties, given.start_timestamp, given.options)
+
+        expect(Object.keys(properties)).toEqual(['prop1', 'prop2'])
+    })
 })
 
 describe('_handle_unload()', () => {
