@@ -878,7 +878,6 @@ _['info']['device'] = _.info.device
 _['info']['browser'] = _.info.browser
 _['info']['browserVersion'] = _.info.browserVersion
 _['info']['properties'] = _.info.properties
-_['deepCircularCopy'] = deepCircularCopy
 
 export { win as window, _, userAgent, console, document }
 

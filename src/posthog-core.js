@@ -640,7 +640,7 @@ PostHogLib.prototype._invokeCaptureHooks = function (eventName, eventData) {
 
 PostHogLib.prototype._calculate_event_properties = function (event_name, event_properties, start_timestamp) {
     // set defaults
-    let properties = _.deepCircularCopy(event_properties) || {}
+    let properties = { ...event_properties } || {}
     properties['token'] = this.get_config('token')
 
     if (event_name === '$snapshot') {
