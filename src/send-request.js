@@ -1,4 +1,4 @@
-import { _, console } from './utils'
+import { _, logger } from './utils'
 
 export const encodePostData = (data, options) => {
     if (options.blob && data.buffer) {
@@ -79,7 +79,7 @@ export const xhr = ({
                     try {
                         response = JSON.parse(req.responseText)
                     } catch (e) {
-                        console.error(e)
+                        logger.error(e)
                         return
                     }
                     callback(response)
