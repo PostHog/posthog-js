@@ -1,13 +1,12 @@
-import { encodePostData, xhr } from '../send-request'
+import { addParamsToURL, encodePostData, xhr } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
 describe('xhr', () => {
-    given('setRequestHeader', jest.fn)
     given('mockXHR', () => ({
         open: jest.fn(),
-        setRequestHeader: given.setRequestHeader,
+        setRequestHeader: jest.fn,
         onreadystatechange: jest.fn(),
         send: jest.fn(),
         readyState: 4,
@@ -54,11 +53,29 @@ describe('xhr', () => {
             expect(requestFromError).toHaveProperty('status', 502)
         })
     })
+})
 
-    it('adds lib version to request headers', () => {
-        given.subject()
+describe('adding query params to posthog API calls', () => {
+    given('subject', () => () => addParamsToURL(given.posthogURL, given.urlQueryArgs, given.parameterOptions))
+    given('posthogURL', () => 'https://any.posthog-instance.com')
+    given('urlQueryArgs', () => ({}))
+    given('parameterOptions', () => ({
+        ip: true,
+    }))
 
-        expect(given.setRequestHeader).toHaveBeenCalledWith('posthog-user-agent', 'web/1.23.45')
+    it('adds library and version', () => {
+        expect(new URL(given.subject()).search).toContain('l=web&v=1.23.45')
+    })
+
+    it('adds i as 1 when IP in config', () => {
+        expect(new URL(given.subject()).search).toContain('ip=1')
+    })
+    it('adds i as 0 when IP not in config', () => {
+        given('parameterOptions', () => ({}))
+        expect(new URL(given.subject()).search).toContain('ip=0')
+    })
+    it('adds timestamp', () => {
+        expect(new URL(given.subject()).search).toMatch(/_=\d+/)
     })
 })
 

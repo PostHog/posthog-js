@@ -1,6 +1,17 @@
 import { _, console } from './utils'
 import Config from './config'
 
+export const addParamsToURL = (url, urlQueryArgs, parameterOptions) => {
+    const args = urlQueryArgs || {}
+    args['ip'] = parameterOptions['ip'] ? 1 : 0
+    args['_'] = new Date().getTime().toString()
+    args['l'] = 'web'
+    args['v'] = Config.LIB_VERSION
+
+    const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
+    return url + argSeparator + _.HTTPBuildQuery(args)
+}
+
 export const encodePostData = (data, options) => {
     if (options.blob && data.buffer) {
         return new Blob([data.buffer], { type: 'text/plain' })
@@ -52,7 +63,6 @@ export const xhr = ({
     _.each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
-    req.setRequestHeader('posthog-user-agent', `web/${Config.LIB_VERSION}`)
 
     if (options.method === 'POST' && !options.blob) {
         req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
