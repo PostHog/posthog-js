@@ -201,7 +201,11 @@ describe('Event capture', () => {
 
     describe('capturing performance', () => {
         it('sends performance timing with the pageview when enabled', () => {
-            given('options', () => ({ capture_pageview: true, _capture_performance: true }))
+            given('options', () => ({
+                capture_pageview: true,
+                _capture_performance: true,
+                _library_and_version_in_query_params: true,
+            }))
             start()
 
             // Pageview will be sent immediately
@@ -242,6 +246,8 @@ describe('Event capture', () => {
     })
 
     describe('decoding the payload', () => {
+        given('options', () => ({ _library_and_version_in_query_params: true }))
+
         it('contains the correct headers and payload after an event', () => {
             start()
 

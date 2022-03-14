@@ -2,11 +2,14 @@ import { _, console } from './utils'
 import Config from './config'
 
 export const addParamsToURL = (url, urlQueryArgs, parameterOptions) => {
+    console.log(parameterOptions, 'poo')
     const args = urlQueryArgs || {}
     args['ip'] = parameterOptions['ip'] ? 1 : 0
     args['_'] = new Date().getTime().toString()
-    args['l'] = 'web'
-    args['v'] = Config.LIB_VERSION
+    if (parameterOptions['_library_and_version_in_query_params']) {
+        args['l'] = 'web'
+        args['v'] = Config.LIB_VERSION
+    }
 
     const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
     return url + argSeparator + _.HTTPBuildQuery(args)

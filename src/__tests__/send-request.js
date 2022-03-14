@@ -61,10 +61,18 @@ describe('adding query params to posthog API calls', () => {
     given('urlQueryArgs', () => ({}))
     given('parameterOptions', () => ({
         ip: true,
+        _library_and_version_in_query_params: false,
     }))
 
-    it('adds library and version', () => {
+    it('adds library and version when switched on via config', () => {
+        given('parameterOptions', () => ({
+            _library_and_version_in_query_params: true,
+        }))
         expect(new URL(given.subject()).search).toContain('l=web&v=1.23.45')
+    })
+
+    it('does not add library and version when switched off via config', () => {
+        expect(new URL(given.subject()).search).not.toContain('l=web&v=1.23.45')
     })
 
     it('adds i as 1 when IP in config', () => {
