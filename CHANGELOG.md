@@ -1,3 +1,8 @@
+## 1.17.9 - 2022-03-04
+
+- fix(web performance): calculate duration when it isn't present on navigation timing (#368)
+- Upgrade jest to remove security vulnerability (#365)
+
 ## 1.17.8 - 2022-02-02
 
 - Fix for enabling a disabled session recording (#364)
