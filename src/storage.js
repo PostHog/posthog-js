@@ -1,4 +1,4 @@
-import { console } from './utils'
+import { logger } from './utils'
 import { _ } from './utils'
 
 var DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
@@ -97,7 +97,7 @@ export const localStore = {
             supported = false
         }
         if (!supported) {
-            console.error('localStorage unsupported; falling back to cookie store')
+            logger.error('localStorage unsupported; falling back to cookie store')
         }
 
         _localStorage_supported = supported
@@ -105,7 +105,7 @@ export const localStore = {
     },
 
     error: function (msg) {
-        console.error('localStorage error: ' + msg)
+        logger.error('localStorage error: ' + msg)
     },
 
     get: function (name) {
@@ -197,7 +197,7 @@ export const memoryStore = {
     },
 
     error: function (msg) {
-        console.error('memoryStorage error: ' + msg)
+        logger.error('memoryStorage error: ' + msg)
     },
 
     parse: function (name) {
@@ -240,7 +240,7 @@ export const sessionStore = {
     },
     error: function (msg) {
         if (Config.DEBUG) {
-            console.error('sessionStorage error: ', msg)
+            logger.error('sessionStorage error: ', msg)
         }
     },
 

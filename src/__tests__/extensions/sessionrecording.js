@@ -41,7 +41,7 @@ describe('SessionRecording', () => {
 
     beforeEach(() => {
         window.rrwebRecord = jest.fn()
-        window.rrwebConsoleRecord = jest.fn()
+        window.rrwebConsoleRecord = { getRecordConsolePlugin: jest.fn() }
     })
 
     describe('afterDecideResponse()', () => {
