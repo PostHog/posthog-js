@@ -150,11 +150,10 @@ export class SessionRecording {
                     this.snapshots.push(properties)
                 }
             },
-            plugins: [
-                window.rrwebConsoleRecord &&
-                    this.instance.get_config('enable_recording_console_log') &&
-                    window.rrwebConsoleRecord.getRecordConsolePlugin(),
-            ],
+            plugins:
+                window.rrwebConsoleRecord && this.instance.get_config('enable_recording_console_log')
+                    ? [window.rrwebConsoleRecord.getRecordConsolePlugin()]
+                    : [],
             ...sessionRecordingOptions,
         })
 
