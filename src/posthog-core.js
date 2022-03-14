@@ -74,6 +74,7 @@ const defaultConfig = () => ({
     disable_session_recording: false,
     disable_persistence: false,
     disable_cookie: false,
+    enable_recording_console_log: false,
     secure_cookie: window.location.protocol === 'https:',
     ip: true,
     opt_out_capturing_by_default: false,
