@@ -111,7 +111,6 @@ const defaultConfig = () => ({
     _onCapture: () => {},
     _capture_metrics: false,
     _capture_performance: false,
-    _library_and_version_in_query_params: false,
 })
 
 /**
@@ -414,7 +413,6 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
     url = addParamsToURL(url, options.urlQueryArgs, {
         ip: this.get_config('ip'),
-        _library_and_version_in_query_params: this.get_config('_library_and_version_in_query_params'),
     })
 
     if (_.isObject(data) && this.get_config('img')) {

@@ -620,7 +620,6 @@ declare namespace posthog {
         advanced_disable_decide?: boolean
         advanced_disable_toolbar_metrics?: boolean
         _capture_performance?: boolean
-        _library_and_version_in_query_params?: boolean
     }
 
     interface OptInOutCapturingOptions {
