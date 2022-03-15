@@ -142,7 +142,6 @@ export class SessionRecording {
 
                 this._updateWindowAndSessionIds(event)
 
-                delete event.data?.['plugin'] // gets sent on every console.log and is unnecessary
                 const properties = {
                     $snapshot_data: event,
                     $session_id: this.sessionId,
