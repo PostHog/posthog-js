@@ -31,6 +31,7 @@ describe('SessionRecording', () => {
     given('config', () => ({
         api_host: 'https://test.com',
         disable_session_recording: given.disabled,
+        enable_recording_console_log: given.enable_recording_console_log,
         autocapture: false, // Assert that session recording works even if `autocapture = false`
         session_recording: {
             maskAllInputs: true,
@@ -264,6 +265,24 @@ describe('SessionRecording', () => {
 
             expect(given.sessionRecording.stopRrweb).toEqual(null)
             expect(given.sessionRecording.captureStarted).toEqual(false)
+        })
+
+        describe('console logs', () => {
+            it('if not enabled, plugin is not used', () => {
+                given('enable_recording_console_log', () => false)
+
+                given.sessionRecording.startRecordingIfEnabled()
+
+                expect(window.rrwebConsoleRecord.getRecordConsolePlugin).not.toHaveBeenCalled()
+            })
+
+            it('if enabled, plugin is used', () => {
+                given('enable_recording_console_log', () => true)
+
+                given.sessionRecording.startRecordingIfEnabled()
+
+                expect(window.rrwebConsoleRecord.getRecordConsolePlugin).toHaveBeenCalled()
+            })
         })
 
         describe('session and window ids', () => {
