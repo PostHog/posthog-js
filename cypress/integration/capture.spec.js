@@ -3,7 +3,7 @@ import { version } from '../../package.json'
 
 import { getBase64EncodedPayload, getGzipEncodedPayload, getLZStringEncodedPayload } from '../support/compression'
 
-const urlWithLibraryAndVersion = new RegExp(`&l=web&v=${version}`)
+const urlWithVersion = new RegExp(`&v=${version}`)
 
 describe('Event capture', () => {
     given('options', () => ({}))
@@ -210,7 +210,7 @@ describe('Event capture', () => {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 })
 
-                expect(url).to.match(urlWithLibraryAndVersion)
+                expect(url).to.match(urlWithVersion)
 
                 const captures = getBase64EncodedPayload(request)
 
@@ -251,7 +251,7 @@ describe('Event capture', () => {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 })
 
-                expect(url).to.match(urlWithLibraryAndVersion)
+                expect(url).to.match(urlWithVersion)
                 const captures = getBase64EncodedPayload(request)
 
                 expect(captures['event']).to.equal('$pageview')
@@ -268,7 +268,7 @@ describe('Event capture', () => {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 })
 
-                expect(url).to.match(urlWithLibraryAndVersion)
+                expect(url).to.match(urlWithVersion)
                 const captures = getLZStringEncodedPayload(request)
 
                 expect(captures.map(({ event }) => event)).to.deep.equal([
@@ -291,7 +291,7 @@ describe('Event capture', () => {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     })
 
-                    expect(url).to.match(urlWithLibraryAndVersion)
+                    expect(url).to.match(urlWithVersion)
                     const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
                     const captures = JSON.parse(Buffer.from(data, 'base64'))
 

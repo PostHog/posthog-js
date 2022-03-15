@@ -5,7 +5,6 @@ export const addParamsToURL = (url, urlQueryArgs, parameterOptions) => {
     const args = urlQueryArgs || {}
     args['ip'] = parameterOptions['ip'] ? 1 : 0
     args['_'] = new Date().getTime().toString()
-    args['l'] = 'web'
     args['v'] = Config.LIB_VERSION
 
     const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
