@@ -123,8 +123,7 @@ export class PostHogFeatureFlags {
             { data: encoded_data },
             { method: 'POST' },
             this.instance._prepare_callback((response) => {
-                parseFeatureFlagDecideResponse(response, this.instance.persistence)
-                this.receivedFeatureFlags()
+                this.receivedFeatureFlags(response)
 
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
@@ -178,7 +177,8 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers.push(handler)
     }
 
-    receivedFeatureFlags() {
+    receivedFeatureFlags(response) {
+        parseFeatureFlagDecideResponse(response, this.instance.persistence)
         const flags = this.getFlags()
         const variants = this.getFlagVariants()
         this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
@@ -208,6 +208,25 @@ export class PostHogFeatureFlags {
             this.instance.persistence.register({ $override_feature_flags: flagsObj })
         } else {
             this.instance.persistence.register({ $override_feature_flags: flags })
+        }
+    }
+    /*
+     * Register an event listener that runs when feature flags become available or when they change.
+     * If there are flags, the listener is called immediately in addition to being called on future changes.
+     *
+     * ### Usage:
+     *
+     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+     *
+     * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
+     *                              It'll return a list of feature flags enabled for the user.
+     */
+    onFeatureFlags(callback) {
+        this.addFeatureFlagsHandler(callback)
+        if (this.instance.decideEndpointWasHit) {
+            const flags = this.getFlags()
+            const flagVariants = this.getFlagVariants()
+            callback(flags, flagVariants)
         }
     }
 }

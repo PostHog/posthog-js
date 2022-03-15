@@ -1,6 +1,6 @@
 import { loadScript } from '../autocapture-utils'
 import { _ } from '../utils'
-import { SESSION_RECORDING_ENABLED } from '../posthog-persistence'
+import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects } from './sessionrecording-utils'
 
@@ -16,19 +16,19 @@ export class SessionRecording {
         this.instance = instance
         this.captureStarted = false
         this.snapshots = []
-        this.emit = false
+        this.emit = false // Controls whether data is sent to the server or not
         this.endpoint = BASE_ENDPOINT
         this.stopRrweb = null
         this.windowId = null
         this.sessionId = null
+        this.receivedDecide = false
     }
 
     startRecordingIfEnabled() {
-        if (
-            this.instance.get_property(SESSION_RECORDING_ENABLED) &&
-            !this.instance.get_config('disable_session_recording')
-        ) {
-            this._startCapture()
+        if (this.isRecordingEnabled()) {
+            this.startCaptureAndTrySendingQueuedSnapshots()
+        } else {
+            this.stopRecording()
         }
     }
 
@@ -44,25 +44,33 @@ export class SessionRecording {
         }
     }
 
-    afterDecideResponse(response) {
-        const enableRecordings =
-            !this.instance.get_config('disable_session_recording') && !!response['sessionRecording']
-        if (this.instance.persistence) {
-            this.instance.persistence.register({ [SESSION_RECORDING_ENABLED]: enableRecordings })
-        }
-
-        if (enableRecordings) {
-            if (response['sessionRecording'].endpoint) {
-                this.endpoint = response['sessionRecording'].endpoint
-            }
-            this.submitRecordings()
-        }
+    isRecordingEnabled() {
+        const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_client_side = !this.instance.get_config('disable_session_recording')
+        return enabled_server_side && enabled_client_side
     }
 
-    submitRecordings() {
-        this.emit = true
+    afterDecideResponse(response) {
+        this.receivedDecide = true
+        if (this.instance.persistence) {
+            this.instance.persistence.register({
+                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
+            })
+        }
+        if (response.sessionRecording?.endpoint) {
+            this.endpoint = response.sessionRecording?.endpoint
+        }
+        this.startRecordingIfEnabled()
+    }
+
+    startCaptureAndTrySendingQueuedSnapshots() {
+        // Only submit data after we've received a decide response to account for
+        // changing endpoints and the feature being disabled on the server side.
+        if (this.receivedDecide) {
+            this.emit = true
+            this.snapshots.forEach((properties) => this._captureSnapshot(properties))
+        }
         this._startCapture()
-        this.snapshots.forEach((properties) => this._captureSnapshot(properties))
     }
 
     _startCapture() {

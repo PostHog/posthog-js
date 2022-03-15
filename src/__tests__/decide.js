@@ -21,8 +21,10 @@ describe('Decide', () => {
         sessionRecording: {
             afterDecideResponse: jest.fn(),
         },
+        featureFlags: {
+            receivedFeatureFlags: jest.fn(),
+        },
         getGroups: () => ({ organization: '5' }),
-        persistence: { register: jest.fn(), unregister: jest.fn() },
     }))
 
     given('decideResponse', () => ({ enable_collect_everything: true }))
@@ -54,6 +56,7 @@ describe('Decide', () => {
                             groups: { organization: '5' },
                         })
                     ),
+                    verbose: true,
                 },
                 { method: 'POST' },
                 expect.any(Function)
@@ -70,6 +73,7 @@ describe('Decide', () => {
 
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse)
             expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
         })
 
@@ -81,35 +85,11 @@ describe('Decide', () => {
             expect(given.posthog.compression['lz64']).toBe(true)
         })
 
-        it('enables feature flags from decide response (v1 backwards compatibility)', () => {
-            // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
-            given('decideResponse', () => ({ featureFlags: ['beta-feature', 'alpha-feature-2'] }))
+        it('Make sure receivedFeatureFlags is not called if the decide response fails', () => {
+            given('decideResponse', () => ({ status: 0 }))
             given.subject()
 
-            expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
-                $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
-                $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
-            })
-        })
-
-        it('enables multivariate feature flags from decide v2 response', () => {
-            given('decideResponse', () => ({
-                featureFlags: {
-                    'beta-feature': true,
-                    'alpha-feature-2': true,
-                    'multivariate-flag': 'variant-1',
-                },
-            }))
-            given.subject()
-
-            expect(given.posthog.persistence.register).toHaveBeenLastCalledWith({
-                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
-                $enabled_feature_flags: {
-                    'beta-feature': true,
-                    'alpha-feature-2': true,
-                    'multivariate-flag': 'variant-1',
-                },
-            })
+            expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
     })
 })

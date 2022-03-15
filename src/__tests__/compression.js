@@ -92,6 +92,9 @@ describe('Payload Compression', () => {
                 sessionRecording: {
                     afterDecideResponse: jest.fn(),
                 },
+                featureFlags: {
+                    receivedFeatureFlags: jest.fn(),
+                },
             }
         })
 

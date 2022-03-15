@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.17.3",
+    "version": "1.17.9",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -50,7 +50,7 @@
         "fast-check": "^2.17.0",
         "given2": "^2.1.7",
         "husky": "^4.2.5",
-        "jest": "^26.1.0",
+        "jest": "^27.5.1",
         "jsdom": "16.2.2",
         "jsdom-global": "3.0.2",
         "lint-staged": "^10.2.11",
@@ -92,6 +92,7 @@
         "setupFilesAfterEnv": [
             "given2/setup"
         ],
-        "clearMocks": true
+        "clearMocks": true,
+        "testEnvironment": "jsdom"
     }
 }

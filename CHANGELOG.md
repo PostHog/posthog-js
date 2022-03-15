@@ -1,3 +1,28 @@
+## 1.17.9 - 2022-03-04
+
+- fix(web performance): calculate duration when it isn't present on navigation timing (#368)
+- Upgrade jest to remove security vulnerability (#365)
+
+## 1.17.8 - 2022-02-02
+
+- Fix for enabling a disabled session recording (#364)
+
+## 1.17.7 - 2022-02-01
+
+- fix onFeatureFlag (#363)
+
+## 1.17.6 - 2022-01-28
+
+- Remove capture failed request (#362)
+
+## 1.17.5 - 2022-01-27
+
+- Only hit onFeatureFlags callback after decide (#360)
+
+## 1.17.4 - 2022-01-27
+
+- Fix featureflags not working when /decide is down (#359)
+
 ## 1.17.3 - 2022-01-20
 
 - Add an allow list to skip truncating strings when capturing events (#355)

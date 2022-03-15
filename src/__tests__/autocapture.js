@@ -883,35 +883,6 @@ describe('Autocapture system', () => {
         })
     })
 
-    describe('init', () => {
-        given('subject', () => () => autocapture.init(given.lib))
-
-        given('lib', () => ({
-            get_config: jest.fn().mockImplementation((key) => given.config[key]),
-            token: 'testtoken',
-            capture: jest.fn(),
-            get_distinct_id: () => 'distinctid',
-
-            toolbar: {
-                maybeLoadEditor: jest.fn(),
-            },
-        }))
-
-        given('config', () => ({
-            api_host: 'https://test.com',
-            token: 'testtoken',
-        }))
-
-        given('decideResponse', () => ({ enable_collect_everything: true }))
-
-        beforeEach(() => {
-            document.title = 'test page'
-            autocapture._initializedTokens = []
-
-            jest.spyOn(autocapture, '_addDomEventHandlers')
-        })
-    })
-
     describe('afterDecideResponse()', () => {
         given('subject', () => () => autocapture.afterDecideResponse(given.decideResponse, given.posthog))
 

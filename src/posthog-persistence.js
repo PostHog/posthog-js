@@ -18,7 +18,7 @@ import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './st
 /** @const */ var ALIAS_ID_KEY = '__alias'
 /** @const */ var CAMPAIGN_IDS_KEY = '__cmpns'
 /** @const */ var EVENT_TIMERS_KEY = '__timers'
-/** @const */ var SESSION_RECORDING_ENABLED = '$session_recording_enabled'
+/** @const */ var SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 /** @const */ var SESSION_ID = '$sesid'
 /** @const */ var ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 /** @const */ var RESERVED_PROPERTIES = [
@@ -33,7 +33,7 @@ import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './st
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,
     EVENT_TIMERS_KEY,
-    SESSION_RECORDING_ENABLED,
+    SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
 ]
@@ -291,6 +291,6 @@ export {
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,
     EVENT_TIMERS_KEY,
-    SESSION_RECORDING_ENABLED,
+    SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_ID,
 }
