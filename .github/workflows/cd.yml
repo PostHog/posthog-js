@@ -101,7 +101,7 @@ jobs:
                   branch: posthog-js-${{ env.COMMITTED_VERSION }}
                   delete-branch: true
                   labels: automerge
-                  title: Update posthog-js to ${{ env.COMMITTED_VERSION }}
+                  title: "chore: Update posthog-js to ${{ env.COMMITTED_VERSION }}"
                   body: |
                       ## Changes
 
