@@ -97,11 +97,11 @@ jobs:
               uses: peter-evans/create-pull-request@v3
               with:
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
-                  commit-message: Update posthog-js to ${{ env.COMMITTED_VERSION }}
+                  commit-message: "chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}"
                   branch: posthog-js-${{ env.COMMITTED_VERSION }}
                   delete-branch: true
                   labels: automerge
-                  title: "chore: Update posthog-js to ${{ env.COMMITTED_VERSION }}"
+                  title: "chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}"
                   body: |
                       ## Changes
 
