@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 import { LZString } from './lz-string'
 import Config from './config'
-import { _, console, document, userAgent, window } from './utils'
+import { _, logger, document, userAgent, window } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -74,6 +74,7 @@ const defaultConfig = () => ({
     disable_session_recording: false,
     disable_persistence: false,
     disable_cookie: false,
+    enable_recording_console_log: false,
     secure_cookie: window.location.protocol === 'https:',
     ip: true,
     opt_out_capturing_by_default: false,
@@ -161,10 +162,10 @@ var create_mplib = function (token, config, name) {
         var num_enabled_buckets = 100
         if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
             instance['__autocapture_enabled'] = false
-            console.log('Not in active bucket: disabling Automatic Event Collection.')
+            logger.log('Not in active bucket: disabling Automatic Event Collection.')
         } else if (!autocapture.isBrowserSupported()) {
             instance['__autocapture_enabled'] = false
-            console.log('Disabling Automatic Event Collection because this browser is not supported')
+            logger.log('Disabling Automatic Event Collection because this browser is not supported')
         } else {
             autocapture.init(instance)
         }
@@ -609,7 +610,7 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
 
     data = _.copyAndTruncateStrings(data, options._noTruncate ? null : this.get_config('properties_string_max_length'))
     if (this.get_config('debug')) {
-        console.log('PostHog.js send', data)
+        logger.log('PostHog.js send', data)
     }
     const jsonData = JSON.stringify(data)
 

@@ -31,6 +31,7 @@ describe('SessionRecording', () => {
     given('config', () => ({
         api_host: 'https://test.com',
         disable_session_recording: given.disabled,
+        enable_recording_console_log: given.enable_recording_console_log,
         autocapture: false, // Assert that session recording works even if `autocapture = false`
         session_recording: {
             maskAllInputs: true,
@@ -42,9 +43,8 @@ describe('SessionRecording', () => {
     given('disabled', () => false)
 
     beforeEach(() => {
-        window.rrweb = {
-            record: jest.fn(),
-        }
+        window.rrwebRecord = jest.fn()
+        window.rrwebConsoleRecord = { getRecordConsolePlugin: jest.fn() }
     })
 
     describe('isRecordingEnabled', () => {
@@ -137,13 +137,11 @@ describe('SessionRecording', () => {
     describe('recording', () => {
         beforeEach(() => {
             const mockFullSnapshot = jest.fn()
-            window.rrweb = {
-                record: jest.fn(({ emit }) => {
-                    _emit = emit
-                    return () => {}
-                }),
-            }
-            window.rrweb.record.takeFullSnapshot = mockFullSnapshot
+            ;(window.rrwebRecord = jest.fn(({ emit }) => {
+                _emit = emit
+                return () => {}
+            })),
+                (window.rrwebRecord.takeFullSnapshot = mockFullSnapshot)
             loadScript.mockImplementation((path, callback) => callback())
         })
 
@@ -152,7 +150,7 @@ describe('SessionRecording', () => {
 
             // maskAllInputs should change from default
             // someUnregisteredProp should not be present
-            expect(window.rrweb.record).toHaveBeenCalledWith({
+            expect(window.rrwebRecord).toHaveBeenCalledWith({
                 emit: expect.anything(),
                 maskAllInputs: true,
                 blockClass: 'ph-no-capture',
@@ -162,6 +160,7 @@ describe('SessionRecording', () => {
                 maskInputFn: null,
                 slimDOMOptions: {},
                 collectFonts: false,
+                plugins: [],
             })
         })
 
@@ -268,6 +267,24 @@ describe('SessionRecording', () => {
             expect(given.sessionRecording.captureStarted).toEqual(false)
         })
 
+        describe('console logs', () => {
+            it('if not enabled, plugin is not used', () => {
+                given('enable_recording_console_log', () => false)
+
+                given.sessionRecording.startRecordingIfEnabled()
+
+                expect(window.rrwebConsoleRecord.getRecordConsolePlugin).not.toHaveBeenCalled()
+            })
+
+            it('if enabled, plugin is used', () => {
+                given('enable_recording_console_log', () => true)
+
+                given.sessionRecording.startRecordingIfEnabled()
+
+                expect(window.rrwebConsoleRecord.getRecordConsolePlugin).toHaveBeenCalled()
+            })
+        })
+
         describe('session and window ids', () => {
             beforeEach(() => {
                 given.sessionRecording.sessionId = 'old-session-id'
@@ -280,25 +297,25 @@ describe('SessionRecording', () => {
             it('sends a full snapshot if there is a new session/window id and the event is not type FullSnapshot or Meta', () => {
                 given('incomingSessionAndWindowId', () => ({ sessionId: 'new-session-id', windowId: 'new-window-id' }))
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
-                expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('sends a full snapshot if there is a new window id and the event is not type FullSnapshot or Meta', () => {
                 given('incomingSessionAndWindowId', () => ({ sessionId: 'old-session-id', windowId: 'new-window-id' }))
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
-                expect(window.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is a new session/window id and the event is type FullSnapshot or Meta', () => {
                 given('incomingSessionAndWindowId', () => ({ sessionId: 'new-session-id', windowId: 'new-window-id' }))
                 _emit({ event: 123, type: META_EVENT_TYPE })
-                expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
+                expect(window.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is not a new session or window id', () => {
                 given('incomingSessionAndWindowId', () => ({ sessionId: 'old-session-id', windowId: 'old-window-id' }))
                 _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
-                expect(window.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
+                expect(window.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
             it('it uses the current timestamp if the event does not have one', () => {

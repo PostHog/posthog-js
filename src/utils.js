@@ -31,15 +31,20 @@ var _ = {
 }
 
 // Console override
-var console = {
+var logger = {
     /** @type {function(...*)} */
     log: function () {
         if (Config.DEBUG && !_.isUndefined(window.console) && window.console) {
+            // Don't log PostHog debug messages in rrweb
+            const log = window.console.log['__rrweb_original__']
+                ? window.console.log['__rrweb_original__']
+                : window.console.log
+
             try {
-                window.console.log.apply(window.console, arguments)
+                log.apply(window.console, arguments)
             } catch (err) {
                 _.each(arguments, function (arg) {
-                    window.console.log(arg)
+                    log(arg)
                 })
             }
         }
@@ -48,11 +53,15 @@ var console = {
     error: function () {
         if (Config.DEBUG && !_.isUndefined(window.console) && window.console) {
             var args = ['PostHog error:', ...arguments]
+            // Don't log PostHog debug messages in rrweb
+            const error = window.console.error['__rrweb_original__']
+                ? window.console.error['__rrweb_original__']
+                : window.console.error
             try {
-                window.console.error.apply(window.console, args)
+                error.apply(window.console, args)
             } catch (err) {
                 _.each(args, function (arg) {
-                    window.console.error(arg)
+                    error(arg)
                 })
             }
         }
@@ -61,11 +70,15 @@ var console = {
     critical: function () {
         if (!_.isUndefined(window.console) && window.console) {
             var args = ['PostHog error:', ...arguments]
+            // Don't log PostHog debug messages in rrweb
+            const error = window.console.error['__rrweb_original__']
+                ? window.console.error['__rrweb_original__']
+                : window.console.error
             try {
-                window.console.error.apply(window.console, args)
+                error.apply(window.console, args)
             } catch (err) {
                 _.each(args, function (arg) {
-                    window.console.error(arg)
+                    error(arg)
                 })
             }
         }
@@ -262,9 +275,9 @@ _.safewrap = function (f) {
         try {
             return f.apply(this, arguments)
         } catch (e) {
-            console.critical('Implementation error. Please turn on debug and contact support@posthog.com.')
+            logger.critical('Implementation error. Please turn on debug and contact support@posthog.com.')
             if (Config.DEBUG) {
-                console.critical(e)
+                logger.critical(e)
             }
         }
     }
@@ -546,7 +559,7 @@ _.getQueryParam = function (url, param) {
         try {
             result = decodeURIComponent(result)
         } catch (err) {
-            console.error('Skipping decoding for malformed query param: ' + result)
+            logger.error('Skipping decoding for malformed query param: ' + result)
         }
         return result.replace(/\+/g, ' ')
     }
@@ -574,7 +587,7 @@ _.register_event = (function () {
      */
     var register_event = function (element, type, handler, oldSchool, useCapture) {
         if (!element) {
-            console.error('No valid element provided to register_event')
+            logger.error('No valid element provided to register_event')
             return
         }
 
@@ -879,7 +892,7 @@ _['info']['browser'] = _.info.browser
 _['info']['browserVersion'] = _.info.browserVersion
 _['info']['properties'] = _.info.properties
 
-export { win as window, _, userAgent, console, document }
+export { win as window, _, userAgent, logger, document }
 
 // Exports For Test ONLY
 export { COPY_IN_PROGRESS_ATTRIBUTE }
