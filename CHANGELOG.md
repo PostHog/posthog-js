@@ -1,3 +1,8 @@
+## 1.18.0 - 2022-03-16
+
+- Add console log recording (#367)
+- fix(properties): dont modify input properties (#369)
+
 ## 1.17.9 - 2022-03-04
 
 - fix(web performance): calculate duration when it isn't present on navigation timing (#368)
