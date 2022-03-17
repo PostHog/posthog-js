@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { _, console } from './utils'
+import { _, logger } from './utils'
 import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
 
 /*
@@ -62,7 +62,7 @@ var PostHogPersistence = function (config) {
 
     var storage_type = config['persistence']
     if (storage_type !== 'cookie' && storage_type.indexOf('localStorage') === -1 && storage_type !== 'memory') {
-        console.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
+        logger.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
     }
     if (storage_type === 'localStorage' && localStore.is_supported()) {

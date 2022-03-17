@@ -1,4 +1,4 @@
-import { _, console } from './utils'
+import { _, logger } from './utils'
 import Config from './config'
 
 export const addParamsToURL = (url, urlQueryArgs, parameterOptions) => {
@@ -83,7 +83,7 @@ export const xhr = ({
                     try {
                         response = JSON.parse(req.responseText)
                     } catch (e) {
-                        console.error(e)
+                        logger.error(e)
                         return
                     }
                     callback(response)

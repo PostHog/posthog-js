@@ -1,4 +1,4 @@
-import { _ } from './utils'
+import { _, logger } from './utils'
 import {
     getClassName,
     getSafeText,
@@ -238,7 +238,7 @@ var autocapture = {
     afterDecideResponse: function (response, instance) {
         var token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
-            console.log('autocapture already initialized for token "' + token + '"')
+            logger.log('autocapture already initialized for token "' + token + '"')
             return
         }
 
