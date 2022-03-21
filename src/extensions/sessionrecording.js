@@ -142,7 +142,6 @@ export class SessionRecording {
                 event = truncateLargeConsoleLogs(
                     filterDataURLsFromLargeDataObjects(event)
                 )
-                event = truncateLargeConsoleLogs(event)
 
                 this._updateWindowAndSessionIds(event)
 
