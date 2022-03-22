@@ -95,7 +95,7 @@ export class SessionRecording {
 
     _updateWindowAndSessionIds(event) {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
-        // We don't want to extend the session or trigger a new session these cases. These events are designated by event
+        // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
         const isUserInteraction = !(
             event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && event.data?.source === MUTATION_SOURCE_TYPE

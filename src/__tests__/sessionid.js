@@ -104,7 +104,7 @@ describe('Session ID manager', () => {
         it('uses the current time if no timestamp is provided', () => {
             const old_timestamp = 1601107460000
             given('storedSessionIdData', () => [old_timestamp, 'oldSessionID'])
-            given('timestamp', () => null)
+            given('timestamp', () => undefined)
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
