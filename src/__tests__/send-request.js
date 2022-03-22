@@ -63,7 +63,7 @@ describe('adding query params to posthog API calls', () => {
         ip: true,
     }))
 
-    it('adds library and version', () => {
+    it('adds library version', () => {
         expect(new URL(given.subject()).search).toContain('&ver=1.23.45')
     })
 
