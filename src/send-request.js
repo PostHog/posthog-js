@@ -5,7 +5,18 @@ export const addParamsToURL = (url, urlQueryArgs, parameterOptions) => {
     const args = urlQueryArgs || {}
     args['ip'] = parameterOptions['ip'] ? 1 : 0
     args['_'] = new Date().getTime().toString()
-    args['v'] = Config.LIB_VERSION
+    args['ver'] = Config.LIB_VERSION
+
+    const halves = url.split('?')
+    if (halves.length > 1) {
+        const params = halves[1].split('&')
+        for (const p of params) {
+            const key = p.split('=')[0]
+            if (args[key]) {
+                delete args[key]
+            }
+        }
+    }
 
     const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
     return url + argSeparator + _.HTTPBuildQuery(args)

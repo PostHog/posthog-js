@@ -3,7 +3,7 @@ import { version } from '../../package.json'
 
 import { getBase64EncodedPayload, getGzipEncodedPayload, getLZStringEncodedPayload } from '../support/compression'
 
-const urlWithVersion = new RegExp(`&v=${version}`)
+const urlWithVersion = new RegExp(`&ver=${version}`)
 
 describe('Event capture', () => {
     given('options', () => ({}))

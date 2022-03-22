@@ -64,7 +64,7 @@ describe('adding query params to posthog API calls', () => {
     }))
 
     it('adds library and version', () => {
-        expect(new URL(given.subject()).search).toContain('&v=1.23.45')
+        expect(new URL(given.subject()).search).toContain('&ver=1.23.45')
     })
 
     it('adds i as 1 when IP in config', () => {
@@ -76,6 +76,17 @@ describe('adding query params to posthog API calls', () => {
     })
     it('adds timestamp', () => {
         expect(new URL(given.subject()).search).toMatch(/_=\d+/)
+    })
+
+    it('does not add a query parameter if it already exists in the URL', () => {
+        given('posthogURL', () => 'https://test.com/')
+        const whenItShouldAddParam = given.subject()
+        expect(whenItShouldAddParam).toContain('ver=1.23.45')
+
+        given('posthogURL', () => 'https://test.com/decide/?ver=2')
+        const whenItShouldNotAddParam = given.subject()
+        expect(whenItShouldNotAddParam).not.toContain('ver=1.23.45')
+        expect(whenItShouldNotAddParam).toContain('ver=2')
     })
 })
 
