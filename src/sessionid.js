@@ -1,4 +1,3 @@
-import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE } from './extensions/sessionrecording'
 import { SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
 import { _ } from './utils'
@@ -21,8 +20,8 @@ export class SessionIdManager {
     // when persistence is disabled (by user config) and when sessionStorage is not supported (it *should* be supported on all browsers),
     // and in that case, it falls back to memory (which sadly, won't persist page loads)
     _setWindowId(windowId) {
-        if (windowId !== this.windowId) {
-            this.windowId = windowId
+        if (windowId !== this._windowId) {
+            this._windowId = windowId
             if (!this.persistence.disabled && sessionStore.is_supported()) {
                 sessionStore.set(this.window_id_storage_key, windowId)
             }
@@ -30,8 +29,8 @@ export class SessionIdManager {
     }
 
     _getWindowId() {
-        if (this.windowId) {
-            return this.windowId
+        if (this._windowId) {
+            return this._windowId
         }
         if (!this.persistence.disabled && sessionStore.is_supported()) {
             return sessionStore.parse(this.window_id_storage_key)
@@ -42,16 +41,16 @@ export class SessionIdManager {
     // Note: 'this.persistence.register' can be disabled in the config.
     // In that case, this works by storing sessionId and the timestamp in memory.
     _setSessionId(sessionId, timestamp) {
-        if (sessionId !== this.sessionId || timestamp !== this.timestamp) {
-            this.timestamp = timestamp
-            this.sessionId = sessionId
+        if (sessionId !== this._sessionId || timestamp !== this._timestamp) {
+            this._timestamp = timestamp
+            this._sessionId = sessionId
             this.persistence.register({ [SESSION_ID]: [timestamp, sessionId] })
         }
     }
 
     _getSessionId() {
-        if (this.sessionId && this.timestamp) {
-            return [this.timestamp, this.sessionId]
+        if (this._sessionId && this._timestamp) {
+            return [this._timestamp, this._sessionId]
         }
         return this.persistence['props'][SESSION_ID] || [0, null]
     }
@@ -62,29 +61,41 @@ export class SessionIdManager {
         this._setSessionId(null, null)
     }
 
-    getSessionAndWindowId(timestamp = null, recordingEvent = false) {
-        // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
-        // We don't want to update the session and window ids in these cases. These events are designated by event
-        // type -> incremental update, and source -> mutation.
-        const isUserInteraction = !(
-            recordingEvent &&
-            recordingEvent.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
-            recordingEvent.data?.source === MUTATION_SOURCE_TYPE
-        )
-
+    /*
+     * This function returns the current sessionId and windowId. It should be used to
+     * access these values over directly calling `._sessionId` or `._windowId`. In addition
+     * to returning the sessionId and windowId, this function also manages cycling the
+     * sessionId and windowId when appropriate by doing the following:
+     *
+     * 1. If the sessionId or windowId is not set, it will generate a new one and store it.
+     * 2. If the shouldExtendExistingSessionOrTriggerNewOne param is set, it will:
+     *    a. Check if it has been > SESSION_CHANGE_THRESHOLD since the last call with this flag set.
+     *       If so, it will generate a new sessionId and store it.
+     *    b. Update the timestamp stored with the sessionId to ensure the current session is extended
+     *       for the appropriate amount of time.
+     *
+     * @param {boolean} shouldExtendExistingSessionOrTriggerNewOne (optional) Defaults to True. Should be set to False when the call to the function should be read only (e.g. being called for non-user generated events)
+     * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
+     */
+    getSessionAndWindowId(shouldExtendExistingSessionOrTriggerNewOne = true, timestamp = null) {
         timestamp = timestamp || new Date().getTime()
 
         let [lastTimestamp, sessionId] = this._getSessionId()
         let windowId = this._getWindowId()
 
-        if (!sessionId || (isUserInteraction && Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD)) {
+        if (
+            !sessionId ||
+            (shouldExtendExistingSessionOrTriggerNewOne &&
+                Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD)
+        ) {
             sessionId = _.UUID()
             windowId = _.UUID()
         } else if (!windowId) {
             windowId = _.UUID()
         }
 
-        const newTimestamp = lastTimestamp === 0 || isUserInteraction ? timestamp : lastTimestamp
+        const newTimestamp =
+            lastTimestamp === 0 || shouldExtendExistingSessionOrTriggerNewOne ? timestamp : lastTimestamp
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newTimestamp)

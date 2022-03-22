@@ -1497,7 +1497,9 @@ PostHogLib.prototype.sentry_integration = function (_posthog, organization, proj
             event.tags['PostHog Person URL'] = _posthog.config.api_host + '/person/' + _posthog.get_distinct_id()
             if (_posthog.sessionRecordingStarted()) {
                 event.tags['PostHog Recording URL'] =
-                    _posthog.config.api_host + '/recordings/#sessionRecordingId=' + _posthog.sessionManager.sessionId
+                    _posthog.config.api_host +
+                    '/recordings/#sessionRecordingId=' +
+                    _posthog.sessionManager.getSessionAndWindowId(false).sessionId
             }
             let data = {
                 $sentry_event_id: event.event_id,

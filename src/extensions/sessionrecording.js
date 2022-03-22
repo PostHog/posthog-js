@@ -9,7 +9,7 @@ const BASE_ENDPOINT = '/e/'
 export const FULL_SNAPSHOT_EVENT_TYPE = 2
 export const META_EVENT_TYPE = 4
 export const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
-export const MUTATION_SOURCE_TYPE = 3
+export const MUTATION_SOURCE_TYPE = 0
 
 export class SessionRecording {
     constructor(instance) {
@@ -94,9 +94,16 @@ export class SessionRecording {
     }
 
     _updateWindowAndSessionIds(event) {
+        // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
+        // We don't want to extend the session or trigger a new session these cases. These events are designated by event
+        // type -> incremental update, and source -> mutation.
+        const isUserInteraction = !(
+            event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && event.data?.source === MUTATION_SOURCE_TYPE
+        )
+
         const { windowId, sessionId } = this.instance.sessionManager.getSessionAndWindowId(
-            event.timestamp || new Date().getTime(),
-            event
+            isUserInteraction,
+            event.timestamp
         )
 
         // Event types FullSnapshot and Meta mean we're already in the process of sending a full snapshot
