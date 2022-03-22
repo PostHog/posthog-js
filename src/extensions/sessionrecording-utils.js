@@ -1,3 +1,5 @@
+import { PLUGIN_EVENT_TYPE } from './sessionrecording'
+
 export var replacementImageURI =
     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNOCAwSDE2TDAgMTZWOEw4IDBaIiBmaWxsPSIjMkQyRDJEIi8+CjxwYXRoIGQ9Ik0xNiA4VjE2SDhMMTYgOFoiIGZpbGw9IiMyRDJEMkQiLz4KPC9zdmc+Cg=='
 
@@ -33,4 +35,40 @@ export function filterDataURLsFromLargeDataObjects(data) {
         return JSON.parse(stringifiedData)
     }
     return data
+}
+
+export const CONSOLE_LOG_PLUGIN_NAME = 'rrweb/console@1' // The name of the rr-web plugin that emits console logs
+
+// Console logs can be really large. This function truncates large logs
+// It's a simple function that just truncates long strings.
+// TODO: Ideally this function would have better handling of objects + lists,
+// so they could still be rendered in a pretty way after truncation.
+export function truncateLargeConsoleLogs(event) {
+    const MAX_STRING_SIZE = 2000 // Maximum number of characters allowed in a string
+    const MAX_STRINGS_PER_LOG = 10 // A log can consist of multiple strings (e.g. consol.log('string1', 'string2'))
+
+    if (
+        event &&
+        typeof event === 'object' &&
+        event.type === PLUGIN_EVENT_TYPE &&
+        typeof event.data === 'object' &&
+        event.data.plugin === CONSOLE_LOG_PLUGIN_NAME
+    ) {
+        // Note: event.data.payload.payload comes from rr-web, and is an array of strings
+        if (event.data.payload.payload.length > MAX_STRINGS_PER_LOG) {
+            event.data.payload.payload = event.data.payload.payload.slice(0, MAX_STRINGS_PER_LOG)
+            event.data.payload.payload.push('...[truncated]')
+        }
+        const updatedPayload = []
+        for (let i = 0; i < event.data.payload.payload.length; i++) {
+            if (event.data.payload.payload[i].length > MAX_STRING_SIZE) {
+                updatedPayload.push(event.data.payload.payload[i].slice(0, MAX_STRING_SIZE) + '...[truncated]')
+            } else {
+                updatedPayload.push(event.data.payload.payload[i])
+            }
+        }
+        event.data.payload.payload = updatedPayload
+        return event
+    }
+    return event
 }

@@ -1,3 +1,12 @@
+## 1.19.1 - 2022-03-22
+
+- fix: truncate console logs (#372)
+
+## 1.19.0 - 2022-03-22
+
+- feat: send library version outside of compressed body as a debug signal (#351)
+- ci: create new PRs in main repo with chore: (#370)
+
 ## 1.18.0 - 2022-03-16
 
 - Add console log recording (#367)

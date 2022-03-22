@@ -1,5 +1,11 @@
-import { filterDataURLsFromLargeDataObjects, replacementImageURI } from '../../extensions/sessionrecording-utils'
-import { threeMBAudioURI, threeMBImageURI } from './test_data/sessionrecording-utils-test-data'
+import { FULL_SNAPSHOT_EVENT_TYPE, PLUGIN_EVENT_TYPE } from '../../extensions/sessionrecording'
+import {
+    filterDataURLsFromLargeDataObjects,
+    replacementImageURI,
+    truncateLargeConsoleLogs,
+    CONSOLE_LOG_PLUGIN_NAME,
+} from '../../extensions/sessionrecording-utils'
+import { largeString, threeMBAudioURI, threeMBImageURI } from './test_data/sessionrecording-utils-test-data'
 
 describe(`SessionRecording utility functions`, () => {
     describe(`filterLargeDataURLs`, () => {
@@ -19,7 +25,7 @@ describe(`SessionRecording utility functions`, () => {
                     },
                 ],
             }
-            expect(filterDataURLsFromLargeDataObjects(data)).toMatchObject(data)
+            expect(filterDataURLsFromLargeDataObjects(data)).toEqual(data)
         })
 
         it(`should replace image data urls if the object is over 5mb`, () => {
@@ -46,7 +52,7 @@ describe(`SessionRecording utility functions`, () => {
                 ],
             }
 
-            expect(filterDataURLsFromLargeDataObjects(data)).toMatchObject({
+            expect(filterDataURLsFromLargeDataObjects(data)).toEqual({
                 attributes: [
                     {
                         node: {
@@ -90,7 +96,7 @@ describe(`SessionRecording utility functions`, () => {
                 ],
             }
 
-            expect(filterDataURLsFromLargeDataObjects(data)).toMatchObject({
+            expect(filterDataURLsFromLargeDataObjects(data)).toEqual({
                 attributes: [
                     {
                         node: {
@@ -107,6 +113,100 @@ describe(`SessionRecording utility functions`, () => {
                         },
                     },
                 ],
+            })
+        })
+    })
+
+    describe(`truncateLargeConsoleLogs`, () => {
+        it(`should handle null data objects`, () => {
+            expect(truncateLargeConsoleLogs(null)).toBe(null)
+        })
+
+        it(`should not touch non plugin objects`, () => {
+            expect(
+                truncateLargeConsoleLogs({
+                    type: FULL_SNAPSHOT_EVENT_TYPE, // not plugin
+                    data: {
+                        plugin: CONSOLE_LOG_PLUGIN_NAME,
+                        payload: {
+                            payload: largeString,
+                        },
+                    },
+                })
+            ).toEqual({
+                type: FULL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    plugin: CONSOLE_LOG_PLUGIN_NAME,
+                    payload: {
+                        payload: largeString,
+                    },
+                },
+            })
+        })
+
+        it(`should not touch objects from a different plugin`, () => {
+            expect(
+                truncateLargeConsoleLogs({
+                    type: PLUGIN_EVENT_TYPE,
+                    data: {
+                        plugin: 'some other plugin',
+                        payload: {
+                            payload: largeString,
+                        },
+                    },
+                })
+            ).toEqual({
+                type: PLUGIN_EVENT_TYPE,
+                data: {
+                    plugin: 'some other plugin',
+                    payload: {
+                        payload: largeString,
+                    },
+                },
+            })
+        })
+
+        it(`should truncate large strings from logs`, () => {
+            expect(
+                truncateLargeConsoleLogs({
+                    type: PLUGIN_EVENT_TYPE,
+                    data: {
+                        plugin: CONSOLE_LOG_PLUGIN_NAME,
+                        payload: {
+                            payload: ['a', largeString],
+                        },
+                    },
+                })
+            ).toEqual({
+                type: PLUGIN_EVENT_TYPE,
+                data: {
+                    plugin: CONSOLE_LOG_PLUGIN_NAME,
+                    payload: {
+                        payload: ['a', largeString.slice(0, 2000) + '...[truncated]'],
+                    },
+                },
+            })
+        })
+
+        it(`should truncate large arrays of strings`, () => {
+            expect(
+                truncateLargeConsoleLogs({
+                    type: PLUGIN_EVENT_TYPE,
+                    data: {
+                        plugin: CONSOLE_LOG_PLUGIN_NAME,
+                        payload: {
+                            payload: Array(100).fill('a'),
+                        },
+                    },
+                })
+            ).toEqual({
+                type: PLUGIN_EVENT_TYPE,
+                data: {
+                    plugin: CONSOLE_LOG_PLUGIN_NAME,
+                    payload: {
+                        payload: [...Array(10).fill('a'), '...[truncated]'],
+                    },
+                },
             })
         })
     })
