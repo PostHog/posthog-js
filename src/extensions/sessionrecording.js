@@ -2,7 +2,7 @@ import { loadScript } from '../autocapture-utils'
 import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
 import Config from '../config'
-import { filterDataURLsFromLargeDataObjects } from './sessionrecording-utils'
+import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -10,6 +10,7 @@ export const FULL_SNAPSHOT_EVENT_TYPE = 2
 export const META_EVENT_TYPE = 4
 export const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
 export const MUTATION_SOURCE_TYPE = 3
+export const PLUGIN_EVENT_TYPE = 6
 
 export class SessionRecording {
     constructor(instance) {
@@ -138,7 +139,9 @@ export class SessionRecording {
 
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
-                event = filterDataURLsFromLargeDataObjects(event)
+                event = truncateLargeConsoleLogs(
+                    filterDataURLsFromLargeDataObjects(event)
+                )
 
                 this._updateWindowAndSessionIds(event)
 
