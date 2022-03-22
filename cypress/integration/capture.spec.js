@@ -1,9 +1,6 @@
 /// <reference types="cypress" />
-import { version } from '../../package.json'
 
 import { getBase64EncodedPayload, getGzipEncodedPayload, getLZStringEncodedPayload } from '../support/compression'
-
-const urlWithVersion = new RegExp(`&v=${version}`)
 
 describe('Event capture', () => {
     given('options', () => ({}))
@@ -205,13 +202,10 @@ describe('Event capture', () => {
             start()
 
             // Pageview will be sent immediately
-            cy.wait('@capture').should(({ request, url }) => {
-                expect(request.headers).to.eql({
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                })
-
-                expect(url).to.match(urlWithVersion)
-
+            cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            })
+            cy.get('@capture').should(({ request }) => {
                 const captures = getBase64EncodedPayload(request)
 
                 expect(captures.event).to.equal('$pageview')
@@ -246,12 +240,10 @@ describe('Event capture', () => {
             start()
 
             // Pageview will be sent immediately
-            cy.wait('@capture').should(({ request, url }) => {
-                expect(request.headers).to.eql({
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                })
-
-                expect(url).to.match(urlWithVersion)
+            cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            })
+            cy.get('@capture').should(({ request }) => {
                 const captures = getBase64EncodedPayload(request)
 
                 expect(captures['event']).to.equal('$pageview')
@@ -263,12 +255,10 @@ describe('Event capture', () => {
             cy.phCaptures().should('include', '$autocapture')
             cy.phCaptures().should('include', 'custom-event')
 
-            cy.wait('@capture').should(({ request, url }) => {
-                expect(request.headers).to.eql({
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                })
-
-                expect(url).to.match(urlWithVersion)
+            cy.wait('@capture').its('request.headers').should('deep.equal', {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            })
+            cy.get('@capture').should(({ request }) => {
                 const captures = getLZStringEncodedPayload(request)
 
                 expect(captures.map(({ event }) => event)).to.deep.equal([
@@ -286,12 +276,10 @@ describe('Event capture', () => {
             it('contains the correct payload after an event', () => {
                 start()
                 // Pageview will be sent immediately
-                cy.wait('@capture').should(({ request, url }) => {
-                    expect(request.headers).to.eql({
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    })
-
-                    expect(url).to.match(urlWithVersion)
+                cy.wait('@capture').its('request.headers').should('deep.equal', {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                })
+                cy.get('@capture').should(({ request }) => {
                     const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
                     const captures = JSON.parse(Buffer.from(data, 'base64'))
 
