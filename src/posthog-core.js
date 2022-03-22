@@ -14,7 +14,7 @@ import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
 import { compressData, decideCompression } from './compression'
-import { addParamsToURL, encodePostData, xhr } from './send-request'
+import { encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { getPerformanceData } from './apm'
@@ -412,9 +412,12 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
     }
 
     const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
-    url = addParamsToURL(url, options.urlQueryArgs, {
-        ip: this.get_config('ip'),
-    })
+    var args = options.urlQueryArgs || {}
+    args['ip'] = this.get_config('ip') ? 1 : 0
+    args['_'] = new Date().getTime().toString()
+
+    const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
+    url += argSeparator + _.HTTPBuildQuery(args)
 
     if (_.isObject(data) && this.get_config('img')) {
         var img = document.createElement('img')

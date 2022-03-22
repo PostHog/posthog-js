@@ -1,3 +1,7 @@
+## 1.19.2 - 2022-03-22
+
+- Revert "feat: send library version outside of compressed body as a debug signal (#351)" (#375)
+
 ## 1.19.1 - 2022-03-22
 
 - fix: truncate console logs (#372)
