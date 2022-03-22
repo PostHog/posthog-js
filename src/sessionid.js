@@ -55,7 +55,7 @@ export class SessionIdManager {
         return this.persistence['props'][SESSION_ID] || [0, null]
     }
 
-    // Resets the session id by setting it to null. On the subsequent call to getSessionAndWindowId,
+    // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
     // new ids will be generated.
     resetSessionId() {
         this._setSessionId(null, null)
@@ -68,34 +68,29 @@ export class SessionIdManager {
      * sessionId and windowId when appropriate by doing the following:
      *
      * 1. If the sessionId or windowId is not set, it will generate a new one and store it.
-     * 2. If the shouldExtendExistingSessionOrTriggerNewOne param is set, it will:
+     * 2. If the readOnly param is set to false, it will:
      *    a. Check if it has been > SESSION_CHANGE_THRESHOLD since the last call with this flag set.
      *       If so, it will generate a new sessionId and store it.
      *    b. Update the timestamp stored with the sessionId to ensure the current session is extended
      *       for the appropriate amount of time.
      *
-     * @param {boolean} shouldExtendExistingSessionOrTriggerNewOne (optional) Defaults to True. Should be set to False when the call to the function should be read only (e.g. being called for non-user generated events)
+     * @param {boolean} readOnly (optional) Defaults to False. Should be set to True when the call to the function should not extend or cycle the session (e.g. being called for non-user generated events)
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
-    getSessionAndWindowId(shouldExtendExistingSessionOrTriggerNewOne = true, timestamp = null) {
+    checkAndGetSessionAndWindowId(readOnly = false, timestamp = null) {
         timestamp = timestamp || new Date().getTime()
 
         let [lastTimestamp, sessionId] = this._getSessionId()
         let windowId = this._getWindowId()
 
-        if (
-            !sessionId ||
-            (shouldExtendExistingSessionOrTriggerNewOne &&
-                Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD)
-        ) {
+        if (!sessionId || (!readOnly && Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD)) {
             sessionId = _.UUID()
             windowId = _.UUID()
         } else if (!windowId) {
             windowId = _.UUID()
         }
 
-        const newTimestamp =
-            lastTimestamp === 0 || shouldExtendExistingSessionOrTriggerNewOne ? timestamp : lastTimestamp
+        const newTimestamp = lastTimestamp === 0 || !readOnly ? timestamp : lastTimestamp
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newTimestamp)

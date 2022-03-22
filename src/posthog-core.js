@@ -657,7 +657,7 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     }
 
     if (this.sessionManager) {
-        const { sessionId, windowId } = this.sessionManager.getSessionAndWindowId()
+        const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
         properties['$session_id'] = sessionId
         properties['$window_id'] = windowId
     }
@@ -1499,7 +1499,7 @@ PostHogLib.prototype.sentry_integration = function (_posthog, organization, proj
                 event.tags['PostHog Recording URL'] =
                     _posthog.config.api_host +
                     '/recordings/#sessionRecordingId=' +
-                    _posthog.sessionManager.getSessionAndWindowId(false).sessionId
+                    _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
             }
             let data = {
                 $sentry_event_id: event.event_id,

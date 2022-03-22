@@ -26,7 +26,7 @@ describe('SessionRecording', () => {
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         sessionManager: {
-            getSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
+            checkAndGetSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
         },
         _addCaptureHook: jest.fn(),
     }))
@@ -321,17 +321,20 @@ describe('SessionRecording', () => {
                 expect(window.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
-            it('it calls getSessionAndWindowId with shouldExtendExistingSessionOrTriggerNewOne as false if it not a user interaction', () => {
+            it('it calls checkAndGetSessionAndWindowId with readOnly as true if it not a user interaction', () => {
                 _emit(NON_USER_GENERATED_EVENT)
-                expect(given.posthog.sessionManager.getSessionAndWindowId).toHaveBeenCalledWith(false, undefined)
+                expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(true, undefined)
             })
 
-            it('it calls getSessionAndWindowId with shouldExtendExistingSessionOrTriggerNewOne as true if it is a user interaction', () => {
+            it('it calls checkAndGetSessionAndWindowId with readOnly as false if it is a user interaction', () => {
                 _emit({
                     event: 123,
                     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 })
-                expect(given.posthog.sessionManager.getSessionAndWindowId).toHaveBeenCalledWith(true, undefined)
+                expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(
+                    false,
+                    undefined
+                )
             })
         })
     })

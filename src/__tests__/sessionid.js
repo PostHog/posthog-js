@@ -7,9 +7,7 @@ jest.mock('../utils')
 jest.mock('../storage')
 
 describe('Session ID manager', () => {
-    given('subject', () =>
-        given.sessionIdManager.getSessionAndWindowId(given.shouldExtendExistingSessionOrTriggerNewOne, given.timestamp)
-    )
+    given('subject', () => given.sessionIdManager.checkAndGetSessionAndWindowId(given.readOnly, given.timestamp))
     given('sessionIdManager', () => new SessionIdManager(given.config, given.persistence))
 
     given('persistence', () => ({
@@ -42,8 +40,8 @@ describe('Session ID manager', () => {
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
 
-        it('generates an initial session id and window id, and saves them even if shouldExtendExistingSessionOrTriggerNewOne is false', () => {
-            given('shouldExtendExistingSessionOrTriggerNewOne', () => false)
+        it('generates an initial session id and window id, and saves them even if readOnly is true', () => {
+            given('readOnly', () => true)
             expect(given.subject).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
@@ -67,10 +65,10 @@ describe('Session ID manager', () => {
             expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [given.timestamp, 'oldSessionID'] })
         })
 
-        it('reuses old ids and does not update the session timestamp if  > 30m pass and shouldExtendExistingSessionOrTriggerNewOne is false', () => {
+        it('reuses old ids and does not update the session timestamp if  > 30m pass and readOnly is true', () => {
             const old_timestamp = 1602107460000
             given('storedSessionIdData', () => [old_timestamp, 'oldSessionID'])
-            given('shouldExtendExistingSessionOrTriggerNewOne', () => false)
+            given('readOnly', () => true)
 
             expect(given.subject).toEqual({
                 windowId: 'oldWindowID',
