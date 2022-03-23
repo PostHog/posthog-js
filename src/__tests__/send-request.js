@@ -1,10 +1,12 @@
-import { encodePostData, xhr } from '../send-request'
+import { addParamsToURL, encodePostData, xhr } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 
-describe('when xhr requests fail', () => {
+jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
+
+describe('xhr', () => {
     given('mockXHR', () => ({
         open: jest.fn(),
-        setRequestHeader: jest.fn(),
+        setRequestHeader: jest.fn,
         onreadystatechange: jest.fn(),
         send: jest.fn(),
         readyState: 4,
@@ -37,17 +39,54 @@ describe('when xhr requests fail', () => {
         window.XMLHttpRequest = jest.fn(() => given.mockXHR)
     })
 
-    it('does not error if the configured onXHRError is not a function', () => {
-        given('onXHRError', () => 'not a function')
-        expect(() => given.subject()).not.toThrow()
+    describe('when xhr requests fail', () => {
+        it('does not error if the configured onXHRError is not a function', () => {
+            given('onXHRError', () => 'not a function')
+            expect(() => given.subject()).not.toThrow()
+        })
+
+        it('calls the injected XHR error handler', () => {
+            //cannot use an auto-mock from jest as the code checks if onXHRError is a Function
+            let requestFromError
+            given('onXHRError', () => (req) => (requestFromError = req))
+            given.subject()
+            expect(requestFromError).toHaveProperty('status', 502)
+        })
+    })
+})
+
+describe('adding query params to posthog API calls', () => {
+    given('subject', () => () => addParamsToURL(given.posthogURL, given.urlQueryArgs, given.parameterOptions))
+    given('posthogURL', () => 'https://any.posthog-instance.com')
+    given('urlQueryArgs', () => ({}))
+    given('parameterOptions', () => ({
+        ip: true,
+    }))
+
+    it('adds library version', () => {
+        expect(new URL(given.subject()).search).toContain('&ver=1.23.45')
     })
 
-    it('calls the injected XHR error handler', () => {
-        //cannot use an auto-mock from jest as the code checks if onXHRError is a Function
-        let requestFromError
-        given('onXHRError', () => (req) => (requestFromError = req))
-        given.subject()
-        expect(requestFromError).toHaveProperty('status', 502)
+    it('adds i as 1 when IP in config', () => {
+        expect(new URL(given.subject()).search).toContain('ip=1')
+    })
+    it('adds i as 0 when IP not in config', () => {
+        given('parameterOptions', () => ({}))
+        expect(new URL(given.subject()).search).toContain('ip=0')
+    })
+    it('adds timestamp', () => {
+        expect(new URL(given.subject()).search).toMatch(/_=\d+/)
+    })
+
+    it('does not add a query parameter if it already exists in the URL', () => {
+        given('posthogURL', () => 'https://test.com/')
+        const whenItShouldAddParam = given.subject()
+        expect(whenItShouldAddParam).toContain('ver=1.23.45')
+
+        given('posthogURL', () => 'https://test.com/decide/?ver=2')
+        const whenItShouldNotAddParam = given.subject()
+        expect(whenItShouldNotAddParam).not.toContain('ver=1.23.45')
+        expect(whenItShouldNotAddParam).toContain('ver=2')
     })
 })
 
