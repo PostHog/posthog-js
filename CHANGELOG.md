@@ -1,3 +1,7 @@
+## 1.20.0 - 2022-03-23
+
+- feat: send library version outside of compressed body as a debug signal (#376)
+
 ## 1.19.2 - 2022-03-22
 
 - Revert "feat: send library version outside of compressed body as a debug signal (#351)" (#375)
