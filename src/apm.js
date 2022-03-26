@@ -106,6 +106,7 @@ export function getPerformanceData() {
         paint: getPerformanceEntriesByType('paint'),
         resource: getPerformanceEntriesByType('resource'),
     }
+    window?.performance?.clearResourceTimings()
 
     const properties = {}
 
