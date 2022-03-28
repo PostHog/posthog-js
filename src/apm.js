@@ -106,7 +106,10 @@ export function getPerformanceData() {
         paint: getPerformanceEntriesByType('paint'),
         resource: getPerformanceEntriesByType('resource'),
     }
-    window?.performance?.clearResourceTimings()
+
+    if (typeof window !== undefined && window.performance && window.performance.clearResourceTimings) {
+        window.performance.clearResourceTimings()
+    }
 
     const properties = {}
 
