@@ -1,3 +1,7 @@
+## 1.20.1 - 2022-03-29
+
+- feat(tracking): add ahrefsbot to list of ignored bots (#378)
+
 ## 1.20.0 - 2022-03-23
 
 - feat: send library version outside of compressed body as a debug signal (#376)
