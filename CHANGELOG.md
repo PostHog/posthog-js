@@ -1,3 +1,7 @@
+## 1.20.2 - 2022-03-31
+
+- fix(web-performance): clear resource timings after reading (#377)
+
 ## 1.20.1 - 2022-03-29
 
 - feat(tracking): add ahrefsbot to list of ignored bots (#378)
