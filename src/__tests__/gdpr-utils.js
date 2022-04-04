@@ -575,6 +575,17 @@ describe(`GDPR utils`, () => {
                 })
             })
 
+            it(`should call the wrapped method if config is undefined`, () => {
+                TOKENS.forEach((token) => {
+                    setupMocks(() => undefined, false)
+
+                    gdpr.optIn(token, { persistenceType })
+                    postHogLib.capture(captureEventName, captureProperties)
+
+                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
+                })
+            })
+
             it(`should allow use of a custom "persistence prefix" string`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => ({
