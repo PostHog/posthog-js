@@ -265,22 +265,20 @@ function _addOptOutCheck(method, getConfigValue, silenceErrors) {
         var optedOut = false
 
         try {
-            if (this['config']) {
-                var token = getConfigValue.call(this, 'token')
-                var respectDnt = getConfigValue.call(this, 'respect_dnt')
-                var persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type')
-                var persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix')
-                var win = getConfigValue.call(this, 'window') // used to override window during browser tests
+            var token = getConfigValue.call(this, 'token')
+            var respectDnt = getConfigValue.call(this, 'respect_dnt')
+            var persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type')
+            var persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix')
+            var win = getConfigValue.call(this, 'window') // used to override window during browser tests
 
-                if (token) {
-                    // if there was an issue getting the token, continue method execution as normal
-                    optedOut = hasOptedOut(token, {
-                        respectDnt,
-                        persistenceType,
-                        persistencePrefix,
-                        window: win,
-                    })
-                }
+            if (token) {
+                // if there was an issue getting the token, continue method execution as normal
+                optedOut = hasOptedOut(token, {
+                    respectDnt,
+                    persistenceType,
+                    persistencePrefix,
+                    window: win,
+                })
             }
         } catch (err) {
             if (!silenceErrors) {

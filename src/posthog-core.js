@@ -1202,7 +1202,7 @@ PostHogLib.prototype.sessionRecordingStarted = function () {
  * returns the current config object for the library.
  */
 PostHogLib.prototype.get_config = function (prop_name) {
-    return this['config'][prop_name]
+    return this.config?.[prop_name]
 }
 
 /**
