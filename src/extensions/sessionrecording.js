@@ -124,6 +124,7 @@ export class SessionRecording {
             maskInputFn: null,
             slimDOMOptions: {},
             collectFonts: false,
+            inlineStylesheet: true,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
@@ -139,9 +140,7 @@ export class SessionRecording {
 
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
-                event = truncateLargeConsoleLogs(
-                    filterDataURLsFromLargeDataObjects(event)
-                )
+                event = truncateLargeConsoleLogs(filterDataURLsFromLargeDataObjects(event))
 
                 this._updateWindowAndSessionIds(event)
 
