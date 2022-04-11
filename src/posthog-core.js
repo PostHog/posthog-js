@@ -99,6 +99,7 @@ const defaultConfig = () => ({
         maskInputFn: null,
         slimDOMOptions: {},
         collectFonts: false,
+        inlineStylesheet: true,
     },
     mask_all_element_attributes: false,
     mask_all_text: false,
