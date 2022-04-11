@@ -1,3 +1,8 @@
+## 1.20.3 - 2022-04-11
+
+- feat(recordings): add inline stylesheet option (#383)
+- fix(config): Handle config undefined (#382)
+
 ## 1.20.2 - 2022-03-31
 
 - fix(web-performance): clear resource timings after reading (#377)
