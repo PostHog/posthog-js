@@ -139,9 +139,7 @@ export class SessionRecording {
 
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
-                event = truncateLargeConsoleLogs(
-                    filterDataURLsFromLargeDataObjects(event)
-                )
+                event = truncateLargeConsoleLogs(filterDataURLsFromLargeDataObjects(event))
 
                 this._updateWindowAndSessionIds(event)
 

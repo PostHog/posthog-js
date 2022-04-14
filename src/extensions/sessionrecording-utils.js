@@ -61,7 +61,10 @@ export function truncateLargeConsoleLogs(event) {
         }
         const updatedPayload = []
         for (let i = 0; i < event.data.payload.payload.length; i++) {
-            if (event.data.payload.payload[i].length > MAX_STRING_SIZE) {
+            if (
+                event.data.payload.payload[i] && // Value can be null
+                event.data.payload.payload[i].length > MAX_STRING_SIZE
+            ) {
                 updatedPayload.push(event.data.payload.payload[i].slice(0, MAX_STRING_SIZE) + '...[truncated]')
             } else {
                 updatedPayload.push(event.data.payload.payload[i])
