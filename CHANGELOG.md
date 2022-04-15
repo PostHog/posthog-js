@@ -1,3 +1,7 @@
+## 1.20.4 - 2022-04-15
+
+- fix(console-logs): handle undefined and null log (#385)
+
 ## 1.20.3 - 2022-04-11
 
 - feat(recordings): add inline stylesheet option (#383)
