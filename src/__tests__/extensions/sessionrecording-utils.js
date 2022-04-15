@@ -209,5 +209,27 @@ describe(`SessionRecording utility functions`, () => {
                 },
             })
         })
+
+        it(`should handle and not touch null or undefined elements`, () => {
+            expect(
+                truncateLargeConsoleLogs({
+                    type: PLUGIN_EVENT_TYPE,
+                    data: {
+                        plugin: CONSOLE_LOG_PLUGIN_NAME,
+                        payload: {
+                            payload: [undefined, null],
+                        },
+                    },
+                })
+            ).toEqual({
+                type: PLUGIN_EVENT_TYPE,
+                data: {
+                    plugin: CONSOLE_LOG_PLUGIN_NAME,
+                    payload: {
+                        payload: [undefined, null],
+                    },
+                },
+            })
+        })
     })
 })
