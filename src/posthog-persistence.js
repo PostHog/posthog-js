@@ -60,14 +60,14 @@ var PostHogPersistence = function (config) {
         this.name = 'ph_' + token + '_posthog'
     }
 
-    var storage_type = config['persistence']
-    if (storage_type !== 'cookie' && storage_type.indexOf('localStorage') === -1 && storage_type !== 'memory') {
+    var storage_type = config['persistence'].toLowerCase()
+    if (storage_type !== 'cookie' && storage_type.indexOf('localstorage') === -1 && storage_type !== 'memory') {
         logger.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
     }
-    if (storage_type === 'localStorage' && localStore.is_supported()) {
+    if (storage_type === 'localstorage' && localStore.is_supported()) {
         this.storage = localStore
-    } else if (storage_type === 'localStorage+cookie' && localPlusCookieStore.is_supported()) {
+    } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
         this.storage = localPlusCookieStore
     } else if (storage_type === 'memory') {
         this.storage = memoryStore
