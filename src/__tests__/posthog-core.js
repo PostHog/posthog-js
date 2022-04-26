@@ -386,6 +386,16 @@ describe('capture()', () => {
                 '{"navigation":[["duration"],[[1234]]],"paint":[],"resource":[["c"],[["d"]]]}'
             )
         })
+
+        it('supports timestamp override', () => {
+            const date = new Date(1234)
+            given('options', () => ({
+                timestamp: date,
+            }))
+
+            const captured_event = given.subject()
+            expect(captured_event.timestamp).toBe(date.toISOString())
+        })
     })
 })
 
