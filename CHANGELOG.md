@@ -1,3 +1,8 @@
+## 1.20.5 - 2022-05-10
+
+- feat: add recording url to sentry integration (#371)
+- fix(config): Case-insensitive persistence (#389)
+
 ## 1.20.4 - 2022-04-15
 
 - fix(console-logs): handle undefined and null log (#385)
