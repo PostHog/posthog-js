@@ -107,6 +107,10 @@ export function getPerformanceData() {
         resource: getPerformanceEntriesByType('resource'),
     }
 
+    if (typeof window !== undefined && window.performance && window.performance.clearResourceTimings) {
+        window.performance.clearResourceTimings()
+    }
+
     const properties = {}
 
     const pageLoad = pageLoadFrom(performanceEntries)

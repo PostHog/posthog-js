@@ -272,6 +272,18 @@ describe('capture()', () => {
         // even though it implements getEntriesByType
         given('paintTimingsImplementedByBrowser', () => true)
 
+        given('clearResourceTimings', () => jest.fn())
+
+        given('getEntriesByType', () =>
+            jest.fn().mockImplementation((type) => {
+                if (!given.paintTimingsImplementedByBrowser && type === 'paint') {
+                    throw new Error('IE does not implement this')
+                } else {
+                    return given.performanceEntries[type]
+                }
+            })
+        )
+
         beforeEach(() => {
             /*
                 window.performance is not a complete implementation in jsdom
@@ -283,13 +295,8 @@ describe('capture()', () => {
             Object.defineProperty(window, 'performance', {
                 writable: true,
                 value: {
-                    getEntriesByType: jest.fn().mockImplementation((type) => {
-                        if (!given.paintTimingsImplementedByBrowser && type === 'paint') {
-                            throw new Error('IE does not implement this')
-                        } else {
-                            return given.performanceEntries[type]
-                        }
-                    }),
+                    getEntriesByType: given.getEntriesByType,
+                    clearResourceTimings: given.clearResourceTimings,
                 },
             })
         })
@@ -301,7 +308,8 @@ describe('capture()', () => {
 
             given.subject()
 
-            expect(window.performance.getEntriesByType).not.toHaveBeenCalled()
+            expect(given.getEntriesByType).not.toHaveBeenCalled()
+            expect(given.clearResourceTimings).not.toHaveBeenCalled()
         })
 
         it('captures pageview with performance when enabled', () => {
@@ -314,10 +322,11 @@ describe('capture()', () => {
 
             expect(captured_event.properties).toHaveProperty('$performance_page_loaded', 1234)
 
-            expect(window.performance.getEntriesByType).toHaveBeenCalledTimes(3)
-            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
-            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
-            expect(window.performance.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
+            expect(given.getEntriesByType).toHaveBeenCalledTimes(3)
+            expect(given.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
+            expect(given.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
+            expect(given.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
+            expect(given.clearResourceTimings).toHaveBeenCalled()
         })
 
         it('captures pageview with performance even if duration is not available', () => {

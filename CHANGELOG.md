@@ -1,3 +1,24 @@
+## 1.20.4 - 2022-04-15
+
+- fix(console-logs): handle undefined and null log (#385)
+
+## 1.20.3 - 2022-04-11
+
+- feat(recordings): add inline stylesheet option (#383)
+- fix(config): Handle config undefined (#382)
+
+## 1.20.2 - 2022-03-31
+
+- fix(web-performance): clear resource timings after reading (#377)
+
+## 1.20.1 - 2022-03-29
+
+- feat(tracking): add ahrefsbot to list of ignored bots (#378)
+
+## 1.20.0 - 2022-03-23
+
+- feat: send library version outside of compressed body as a debug signal (#376)
+
 ## 1.19.2 - 2022-03-22
 
 - Revert "feat: send library version outside of compressed body as a debug signal (#351)" (#375)

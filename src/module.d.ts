@@ -289,6 +289,7 @@ declare class posthog {
      *         maskInputFn: null,
      *         slimDOMOptions: {},
      *         collectFonts: false
+     *         inlineStylesheet: true
      *      }
      *
      *      // prevent autocapture from capturing any attribute names on elements
@@ -658,6 +659,7 @@ declare namespace posthog {
         maskInputFn?: (text: string) => string
         slimDOMOptions?: SlimDOMOptions | 'all' | true
         collectFonts?: boolean
+        inlineStylesheet?: boolean
     }
 
     export class persistence {
