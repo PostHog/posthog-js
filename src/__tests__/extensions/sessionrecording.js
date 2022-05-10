@@ -7,6 +7,9 @@ import {
 } from '../../extensions/sessionrecording'
 import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
 
+// Type and source defined here designate a non-user-generated recording event
+const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
+
 jest.mock('../../autocapture-utils')
 jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
 
@@ -23,7 +26,7 @@ describe('SessionRecording', () => {
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
         sessionManager: {
-            getSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
+            checkAndGetSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
         },
         _addCaptureHook: jest.fn(),
     }))
@@ -319,29 +322,20 @@ describe('SessionRecording', () => {
                 expect(window.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
-            it('it uses the current timestamp if the event does not have one', () => {
-                const mockDate = new Date(1602107460000)
-                jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
-                expect(given.posthog.sessionManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                })
+            it('it calls checkAndGetSessionAndWindowId with readOnly as true if it not a user interaction', () => {
+                _emit(NON_USER_GENERATED_EVENT)
+                expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(true, undefined)
             })
 
-            it('sends its timestamp and event data to getSessionAndWindowId', () => {
+            it('it calls checkAndGetSessionAndWindowId with readOnly as false if it is a user interaction', () => {
                 _emit({
                     event: 123,
                     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: { source: MUTATION_SOURCE_TYPE },
-                    timestamp: 1602107460000,
                 })
-                expect(given.posthog.sessionManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: { source: MUTATION_SOURCE_TYPE },
-                    timestamp: 1602107460000,
-                })
+                expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(
+                    false,
+                    undefined
+                )
             })
         })
     })
