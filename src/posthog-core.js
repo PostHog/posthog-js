@@ -560,14 +560,13 @@ PostHogLib.prototype.push = function (item) {
  */
 PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options) {
     // While developing, a developer might purposefully _not_ call init(),
-    // in this case, we would like capture to be a noop.
-    if (!this['__loaded']) {
-        return
-    }
+    // in this case, we would like capture to be a noop but we should still output debug events
 
-    this._captureMetrics.incr('capture')
-    if (event_name === '$snapshot') {
-        this._captureMetrics.incr('snapshot')
+    if (this._captureMetrics) {
+        this._captureMetrics.incr('capture')
+        if (event_name === '$snapshot') {
+            this._captureMetrics.incr('snapshot')
+        }
     }
 
     options = options || __NOOPTIONS
@@ -585,16 +584,18 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
         return
     }
 
-    const start_timestamp = this['persistence'].remove_event_timer(event_name)
+    const start_timestamp = this['persistence'] ? this['persistence'].remove_event_timer(event_name) : undefined
 
-    // update persistence
-    this['persistence'].update_search_keyword(document.referrer)
+    if (this['persistence']) {
+        // update persistence
+        this['persistence'].update_search_keyword(document.referrer)
 
-    if (this.get_config('store_google')) {
-        this['persistence'].update_campaign_params()
-    }
-    if (this.get_config('save_referrer')) {
-        this['persistence'].update_referrer_info(document.referrer)
+        if (this.get_config('store_google')) {
+            this['persistence'].update_campaign_params()
+        }
+        if (this.get_config('save_referrer')) {
+            this['persistence'].update_referrer_info(document.referrer)
+        }
     }
 
     var data = {
@@ -610,6 +611,11 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     if (this.get_config('debug')) {
         logger.log('PostHog.js send', data)
     }
+
+    if (!this['__loaded']) {
+        return
+    }
+
     const jsonData = JSON.stringify(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
@@ -642,7 +648,7 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     let properties = { ...event_properties }
     properties['token'] = this.get_config('token')
 
-    if (event_name === '$snapshot') {
+    if (event_name === '$snapshot' && this.persistence) {
         const persistenceProps = this.persistence.properties()
         properties['distinct_id'] = persistenceProps.distinct_id
         return properties
@@ -664,7 +670,12 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
     // properties object by passing in a new object
 
     // update properties with pageview info and super-properties
-    properties = _.extend({}, _.info.properties(), this['persistence'].properties(), properties)
+    properties = _.extend(
+        {},
+        _.info.properties(),
+        this['persistence'] ? this['persistence'].properties() : {},
+        properties
+    )
 
     if (event_name === '$pageview' && this.get_config('_capture_performance')) {
         properties = _.extend(properties, getPerformanceData())
@@ -706,6 +717,12 @@ PostHogLib.prototype._calculate_event_properties = function (event_name, event_p
  * @param {Number} [days] How many days since the user's last visit to store the super properties
  */
 PostHogLib.prototype.register = function (props, days) {
+    if (this.get_config('debug')) {
+        logger.log('PostHog.js register', { props, days })
+    }
+    if (!this['persistence']) {
+        return
+    }
     this['persistence'].register(props, days)
 }
 
@@ -730,6 +747,12 @@ PostHogLib.prototype.register = function (props, days) {
  * @param {Number} [days] How many days since the users last visit to store the super properties
  */
 PostHogLib.prototype.register_once = function (props, default_value, days) {
+    if (this.get_config('debug')) {
+        logger.log('PostHog.js register_once', { props, default_value, days })
+    }
+    if (!this['persistence']) {
+        return
+    }
     this['persistence'].register_once(props, default_value, days)
 }
 
@@ -739,6 +762,12 @@ PostHogLib.prototype.register_once = function (props, default_value, days) {
  * @param {String} property The name of the super property to remove
  */
 PostHogLib.prototype.unregister = function (property) {
+    if (this.get_config('debug')) {
+        logger.log('PostHog.js unregister', property)
+    }
+    if (!this['persistence']) {
+        return
+    }
     this['persistence'].unregister(property)
 }
 

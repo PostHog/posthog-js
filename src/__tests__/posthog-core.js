@@ -652,6 +652,18 @@ describe('skipped init()', () => {
     it('capture() does not throw', () => {
         expect(() => given.lib.capture('$pageview')).not.toThrow()
     })
+    it('register() does not throw', () => {
+        expect(() => given.lib.register({})).not.toThrow()
+    })
+    it('register_once() does not throw', () => {
+        expect(() => given.lib.register_once({})).not.toThrow()
+    })
+    it('unregister() does not throw', () => {
+        expect(() => given.lib.unregister('property')).not.toThrow()
+    })
+    it('identify() does not throw', () => {
+        expect(() => given.lib.identify('user')).not.toThrow()
+    })
 })
 
 describe('group()', () => {
