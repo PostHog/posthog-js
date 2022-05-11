@@ -1,3 +1,7 @@
+## 1.21.0 - 2022-05-11
+
+- fix(recordings): mask all input fields for recordings (#388)
+
 ## 1.20.5 - 2022-05-10
 
 - feat: add recording url to sentry integration (#371)
