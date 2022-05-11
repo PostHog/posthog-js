@@ -37,7 +37,7 @@ describe('SessionRecording', () => {
         enable_recording_console_log: given.enable_recording_console_log,
         autocapture: false, // Assert that session recording works even if `autocapture = false`
         session_recording: {
-            maskAllInputs: true,
+            maskAllInputs: false,
             recordCanvas: true,
             someUnregisteredProp: 'abc',
         },
@@ -155,7 +155,7 @@ describe('SessionRecording', () => {
             // someUnregisteredProp should not be present
             expect(window.rrwebRecord).toHaveBeenCalledWith({
                 emit: expect.anything(),
-                maskAllInputs: true,
+                maskAllInputs: false,
                 blockClass: 'ph-no-capture',
                 blockSelector: null,
                 ignoreClass: 'ph-ignore-input',

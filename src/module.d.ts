@@ -284,7 +284,7 @@ declare class posthog {
      *         blockClass: 'ph-no-capture',
      *         blockSelector: null,
      *         ignoreClass: 'ph-ignore-input',
-     *         maskAllInputs: false,
+     *         maskAllInputs: true,
      *         maskInputOptions: {},
      *         maskInputFn: null,
      *         slimDOMOptions: {},
