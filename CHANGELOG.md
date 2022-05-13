@@ -1,3 +1,8 @@
+## 1.21.1 - 2022-05-13
+
+- chore(build): bumping to make release (#396)
+- chore(dep): update rrweb to 1.1.3 (#395)
+
 ## 1.21.0 - 2022-05-11
 
 - fix(recordings): mask all input fields for recordings (#388)
