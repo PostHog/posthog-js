@@ -109,6 +109,7 @@ const defaultConfig = () => ({
         const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
         console.error(error)
     },
+    get_device_id: (uuid) => uuid,
     // Used for internal testing
     _onCapture: () => {},
     _capture_metrics: false,
@@ -131,7 +132,7 @@ export const PostHogLib = function () {}
  */
 var create_mplib = function (token, config, name) {
     var instance,
-        target = name === PRIMARY_INSTANCE_NAME ? posthog_master : posthog_master[name]
+        target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
 
     if (target && init_type === INIT_MODULE) {
         instance = target
@@ -259,11 +260,11 @@ PostHogLib.prototype._init = function (token, config, name) {
 
     this._gdpr_init()
 
-    var uuid = _.UUID()
     if (!this.get_distinct_id()) {
         // There is no need to set the distinct id
         // or the device id if something was already stored
         // in the persitence
+        const uuid = this.get_config('get_device_id')(_.UUID())
         this.register_once(
             {
                 distinct_id: uuid,
@@ -937,7 +938,7 @@ PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet
 PostHogLib.prototype.reset = function (reset_device_id) {
     let device_id = this.get_property('$device_id')
     this['persistence'].clear()
-    var uuid = _.UUID()
+    const uuid = this.get_config('get_device_id')(_.UUID())
     this.register_once(
         {
             distinct_id: uuid,
