@@ -578,11 +578,15 @@ describe(`GDPR utils`, () => {
             it(`should call the wrapped method if config is undefined`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => undefined, false)
+                    console.error = jest.fn()
 
                     gdpr.optIn(token, { persistenceType })
                     postHogLib.capture(captureEventName, captureProperties)
 
                     expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
+                    expect(console.error).toHaveBeenCalledWith(
+                        "Unexpected error when checking capturing opt-out status: TypeError: Cannot read properties of undefined (reading 'token')"
+                    )
                 })
             })
 
