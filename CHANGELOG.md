@@ -1,3 +1,7 @@
+## 1.22.0 - 2022-05-31
+
+- feat: add support to `fbclid` campaign parameter (#400)
+
 ## 1.21.1 - 2022-05-13
 
 - chore(build): bumping to make release (#396)
