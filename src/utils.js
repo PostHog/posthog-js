@@ -650,11 +650,10 @@ _.register_event = (function () {
 
 _.info = {
     campaignParams: function () {
-        var campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term gclid'.split(' '),
-            kw = '',
-            params = {}
+        const campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term gclid fbclid'.split(' ')
+        const params = {}
         _.each(campaign_keywords, function (kwkey) {
-            kw = _.getQueryParam(document.URL, kwkey)
+            let kw = _.getQueryParam(document.URL, kwkey)
             if (kw.length) {
                 params[kwkey] = kw
             }
