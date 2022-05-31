@@ -87,9 +87,12 @@ describe('Decide', () => {
 
         it('Make sure receivedFeatureFlags is not called if the decide response fails', () => {
             given('decideResponse', () => ({ status: 0 }))
+            console.error = jest.fn()
+
             given.subject()
 
             expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
+            expect(console.error).toHaveBeenCalledWith('Failed to fetch feature flags from PostHog.')
         })
     })
 })
