@@ -1137,6 +1137,10 @@ PostHogLib.prototype.alias = function (alias, original) {
  *
  *      // prevent autocapture from capturing textContent on all elements
  *      mask_all_text: false
+ *
+ *      // Anonymous users get a random UUID as their device by default.
+ *      // This option allows overriding that option.
+ *      get_device_id: (uuid) => uuid
  *     }
  *
  *
