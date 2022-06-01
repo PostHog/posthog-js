@@ -65,7 +65,9 @@ export class RetryQueue extends RequestQueueScaffold {
             try {
                 window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
             } catch (e) {
-                if (this.get_config('debug')) {
+                // Note sendBeacon automatically retries, and after the first retry it will loose reference to contextual `this`.
+                // This means in some cases `this.getConfig` will be undefined.
+                if (this.get_config?.('debug')) {
                     console.error(e)
                 }
             }
