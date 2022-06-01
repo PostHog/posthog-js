@@ -308,6 +308,9 @@ declare class posthog {
      *      // setting will not do  anything if you use PostHog Cloud
      *      advanced_disable_toolbar_metrics: false
      *
+     *      // Anonymous users get a random UUID as their device by default.
+     *      // This option allows overriding that option.
+     *      get_device_id: (uuid) => uuid
      *     }
      *
      *
@@ -620,6 +623,7 @@ declare namespace posthog {
         mask_all_text?: boolean
         advanced_disable_decide?: boolean
         advanced_disable_toolbar_metrics?: boolean
+        get_device_id?: (uuid: string) => string
         _capture_performance?: boolean
     }
 

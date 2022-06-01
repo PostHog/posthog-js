@@ -569,13 +569,14 @@ describe('__compress_and_send_json_request', () => {
 })
 
 describe('init()', () => {
-    given('subject', () => () => given.lib.init())
+    given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 
     given('overrides', () => ({
-        get_distinct_id: () => 'distinct_id_987',
+        get_distinct_id: () => given.distinct_id,
         advanced_disable_decide: given.advanced_disable_decide,
         _send_request: jest.fn(),
         capture: jest.fn(),
+        register_once: jest.fn(),
     }))
 
     beforeEach(() => {
@@ -609,19 +610,19 @@ describe('init()', () => {
     })
 
     it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
-        given('overrides', () => {
-            return {
-                sessionRecording: {
-                    afterDecideResponse: jest.fn(),
-                },
-                toolbar: {
-                    afterDecideResponse: jest.fn(),
-                },
-                persistence: {
-                    register: jest.fn(),
-                },
-            }
-        })
+        given('overrides', () => ({
+            sessionRecording: {
+                afterDecideResponse: jest.fn(),
+                startRecordingIfEnabled: jest.fn(),
+            },
+            toolbar: {
+                afterDecideResponse: jest.fn(),
+            },
+            persistence: {
+                register: jest.fn(),
+                update_config: jest.fn(),
+            },
+        }))
 
         given.subject()
 
@@ -630,21 +631,68 @@ describe('init()', () => {
         jest.spyOn(given.lib.persistence, 'register').mockImplementation()
 
         // Autocapture
-        expect(given.lib['__autocapture_enabled']).toBe(undefined)
-        expect(autocapture.init).toHaveBeenCalledTimes(0)
-        expect(autocapture.afterDecideResponse).toHaveBeenCalledTimes(0)
+        expect(given.lib['__autocapture_enabled']).toEqual(undefined)
+        expect(autocapture.init).not.toHaveBeenCalled()
+        expect(autocapture.afterDecideResponse).not.toHaveBeenCalled()
 
         // Feature flags
-        expect(given.lib.persistence.register).toHaveBeenCalledTimes(0) // FFs are saved this way
+        expect(given.lib.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
 
         // Toolbar
-        expect(given.lib.toolbar.afterDecideResponse).toHaveBeenCalledTimes(0)
+        expect(given.lib.toolbar.afterDecideResponse).not.toHaveBeenCalled()
 
         // Session recording
-        expect(given.lib.sessionRecording.afterDecideResponse).toHaveBeenCalledTimes(0)
+        expect(given.lib.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
 
         // Compression
-        expect(given.lib['compression']).toBe(undefined)
+        expect(given.lib['compression']).toEqual({})
+    })
+
+    describe('device id behavior', () => {
+        const uuid = '1811a3ce5b0363-0052debf84392a-3a50387c-0-1811a3ce5b1ad2'
+
+        beforeEach(() => {
+            jest.spyOn(_, 'UUID').mockReturnValue(uuid)
+        })
+
+        it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
+            given('distinct_id', () => undefined)
+
+            given.subject()
+
+            expect(given.lib.register_once).toHaveBeenCalledWith(
+                {
+                    $device_id: uuid,
+                    distinct_id: uuid,
+                },
+                ''
+            )
+        })
+
+        it('does not set distinct_id/$device_id if distinct_id is unset', () => {
+            given('distinct_id', () => 'existing-id')
+
+            given.subject()
+
+            expect(given.lib.register_once).not.toHaveBeenCalled()
+        })
+
+        it('uses config.get_device_id for uuid generation if passed', () => {
+            given('distinct_id', () => undefined)
+            given('config', () => ({
+                get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
+            }))
+
+            given.subject()
+
+            expect(given.lib.register_once).toHaveBeenCalledWith(
+                {
+                    $device_id: 'custom-1811a3ce',
+                    distinct_id: 'custom-1811a3ce',
+                },
+                ''
+            )
+        })
     })
 })
 
