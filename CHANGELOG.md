@@ -1,3 +1,8 @@
+## 1.23.0 - 2022-06-01
+
+- feat: Allow overriding device id generation (#401)
+- Fix this.get_config undefined error (#397)
+
 ## 1.22.0 - 2022-05-31
 
 - feat: add support to `fbclid` campaign parameter (#400)
