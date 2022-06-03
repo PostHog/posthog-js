@@ -134,10 +134,13 @@ describe('identify()', () => {
         given('identity', () => null)
 
         it('does not update user', () => {
+            console.error = jest.fn()
+
             given.subject()
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
             expect(given.overrides.register).not.toHaveBeenCalled()
+            expect(console.error).toHaveBeenCalledWith('Unique user id has not been set in posthog.identify')
         })
     })
 
@@ -175,12 +178,15 @@ describe('capture()', () => {
         given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
     )
 
+    given('config', () => ({
+        property_blacklist: [],
+        _onCapture: jest.fn(),
+    }))
+
     given('overrides', () => ({
         __loaded: true,
         get_config: (key) => given.config?.[key],
-        config: {
-            _onCapture: jest.fn(),
-        },
+        config: given.config,
         persistence: {
             remove_event_timer: jest.fn(),
             update_search_keyword: jest.fn(),
@@ -214,27 +220,33 @@ describe('capture()', () => {
 
     it('errors with undefined event name', () => {
         given('eventName', () => undefined)
+        console.error = jest.fn()
 
         const hook = jest.fn()
         given.lib._addCaptureHook(hook)
 
         expect(() => given.subject()).not.toThrow()
         expect(hook).not.toHaveBeenCalled()
+        expect(console.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
     })
 
     it('errors with object event name', () => {
         given('eventName', () => ({ event: 'object as name' }))
+        console.error = jest.fn()
 
         const hook = jest.fn()
         given.lib._addCaptureHook(hook)
 
         expect(() => given.subject()).not.toThrow()
         expect(hook).not.toHaveBeenCalled()
+        expect(console.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
     })
 
     it('truncates long properties', () => {
         given('config', () => ({
             properties_string_max_length: 1000,
+            property_blacklist: [],
+            _onCapture: jest.fn(),
         }))
         given('eventProperties', () => ({
             key: 'value'.repeat(10000),
@@ -246,6 +258,8 @@ describe('capture()', () => {
     it('keeps long properties if null', () => {
         given('config', () => ({
             properties_string_max_length: null,
+            property_blacklist: [],
+            _onCapture: jest.fn(),
         }))
         given('eventProperties', () => ({
             key: 'value'.repeat(10000),
@@ -258,7 +272,9 @@ describe('capture()', () => {
         given('eventName', () => '$pageview')
 
         given('config', () => ({
+            property_blacklist: [],
             _capture_performance: true,
+            _onCapture: jest.fn(),
         }))
 
         given('performanceEntries', () => ({
@@ -303,7 +319,9 @@ describe('capture()', () => {
 
         it('does not capture performance when disabled', () => {
             given('config', () => ({
+                property_blacklist: [],
                 _capture_performance: false,
+                _onCapture: jest.fn(),
             }))
 
             given.subject()
@@ -417,6 +435,7 @@ describe('_calculate_event_properties()', () => {
         property_blacklist: given.property_blacklist,
         sanitize_properties: given.sanitize_properties,
     }))
+    given('property_blacklist', () => [])
 
     beforeEach(() => {
         jest.spyOn(_.info, 'properties').mockReturnValue({ $lib: 'web' })
@@ -823,11 +842,9 @@ describe('_loaded()', () => {
         },
         _start_queue_if_opted_in: jest.fn(),
     }))
-    given('config', () => ({}))
+    given('config', () => ({ loaded: jest.fn() }))
 
-    it('calls loafed config option', () => {
-        given('config', () => ({ loaded: jest.fn() }))
-
+    it('calls loaded config option', () => {
         given.subject()
 
         expect(given.config.loaded).toHaveBeenCalledWith(given.lib)
@@ -839,8 +856,11 @@ describe('_loaded()', () => {
                 throw Error()
             },
         }))
+        console.error = jest.fn()
 
         given.subject()
+
+        expect(console.error).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
     })
 
     describe('/decide', () => {
@@ -858,6 +878,7 @@ describe('_loaded()', () => {
         it('does not call decide if disabled', () => {
             given('config', () => ({
                 advanced_disable_decide: true,
+                loaded: jest.fn(),
             }))
 
             given.subject()
@@ -870,6 +891,7 @@ describe('_loaded()', () => {
         it('captures not capture pageview if disabled', () => {
             given('config', () => ({
                 capture_pageview: false,
+                loaded: jest.fn(),
             }))
 
             given.subject()
@@ -880,6 +902,7 @@ describe('_loaded()', () => {
         it('captures pageview if enabled', () => {
             given('config', () => ({
                 capture_pageview: true,
+                loaded: jest.fn(),
             }))
 
             given.subject()

@@ -578,11 +578,14 @@ describe(`GDPR utils`, () => {
             it(`should call the wrapped method if config is undefined`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => undefined, false)
+                    console.error = jest.fn()
 
                     gdpr.optIn(token, { persistenceType })
                     postHogLib.capture(captureEventName, captureProperties)
 
                     expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
+                    // :KLUDGE: Exact error message may vary between runtimes
+                    expect(console.error).toHaveBeenCalled()
                 })
             })
 

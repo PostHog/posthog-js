@@ -90,7 +90,11 @@
             "json"
         ],
         "setupFilesAfterEnv": [
-            "given2/setup"
+            "given2/setup",
+            "./src/__tests__/setup.js"
+        ],
+        "modulePathIgnorePatterns": [
+            "src/__tests__/setup.js"
         ],
         "clearMocks": true,
         "testEnvironment": "jsdom"
