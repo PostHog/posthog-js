@@ -123,8 +123,6 @@ export class PostHogFeatureFlags {
             $anon_distinct_id: this.$anon_distinct_id,
         })
 
-        // console.log('json data: ', json_data)
-
         // reset anon_distinct_id after a single request with it
         // makes it through
         this.$anon_distinct_id = undefined

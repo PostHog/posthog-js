@@ -36,6 +36,9 @@ describe('identify()', () => {
         _captureMetrics: {
             incr: jest.fn(),
         },
+        featureFlags: {
+            sendAnonymousDistinctId: jest.fn(),
+        },
         reloadFeatureFlags: jest.fn(),
     }))
 
@@ -63,6 +66,7 @@ describe('identify()', () => {
             { $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
+        expect(given.overrides.featureFlags.sendAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
     it('calls capture when identity changes and old ID is anonymous', () => {
@@ -80,6 +84,7 @@ describe('identify()', () => {
             { $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
+        expect(given.overrides.featureFlags.sendAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
     it("don't identify if the old id isn't anonymous", () => {
@@ -89,6 +94,7 @@ describe('identify()', () => {
 
         expect(given.overrides.capture).not.toHaveBeenCalled()
         expect(given.overrides.people.set).not.toHaveBeenCalled()
+        expect(given.overrides.featureFlags.sendAnonymousDistinctId).not.toHaveBeenCalled()
     })
 
     it('calls capture with user properties if passed', () => {
@@ -106,6 +112,7 @@ describe('identify()', () => {
             { $set: { email: 'john@example.com' } },
             { $set_once: { howOftenAmISet: 'once!' } }
         )
+        expect(given.overrides.featureFlags.sendAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
     describe('identity did not change', () => {
@@ -116,6 +123,7 @@ describe('identify()', () => {
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
             expect(given.overrides.people.set).not.toHaveBeenCalled()
+            expect(given.overrides.featureFlags.sendAnonymousDistinctId).not.toHaveBeenCalled()
         })
 
         it('calls people.set when user properties passed', () => {
@@ -125,6 +133,7 @@ describe('identify()', () => {
             given.subject()
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
+            expect(given.overrides.featureFlags.sendAnonymousDistinctId).not.toHaveBeenCalled()
             expect(given.overrides.people.set).toHaveBeenCalledWith({ email: 'john@example.com' })
             expect(given.overrides.people.set_once).toHaveBeenCalledWith({ howOftenAmISet: 'once!' })
         })
@@ -148,6 +157,7 @@ describe('identify()', () => {
         it('reloads when identity changes', () => {
             given.subject()
 
+            expect(given.overrides.featureFlags.sendAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
             expect(given.overrides.reloadFeatureFlags).toHaveBeenCalled()
         })
 
@@ -156,6 +166,7 @@ describe('identify()', () => {
 
             given.subject()
 
+            expect(given.overrides.featureFlags.sendAnonymousDistinctId).not.toHaveBeenCalled()
             expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
         })
 
@@ -165,7 +176,7 @@ describe('identify()', () => {
             given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
 
             given.subject()
-
+            expect(given.overrides.featureFlags.sendAnonymousDistinctId).not.toHaveBeenCalled()
             expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
         })
     })

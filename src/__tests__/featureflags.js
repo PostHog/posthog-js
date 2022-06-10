@@ -1,12 +1,32 @@
 import { PostHogFeatureFlags, parseFeatureFlagDecideResponse } from '../posthog-featureflags'
+jest.useFakeTimers()
+jest.spyOn(global, 'setTimeout')
 
 describe('featureflags', () => {
     given('decideEndpointWasHit', () => false)
     given('instance', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
-        get_property: (key) => given.properties[key],
+        get_distinct_id: () => 'blah id',
+        getGroups: () => {},
+        _prepare_callback: (callback) => callback,
+        persistence: {
+            props: {
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                    'multivariate-flag': 'variant-1',
+                },
+                $override_feature_flags: false,
+            },
+            register: (dict) => {
+                given.instance.persistence.props = { ...given.instance.persistence.props, ...dict }
+            },
+        },
+        get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
+        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
     }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
@@ -15,16 +35,6 @@ describe('featureflags', () => {
         jest.spyOn(given.instance, 'capture').mockReturnValue()
         jest.spyOn(window.console, 'warn').mockImplementation()
     })
-
-    given('properties', () => ({
-        $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
-        $enabled_feature_flags: {
-            'beta-feature': true,
-            'alpha-feature-2': true,
-            'multivariate-flag': 'variant-1',
-        },
-        $override_feature_flags: false,
-    }))
 
     it('should return the right feature flag and call capture', () => {
         expect(given.featureFlags.getFlags()).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
@@ -50,7 +60,7 @@ describe('featureflags', () => {
     })
 
     it('supports overrides', () => {
-        given('properties', () => ({
+        given.instance.persistence.props = {
             $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
             $enabled_feature_flags: {
                 'beta-feature': true,
@@ -61,7 +71,8 @@ describe('featureflags', () => {
                 'beta-feature': false,
                 'alpha-feature-2': 'as-a-variant',
             },
-        }))
+        }
+
         expect(given.featureFlags.getFlags()).toEqual(['alpha-feature-2', 'multivariate-flag'])
         expect(given.featureFlags.getFlagVariants()).toEqual({
             'alpha-feature-2': 'as-a-variant',
@@ -83,6 +94,87 @@ describe('featureflags', () => {
         expect(called).toEqual(true)
 
         called = false
+    })
+
+    describe('reloadFeatureFlags', () => {
+        given('decideResponse', () => ({
+            featureFlags: {
+                first: 'variant-1',
+                second: true,
+            },
+        }))
+
+        given('config', () => ({
+            token: 'random fake token',
+        }))
+
+        it('on providing anonDistinctId', () => {
+            given.featureFlags.sendAnonymousDistinctId('rando_id')
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                first: 'variant-1',
+                second: true,
+            })
+
+            // check the request sent $anon_distinct_id
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $anon_distinct_id: 'rando_id',
+            })
+        })
+
+        it('on providing anonDistinctId and calling reload multiple times', () => {
+            given.featureFlags.sendAnonymousDistinctId('rando_id')
+            given.featureFlags.reloadFeatureFlags()
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                first: 'variant-1',
+                second: true,
+            })
+
+            // check the request sent $anon_distinct_id
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                $anon_distinct_id: 'rando_id',
+            })
+
+            given.featureFlags.reloadFeatureFlags()
+            given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            // check the request didn't send $anon_distinct_id the second time around
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[1][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                // $anon_distinct_id: "rando_id"
+            })
+
+            given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            // check the request didn't send $anon_distinct_id the second time around
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[1][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                // $anon_distinct_id: "rando_id"
+            })
+        })
     })
 })
 
