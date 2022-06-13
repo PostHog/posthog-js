@@ -39,7 +39,7 @@ describe('Session ID manager', () => {
                 sessionId: 'newUUID',
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, given.timestamp, 'newUUID'],
+                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -51,7 +51,7 @@ describe('Session ID manager', () => {
                 sessionId: 'newUUID',
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, given.timestamp, 'newUUID'],
+                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -60,7 +60,7 @@ describe('Session ID manager', () => {
     describe('stored session data', () => {
         given('timestampOfSessionStart', () => given.now - 3600)
 
-        given('storedSessionIdData', () => [given.timestampOfSessionStart, given.now, 'oldSessionID'])
+        given('storedSessionIdData', () => [given.now, 'oldSessionID', given.timestampOfSessionStart])
         beforeEach(() => {
             sessionStore.parse.mockReturnValue('oldWindowID')
         })
@@ -71,7 +71,7 @@ describe('Session ID manager', () => {
                 sessionId: 'oldSessionID',
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestampOfSessionStart, given.timestamp, 'oldSessionID'],
+                [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestampOfSessionStart],
             })
         })
 
@@ -80,7 +80,7 @@ describe('Session ID manager', () => {
             const oldTimestamp = given.now - thirtyMinutesAndOneSecond
             const sessionStart = oldTimestamp - 1000
 
-            given('storedSessionIdData', () => [sessionStart, oldTimestamp, 'oldSessionID'])
+            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', sessionStart])
             given('readOnly', () => true)
 
             expect(given.subject).toEqual({
@@ -88,7 +88,7 @@ describe('Session ID manager', () => {
                 sessionId: 'oldSessionID',
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [sessionStart, oldTimestamp, 'oldSessionID'],
+                [SESSION_ID]: [oldTimestamp, 'oldSessionID', sessionStart],
             })
         })
 
@@ -99,21 +99,21 @@ describe('Session ID manager', () => {
                 sessionId: 'oldSessionID',
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestampOfSessionStart, given.timestamp, 'oldSessionID'],
+                [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestampOfSessionStart],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
 
         it('generates a new session id and window id, and saves it when >30m since last event', () => {
             const oldTimestamp = 1602107460000
-            given('storedSessionIdData', () => [given.timestampOfSessionStart, oldTimestamp, 'oldSessionID'])
+            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', given.timestampOfSessionStart])
 
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, given.timestamp, 'newUUID'],
+                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -121,7 +121,7 @@ describe('Session ID manager', () => {
         it('generates a new session id and window id, and saves it when >24 hours since start timestamp', () => {
             const oldTimestamp = 1602107460000
             const twentyFourHours = 3600 * 24
-            given('storedSessionIdData', () => [given.timestampOfSessionStart, oldTimestamp, 'oldSessionID'])
+            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', given.timestampOfSessionStart])
             given('timestamp', () => given.timestampOfSessionStart + twentyFourHours)
 
             expect(given.subject).toEqual({
@@ -130,7 +130,7 @@ describe('Session ID manager', () => {
             })
 
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, given.timestamp, 'newUUID'],
+                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -138,7 +138,7 @@ describe('Session ID manager', () => {
         it('generates a new session id and window id, and saves it when >24 hours since start timestamp even when readonly is true', () => {
             const oldTimestamp = 1602107460000
             const twentyFourHoursAndOneSecond = (3600 * 24 + 1) * 1000
-            given('storedSessionIdData', () => [given.timestampOfSessionStart, oldTimestamp, 'oldSessionID'])
+            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', given.timestampOfSessionStart])
             given('timestamp', () => given.timestampOfSessionStart + twentyFourHoursAndOneSecond)
             given('readOnly', () => true)
 
@@ -148,21 +148,21 @@ describe('Session ID manager', () => {
             })
 
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, given.timestamp, 'newUUID'],
+                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
 
         it('uses the current time if no timestamp is provided', () => {
             const oldTimestamp = 1601107460000
-            given('storedSessionIdData', () => [given.timestampOfSessionStart, oldTimestamp, 'oldSessionID'])
+            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', given.timestampOfSessionStart])
             given('timestamp', () => undefined)
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.now, given.now, 'newUUID'],
+                [SESSION_ID]: [given.now, 'newUUID', given.now],
             })
         })
 
@@ -173,7 +173,7 @@ describe('Session ID manager', () => {
                 sessionId: 'oldSessionID',
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, given.timestamp, 'oldSessionID'],
+                [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestamp],
             })
         })
     })
@@ -202,9 +202,9 @@ describe('Session ID manager', () => {
         it('stores and retrieves a session id and timestamp', () => {
             given.sessionIdManager._setSessionId('newSessionId', 1603107460000, 1603107460000)
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [1603107460000, 1603107460000, 'newSessionId'],
+                [SESSION_ID]: [1603107460000, 'newSessionId', 1603107460000],
             })
-            expect(given.sessionIdManager._getSessionId()).toEqual([1603107460000, 1603107460000, 'newSessionId'])
+            expect(given.sessionIdManager._getSessionId()).toEqual([1603107460000, 'newSessionId', 1603107460000])
         })
     })
 

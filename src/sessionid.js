@@ -51,23 +51,23 @@ export class SessionIdManager {
             this._sessionActivityTimestamp = sessionActivityTimestamp
             this._sessionId = sessionId
             this.persistence.register({
-                [SESSION_ID]: [sessionStartTimestamp, sessionActivityTimestamp, sessionId],
+                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
             })
         }
     }
 
     _getSessionId() {
         if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
-            return [this._sessionStartTimestamp, this._sessionActivityTimestamp, this._sessionId]
+            return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
         const sessionId = this.persistence['props'][SESSION_ID]
 
         if (Array.isArray(sessionId) && sessionId.length === 2) {
             // Storage does not yet have a session start time. Add the last activity timestamp as the start time
-            sessionId.unshift(sessionId[0])
+            sessionId.push(sessionId[0])
         }
 
-        return sessionId || [0, 0, null]
+        return sessionId || [0, null, 0]
     }
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
@@ -95,7 +95,7 @@ export class SessionIdManager {
     checkAndGetSessionAndWindowId(readOnly = false, timestamp = null) {
         timestamp = timestamp || new Date().getTime()
 
-        let [startTimestamp, lastTimestamp, sessionId] = this._getSessionId()
+        let [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
         let windowId = this._getWindowId()
 
         const sessionPastMaximumLength =
