@@ -60,7 +60,14 @@ export class SessionIdManager {
         if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
             return [this._sessionStartTimestamp, this._sessionActivityTimestamp, this._sessionId]
         }
-        return this.persistence['props'][SESSION_ID] || [0, 0, null]
+        const sessionId = this.persistence['props'][SESSION_ID]
+
+        if (Array.isArray(sessionId) && sessionId.length === 2) {
+            // Storage does not yet have a session start time. Add the last activity timestamp as the start time
+            sessionId.unshift(sessionId[0])
+        }
+
+        return sessionId || [0, 0, null]
     }
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,

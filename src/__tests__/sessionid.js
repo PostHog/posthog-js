@@ -165,6 +165,17 @@ describe('Session ID manager', () => {
                 [SESSION_ID]: [given.now, given.now, 'newUUID'],
             })
         })
+
+        it('populates the session start timestamp for a browser with no start time stored', () => {
+            given('storedSessionIdData', () => [given.timestamp, 'oldSessionID'])
+            expect(given.subject).toEqual({
+                windowId: 'oldWindowID',
+                sessionId: 'oldSessionID',
+            })
+            expect(given.persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [given.timestamp, given.timestamp, 'oldSessionID'],
+            })
+        })
     })
 
     describe('window id storage', () => {
@@ -190,10 +201,10 @@ describe('Session ID manager', () => {
     describe('session id storage', () => {
         it('stores and retrieves a session id and timestamp', () => {
             given.sessionIdManager._setSessionId('newSessionId', 1603107460000, 1603107460000)
-            expect(given.sessionIdManager._getSessionId()).toEqual([1603107460000, 1603107460000, 'newSessionId'])
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [1603107460000, 1603107460000, 'newSessionId'],
             })
+            expect(given.sessionIdManager._getSessionId()).toEqual([1603107460000, 1603107460000, 'newSessionId'])
         })
     })
 
