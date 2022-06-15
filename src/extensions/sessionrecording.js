@@ -3,6 +3,7 @@ import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
+import { onPageVisibility } from '../page-activity'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -23,11 +24,13 @@ export class SessionRecording {
         this.windowId = null
         this.sessionId = null
         this.receivedDecide = false
+        this.pageIsVisible = true
     }
 
     startRecordingIfEnabled() {
         if (this.isRecordingEnabled()) {
             this.startCaptureAndTrySendingQueuedSnapshots()
+            onPageVisibility((pageIsVisible) => (this.pageIsVisible = pageIsVisible))
         } else {
             this.stopRecording()
         }
@@ -146,6 +149,10 @@ export class SessionRecording {
 
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
+                if (!this.pageIsVisible) {
+                    return // don't record an invisible page
+                }
+
                 event = truncateLargeConsoleLogs(filterDataURLsFromLargeDataObjects(event))
 
                 this._updateWindowAndSessionIds(event)
