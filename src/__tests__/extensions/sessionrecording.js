@@ -5,7 +5,8 @@ import {
     MUTATION_SOURCE_TYPE,
     SessionRecording,
 } from '../../extensions/sessionrecording'
-import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
+import { PostHogPersistence, SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
+import { SessionIdManager } from '../../sessionid'
 
 // Type and source defined here designate a non-user-generated recording event
 const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
@@ -19,15 +20,16 @@ describe('SessionRecording', () => {
     given('sessionRecording', () => new SessionRecording(given.posthog))
     given('incomingSessionAndWindowId', () => ({ sessionId: 'sessionId', windowId: 'windowId' }))
 
+    given('sessionManager', () => ({
+        checkAndGetSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
+    }))
     given('posthog', () => ({
         get_property: () => given.$session_recording_enabled_server_side,
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
-        sessionManager: {
-            checkAndGetSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
-        },
+        sessionManager: given.sessionManager,
         _addCaptureHook: jest.fn(),
     }))
 
@@ -41,6 +43,7 @@ describe('SessionRecording', () => {
             recordCanvas: true,
             someUnregisteredProp: 'abc',
         },
+        persistence: 'memory',
     }))
     given('$session_recording_enabled_server_side', () => true)
     given('disabled', () => false)
@@ -336,6 +339,100 @@ describe('SessionRecording', () => {
                     false,
                     undefined
                 )
+            })
+        })
+
+        describe('with a real session id manager', () => {
+            const startingDate = new Date()
+
+            beforeEach(() => {
+                given('sessionManager', () => new SessionIdManager(given.config, new PostHogPersistence(given.config)))
+                given.sessionRecording.startRecordingIfEnabled()
+                given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
+            })
+
+            it('takes a full snapshot for the first _emit', () => {
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not take a full snapshot for the second _emit', () => {
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    timestamp: new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    ).getTime(),
+                })
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not change session id for a second _emit', () => {
+                const startingSessionId = given.sessionManager._getSessionId()[1]
+
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
+
+                expect(given.sessionManager._getSessionId()[1]).toEqual(startingSessionId)
+            })
+
+            it('does not take a full snapshot for the third _emit', () => {
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    timestamp: new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    ).getTime(),
+                })
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    timestamp: new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 2
+                    ).getTime(),
+                })
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
+            it('sends a full snapshot if the session is rotated because too much time has passed', () => {
+                const startingSessionId = given.sessionManager._getSessionId()[1]
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    timestamp: new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    ).getTime(),
+                })
+
+                const moreThanADayLater = new Date(
+                    startingDate.getFullYear(),
+                    startingDate.getMonth(),
+                    startingDate.getDate() + 1,
+                    startingDate.getHours() + 1
+                )
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: moreThanADayLater.getTime() })
+
+                expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
             })
         })
     })
