@@ -351,77 +351,108 @@ describe('SessionRecording', () => {
                 given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
             })
 
+            const emitAtDateTime = (date) =>
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: date.getTime() })
+
             it('takes a full snapshot for the first _emit', () => {
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
+                emitAtDateTime(startingDate)
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
             it('does not take a full snapshot for the second _emit', () => {
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    timestamp: new Date(
+                emitAtDateTime(startingDate)
+                emitAtDateTime(
+                    new Date(
                         startingDate.getFullYear(),
                         startingDate.getMonth(),
                         startingDate.getDate(),
                         startingDate.getHours(),
                         startingDate.getMinutes() + 1
-                    ).getTime(),
-                })
+                    )
+                )
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
             it('does not change session id for a second _emit', () => {
                 const startingSessionId = given.sessionManager._getSessionId()[1]
 
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
+                emitAtDateTime(startingDate)
+                emitAtDateTime(
+                    new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    )
+                )
 
                 expect(given.sessionManager._getSessionId()[1]).toEqual(startingSessionId)
             })
 
             it('does not take a full snapshot for the third _emit', () => {
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    timestamp: new Date(
+                emitAtDateTime(startingDate)
+
+                emitAtDateTime(
+                    new Date(
                         startingDate.getFullYear(),
                         startingDate.getMonth(),
                         startingDate.getDate(),
                         startingDate.getHours(),
                         startingDate.getMinutes() + 1
-                    ).getTime(),
-                })
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    timestamp: new Date(
+                    )
+                )
+
+                emitAtDateTime(
+                    new Date(
                         startingDate.getFullYear(),
                         startingDate.getMonth(),
                         startingDate.getDate(),
                         startingDate.getHours(),
                         startingDate.getMinutes() + 2
-                    ).getTime(),
-                })
+                    )
+                )
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
-            it('sends a full snapshot if the session is rotated because too much time has passed', () => {
+            it('sends a full snapshot if the session is rotated because session has been inactive for 30 minutess', () => {
                 const startingSessionId = given.sessionManager._getSessionId()[1]
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: startingDate.getTime() })
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    timestamp: new Date(
+                emitAtDateTime(startingDate)
+                emitAtDateTime(
+                    new Date(
                         startingDate.getFullYear(),
                         startingDate.getMonth(),
                         startingDate.getDate(),
                         startingDate.getHours(),
                         startingDate.getMinutes() + 1
-                    ).getTime(),
-                })
+                    )
+                )
+
+                const inactivityThresholdLater = new Date(
+                    startingDate.getFullYear(),
+                    startingDate.getMonth(),
+                    startingDate.getDate(),
+                    startingDate.getHours(),
+                    startingDate.getMinutes() + 32
+                )
+                emitAtDateTime(inactivityThresholdLater)
+
+                expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+            })
+
+            it('sends a full snapshot if the session is rotated because max time has passed', () => {
+                const startingSessionId = given.sessionManager._getSessionId()[1]
+                emitAtDateTime(startingDate)
+                emitAtDateTime(
+                    new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    )
+                )
 
                 const moreThanADayLater = new Date(
                     startingDate.getFullYear(),
@@ -429,7 +460,7 @@ describe('SessionRecording', () => {
                     startingDate.getDate() + 1,
                     startingDate.getHours() + 1
                 )
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: moreThanADayLater.getTime() })
+                emitAtDateTime(moreThanADayLater)
 
                 expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
