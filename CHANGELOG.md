@@ -1,7 +1,7 @@
 ## 1.24.0 - 2022-06-01
 
 - feat: Limit session recordings to 24 hours (#405)
-    - a new session is immediately started and no data is lost 
+    - a new recording is immediately started and no data is lost 
 
 ## 1.23.0 - 2022-06-01
 
