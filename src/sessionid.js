@@ -3,6 +3,7 @@ import { sessionStore } from './storage'
 import { _ } from './utils'
 
 const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
+const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
     constructor(config, persistence) {
@@ -40,25 +41,39 @@ export class SessionIdManager {
 
     // Note: 'this.persistence.register' can be disabled in the config.
     // In that case, this works by storing sessionId and the timestamp in memory.
-    _setSessionId(sessionId, timestamp) {
-        if (sessionId !== this._sessionId || timestamp !== this._timestamp) {
-            this._timestamp = timestamp
+    _setSessionId(sessionId, sessionActivityTimestamp, sessionStartTimestamp) {
+        if (
+            sessionId !== this._sessionId ||
+            sessionActivityTimestamp !== this._sessionActivityTimestamp ||
+            sessionStartTimestamp !== this._sessionStartTimestamp
+        ) {
+            this._sessionStartTimestamp = sessionStartTimestamp
+            this._sessionActivityTimestamp = sessionActivityTimestamp
             this._sessionId = sessionId
-            this.persistence.register({ [SESSION_ID]: [timestamp, sessionId] })
+            this.persistence.register({
+                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
+            })
         }
     }
 
     _getSessionId() {
-        if (this._sessionId && this._timestamp) {
-            return [this._timestamp, this._sessionId]
+        if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
+            return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
-        return this.persistence['props'][SESSION_ID] || [0, null]
+        const sessionId = this.persistence['props'][SESSION_ID]
+
+        if (Array.isArray(sessionId) && sessionId.length === 2) {
+            // Storage does not yet have a session start time. Add the last activity timestamp as the start time
+            sessionId.push(sessionId[0])
+        }
+
+        return sessionId || [0, null, 0]
     }
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
     // new ids will be generated.
     resetSessionId() {
-        this._setSessionId(null, null)
+        this._setSessionId(null, null, null)
     }
 
     /*
@@ -80,20 +95,29 @@ export class SessionIdManager {
     checkAndGetSessionAndWindowId(readOnly = false, timestamp = null) {
         timestamp = timestamp || new Date().getTime()
 
-        let [lastTimestamp, sessionId] = this._getSessionId()
+        let [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
         let windowId = this._getWindowId()
 
-        if (!sessionId || (!readOnly && Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD)) {
+        const sessionPastMaximumLength =
+            startTimestamp && startTimestamp > 0 && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT
+
+        if (
+            !sessionId ||
+            (!readOnly && Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD) ||
+            sessionPastMaximumLength
+        ) {
             sessionId = _.UUID()
             windowId = _.UUID()
+            startTimestamp = timestamp
         } else if (!windowId) {
             windowId = _.UUID()
         }
 
-        const newTimestamp = lastTimestamp === 0 || !readOnly ? timestamp : lastTimestamp
+        const newTimestamp = lastTimestamp === 0 || !readOnly || sessionPastMaximumLength ? timestamp : lastTimestamp
+        const sessionStartTimestamp = startTimestamp === 0 ? new Date().getTime() : startTimestamp
 
         this._setWindowId(windowId)
-        this._setSessionId(sessionId, newTimestamp)
+        this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
 
         return {
             sessionId: sessionId,
