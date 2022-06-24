@@ -3,6 +3,7 @@ on: [pull_request]
 env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
   BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
+  BROWSERSTACK_USE_AUTOMATE: "1"
   SECRET_KEY: 'abcdef' # unsafe - for testing only
   DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/test_posthog'
   REDIS_URL: 'redis://localhost'
@@ -80,14 +81,8 @@ jobs:
           ./bin/docker-worker-celery --with-scheduler &> worker_logs &
           ./bin/docker-server &> server_logs &
 
-      - name: Run chrome test
-        run: npx testcafe "browserstack:chrome" testcafe/*.spec.js
-
-      - name: Run ie11 test
-        run: npx testcafe "browserstack:ie" testcafe/*.spec.js
-
-      - name: Run safari test
-        run: npx testcafe "browserstack:safari" testcafe/*.spec.js
+      - name: Run tests
+        run: npx testcafe "browserstack:chrome","browserstack:ie","browserstack:safari" testcafe/*.spec.js -r spec,xunit:report.xml
 
       - name: PostHog plugin server logs
         if: ${{ failure() }}
