@@ -30,7 +30,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI, 3)
+    const results = await retryUntilResults(queryAPI, (results) => results.length() === 3)
 
     await t.expect(results.length).eql(3)
     await t.expect(results.filter(({ event }) => event === 'custom-event').length).eql(1)
@@ -51,7 +51,9 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI, 3)
+    const results = await retryUntilResults(queryAPI, (results) =>
+        results.some((result) => result.event === '$autocapture')
+    )
 
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
 
@@ -87,7 +89,9 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI, 3)
+    const results = await retryUntilResults(queryAPI, (results) =>
+        results.some((result) => result.event === '$autocapture')
+    )
 
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
     await t.expect(autocapturedEvents.length).eql(2)
