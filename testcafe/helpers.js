@@ -35,15 +35,25 @@ export const initPosthog = ClientFunction((configParams = {}) => {
 
 export async function retryUntilResults(operation, target_results, limit = 100) {
     const attempt = (count, resolve, reject) => {
-        if (count === limit) {
-            return reject(new Error(`Failed to fetch results in ${limit} attempts`))
-        }
-
         setTimeout(() => {
             operation()
-                .then((results) =>
-                    results.length >= target_results ? resolve(results) : attempt(count + 1, resolve, reject)
-                )
+                .then((results) => {
+                    if (results.length >= target_results) {
+                        return resolve(results)
+                    } else {
+                        if (count === limit) {
+                            return reject(
+                                new Error(
+                                    ```Failed to fetch results in ${limit} attempts. 
+                                       Expected ${target_results} results but received ${results?.length}
+                                       
+                                       Last results were: ${results}```
+                                )
+                            )
+                        }
+                        return attempt(count + 1, resolve, reject)
+                    }
+                })
                 .catch(reject)
         }, 600)
     }
