@@ -608,11 +608,10 @@ PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, pr
     }
 
     data = _.copyAndTruncateStrings(data, options._noTruncate ? null : this.get_config('properties_string_max_length'))
-    const jsonData = JSON.stringify(data)
-
     if (this.get_config('debug')) {
-        logger.log('PostHog.js send', jsonData)
+        logger.log('PostHog.js send', data)
     }
+    const jsonData = JSON.stringify(data)
 
     const url = this.get_config('api_host') + (options.endpoint || '/e/')
 
