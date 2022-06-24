@@ -168,7 +168,7 @@ describe('featureflags', () => {
 
             // check the request didn't send $anon_distinct_id the second time around
             expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[1][1].data, 'base64').toString())
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[2][1].data, 'base64').toString())
             ).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
