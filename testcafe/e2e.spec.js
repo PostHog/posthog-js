@@ -15,11 +15,11 @@ fixture('posthog.js capture')
             })
         })
 
-        console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
+        // console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
     })
 
 test('Custom events work and are accessible via /api/event', async (t) => {
-    await initPosthog({ debug: true })
+    await initPosthog()
     await t
         .wait(1000)
         .click('[data-cy-custom-event-button]')
@@ -39,7 +39,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
 })
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
-    await initPosthog({ debug: true })
+    await initPosthog()
     await t
         .wait(1000)
         .click('[data-cy-link-mask-text]')
