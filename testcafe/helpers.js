@@ -47,7 +47,7 @@ export async function retryUntilResults(operation, target_results, limit = 100) 
                                     `Failed to fetch results in ${limit} attempts. 
                                        Expected ${target_results} results but received ${results?.length}
                                        
-                                       Last results were: ${results}`
+                                       Last results were: ${JSON.stringify(results)}`
                                 )
                             )
                         }
