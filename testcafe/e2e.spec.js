@@ -15,7 +15,7 @@ fixture('posthog.js capture')
             })
         })
 
-        // console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
+        console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
     })
 
 test('Custom events work and are accessible via /api/event', async (t) => {
