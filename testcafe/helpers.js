@@ -44,8 +44,7 @@ export async function retryUntilResults(operation, predicate, limit = 100) {
                         if (count === limit) {
                             return reject(
                                 new Error(
-                                    `Failed to fetch results in ${limit} attempts. 
-                                       Expected ${target_results} results but received ${results?.length}
+                                    `Did not match predicate in ${limit} attempts. 
                                        
                                        Last results were: ${JSON.stringify(
                                            results.map((r) => r.event || 'no event on this event ¯\\_(ツ)_/¯')
