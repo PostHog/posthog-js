@@ -109,7 +109,7 @@ describe('featureflags', () => {
         }))
 
         it('on providing anonDistinctId', () => {
-            given.featureFlags.sendAnonymousDistinctId('rando_id')
+            given.featureFlags.setAnonymousDistinctId('rando_id')
             given.featureFlags.reloadFeatureFlags()
 
             jest.runAllTimers()
@@ -130,7 +130,7 @@ describe('featureflags', () => {
         })
 
         it('on providing anonDistinctId and calling reload multiple times', () => {
-            given.featureFlags.sendAnonymousDistinctId('rando_id')
+            given.featureFlags.setAnonymousDistinctId('rando_id')
             given.featureFlags.reloadFeatureFlags()
             given.featureFlags.reloadFeatureFlags()
 
