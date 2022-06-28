@@ -880,6 +880,9 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
             { $set: userPropertiesToSet || {} },
             { $set_once: userPropertiesToSetOnce || {} }
         )
+        // let the reload feature flag request know to send this previous distinct id
+        // for flag consistency
+        this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
     } else {
         if (userPropertiesToSet) {
             this['people'].set(userPropertiesToSet)

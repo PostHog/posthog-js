@@ -90,6 +90,10 @@ export class PostHogFeatureFlags {
         }
     }
 
+    setAnonymousDistinctId(anon_distinct_id) {
+        this.$anon_distinct_id = anon_distinct_id
+    }
+
     setReloadingPaused(isPaused) {
         this.reloadFeatureFlagsInAction = isPaused
     }
@@ -116,13 +120,19 @@ export class PostHogFeatureFlags {
             token: token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
+            $anon_distinct_id: this.$anon_distinct_id,
         })
+
         const encoded_data = _.base64Encode(json_data)
         this.instance._send_request(
             this.instance.get_config('api_host') + '/decide/?v=2',
             { data: encoded_data },
             { method: 'POST' },
             this.instance._prepare_callback((response) => {
+                // reset anon_distinct_id after at least a single request with it
+                // makes it through
+                this.$anon_distinct_id = undefined
+
                 this.receivedFeatureFlags(response)
 
                 // :TRICKY: Reload - start another request if queued!
