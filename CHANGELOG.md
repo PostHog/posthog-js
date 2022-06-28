@@ -1,3 +1,8 @@
+## 1.25.0 - 2022-06-28
+
+- feat(feature-flags): Enable experience continuity (#404)
+- chore: Update changelog for 1.24.0 (#411)
+
 ## 1.24.0 - 2022-06-01
 
 - feat: Limit session recordings to 24 hours (#405)
