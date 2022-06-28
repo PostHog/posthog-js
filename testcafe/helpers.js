@@ -45,7 +45,7 @@ export async function retryUntilResults(operation, target_results, limit = 100) 
                     results.length >= target_results ? resolve(results) : attempt(count + 1, resolve, reject)
                 )
                 .catch(reject)
-        }, 1000)
+        }, 600)
     }
 
     return new Promise((...args) => attempt(0, ...args))
