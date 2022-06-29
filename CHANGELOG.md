@@ -1,3 +1,7 @@
+## 1.25.1 - 2022-06-29
+
+- fix: Add facebook crawlers to blocked user agents (#417)
+
 ## 1.25.0 - 2022-06-28
 
 - feat(feature-flags): Enable experience continuity (#404)
