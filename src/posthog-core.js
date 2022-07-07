@@ -447,8 +447,12 @@ PostHogLib.prototype._send_request = function (url, data, options, callback, err
                 retriesPerformedSoFar: 0,
                 retryQueue: this._retryQueue,
                 onXHRError: (req) => {
-                    debugger
-                    errorCallback?.(req)
+                    if (errorCallback) {
+                        const error = Error('XHRError')
+                        error.status = 0
+                        error.req = req
+                        errorCallback(error)
+                    }
                     this.get_config('on_xhr_error')?.(req)
                 },
             })

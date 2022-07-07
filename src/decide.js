@@ -44,7 +44,6 @@ export class Decide {
         this.instance.toolbar.afterDecideResponse(response)
         this.instance.sessionRecording.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
-
         this.instance.featureFlags.receivedFeatureFlags(response)
 
         if (response['supportedCompression']) {
