@@ -29,7 +29,7 @@ describe('featureflags', () => {
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: given._send_request,
+        _send_request: jest.fn().mockImplementation((...args) => given._send_request(...args)),
     }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
@@ -118,6 +118,9 @@ describe('featureflags', () => {
             given('_send_request', () =>
                 jest.fn().mockImplementation((_, __, ___, ____, errorCallback) => errorCallback(Error('message')))
             )
+            given('config', () => ({
+                token: 'random fake token',
+            }))
 
             it('onFeatureFlagsError should be called if reloading feature flags errors', () => {
                 var called = false
