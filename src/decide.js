@@ -5,6 +5,7 @@ export class Decide {
     constructor(instance) {
         this.instance = instance
         this.instance.decideEndpointWasHit = false
+        this.instance.decideEndpointErrored = false
     }
 
     call() {
@@ -22,7 +23,8 @@ export class Decide {
             `${this.instance.get_config('api_host')}/decide/?v=2`,
             { data: encoded_data, verbose: true },
             { method: 'POST' },
-            (response) => this.parseDecideResponse(response)
+            (response) => this.parseDecideResponse(response),
+            (error) => this.parseDecideError(error)
         )
     }
 
@@ -32,11 +34,10 @@ export class Decide {
             return
         }
         this.instance.decideEndpointWasHit = true
-        if (!(document && document.body)) {
+        this.instance.decideEndpointErrored = false
+        if (!document?.body) {
             console.log('document not ready yet, trying again in 500 milliseconds...')
-            setTimeout(() => {
-                this.parseDecideResponse(response)
-            }, 500)
+            setTimeout(() => this.parseDecideResponse(response), 500)
             return
         }
 
@@ -55,5 +56,14 @@ export class Decide {
         } else {
             this.instance['compression'] = {}
         }
+    }
+
+    parseDecideError(error) {
+        if (!document?.body) {
+            console.log('document not ready yet, trying again in 500 milliseconds...')
+            setTimeout(() => this.parseDecideError(error), 500)
+            return
+        }
+        this.instance.featureFlags.receivedFeatureFlagsError(error)
     }
 }

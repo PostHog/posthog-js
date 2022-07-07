@@ -4,6 +4,9 @@ jest.spyOn(global, 'setTimeout')
 
 describe('featureflags', () => {
     given('decideEndpointWasHit', () => false)
+    given('_send_request', () =>
+        jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse))
+    )
     given('instance', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         get_distinct_id: () => 'blah id',
@@ -26,7 +29,7 @@ describe('featureflags', () => {
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+        _send_request: given._send_request,
     }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
@@ -94,6 +97,37 @@ describe('featureflags', () => {
         expect(called).toEqual(true)
 
         called = false
+    })
+
+    describe('onFeatureFlagsError', () => {
+        it('onFeatureFlagsError should not be called immediately if feature flags not loaded', () => {
+            var called = false
+            given.featureFlags.onFeatureFlagsError(() => (called = true))
+            expect(called).toEqual(false)
+        })
+
+        it('onFeatureFlagsError callback should be called immediately if feature flags were loaded', () => {
+            given.featureFlags.instance.decideEndpointErrored = true
+            var called = false
+            given.featureFlags.onFeatureFlagsError(() => (called = true))
+            expect(called).toEqual(true)
+            called = false
+        })
+
+        describe('errors', () => {
+            given('_send_request', () =>
+                jest.fn().mockImplementation((_, __, ___, ____, errorCallback) => errorCallback(Error('message')))
+            )
+
+            it('onFeatureFlagsError should be called if reloading feature flags errors', () => {
+                var called = false
+                given.featureFlags.onFeatureFlagsError(() => (called = true))
+                expect(called).toEqual(false)
+                given.featureFlags.reloadFeatureFlags()
+                jest.runAllTimers()
+                expect(called).toEqual(true)
+            })
+        })
     })
 
     describe('reloadFeatureFlags', () => {

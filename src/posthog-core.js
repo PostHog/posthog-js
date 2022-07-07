@@ -396,7 +396,7 @@ PostHogLib.prototype.__compress_and_send_json_request = function (url, jsonData,
     this._send_request(url, data, _options, callback)
 }
 
-PostHogLib.prototype._send_request = function (url, data, options, callback) {
+PostHogLib.prototype._send_request = function (url, data, options, callback, errorCallback) {
     if (ENQUEUE_REQUESTS) {
         this.__request_queue.push(arguments)
         return
@@ -433,6 +433,7 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
             if (this.get_config('debug')) {
                 console.error(e)
             }
+            errorCallback?.(e)
         }
     } else if (USE_XHR) {
         try {
@@ -445,10 +446,15 @@ PostHogLib.prototype._send_request = function (url, data, options, callback) {
                 callback,
                 retriesPerformedSoFar: 0,
                 retryQueue: this._retryQueue,
-                onXHRError: this.get_config('on_xhr_error'),
+                onXHRError: (req) => {
+                    debugger
+                    errorCallback?.(req)
+                    this.get_config('on_xhr_error')?.(req)
+                },
             })
         } catch (e) {
             console.error(e)
+            errorCallback?.(e)
         }
     } else {
         var script = document.createElement('script')
@@ -794,6 +800,19 @@ PostHogLib.prototype.reloadFeatureFlags = function () {
  */
 PostHogLib.prototype.onFeatureFlags = function (callback) {
     this.featureFlags.onFeatureFlags(callback)
+}
+
+/*
+ * Register an event listener that runs when we had an error loading feature flags.
+ *
+ * ### Usage:
+ *
+ *     posthog.onFeatureFlagsError(function(error) { // do something })
+ *
+ * @param {Function} [callback] The callback function will be called if feature flags fail to load.
+ */
+PostHogLib.prototype.onFeatureFlagsError = function (error) {
+    this.featureFlags.onFeatureFlagsError(error)
 }
 
 /**

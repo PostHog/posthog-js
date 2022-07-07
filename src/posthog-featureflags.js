@@ -38,6 +38,8 @@ export class PostHogFeatureFlags {
         this._override_warning = false
         this.flagCallReported = {}
         this.featureFlagEventHandlers = []
+        this.featureFlagErrorHandlers = []
+        this.featureFlagError = null
 
         this.reloadFeatureFlagsQueued = false
         this.reloadFeatureFlagsInAction = false
@@ -138,7 +140,8 @@ export class PostHogFeatureFlags {
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
                 this._startReloadTimer()
-            })
+            }),
+            (error) => this.receivedFeatureFlagsError(error)
         )
     }
 
@@ -189,9 +192,15 @@ export class PostHogFeatureFlags {
 
     receivedFeatureFlags(response) {
         parseFeatureFlagDecideResponse(response, this.instance.persistence)
+        this.featureFlagError = null
         const flags = this.getFlags()
         const variants = this.getFlagVariants()
         this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
+    }
+
+    receivedFeatureFlagsError(error) {
+        this.featureFlagError = error
+        this.featureFlagErrorHandlers.forEach((handler) => handler(error))
     }
 
     /*
@@ -237,6 +246,23 @@ export class PostHogFeatureFlags {
             const flags = this.getFlags()
             const flagVariants = this.getFlagVariants()
             callback(flags, flagVariants)
+        }
+    }
+    /*
+     * Register an event listener that runs when feature flags can not be loaded.
+     * If we already tried to load, the listener is called immediately in addition to being called on future errors.
+     *
+     * ### Usage:
+     *
+     *     posthog.onFeatureFlagsError(function(error) { // do something })
+     *
+     * @param {Function} [callback] The callback function will be called once the feature flags fail to load.
+     */
+
+    onFeatureFlagsError(callback) {
+        this.featureFlagErrorHandlers.push(callback)
+        if (this.instance.decideEndpointErrored) {
+            callback(this.featureFlagError)
         }
     }
 }
