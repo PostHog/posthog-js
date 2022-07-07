@@ -241,21 +241,4 @@ export class PostHogFeatureFlags {
             callback(flags, flagVariants)
         }
     }
-    /*
-     * Register an event listener that runs when feature flags can not be loaded.
-     * If we already tried to load, the listener is called immediately in addition to being called on future errors.
-     *
-     * ### Usage:
-     *
-     *     posthog.onFeatureFlagsError(function(error) { // do something })
-     *
-     * @param {Function} [callback] The callback function will be called once the feature flags fail to load.
-     */
-
-    onFeatureFlagsError(callback) {
-        this.featureFlagErrorHandlers.push(callback)
-        if (this.instance.decideEndpointErrored) {
-            callback(this.featureFlagError)
-        }
-    }
 }

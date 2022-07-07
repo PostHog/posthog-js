@@ -4,9 +4,6 @@ jest.spyOn(global, 'setTimeout')
 
 describe('featureflags', () => {
     given('decideEndpointWasHit', () => false)
-    given('_send_request', () =>
-        jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse))
-    )
     given('instance', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         get_distinct_id: () => 'blah id',
@@ -29,7 +26,7 @@ describe('featureflags', () => {
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest.fn().mockImplementation((...args) => given._send_request(...args)),
+        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
     }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))

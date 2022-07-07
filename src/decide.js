@@ -5,7 +5,6 @@ export class Decide {
     constructor(instance) {
         this.instance = instance
         this.instance.decideEndpointWasHit = false
-        this.instance.decideEndpointErrored = false
     }
 
     call() {
@@ -34,7 +33,6 @@ export class Decide {
             return
         }
         this.instance.decideEndpointWasHit = true
-        this.instance.decideEndpointErrored = false
         if (!document?.body) {
             console.log('document not ready yet, trying again in 500 milliseconds...')
             setTimeout(() => this.parseDecideResponse(response), 500)
