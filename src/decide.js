@@ -63,6 +63,6 @@ export class Decide {
             setTimeout(() => this.parseDecideError(error), 500)
             return
         }
-        this.instance.featureFlags.receivedFeatureFlagsError(error)
+        this.instance.receivedDecideError(error)
     }
 }

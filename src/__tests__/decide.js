@@ -15,6 +15,7 @@ describe('Decide', () => {
         _prepare_callback: jest.fn().mockImplementation((callback) => callback),
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
         _send_request: given._send_request,
+        receivedDecideError: jest.fn(),
         toolbar: {
             maybeLoadEditor: jest.fn(),
             afterDecideResponse: jest.fn(),
@@ -24,7 +25,6 @@ describe('Decide', () => {
         },
         featureFlags: {
             receivedFeatureFlags: jest.fn(),
-            receivedFeatureFlagsError: jest.fn(),
         },
         getGroups: () => ({ organization: '5' }),
     }))
@@ -82,7 +82,7 @@ describe('Decide', () => {
             given.subject()
 
             expect(given.posthog._send_request).toHaveBeenCalled()
-            expect(given.posthog.featureFlags.receivedFeatureFlagsError).toHaveBeenCalled()
+            expect(given.posthog.receivedDecideError).toHaveBeenCalled()
         })
     })
 

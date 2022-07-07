@@ -99,40 +99,6 @@ describe('featureflags', () => {
         called = false
     })
 
-    describe('onFeatureFlagsError', () => {
-        it('onFeatureFlagsError should not be called immediately if feature flags not loaded', () => {
-            var called = false
-            given.featureFlags.onFeatureFlagsError(() => (called = true))
-            expect(called).toEqual(false)
-        })
-
-        it('onFeatureFlagsError callback should be called immediately if feature flags were loaded', () => {
-            given.featureFlags.instance.decideEndpointErrored = true
-            var called = false
-            given.featureFlags.onFeatureFlagsError(() => (called = true))
-            expect(called).toEqual(true)
-            called = false
-        })
-
-        describe('errors', () => {
-            given('_send_request', () =>
-                jest.fn().mockImplementation((_, __, ___, ____, errorCallback) => errorCallback(Error('message')))
-            )
-            given('config', () => ({
-                token: 'random fake token',
-            }))
-
-            it('onFeatureFlagsError should be called if reloading feature flags errors', () => {
-                var called = false
-                given.featureFlags.onFeatureFlagsError(() => (called = true))
-                expect(called).toEqual(false)
-                given.featureFlags.reloadFeatureFlags()
-                jest.runAllTimers()
-                expect(called).toEqual(true)
-            })
-        })
-    })
-
     describe('reloadFeatureFlags', () => {
         given('decideResponse', () => ({
             featureFlags: {

@@ -173,6 +173,8 @@ var create_mplib = function (token, config, name) {
         }
     }
 
+    instance.decideErrorHandlers = []
+
     // if any instance on the page has debug = true, we set the
     // global debug to be true
     Config.DEBUG = Config.DEBUG || instance.get_config('debug')
@@ -815,8 +817,8 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
  *
  * @param {Function} [callback] The callback function will be called if feature flags fail to load.
  */
-PostHogLib.prototype.onFeatureFlagsError = function (error) {
-    this.featureFlags.onFeatureFlagsError(error)
+PostHogLib.prototype.onDecideError = function (error) {
+    this.decideErrorHandlers.forEach((handler) => handler(error))
 }
 
 /**

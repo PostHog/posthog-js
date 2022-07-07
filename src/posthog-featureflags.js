@@ -38,8 +38,6 @@ export class PostHogFeatureFlags {
         this._override_warning = false
         this.flagCallReported = {}
         this.featureFlagEventHandlers = []
-        this.featureFlagErrorHandlers = []
-        this.featureFlagError = null
 
         this.reloadFeatureFlagsQueued = false
         this.reloadFeatureFlagsInAction = false
@@ -141,7 +139,7 @@ export class PostHogFeatureFlags {
                 this.setReloadingPaused(false)
                 this._startReloadTimer()
             }),
-            (error) => this.receivedFeatureFlagsError(error)
+            (error) => this.instance.receivedDecideError(error)
         )
     }
 
@@ -196,11 +194,6 @@ export class PostHogFeatureFlags {
         const flags = this.getFlags()
         const variants = this.getFlagVariants()
         this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
-    }
-
-    receivedFeatureFlagsError(error) {
-        this.featureFlagError = error
-        this.featureFlagErrorHandlers.forEach((handler) => handler(error))
     }
 
     /*
