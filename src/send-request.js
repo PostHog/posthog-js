@@ -117,11 +117,7 @@ export const xhr = ({
                 }
 
                 if (callback) {
-                    if (options.verbose) {
-                        callback({ status: 0, error: error })
-                    } else {
-                        callback(0)
-                    }
+                    callback({ status: 0 })
                 }
             }
         }
