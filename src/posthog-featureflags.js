@@ -190,7 +190,6 @@ export class PostHogFeatureFlags {
 
     receivedFeatureFlags(response) {
         parseFeatureFlagDecideResponse(response, this.instance.persistence)
-        this.featureFlagError = null
         const flags = this.getFlags()
         const variants = this.getFlagVariants()
         this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))

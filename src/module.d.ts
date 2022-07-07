@@ -517,6 +517,17 @@ declare class posthog {
      */
     static reloadFeatureFlags(): void
 
+    /*
+     * Register an event listener that runs when we had an error loading /decide, probably due to ad blockers.
+     *
+     * ### Usage:
+     *
+     *     posthog.onDecideError(function(error) { // do something })
+     *
+     * @param {Function} [callback] The callback function will be called if the `/decide` endpoint fails to load.
+     */
+    static onDecideError(callback: (error: any) => void): void
+
     /**
      * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
      *

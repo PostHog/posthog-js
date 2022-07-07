@@ -146,6 +146,14 @@ var create_mplib = function (token, config, name) {
 
     instance._init(token, config, name)
 
+    instance.decideEndpointWasHit = false
+    instance.decideError = null
+    instance.decideErrorHandlers = []
+    instance.receivedDecideError = (error) => {
+        instance.decideError = error
+        instance.decideErrorHandlers.forEach((handler) => handler(error))
+    }
+
     instance['people'] = new PostHogPeople()
     instance['people']._init(instance)
 
@@ -172,8 +180,6 @@ var create_mplib = function (token, config, name) {
             autocapture.init(instance)
         }
     }
-
-    instance.decideErrorHandlers = []
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true
@@ -809,16 +815,19 @@ PostHogLib.prototype.onFeatureFlags = function (callback) {
 }
 
 /*
- * Register an event listener that runs when we had an error loading feature flags.
+ * Register an event listener that runs when we had an error loading /decide, probably due to ad blockers.
  *
  * ### Usage:
  *
- *     posthog.onFeatureFlagsError(function(error) { // do something })
+ *     posthog.onDecideError(function(error) { // do something })
  *
- * @param {Function} [callback] The callback function will be called if feature flags fail to load.
+ * @param {Function} [callback] The callback function will be called if the `/decide` endpoint fails to load.
  */
-PostHogLib.prototype.onDecideError = function (error) {
-    this.decideErrorHandlers.forEach((handler) => handler(error))
+PostHogLib.prototype.onDecideError = function (callback) {
+    this.decideErrorHandlers.push(callback)
+    if (this.decideError) {
+        callback(this.decideError)
+    }
 }
 
 /**
