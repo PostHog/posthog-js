@@ -51,7 +51,7 @@ const USE_XHR = window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest
 // should only be true for Opera<12
 let ENQUEUE_REQUESTS = !USE_XHR && userAgent.indexOf('MSIE') === -1 && userAgent.indexOf('Mozilla') === -1
 
-const defaultConfig = () => ({
+export const defaultConfig = () => ({
     api_host: 'https://app.posthog.com',
     api_method: 'POST',
     api_transport: 'XHR',
@@ -105,6 +105,7 @@ const defaultConfig = () => ({
     mask_all_text: false,
     advanced_disable_decide: false,
     advanced_disable_toolbar_metrics: false,
+    send_anon_distinct_id: true,
     on_xhr_error: (req) => {
         const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
         console.error(error)
@@ -873,10 +874,12 @@ PostHogLib.prototype.identify = function (new_distinct_id, userPropertiesToSet, 
     ) {
         this.capture(
             '$identify',
-            {
-                distinct_id: new_distinct_id,
-                $anon_distinct_id: previous_distinct_id,
-            },
+            this.get_config('send_anon_distinct_id')
+                ? {
+                      distinct_id: new_distinct_id,
+                      $anon_distinct_id: previous_distinct_id,
+                  }
+                : { distinct_id: new_distinct_id },
             { $set: userPropertiesToSet || {} },
             { $set_once: userPropertiesToSetOnce || {} }
         )

@@ -623,6 +623,7 @@ declare namespace posthog {
         mask_all_text?: boolean
         advanced_disable_decide?: boolean
         advanced_disable_toolbar_metrics?: boolean
+        send_anon_distinct_id?: boolean
         get_device_id?: (uuid: string) => string
         _capture_performance?: boolean
     }

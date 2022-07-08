@@ -1,4 +1,4 @@
-import { init_as_module, PostHogLib } from '../posthog-core'
+import { defaultConfig, init_as_module, PostHogLib } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
 import { _ } from '../utils'
@@ -23,6 +23,7 @@ describe('identify()', () => {
 
     given('overrides', () => ({
         get_distinct_id: () => given.oldIdentity,
+        get_config: (key) => given.config?.[key] ?? defaultConfig()[key],
         capture: jest.fn(),
         register: jest.fn(),
         register_once: jest.fn(),
@@ -61,6 +62,22 @@ describe('identify()', () => {
             {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
+            },
+            { $set: {} },
+            { $set_once: {} }
+        )
+        expect(given.overrides.people.set).not.toHaveBeenCalled()
+        expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+    })
+
+    it('calls capture and respects send_anon_distinct_id: false', () => {
+        given('config', () => ({ send_anon_distinct_id: false }))
+        given.subject()
+
+        expect(given.overrides.capture).toHaveBeenCalledWith(
+            '$identify',
+            {
+                distinct_id: 'a-new-id',
             },
             { $set: {} },
             { $set_once: {} }
