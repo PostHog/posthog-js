@@ -1,3 +1,8 @@
+## 1.25.2 - 2022-07-12
+
+- feat: Add msclkid param to campaign keywords (#424)
+- chore(deps): Update @sentry/types for 7.2.0 (#412)
+
 ## 1.25.1 - 2022-06-29
 
 - fix: Add facebook crawlers to blocked user agents (#417)
