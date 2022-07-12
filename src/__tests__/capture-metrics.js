@@ -1,7 +1,5 @@
 import { CaptureMetrics } from '../capture-metrics'
 
-import { _ } from '../utils'
-
 jest.mock('../utils')
 
 describe('CaptureMetrics()', () => {

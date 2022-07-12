@@ -1,5 +1,4 @@
 import { logger } from './utils'
-import { _ } from './utils'
 
 var DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
 
@@ -158,7 +157,7 @@ export const localPlusCookieStore = {
                     cookieStore.set(name, { distinct_id: extend['distinct_id'] })
                 }
             } catch (err) {}
-            const value = _.extend(extend, JSON.parse(localStore.get(name) || '{}'))
+            const value = _extend(extend, JSON.parse(localStore.get(name) || '{}'))
             localStore.set(name, value)
             return value
         } catch (err) {

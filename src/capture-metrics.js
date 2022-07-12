@@ -1,5 +1,3 @@
-import { _ } from './utils'
-
 export class CaptureMetrics {
     constructor(enabled) {
         this.enabled = enabled

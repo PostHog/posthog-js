@@ -1,5 +1,4 @@
 import { loadScript } from '../autocapture-utils'
-import { _ } from '../utils'
 import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
@@ -89,7 +88,7 @@ export class SessionRecording {
             this.captureStarted = true
             loadScript(
                 this.instance.get_config('api_host') + '/static/recorder.js?v=' + Config.LIB_VERSION,
-                _.bind(this._onScriptLoaded, this)
+                _bind(this._onScriptLoaded, this)
             )
         }
     }

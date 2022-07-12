@@ -3,14 +3,21 @@ module.exports = {
         browser: true,
         es6: true,
     },
-    parser: 'babel-eslint',
+    parser: '@typescript-eslint/parser',
     parserOptions: {
         ecmaVersion: 2018,
         sourceType: 'module',
     },
-    plugins: ['prettier'],
+    plugins: ['prettier', '@typescript-eslint', 'eslint-plugin-react', 'eslint-plugin-react-hooks'],
+    extends: ['plugin:@typescript-eslint/recommended', 'plugin:react/recommended', 'plugin:react-hooks/recommended'],
     rules: {
         'prettier/prettier': 'error',
-        'no-unused-vars': ['error', { ignoreRestSiblings: true, varsIgnorePattern: '^_.*' }],
+        'no-unused-vars': ['error', { ignoreRestSiblings: true }],
+        '@typescript-eslint/no-empty-function': 'off',
+    },
+    settings: {
+        react: {
+            version: '17.0',
+        },
     },
 }

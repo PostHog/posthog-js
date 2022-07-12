@@ -1,6 +1,5 @@
 import { LZString } from './lz-string'
 import { strToU8, gzipSync } from 'fflate'
-import { _ } from './utils'
 
 export function decideCompression(compressionSupport) {
     if (compressionSupport['gzip-js']) {
@@ -22,6 +21,6 @@ export function compressData(compression, jsonData, options) {
             { ...options, blob: true, urlQueryArgs: { compression: 'gzip-js' } },
         ]
     } else {
-        return [{ data: _.base64Encode(jsonData) }, options]
+        return [{ data: _base64Encode(jsonData) }, options]
     }
 }

@@ -1,5 +1,4 @@
 import { RequestQueueScaffold } from './base-request-queue'
-import { _ } from './utils'
 
 export class RequestQueue extends RequestQueueScaffold {
     constructor(captureMetrics, handlePollRequest, pollInterval = 3000) {
@@ -26,7 +25,7 @@ export class RequestQueue extends RequestQueueScaffold {
                 const requests = this.formatQueue()
                 for (let key in requests) {
                     let { url, data, options } = requests[key]
-                    _.each(data, (_, dataKey) => {
+                    _each(data, (_, dataKey) => {
                         data[dataKey]['offset'] = Math.abs(data[dataKey]['timestamp'] - this.getTime())
                         delete data[dataKey]['timestamp']
                     })
@@ -85,7 +84,7 @@ export class RequestQueue extends RequestQueueScaffold {
 
     formatQueue() {
         const requests = {}
-        _.each(this._event_queue, (request) => {
+        _each(this._event_queue, (request) => {
             const { url, data, options } = request
             const key = (options ? options._batchKey : null) || url
             if (requests[key] === undefined) {

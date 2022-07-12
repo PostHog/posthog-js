@@ -1,6 +1,5 @@
 import { SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
-import { _ } from './utils'
 
 const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
@@ -106,11 +105,11 @@ export class SessionIdManager {
             (!readOnly && Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD) ||
             sessionPastMaximumLength
         ) {
-            sessionId = _.UUID()
-            windowId = _.UUID()
+            sessionId = _UUID()
+            windowId = _UUID()
             startTimestamp = timestamp
         } else if (!windowId) {
-            windowId = _.UUID()
+            windowId = _UUID()
         }
 
         const newTimestamp = lastTimestamp === 0 || !readOnly || sessionPastMaximumLength ? timestamp : lastTimestamp

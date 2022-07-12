@@ -1,7 +1,5 @@
 /* eslint camelcase: "off" */
 
-import { _ } from './utils'
-
 /** @const */ var SET_ACTION = '$set'
 /** @const */ var SET_ONCE_ACTION = '$set_once'
 
@@ -20,8 +18,8 @@ var apiActions = {
         var data = {}
         var props = {}
 
-        if (_.isObject(prop)) {
-            _.each(
+        if (_isObject(prop)) {
+            _each(
                 prop,
                 function (v, k) {
                     if (!this._is_reserved_property(k)) {

@@ -1,5 +1,4 @@
 import { loadScript } from '../autocapture-utils'
-import { _ } from '../utils'
 
 export class Toolbar {
     constructor(instance) {
@@ -42,7 +41,7 @@ export class Toolbar {
                 localStorage = window.localStorage
             }
 
-            const stateHash = _.getHashParam(location.hash, '__posthog') || _.getHashParam(location.hash, 'state')
+            const stateHash = _getHashParam(location.hash, '__posthog') || _getHashParam(location.hash, 'state')
             const state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
             const parseFromUrl = state && (state['action'] === 'mpeditor' || state['action'] === 'ph_authorize')
             let editorParams
@@ -101,7 +100,7 @@ export class Toolbar {
                 window['ph_load_editor'](editorParams, this.instance)
             })
             // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
-            _.register_event(window, 'turbolinks:load', () => {
+            _register_event(window, 'turbolinks:load', () => {
                 window['_postHogToolbarLoaded'] = false
                 this._loadEditor(editorParams)
             })

@@ -1,8 +1,11 @@
 import { autocapture } from './autocapture'
-import { _ } from './utils'
+import { _base64Encode } from './utils'
+import { PostHogLib } from './posthog-core'
 
 export class Decide {
-    constructor(instance) {
+    instance: PostHogLib
+
+    constructor(instance: PostHogLib) {
         this.instance = instance
         this.instance.decideEndpointWasHit = false
     }
@@ -17,7 +20,7 @@ export class Decide {
             groups: this.instance.getGroups(),
         })
 
-        const encoded_data = _.base64Encode(json_data)
+        const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
             `${this.instance.get_config('api_host')}/decide/?v=2`,
             { data: encoded_data, verbose: true },

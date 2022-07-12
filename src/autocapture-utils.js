@@ -1,5 +1,3 @@
-import { _ } from './utils'
-
 /*
  * Get the className of an element, accounting for edge cases where element.className is an object
  * @param {Element} el - element to get the className of
@@ -30,9 +28,9 @@ export function getSafeText(el) {
     var elText = ''
 
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
-        _.each(el.childNodes, function (child) {
+        _each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += _.trim(child.textContent)
+                elText += _trim(child.textContent)
                     // scrub potentially sensitive values
                     .split(/(\s+)/)
                     .filter(shouldCaptureValue)
@@ -46,7 +44,7 @@ export function getSafeText(el) {
         })
     }
 
-    return _.trim(elText)
+    return _trim(elText)
 }
 
 /*
@@ -154,12 +152,12 @@ export function shouldCaptureDomEvent(el, event) {
 export function shouldCaptureElement(el) {
     for (var curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode) {
         var classes = getClassName(curEl).split(' ')
-        if (_.includes(classes, 'ph-sensitive') || _.includes(classes, 'ph-no-capture')) {
+        if (_includes(classes, 'ph-sensitive') || _includes(classes, 'ph-no-capture')) {
             return false
         }
     }
 
-    if (_.includes(getClassName(el).split(' '), 'ph-include')) {
+    if (_includes(getClassName(el).split(' '), 'ph-include')) {
         return true
     }
 
@@ -179,7 +177,8 @@ export function shouldCaptureElement(el) {
     var name = el.name || el.id || ''
     if (typeof name === 'string') {
         // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
-        var sensitiveNameRegex = /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
+        var sensitiveNameRegex =
+            /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
         if (sensitiveNameRegex.test(name.replace(/[^a-zA-Z0-9]/g, ''))) {
             return false
         }
@@ -215,16 +214,17 @@ export function isSensitiveElement(el) {
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureValue(value) {
-    if (value === null || _.isUndefined(value)) {
+    if (value === null || _isUndefined(value)) {
         return false
     }
 
     if (typeof value === 'string') {
-        value = _.trim(value)
+        value = _trim(value)
 
         // check to see if input value looks like a credit card number
         // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
-        var ccRegex = /^(?:(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11}))$/
+        var ccRegex =
+            /^(?:(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11}))$/
         if (ccRegex.test((value || '').replace(/[- ]/g, ''))) {
             return false
         }

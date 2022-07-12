@@ -1,4 +1,4 @@
-import { _, logger } from './utils'
+import { logger } from './utils'
 import {
     getClassName,
     getSafeText,
@@ -43,7 +43,7 @@ var autocapture = {
                 return c !== ''
             })
 
-        _.each(elem.attributes, function (attr) {
+        _each(elem.attributes, function (attr) {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
 
@@ -77,7 +77,7 @@ var autocapture = {
 
     _extractCustomPropertyValue: function (customProperty) {
         var propValues = []
-        _.each(document.querySelectorAll(customProperty['css_selector']), function (matchedElem) {
+        _each(document.querySelectorAll(customProperty['css_selector']), function (matchedElem) {
             var value
 
             if (['input', 'select'].indexOf(matchedElem.tagName.toLowerCase()) > -1) {
@@ -95,17 +95,17 @@ var autocapture = {
 
     _getCustomProperties: function (targetElementList) {
         var props = {}
-        _.each(
+        _each(
             this._customProperties,
             function (customProperty) {
-                _.each(
+                _each(
                     customProperty['event_selectors'],
                     function (eventSelector) {
                         var eventElements = document.querySelectorAll(eventSelector)
-                        _.each(
+                        _each(
                             eventElements,
                             function (eventElement) {
-                                if (_.includes(targetElementList, eventElement) && shouldCaptureElement(eventElement)) {
+                                if (_includes(targetElementList, eventElement) && shouldCaptureElement(eventElement)) {
                                     props[customProperty['name']] = this._extractCustomPropertyValue(customProperty)
                                 }
                             },
@@ -160,7 +160,7 @@ var autocapture = {
             var elementsJson = []
             var href,
                 explicitNoCapture = false
-            _.each(
+            _each(
                 targetElementList,
                 function (el) {
                     var shouldCaptureEl = shouldCaptureElement(el)
@@ -174,7 +174,7 @@ var autocapture = {
 
                     // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
                     var classes = getClassName(el).split(' ')
-                    if (_.includes(classes, 'ph-no-capture')) {
+                    if (_includes(classes, 'ph-no-capture')) {
                         explicitNoCapture = true
                     }
 
@@ -201,7 +201,7 @@ var autocapture = {
                 return false
             }
 
-            var props = _.extend(
+            var props = _extend(
                 this._getDefaultProperties(e.type),
                 {
                     $elements: elementsJson,
@@ -221,13 +221,13 @@ var autocapture = {
     },
 
     _addDomEventHandlers: function (instance) {
-        var handler = _.bind(function (e) {
+        var handler = _bind(function (e) {
             e = e || window.event
             this._captureEvent(e, instance)
         }, this)
-        _.register_event(document, 'submit', handler, false, true)
-        _.register_event(document, 'change', handler, false, true)
-        _.register_event(document, 'click', handler, false, true)
+        _register_event(document, 'submit', handler, false, true)
+        _register_event(document, 'change', handler, false, true)
+        _register_event(document, 'click', handler, false, true)
     },
 
     _customProperties: {},
@@ -265,8 +265,8 @@ var autocapture = {
     // deterministically if CE is enabled for this project by modding the char
     // value of the project token.
     enabledForProject: function (token, numBuckets, numEnabledBuckets) {
-        numBuckets = !_.isUndefined(numBuckets) ? numBuckets : 10
-        numEnabledBuckets = !_.isUndefined(numEnabledBuckets) ? numEnabledBuckets : 10
+        numBuckets = !_isUndefined(numBuckets) ? numBuckets : 10
+        numEnabledBuckets = !_isUndefined(numEnabledBuckets) ? numEnabledBuckets : 10
         var charCodeSum = 0
         for (var i = 0; i < token.length; i++) {
             charCodeSum += token.charCodeAt(i)
@@ -275,11 +275,11 @@ var autocapture = {
     },
 
     isBrowserSupported: function () {
-        return _.isFunction(document.querySelectorAll)
+        return _isFunction(document.querySelectorAll)
     },
 }
 
-_.bind_instance_methods(autocapture)
-_.safewrap_instance_methods(autocapture)
+_bind_instance_methods(autocapture)
+_safewrap_instance_methods(autocapture)
 
 export { autocapture }

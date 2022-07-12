@@ -1,5 +1,3 @@
-import { _ } from './utils'
-
 export const parseFeatureFlagDecideResponse = (response, persistence) => {
     const flags = response['featureFlags']
     if (flags) {
@@ -54,7 +52,7 @@ export class PostHogFeatureFlags {
             return enabledFlags || {}
         }
 
-        const finalFlags = _.extend({}, enabledFlags)
+        const finalFlags = _extend({}, enabledFlags)
         const overriddenKeys = Object.keys(overriddenFlags)
         for (let i = 0; i < overriddenKeys.length; i++) {
             if (overriddenFlags[overriddenKeys[i]] === false) {
@@ -123,7 +121,7 @@ export class PostHogFeatureFlags {
             $anon_distinct_id: this.$anon_distinct_id,
         })
 
-        const encoded_data = _.base64Encode(json_data)
+        const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
             this.instance.get_config('api_host') + '/decide/?v=2',
             { data: encoded_data },

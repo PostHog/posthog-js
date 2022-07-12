@@ -13,8 +13,9 @@
         "build-module": "rollup -i src/loader-module.js -f cjs -o dist/module.js -c rollup.config.js",
         "build-es-module": "rollup -i src/loader-module.js -f es -o dist/es.js -c rollup.config.js",
         "build-react": "cd react; yarn; yarn build;",
-        "process-types": "mkdir -p dist; eslint src --ext .ts -c .eslintrc.ts.js --fix && tsc && cp -f src/*.d.ts dist/",
-        "lint": "eslint src --fix",
+        "process-types": "mkdir -p dist; eslint src --ext .ts --fix && tsc && cp -f src/*.d.ts dist/",
+        "lint": "eslint src/**/*.{ts,tsx}",
+        "prettier": "prettier --write src/**/*",
         "prepublishOnly": "yarn lint && yarn test && yarn build && yarn test-react",
         "test": "jest src",
         "test-react": "cd react; yarn test",
@@ -66,15 +67,10 @@
         "testcafe-browser-provider-browserstack": "^1.14.0",
         "typescript": "^3.9.6"
     },
-    "husky": {
-        "hooks": {
-            "pre-commit": "lint-staged"
-        }
-    },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",
         "*.{ts,tsx}": [
-            "eslint -c .eslintrc.ts.js --fix",
+            "eslint --fix",
             "tsc --noEmit --esModuleInterop --jsx react"
         ]
     },

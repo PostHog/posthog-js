@@ -11,7 +11,7 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { _, window } from './utils'
+import { window } from './utils'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 
 /**
@@ -194,14 +194,14 @@ function _hasDoNotTrackFlagOn(options) {
         var win = (options && options.window) || window
         var nav = win['navigator'] || {}
         var hasDntOn = false
-        _.each(
+        _each(
             [
                 nav['doNotTrack'], // standard
                 nav['msDoNotTrack'],
                 win['doNotTrack'],
             ],
             function (dntValue) {
-                if (_.includes([true, 1, '1', 'yes'], dntValue)) {
+                if (_includes([true, 1, '1', 'yes'], dntValue)) {
                     hasDntOn = true
                 }
             }
@@ -227,7 +227,7 @@ function _hasDoNotTrackFlagOn(options) {
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
 function _optInOut(optValue, token, options) {
-    if (!_.isString(token) || !token.length) {
+    if (!_isString(token) || !token.length) {
         console.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
         return
     }
@@ -237,7 +237,7 @@ function _optInOut(optValue, token, options) {
     _getStorage(options).set(
         _getStorageKey(token, options),
         optValue ? 1 : 0,
-        _.isNumber(options.cookieExpiration) ? options.cookieExpiration : null,
+        _isNumber(options.cookieExpiration) ? options.cookieExpiration : null,
         !!options.crossSubdomainCookie,
         !!options.secureCookie,
         !!options.crossSiteCookie,

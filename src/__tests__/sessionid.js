@@ -1,6 +1,5 @@
 import { SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../posthog-persistence'
-import { _ } from '../utils'
 import { sessionStore } from '../storage'
 
 jest.mock('../utils')
@@ -26,7 +25,7 @@ describe('Session ID manager', () => {
     given('now', () => given.timestamp + 1000)
 
     beforeEach(() => {
-        _.UUID.mockReturnValue('newUUID')
+        _UUID.mockReturnValue('newUUID')
         sessionStore.is_supported.mockReturnValue(true)
         const mockDate = new Date(given.now)
         jest.spyOn(global, 'Date').mockImplementation(() => mockDate)

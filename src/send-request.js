@@ -1,4 +1,4 @@
-import { _, logger } from './utils'
+import { logger } from './utils'
 import Config from './config'
 
 export const addParamsToURL = (url, urlQueryArgs, parameterOptions) => {
@@ -19,7 +19,7 @@ export const addParamsToURL = (url, urlQueryArgs, parameterOptions) => {
     }
 
     const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
-    return url + argSeparator + _.HTTPBuildQuery(args)
+    return url + argSeparator + _HTTPBuildQuery(args)
 }
 
 export const encodePostData = (data, options) => {
@@ -70,7 +70,7 @@ export const xhr = ({
     captureMetrics.incr('_send_request')
     captureMetrics.incr('_send_request_inflight')
 
-    _.each(headers, function (headerValue, headerName) {
+    _each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
 

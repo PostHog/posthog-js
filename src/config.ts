@@ -1,6 +1,6 @@
 import { version } from '../package.json'
 
-var Config = {
+const Config = {
     DEBUG: false,
     LIB_VERSION: version,
 }

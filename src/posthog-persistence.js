@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { _, logger } from './utils'
+import { logger } from './utils'
 import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
 
 /*
@@ -83,13 +83,13 @@ var PostHogPersistence = function (config) {
 PostHogPersistence.prototype.properties = function () {
     var p = {}
     // Filter out reserved properties
-    _.each(this['props'], function (v, k) {
+    _each(this['props'], function (v, k) {
         if (k === ENABLED_FEATURE_FLAGS && typeof v === 'object') {
             var keys = Object.keys(v)
             for (var i = 0; i < keys.length; i++) {
                 p[`$feature/${keys[i]}`] = v[keys[i]]
             }
-        } else if (!_.include(RESERVED_PROPERTIES, k)) {
+        } else if (!_include(RESERVED_PROPERTIES, k)) {
             p[k] = v
         }
     })
@@ -104,7 +104,7 @@ PostHogPersistence.prototype.load = function () {
     var entry = this.storage.parse(this.name)
 
     if (entry) {
-        this['props'] = _.extend({}, entry)
+        this['props'] = _extend({}, entry)
     }
 }
 
@@ -134,13 +134,13 @@ PostHogPersistence.prototype.clear = function () {
  * @param {number=} days
  */
 PostHogPersistence.prototype.register_once = function (props, default_value, days) {
-    if (_.isObject(props)) {
+    if (_isObject(props)) {
         if (typeof default_value === 'undefined') {
             default_value = 'None'
         }
         this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
 
-        _.each(
+        _each(
             props,
             function (val, prop) {
                 if (!this['props'].hasOwnProperty(prop) || this['props'][prop] === default_value) {
@@ -162,10 +162,10 @@ PostHogPersistence.prototype.register_once = function (props, default_value, day
  * @param {number=} days
  */
 PostHogPersistence.prototype.register = function (props, days) {
-    if (_.isObject(props)) {
+    if (_isObject(props)) {
         this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
 
-        _.extend(this['props'], props)
+        _extend(this['props'], props)
 
         this.save()
 
@@ -183,13 +183,13 @@ PostHogPersistence.prototype.unregister = function (prop) {
 
 PostHogPersistence.prototype.update_campaign_params = function () {
     if (!this.campaign_params_saved) {
-        this.register(_.info.campaignParams())
+        this.register(_info.campaignParams())
         this.campaign_params_saved = true
     }
 }
 
 PostHogPersistence.prototype.update_search_keyword = function (referrer) {
-    this.register(_.info.searchInfo(referrer))
+    this.register(_info.searchInfo(referrer))
 }
 
 // EXPORTED METHOD, we test this directly.
@@ -199,19 +199,19 @@ PostHogPersistence.prototype.update_referrer_info = function (referrer) {
     this.register_once(
         {
             $initial_referrer: referrer || '$direct',
-            $initial_referring_domain: _.info.referringDomain(referrer) || '$direct',
+            $initial_referring_domain: _info.referringDomain(referrer) || '$direct',
         },
         ''
     )
     // Register the current referrer but override if it's different, hence register
     this.register({
         $referrer: referrer || this['props']['$referrer'] || '$direct',
-        $referring_domain: _.info.referringDomain(referrer) || this['props']['$referring_domain'] || '$direct',
+        $referring_domain: _info.referringDomain(referrer) || this['props']['$referring_domain'] || '$direct',
     })
 }
 
 PostHogPersistence.prototype.get_referrer_info = function () {
-    return _.strip_empty_properties({
+    return _strip_empty_properties({
         $initial_referrer: this['props']['$initial_referrer'],
         $initial_referring_domain: this['props']['$initial_referring_domain'],
     })
@@ -221,7 +221,7 @@ PostHogPersistence.prototype.get_referrer_info = function () {
 // does not override any properties defined in both
 // returns the passed in object
 PostHogPersistence.prototype.safe_merge = function (props) {
-    _.each(this['props'], function (val, prop) {
+    _each(this['props'], function (val, prop) {
         if (!(prop in props)) {
             props[prop] = val
         }
@@ -276,7 +276,7 @@ PostHogPersistence.prototype.set_event_timer = function (event_name, timestamp) 
 PostHogPersistence.prototype.remove_event_timer = function (event_name) {
     var timers = this['props'][EVENT_TIMERS_KEY] || {}
     var timestamp = timers[event_name]
-    if (!_.isUndefined(timestamp)) {
+    if (!_isUndefined(timestamp)) {
         delete this['props'][EVENT_TIMERS_KEY][event_name]
         this.save()
     }

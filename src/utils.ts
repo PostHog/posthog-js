@@ -1,4 +1,3 @@
-/* eslint camelcase: "off", eqeqeq: "off" */
 import Config from './config'
 
 /*
@@ -23,18 +22,11 @@ const nativeBind = FuncProto.bind,
     nativeIsArray = Array.isArray,
     breaker = {}
 
-var _ = {
-    trim: function (str) {
-        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/Trim#Polyfill
-        return str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
-    },
-}
-
 // Console override
-var logger = {
+const logger = {
     /** @type {function(...*)} */
     log: function () {
-        if (Config.DEBUG && !_.isUndefined(window.console) && window.console) {
+        if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
             // Don't log PostHog debug messages in rrweb
             const log = window.console.log['__rrweb_original__']
                 ? window.console.log['__rrweb_original__']
@@ -43,7 +35,7 @@ var logger = {
             try {
                 log.apply(window.console, arguments)
             } catch (err) {
-                _.each(arguments, function (arg) {
+                _each(arguments, function (arg) {
                     log(arg)
                 })
             }
@@ -51,7 +43,7 @@ var logger = {
     },
     /** @type {function(...*)} */
     error: function () {
-        if (Config.DEBUG && !_.isUndefined(window.console) && window.console) {
+        if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
             var args = ['PostHog error:', ...arguments]
             // Don't log PostHog debug messages in rrweb
             const error = window.console.error['__rrweb_original__']
@@ -60,7 +52,7 @@ var logger = {
             try {
                 error.apply(window.console, args)
             } catch (err) {
-                _.each(args, function (arg) {
+                _each(args, function (arg) {
                     error(arg)
                 })
             }
@@ -68,7 +60,7 @@ var logger = {
     },
     /** @type {function(...*)} */
     critical: function () {
-        if (!_.isUndefined(window.console) && window.console) {
+        if (!_isUndefined(window.console) && window.console) {
             var args = ['PostHog error:', ...arguments]
             // Don't log PostHog debug messages in rrweb
             const error = window.console.error['__rrweb_original__']
@@ -77,7 +69,7 @@ var logger = {
             try {
                 error.apply(window.console, args)
             } catch (err) {
-                _.each(args, function (arg) {
+                _each(args, function (arg) {
                     error(arg)
                 })
             }
@@ -87,12 +79,16 @@ var logger = {
 
 // UNDERSCORE
 // Embed part of the Underscore Library
-_.bind = function (func, context) {
+export const _trim = function (str) {
+    return str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
+}
+
+export const _bind = function (func, context) {
     var args, bound
     if (nativeBind && func.bind === nativeBind) {
         return nativeBind.apply(func, slice.call(arguments, 1))
     }
-    if (!_.isFunction(func)) {
+    if (!_isFunction(func)) {
         throw new TypeError()
     }
     args = slice.call(arguments, 2)
@@ -113,10 +109,10 @@ _.bind = function (func, context) {
     return bound
 }
 
-_.bind_instance_methods = function (obj) {
+export const bind_instance_methods = function (obj) {
     for (var func in obj) {
         if (typeof obj[func] === 'function') {
-            obj[func] = _.bind(obj[func], obj)
+            obj[func] = _bind(obj[func], obj)
         }
     }
 }
@@ -126,7 +122,7 @@ _.bind_instance_methods = function (obj) {
  * @param {function(...*)=} iterator
  * @param {Object=} context
  */
-_.each = function (obj, iterator, context) {
+export const _each = function (obj, iterator, context?) {
     if (obj === null || obj === undefined) {
         return
     }
@@ -149,8 +145,8 @@ _.each = function (obj, iterator, context) {
     }
 }
 
-_.extend = function (obj) {
-    _.each(slice.call(arguments, 1), function (source) {
+export const _extend = function (obj) {
+    _each(slice.call(arguments, 1), function (source) {
         for (var prop in source) {
             if (source[prop] !== void 0) {
                 obj[prop] = source[prop]
@@ -160,7 +156,7 @@ _.extend = function (obj) {
     return obj
 }
 
-_.isArray =
+export const _isArray =
     nativeIsArray ||
     function (obj) {
         return toString.call(obj) === '[object Array]'
@@ -169,7 +165,7 @@ _.isArray =
 // from a comment on http://dbj.org/dbj/?p=286
 // fails on only one very rare and deliberate custom object:
 // var bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
-_.isFunction = function (f) {
+export const _isFunction = function (f) {
     try {
         return /^\s*\bfunction\b/.test(f)
     } catch (x) {
@@ -177,7 +173,7 @@ _.isFunction = function (f) {
     }
 }
 
-_.include = function (obj, target) {
+export const _include = function (obj, target) {
     var found = false
     if (obj === null) {
         return found
@@ -185,7 +181,7 @@ _.include = function (obj, target) {
     if (nativeIndexOf && obj.indexOf === nativeIndexOf) {
         return obj.indexOf(target) != -1
     }
-    _.each(obj, function (value) {
+    _each(obj, function (value) {
         if (found || (found = value === target)) {
             return breaker
         }
@@ -193,17 +189,17 @@ _.include = function (obj, target) {
     return found
 }
 
-_.includes = function (str, needle) {
+export const _includes = function (str, needle) {
     return str.indexOf(needle) !== -1
 }
 
 // Underscore Addons
-_.isObject = function (obj) {
-    return obj === Object(obj) && !_.isArray(obj)
+export const _isObject = function (obj) {
+    return obj === Object(obj) && !_isArray(obj)
 }
 
-_.isEmptyObject = function (obj) {
-    if (_.isObject(obj)) {
+export const _isEmptyObject = function (obj) {
+    if (_isObject(obj)) {
         for (var key in obj) {
             if (hasOwnProperty.call(obj, key)) {
                 return false
@@ -214,34 +210,34 @@ _.isEmptyObject = function (obj) {
     return false
 }
 
-_.isUndefined = function (obj) {
+export const _isUndefined = function (obj) {
     return obj === void 0
 }
 
-_.isString = function (obj) {
+export const _isString = function (obj) {
     return toString.call(obj) == '[object String]'
 }
 
-_.isDate = function (obj) {
+export const _isDate = function (obj) {
     return toString.call(obj) == '[object Date]'
 }
 
-_.isNumber = function (obj) {
+export const _isNumber = function (obj) {
     return toString.call(obj) == '[object Number]'
 }
 
-_.encodeDates = function (obj) {
-    _.each(obj, function (v, k) {
-        if (_.isDate(v)) {
-            obj[k] = _.formatDate(v)
-        } else if (_.isObject(v)) {
-            obj[k] = _.encodeDates(v) // recurse
+export const _encodeDates = function (obj) {
+    _each(obj, function (v, k) {
+        if (_isDate(v)) {
+            obj[k] = _formatDate(v)
+        } else if (_isObject(v)) {
+            obj[k] = _encodeDates(v) // recurse
         }
     })
     return obj
 }
 
-_.timestamp = function () {
+export const _timestamp = function () {
     Date.now =
         Date.now ||
         function () {
@@ -250,7 +246,7 @@ _.timestamp = function () {
     return Date.now()
 }
 
-_.formatDate = function (d) {
+export const _formatDate = function (d) {
     // YYYY-MM-DDTHH:MM:SS in UTC
     function pad(n) {
         return n < 10 ? '0' + n : n
@@ -270,7 +266,7 @@ _.formatDate = function (d) {
     )
 }
 
-_.safewrap = function (f) {
+export const _safewrap = function (f) {
     return function () {
         try {
             return f.apply(this, arguments)
@@ -283,24 +279,24 @@ _.safewrap = function (f) {
     }
 }
 
-_.safewrap_class = function (klass, functions) {
+export const _safewrap_class = function (klass, functions) {
     for (var i = 0; i < functions.length; i++) {
-        klass.prototype[functions[i]] = _.safewrap(klass.prototype[functions[i]])
+        klass.prototype[functions[i]] = _safewrap(klass.prototype[functions[i]])
     }
 }
 
-_.safewrap_instance_methods = function (obj) {
+export const _safewrap_instance_methods = function (obj) {
     for (var func in obj) {
         if (typeof obj[func] === 'function') {
-            obj[func] = _.safewrap(obj[func])
+            obj[func] = _safewrap(obj[func])
         }
     }
 }
 
-_.strip_empty_properties = function (p) {
+export const _strip_empty_properties = function (p) {
     var ret = {}
-    _.each(p, function (v, k) {
-        if (_.isString(v) && v.length > 0) {
+    _each(p, function (v, k) {
+        if (_isString(v) && v.length > 0) {
             ret[k] = v
         }
     })
@@ -328,14 +324,14 @@ function deepCircularCopy(value, customizer, key) {
     value[COPY_IN_PROGRESS_ATTRIBUTE] = true
     let result
 
-    if (_.isArray(value)) {
+    if (_isArray(value)) {
         result = []
-        _.each(value, (it) => {
+        _each(value, (it) => {
             result.push(deepCircularCopy(it, customizer))
         })
     } else {
         result = {}
-        _.each(value, (val, key) => {
+        _each(value, (val, key) => {
             if (key !== COPY_IN_PROGRESS_ATTRIBUTE) {
                 result[key] = deepCircularCopy(val, customizer, key)
             }
@@ -347,7 +343,7 @@ function deepCircularCopy(value, customizer, key) {
 
 const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
 
-_.copyAndTruncateStrings = (object, maxStringLength) =>
+export const _copyAndTruncateStrings = (object, maxStringLength) =>
     deepCircularCopy(object, (value, key) => {
         if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key) > -1) {
             return value
@@ -358,7 +354,7 @@ _.copyAndTruncateStrings = (object, maxStringLength) =>
         return value
     })
 
-_.base64Encode = function (data) {
+export const _base64Encode = function (data) {
     var b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
     var o1,
         o2,
@@ -377,7 +373,7 @@ _.base64Encode = function (data) {
         return data
     }
 
-    data = _.utf8Encode(data)
+    data = _utf8Encode(data)
 
     do {
         // pack three octets into four hexets
@@ -410,7 +406,7 @@ _.base64Encode = function (data) {
     return enc
 }
 
-_.utf8Encode = function (string) {
+export const _utf8Encode = function (string: string): string {
     string = (string + '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
     var utftext = '',
@@ -449,7 +445,7 @@ _.utf8Encode = function (string) {
     return utftext
 }
 
-_.UUID = (function () {
+export const _UUID = (function () {
     // Time/ticks information
     // 1*new Date() is a cross browser version of Date.now()
     var T = function () {
@@ -516,7 +512,7 @@ _.UUID = (function () {
 // _.isBlockedUA()
 // This is to block various web spiders from executing our JS and
 // sending false captureing data
-_.isBlockedUA = function (ua) {
+export const _isBlockedUA = function (ua) {
     if (
         /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog)/i.test(
             ua
@@ -531,16 +527,16 @@ _.isBlockedUA = function (ua) {
  * @param {Object=} formdata
  * @param {string=} arg_separator
  */
-_.HTTPBuildQuery = function (formdata, arg_separator) {
+export const _HTTPBuildQuery = function (formdata, arg_separator) {
     var use_val,
         use_key,
         tph_arr = []
 
-    if (_.isUndefined(arg_separator)) {
+    if (_isUndefined(arg_separator)) {
         arg_separator = '&'
     }
 
-    _.each(formdata, function (val, key) {
+    _each(formdata, function (val, key) {
         use_val = encodeURIComponent(val.toString())
         use_key = encodeURIComponent(key)
         tph_arr[tph_arr.length] = use_key + '=' + use_val
@@ -549,7 +545,7 @@ _.HTTPBuildQuery = function (formdata, arg_separator) {
     return tph_arr.join(arg_separator)
 }
 
-_.getQueryParam = function (url, param) {
+export const _getQueryParam = function (url, param) {
     // Expects a raw URL
 
     param = param.replace(/[[]/, '\\[').replace(/[\]]/, '\\]')
@@ -569,12 +565,12 @@ _.getQueryParam = function (url, param) {
     }
 }
 
-_.getHashParam = function (hash, param) {
+export const _getHashParam = function (hash, param) {
     var matches = hash.match(new RegExp(param + '=([^&]*)'))
     return matches ? matches[1] : null
 }
 
-_.register_event = (function () {
+export const _register_event = (function () {
     // written by Dean Edwards, 2005
     // with input from Tino Zijdel - crisp@xs4all.nl
     // with input from Carl Sverre - mail@carlsverre.com
@@ -620,7 +616,7 @@ _.register_event = (function () {
             var ret = true
             var old_result, new_result
 
-            if (_.isFunction(old_handlers)) {
+            if (_isFunction(old_handlers)) {
                 old_result = old_handlers(event)
             }
             new_result = new_handler.call(element, event)
@@ -652,14 +648,14 @@ _.register_event = (function () {
     return register_event
 })()
 
-_.info = {
+export const _info = {
     campaignParams: function () {
         const campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term gclid fbclid msclkid'.split(
             ' '
         )
         const params = {}
-        _.each(campaign_keywords, function (kwkey) {
-            let kw = _.getQueryParam(document.URL, kwkey)
+        _each(campaign_keywords, function (kwkey) {
+            let kw = _getQueryParam(document.URL, kwkey)
             if (kw.length) {
                 params[kwkey] = kw
             }
@@ -683,14 +679,14 @@ _.info = {
     },
 
     searchInfo: function (referrer) {
-        var search = _.info.searchEngine(referrer),
+        var search = _info.searchEngine(referrer),
             param = search != 'yahoo' ? 'q' : 'p',
             ret = {}
 
         if (search !== null) {
             ret['$search_engine'] = search
 
-            var keyword = _.getQueryParam(referrer, param)
+            var keyword = _getQueryParam(referrer, param)
             if (keyword.length) {
                 ret['ph_keyword'] = keyword
             }
@@ -706,44 +702,44 @@ _.info = {
      */
     browser: function (user_agent, vendor, opera) {
         vendor = vendor || '' // vendor is undefined for at least IE9
-        if (opera || _.includes(user_agent, ' OPR/')) {
-            if (_.includes(user_agent, 'Mini')) {
+        if (opera || _includes(user_agent, ' OPR/')) {
+            if (_includes(user_agent, 'Mini')) {
                 return 'Opera Mini'
             }
             return 'Opera'
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
             return 'BlackBerry'
-        } else if (_.includes(user_agent, 'IEMobile') || _.includes(user_agent, 'WPDesktop')) {
+        } else if (_includes(user_agent, 'IEMobile') || _includes(user_agent, 'WPDesktop')) {
             return 'Internet Explorer Mobile'
-        } else if (_.includes(user_agent, 'SamsungBrowser/')) {
+        } else if (_includes(user_agent, 'SamsungBrowser/')) {
             // https://developer.samsung.com/internet/user-agent-string-format
             return 'Samsung Internet'
-        } else if (_.includes(user_agent, 'Edge') || _.includes(user_agent, 'Edg/')) {
+        } else if (_includes(user_agent, 'Edge') || _includes(user_agent, 'Edg/')) {
             return 'Microsoft Edge'
-        } else if (_.includes(user_agent, 'FBIOS')) {
+        } else if (_includes(user_agent, 'FBIOS')) {
             return 'Facebook Mobile'
-        } else if (_.includes(user_agent, 'Chrome')) {
+        } else if (_includes(user_agent, 'Chrome')) {
             return 'Chrome'
-        } else if (_.includes(user_agent, 'CriOS')) {
+        } else if (_includes(user_agent, 'CriOS')) {
             return 'Chrome iOS'
-        } else if (_.includes(user_agent, 'UCWEB') || _.includes(user_agent, 'UCBrowser')) {
+        } else if (_includes(user_agent, 'UCWEB') || _includes(user_agent, 'UCBrowser')) {
             return 'UC Browser'
-        } else if (_.includes(user_agent, 'FxiOS')) {
+        } else if (_includes(user_agent, 'FxiOS')) {
             return 'Firefox iOS'
-        } else if (_.includes(vendor, 'Apple')) {
-            if (_.includes(user_agent, 'Mobile')) {
+        } else if (_includes(vendor, 'Apple')) {
+            if (_includes(user_agent, 'Mobile')) {
                 return 'Mobile Safari'
             }
             return 'Safari'
-        } else if (_.includes(user_agent, 'Android')) {
+        } else if (_includes(user_agent, 'Android')) {
             return 'Android Mobile'
-        } else if (_.includes(user_agent, 'Konqueror')) {
+        } else if (_includes(user_agent, 'Konqueror')) {
             return 'Konqueror'
-        } else if (_.includes(user_agent, 'Firefox')) {
+        } else if (_includes(user_agent, 'Firefox')) {
             return 'Firefox'
-        } else if (_.includes(user_agent, 'MSIE') || _.includes(user_agent, 'Trident/')) {
+        } else if (_includes(user_agent, 'MSIE') || _includes(user_agent, 'Trident/')) {
             return 'Internet Explorer'
-        } else if (_.includes(user_agent, 'Gecko')) {
+        } else if (_includes(user_agent, 'Gecko')) {
             return 'Mozilla'
         } else {
             return ''
@@ -756,7 +752,7 @@ _.info = {
      * http://www.useragentstring.com/pages/useragentstring.php
      */
     browserVersion: function (userAgent, vendor, opera) {
-        var browser = _.info.browser(userAgent, vendor, opera)
+        var browser = _info.browser(userAgent, vendor, opera)
         var versionRegexs = {
             'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
             'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
@@ -850,18 +846,18 @@ _.info = {
     },
 
     properties: function () {
-        return _.extend(
-            _.strip_empty_properties({
-                $os: _.info.os(),
-                $browser: _.info.browser(userAgent, navigator.vendor, window.opera),
-                $device: _.info.device(userAgent),
-                $device_type: _.info.deviceType(userAgent),
+        return _extend(
+            _strip_empty_properties({
+                $os: _info.os(),
+                $browser: _info.browser(userAgent, navigator.vendor, window.opera),
+                $device: _info.device(userAgent),
+                $device_type: _info.deviceType(userAgent),
             }),
             {
                 $current_url: window.location.href,
                 $host: window.location.host,
                 $pathname: window.location.pathname,
-                $browser_version: _.info.browserVersion(userAgent, navigator.vendor, window.opera),
+                $browser_version: _info.browserVersion(userAgent, navigator.vendor, window.opera),
                 $screen_height: window.screen.height,
                 $screen_width: window.screen.width,
                 $viewport_height: window.innerHeight,
@@ -869,35 +865,25 @@ _.info = {
                 $lib: 'web',
                 $lib_version: Config.LIB_VERSION,
                 $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
-                $time: _.timestamp() / 1000, // epoch time in seconds
+                $time: _timestamp() / 1000, // epoch time in seconds
             }
         )
     },
 
     people_properties: function () {
-        return _.extend(
-            _.strip_empty_properties({
-                $os: _.info.os(),
-                $browser: _.info.browser(userAgent, navigator.vendor, window.opera),
+        return _extend(
+            _strip_empty_properties({
+                $os: _info.os(),
+                $browser: _info.browser(userAgent, navigator.vendor, window.opera),
             }),
             {
-                $browser_version: _.info.browserVersion(userAgent, navigator.vendor, window.opera),
+                $browser_version: _info.browserVersion(userAgent, navigator.vendor, window.opera),
             }
         )
     },
 }
 
-// EXPORTS (for closure compiler)
-_['isObject'] = _.isObject
-_['isBlockedUA'] = _.isBlockedUA
-_['isEmptyObject'] = _.isEmptyObject
-_['info'] = _.info
-_['info']['device'] = _.info.device
-_['info']['browser'] = _.info.browser
-_['info']['browserVersion'] = _.info.browserVersion
-_['info']['properties'] = _.info.properties
-
-export { win as window, _, userAgent, logger, document }
+export { win as window, userAgent, logger, document }
 
 // Exports For Test ONLY
 export { COPY_IN_PROGRESS_ATTRIBUTE }

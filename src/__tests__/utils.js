@@ -5,11 +5,11 @@
  * currently not supported in the browser lib).
  */
 
-import { _, COPY_IN_PROGRESS_ATTRIBUTE } from '../utils'
+import { COPY_IN_PROGRESS_ATTRIBUTE } from '../utils'
 
 describe(`utils.js`, () => {
     it('should have $host and $pathname in properties', () => {
-        const properties = _.info.properties()
+        const properties = _info.properties()
         expect(properties['$current_url']).toBeDefined()
         expect(properties['$host']).toBeDefined()
         expect(properties['$pathname']).toBeDefined()
@@ -17,7 +17,7 @@ describe(`utils.js`, () => {
 })
 
 describe('_.copyAndTruncateStrings', () => {
-    given('subject', () => _.copyAndTruncateStrings(given.target, given.maxStringLength))
+    given('subject', () => _copyAndTruncateStrings(given.target, given.maxStringLength))
 
     given('target', () => ({
         key: 'value',
@@ -84,7 +84,7 @@ describe('_.copyAndTruncateStrings', () => {
 })
 
 describe('_.info', () => {
-    given('subject', () => _.info)
+    given('subject', () => _info)
 
     it('deviceType', () => {
         const deviceTypes = {

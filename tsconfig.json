@@ -1,6 +1,8 @@
 {
     "compilerOptions": {
-        "target": "es2015",
+        "baseUrl": "./src",
+        "outDir": "./lib",
+        "target": "ES5",
         "lib": ["dom", "dom.iterable", "esnext"],
         "allowJs": true,
         "checkJs": true,

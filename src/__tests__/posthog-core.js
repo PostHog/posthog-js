@@ -1,7 +1,6 @@
 import { init_as_module, PostHogLib } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
-import { _ } from '../utils'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
 
@@ -15,8 +14,9 @@ jest.mock('../decide')
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
 describe('identify()', () => {
-    given('subject', () => () =>
-        given.lib.identify(given.identity, given.userPropertiesToSet, given.userPropertiesToSetOnce)
+    given(
+        'subject',
+        () => () => given.lib.identify(given.identity, given.userPropertiesToSet, given.userPropertiesToSetOnce)
     )
 
     given('identity', () => 'a-new-id')
@@ -185,8 +185,9 @@ describe('identify()', () => {
 describe('capture()', () => {
     given('eventName', () => '$event')
 
-    given('subject', () => () =>
-        given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
+    given(
+        'subject',
+        () => () => given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
     )
 
     given('config', () => ({
@@ -449,7 +450,7 @@ describe('_calculate_event_properties()', () => {
     given('property_blacklist', () => [])
 
     beforeEach(() => {
-        jest.spyOn(_.info, 'properties').mockReturnValue({ $lib: 'web' })
+        jest.spyOn(_info, 'properties').mockReturnValue({ $lib: 'web' })
     })
 
     it('returns calculated properties', () => {
@@ -577,8 +578,9 @@ describe('_handle_unload()', () => {
 })
 
 describe('__compress_and_send_json_request', () => {
-    given('subject', () => () =>
-        given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
+    given(
+        'subject',
+        () => () => given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
     )
 
     given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
@@ -682,7 +684,7 @@ describe('init()', () => {
         const uuid = '1811a3ce5b0363-0052debf84392a-3a50387c-0-1811a3ce5b1ad2'
 
         beforeEach(() => {
-            jest.spyOn(_, 'UUID').mockReturnValue(uuid)
+            jest.spyOn(________, 'UUID').mockReturnValue(uuid)
         })
 
         it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {

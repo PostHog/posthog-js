@@ -1,7 +1,6 @@
 /* eslint camelcase: "off" */
 import { addOptOutCheckPostHogPeople } from './gdpr-utils'
 import { SET_ACTION, apiActions } from './api-actions'
-import { _ } from './utils'
 
 /**
  * PostHog People Object
@@ -9,7 +8,7 @@ import { _ } from './utils'
  */
 var PostHogPeople = function () {}
 
-_.extend(PostHogPeople.prototype, apiActions)
+_extend(PostHogPeople.prototype, apiActions)
 
 PostHogPeople.prototype._init = function (posthog_instance) {
     this._posthog = posthog_instance
@@ -36,7 +35,7 @@ PostHogPeople.prototype._init = function (posthog_instance) {
  */
 PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, callback) {
     var data = this.set_action(prop, to)
-    if (_.isObject(prop)) {
+    if (_isObject(prop)) {
         callback = to
     }
     // make sure that the referrer info has been updated and saved
@@ -45,9 +44,9 @@ PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, ca
     }
 
     // update $set object with default people properties
-    data[SET_ACTION] = _.extend(
+    data[SET_ACTION] = _extend(
         {},
-        _.info.people_properties(),
+        _info.people_properties(),
         this._posthog['persistence'].get_referrer_info(),
         data[SET_ACTION]
     )
@@ -77,7 +76,7 @@ PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, ca
  */
 PostHogPeople.prototype.set_once = addOptOutCheckPostHogPeople(function (prop, to, callback) {
     var data = this.set_once_action(prop, to)
-    if (_.isObject(prop)) {
+    if (_isObject(prop)) {
         callback = to
     }
     return this._send_request(data, callback)
@@ -103,10 +102,10 @@ PostHogPeople.prototype._send_request = function (data, callback) {
         data['$had_persisted_distinct_id'] = had_persisted_distinct_id
     }
 
-    var date_encoded_data = _.encodeDates(data)
-    var truncated_data = _.copyAndTruncateStrings(date_encoded_data, this._get_config('properties_string_max_length'))
+    var date_encoded_data = _encodeDates(data)
+    var truncated_data = _copyAndTruncateStrings(date_encoded_data, this._get_config('properties_string_max_length'))
     var json_data = JSON.stringify(date_encoded_data)
-    var encoded_data = _.base64Encode(json_data)
+    var encoded_data = _base64Encode(json_data)
 
     this._posthog._send_request(
         this._get_config('api_host') + '/engage/',
