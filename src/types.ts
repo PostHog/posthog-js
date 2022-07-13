@@ -66,54 +66,54 @@ export type CaptureCallback = (response: any, data: any) => void
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface PostHogConfig {
-    api_host?: string
-    api_method?: string
-    api_transport?: string
-    autocapture?: boolean
-    rageclick?: boolean
-    cdn?: string
-    cross_subdomain_cookie?: boolean
-    persistence?: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie'
-    persistence_name?: string
-    cookie_name?: string
-    loaded?: (posthog_instance: typeof PostHogClass) => void
-    store_google?: boolean
-    save_referrer?: boolean
-    test?: boolean
-    verbose?: boolean
-    img?: boolean
-    capture_pageview?: boolean
-    debug?: boolean
-    cookie_expiration?: number
-    upgrade?: boolean
-    disable_session_recording?: boolean
-    disable_persistence?: boolean
-    disable_cookie?: boolean
-    enable_recording_console_log?: boolean
-    secure_cookie?: boolean
-    ip?: boolean
-    opt_out_capturing_by_default?: boolean
-    opt_out_persistence_by_default?: boolean
-    opt_out_capturing_persistence_type?: 'localStorage' | 'cookie'
-    opt_out_capturing_cookie_prefix?: string | null
-    respect_dnt?: boolean
-    property_blacklist?: string[]
-    xhr_headers?: { [header_name: string]: string }
-    on_xhr_error?: (failedRequest: XMLHttpRequest) => void
-    inapp_protocol?: string
-    inapp_link_new_window?: boolean
-    request_batching?: boolean
-    sanitize_properties?: ((properties: Properties, event_name: string) => Properties) | null
-    properties_string_max_length?: number
-    session_recording?: SessionRecordingOptions
-    mask_all_element_attributes?: boolean
-    mask_all_text?: boolean
-    advanced_disable_decide?: boolean
-    advanced_disable_toolbar_metrics?: boolean
-    get_device_id?: (uuid: string) => string
-    _onCapture?: (eventName: string, eventData: CaptureResult) => void
-    _capture_metrics?: boolean
-    _capture_performance?: boolean
+    api_host: string
+    api_method: string
+    api_transport: string
+    token: string
+    autocapture: boolean
+    rageclick: boolean
+    cross_subdomain_cookie: boolean
+    persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie'
+    persistence_name: string
+    cookie_name: string
+    loaded: (posthog_instance: typeof PostHogClass) => void
+    store_google: boolean
+    save_referrer: boolean
+    test: boolean
+    verbose: boolean
+    img: boolean
+    capture_pageview: boolean
+    debug: boolean
+    cookie_expiration: number
+    upgrade: boolean
+    disable_session_recording: boolean
+    disable_persistence: boolean
+    disable_cookie: boolean
+    enable_recording_console_log: boolean
+    secure_cookie: boolean
+    ip: boolean
+    opt_out_capturing_by_default: boolean
+    opt_out_persistence_by_default: boolean
+    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
+    opt_out_capturing_cookie_prefix: string | null
+    respect_dnt: boolean
+    property_blacklist: string[]
+    xhr_headers: { [header_name: string]: string }
+    on_xhr_error: (failedRequest: XMLHttpRequest) => void
+    inapp_protocol: string
+    inapp_link_new_window: boolean
+    request_batching: boolean
+    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
+    properties_string_max_length: number
+    session_recording: SessionRecordingOptions
+    mask_all_element_attributes: boolean
+    mask_all_text: boolean
+    advanced_disable_decide: boolean
+    advanced_disable_toolbar_metrics: boolean
+    get_device_id: (uuid: string) => string
+    _onCapture: (eventName: string, eventData: CaptureResult) => void
+    _capture_metrics: boolean
+    _capture_performance: boolean
 }
 
 export interface OptInOutCapturingOptions {

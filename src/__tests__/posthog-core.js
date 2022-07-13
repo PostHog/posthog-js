@@ -3,6 +3,7 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
+import { _info } from '../utils'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),

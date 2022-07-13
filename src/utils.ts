@@ -109,7 +109,7 @@ export const _bind = function (func, context) {
     return bound
 }
 
-export const bind_instance_methods = function (obj) {
+export const _bind_instance_methods = function (obj) {
     for (var func in obj) {
         if (typeof obj[func] === 'function') {
             obj[func] = _bind(obj[func], obj)
@@ -145,8 +145,8 @@ export const _each = function (obj, iterator, context?) {
     }
 }
 
-export const _extend = function (obj) {
-    _each(slice.call(arguments, 1), function (source) {
+export const _extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
+    _each(args, function (source) {
         for (var prop in source) {
             if (source[prop] !== void 0) {
                 obj[prop] = source[prop]

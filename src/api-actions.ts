@@ -1,5 +1,7 @@
 /* eslint camelcase: "off" */
 
+import { _each, _isObject } from './utils'
+
 /** @const */ var SET_ACTION = '$set'
 /** @const */ var SET_ONCE_ACTION = '$set_once'
 

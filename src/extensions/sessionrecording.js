@@ -2,6 +2,7 @@ import { loadScript } from '../autocapture-utils'
 import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
+import { _bind } from '../utils'
 
 const BASE_ENDPOINT = '/e/'
 

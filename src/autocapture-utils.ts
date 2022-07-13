@@ -3,6 +3,8 @@
  * @param {Element} el - element to get the className of
  * @returns {string} the element's class
  */
+import { _each, _includes, _isUndefined, _trim } from './utils'
+
 export function getClassName(el) {
     switch (typeof el.className) {
         case 'string':

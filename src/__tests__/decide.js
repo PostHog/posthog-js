@@ -1,5 +1,6 @@
 import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
+import { _base64Encode } from '../utils'
 
 describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))

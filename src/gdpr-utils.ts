@@ -11,7 +11,7 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { window } from './utils'
+import { _each, _includes, _isNumber, _isString, window } from './utils'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 
 /**

@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { logger } from './utils'
+import { _each, _extend, _include, _info, _isObject, _isUndefined, _strip_empty_properties, logger } from './utils'
 import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
 
 /*

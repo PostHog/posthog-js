@@ -1,4 +1,15 @@
-import { logger } from './utils'
+import {
+    _bind,
+    _bind_instance_methods,
+    _each,
+    _extend,
+    _includes,
+    _isFunction,
+    _isUndefined,
+    _register_event,
+    _safewrap_instance_methods,
+    logger,
+} from './utils'
 import {
     getClassName,
     getSafeText,
@@ -14,7 +25,7 @@ import {
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 
-var autocapture = {
+const autocapture = {
     _initializedTokens: [],
 
     _previousElementSibling: function (el) {
@@ -201,7 +212,7 @@ var autocapture = {
                 return false
             }
 
-            var props = _extend(
+            const props = _extend(
                 this._getDefaultProperties(e.type),
                 {
                     $elements: elementsJson,
@@ -216,7 +227,7 @@ var autocapture = {
 
     // only reason is to stub for unit tests
     // since you can't override window.location props
-    _navigate: function (href) {
+    _navigate: function (href: string) {
         window.location.href = href
     },
 
@@ -264,17 +275,24 @@ var autocapture = {
     // need to gently ramp this up so we don't overload decide. this decides
     // deterministically if CE is enabled for this project by modding the char
     // value of the project token.
-    enabledForProject: function (token, numBuckets, numEnabledBuckets) {
+    enabledForProject: function (
+        token: string | null | undefined,
+        numBuckets: number,
+        numEnabledBuckets: number
+    ): boolean {
+        if (!token) {
+            return true
+        }
         numBuckets = !_isUndefined(numBuckets) ? numBuckets : 10
         numEnabledBuckets = !_isUndefined(numEnabledBuckets) ? numEnabledBuckets : 10
-        var charCodeSum = 0
-        for (var i = 0; i < token.length; i++) {
+        let charCodeSum = 0
+        for (let i = 0; i < token.length; i++) {
             charCodeSum += token.charCodeAt(i)
         }
         return charCodeSum % numBuckets < numEnabledBuckets
     },
 
-    isBrowserSupported: function () {
+    isBrowserSupported: function (): boolean {
         return _isFunction(document.querySelectorAll)
     },
 }

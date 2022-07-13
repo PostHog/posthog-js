@@ -1,6 +1,7 @@
 import { SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../posthog-persistence'
 import { sessionStore } from '../storage'
+import { _UUID } from '../utils'
 
 jest.mock('../utils')
 jest.mock('../storage')

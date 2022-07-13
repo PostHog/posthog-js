@@ -1,5 +1,6 @@
 import { SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
+import { _UUID } from './utils'
 
 const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours

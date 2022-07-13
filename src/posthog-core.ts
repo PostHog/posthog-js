@@ -1,6 +1,23 @@
 import { LZString } from './lz-string'
 import Config from './config'
-import { logger, document, userAgent, window } from './utils'
+import {
+    logger,
+    document,
+    userAgent,
+    window,
+    _isUndefined,
+    _extend,
+    _each,
+    _isObject,
+    _isBlockedUA,
+    _copyAndTruncateStrings,
+    _isArray,
+    _safewrap_class,
+    _register_event,
+    _bind,
+    _UUID,
+    _info,
+} from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -71,6 +88,7 @@ const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
     api_method: 'POST',
     api_transport: 'XHR',
+    token: null,
     autocapture: true,
     rageclick: false,
     cross_subdomain_cookie: document.location.hostname.indexOf('herokuapp.com') === -1,
@@ -98,6 +116,7 @@ const defaultConfig = (): PostHogConfig => ({
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     property_blacklist: [],
+    respect_dnt: false,
     sanitize_properties: null,
     xhr_headers: {}, // { header: value, header2: value }
     inapp_protocol: '//',
@@ -148,7 +167,11 @@ const defaultConfig = (): PostHogConfig => ({
  * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
  * @param {String} [name]    The name for the new posthog instance that you want created
  */
-export function posthogInit(token: string, config?: PostHogConfig, name?: string): PostHogLib | void {
+export function posthogInit(
+    token: string,
+    config?: PostHogConfig,
+    name: string = PRIMARY_INSTANCE_NAME
+): PostHogLib | void {
     if (_isUndefined(name)) {
         console.error('You must name your new library: init(token, config, name)')
         return
@@ -176,6 +199,7 @@ export class PostHogLib {
     people: PostHogPeople
     persistence: PersistenceClass
     featureFlags: FeatureFlagsClass
+    feature_flags: FeatureFlagsClass
     sessionManager: SessionIdManager
     toolbar: Toolbar
     sessionRecording: SessionRecording
@@ -183,6 +207,14 @@ export class PostHogLib {
     _captureMetrics: CaptureMetrics
     _requestQueue: RequestQueue
     _retryQueue: RetryQueue
+
+    _triggered_notifs: any
+    compression: any
+    _jsc: any
+    __captureHooks: any
+    __request_queue: any
+    __autocapture_enabled: any
+
     // Initialization methods
 
     // new PosthogLib(token:string, config:object, name:string)
@@ -192,9 +224,9 @@ export class PostHogLib {
     // is this one initializes the actual instance, whereas the
     // init(...) method sets up a new library and calls _init on it.
     //
-    constructor(token: string, config?: PostHogConfig, name?: string) {
+    constructor(token: string, config: PostHogConfig, name: string) {
         this.__loaded = true
-        this.config = {}
+        this.config = {} as PostHogConfig // will be set right blow
         this._triggered_notifs = []
         this.compression = {}
 
@@ -251,9 +283,10 @@ export class PostHogLib {
 
         this['__autocapture_enabled'] = this.get_config('autocapture')
         if (this.get_config('autocapture')) {
-            var num_buckets = 100
-            var num_enabled_buckets = 100
-            if (!autocapture.enabledForProject(this.get_config('token'), num_buckets, num_enabled_buckets)) {
+            const token = this.get_config('token')
+            const numBuckets = 100
+            const numEnabledBuckets = 100
+            if (!autocapture.enabledForProject(token, numBuckets, numEnabledBuckets)) {
                 this['__autocapture_enabled'] = false
                 logger.log('Not in active bucket: disabling Automatic Event Collection.')
             } else if (!autocapture.isBrowserSupported()) {
@@ -266,7 +299,9 @@ export class PostHogLib {
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
-        Config.DEBUG = Config.DEBUG || instance.get_config('debug')
+        if (this.get_config('debug')) {
+            Config.DEBUG = true
+        }
     }
 
     // Private methods
@@ -340,7 +375,7 @@ export class PostHogLib {
         }
 
         if (USE_XHR) {
-            var callback_function = function (response) {
+            const callback_function = function (response) {
                 callback(response, data)
             }
             return callback_function
@@ -359,7 +394,7 @@ export class PostHogLib {
         }
     }
 
-    _handle_unload() {
+    _handle_unload(): void {
         if (!this.get_config('request_batching')) {
             if (this.get_config('capture_pageview')) {
                 this.capture('$pageleave', null, { transport: 'sendbeacon' })
@@ -378,17 +413,27 @@ export class PostHogLib {
         this._retryQueue.unload()
     }
 
-    _handle_queued_event(url, data, options) {
+    _handle_queued_event(url: string, data: Record<string, any>, options?: { transport: 'XHR' | 'sendBeacon' }): void {
         const jsonData = JSON.stringify(data)
         this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
     }
 
-    __compress_and_send_json_request(url, jsonData, options, callback) {
+    __compress_and_send_json_request(
+        url: string,
+        jsonData: Record<string, any>,
+        options?: { transport: 'XHR' | 'sendBeacon' },
+        callback
+    ): void {
         const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
         this._send_request(url, data, _options, callback)
     }
 
-    _send_request(url, data, options, callback) {
+    _send_request(
+        url: string,
+        data: Record<string, any>,
+        options?: { transport: 'XHR' | 'sendBeacon' },
+        callback
+    ): void {
         if (ENQUEUE_REQUESTS) {
             this.__request_queue.push(arguments)
             return
@@ -411,7 +456,7 @@ export class PostHogLib {
         })
 
         if (_isObject(data) && this.get_config('img')) {
-            var img = document.createElement('img')
+            const img = document.createElement('img')
             img.src = url
             document.body.appendChild(img)
         } else if (useSendBeacon) {
@@ -443,12 +488,12 @@ export class PostHogLib {
                 console.error(e)
             }
         } else {
-            var script = document.createElement('script')
+            const script = document.createElement('script')
             script.type = 'text/javascript'
             script.async = true
             script.defer = true
             script.src = url
-            var s = document.getElementsByTagName('script')[0]
+            const s = document.getElementsByTagName('script')[0]
             s.parentNode.insertBefore(script, s)
         }
     }
@@ -466,10 +511,10 @@ export class PostHogLib {
      * @param {Array} array
      */
     _execute_array(array) {
-        var fn_name,
-            alias_calls = [],
-            other_calls = [],
-            capturing_calls = []
+        let fn_name
+        const alias_calls = []
+        const other_calls = []
+        const capturing_calls = []
         _each(
             array,
             function (item) {
@@ -495,7 +540,7 @@ export class PostHogLib {
             this
         )
 
-        var execute = function (calls, context) {
+        const execute = function (calls, context) {
             _each(
                 calls,
                 function (item) {
@@ -594,7 +639,7 @@ export class PostHogLib {
             this.persistence.update_referrer_info(document.referrer)
         }
 
-        const data: CaptureResult = {
+        let data: CaptureResult = {
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties, start_timestamp),
         }
@@ -747,9 +792,7 @@ export class PostHogLib {
     }
 
     _register_single(prop, value) {
-        var props = {}
-        props[prop] = value
-        this.register(props)
+        this.register({ [prop]: value })
     }
 
     /*
@@ -845,7 +888,7 @@ export class PostHogLib {
 
         this._captureMetrics.incr('identify')
 
-        var previous_distinct_id = this.get_distinct_id()
+        const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
         if (!this.get_property('$device_id')) {
@@ -1153,7 +1196,7 @@ export class PostHogLib {
      * @param {Object} config A dictionary of new configuration values to update
      */
 
-    set_config(config: PostHogConfig): void {
+    set_config(config: Partial<PostHogConfig>): void {
         const oldConfig = { ...this.config }
         if (_isObject(config)) {
             _extend(this.config, config)
@@ -1172,7 +1215,9 @@ export class PostHogLib {
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true
             }
-            Config.DEBUG = Config.DEBUG || this.get_config('debug')
+            if (this.get_config('debug')) {
+                Config.DEBUG = true
+            }
 
             if (this.sessionRecording && typeof config.disable_session_recording !== 'undefined') {
                 if (oldConfig.disable_session_recording !== config.disable_session_recording) {
@@ -1213,7 +1258,7 @@ export class PostHogLib {
     /**
      * returns the current config object for the library.
      */
-    get_config<T extends keyof PostHogConfig>(prop_name: T): PostHogConfig[T] {
+    get_config<K extends keyof PostHogConfig>(prop_name: K): PostHogConfig[K] {
         return this.config?.[prop_name]
     }
 
@@ -1240,7 +1285,7 @@ export class PostHogLib {
     }
 
     toString(): string {
-        let name = this.get_config('name')
+        let name = this.get_config('name') ?? PRIMARY_INSTANCE_NAME
         if (name !== PRIMARY_INSTANCE_NAME) {
             name = PRIMARY_INSTANCE_NAME + '.' + name
         }
@@ -1249,7 +1294,7 @@ export class PostHogLib {
 
     // perform some housekeeping around GDPR opt-in/out state
     _gdpr_init(): void {
-        var is_localStorage_requested = this.get_config('opt_out_capturing_persistence_type') === 'localStorage'
+        const is_localStorage_requested = this.get_config('opt_out_capturing_persistence_type') === 'localStorage'
 
         // try to convert opt-in/out cookies to localStorage if possible
         if (is_localStorage_requested && localStore.is_supported()) {
@@ -1542,7 +1587,9 @@ export class PostHogLib {
         }
     }
 
-    decodeLZ64 = LZString.decompressFromBase64
+    decodeLZ64(input: string | null | undefined): string | null {
+        return LZString.decompressFromBase64(input)
+    }
 }
 
 // EXPORTS (for closure compiler)

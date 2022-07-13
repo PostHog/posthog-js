@@ -1,3 +1,5 @@
+import { _base64Encode, _extend } from './utils'
+
 export const parseFeatureFlagDecideResponse = (response, persistence) => {
     const flags = response['featureFlags']
     if (flags) {

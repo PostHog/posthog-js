@@ -5,7 +5,7 @@
  * currently not supported in the browser lib).
  */
 
-import { COPY_IN_PROGRESS_ATTRIBUTE } from '../utils'
+import { _copyAndTruncateStrings, _info, COPY_IN_PROGRESS_ATTRIBUTE } from '../utils'
 
 describe(`utils.js`, () => {
     it('should have $host and $pathname in properties', () => {

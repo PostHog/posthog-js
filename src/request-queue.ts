@@ -1,4 +1,5 @@
 import { RequestQueueScaffold } from './base-request-queue'
+import { _each } from './utils'
 
 export class RequestQueue extends RequestQueueScaffold {
     constructor(captureMetrics, handlePollRequest, pollInterval = 3000) {
