@@ -94,9 +94,9 @@ export function shouldCaptureDomEvent(el: Element, event: Event): boolean {
         return false
     }
 
-    const parentIsUsefulElement = false
+    let parentIsUsefulElement = false
     const targetElementList = [el]
-    const parentNode = true
+    let parentNode = true
     let curEl = el
     while (curEl.parentNode && !isTag(curEl, 'body')) {
         // If element is a shadow root, we skip it
@@ -179,7 +179,8 @@ export function shouldCaptureElement(el: Element): boolean {
     const name = el.name || el.id || ''
     if (typeof name === 'string') {
         // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
-        const sensitiveNameRegex = /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
+        const sensitiveNameRegex =
+            /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
         if (sensitiveNameRegex.test(name.replace(/[^a-zA-Z0-9]/g, ''))) {
             return false
         }
@@ -224,7 +225,8 @@ export function shouldCaptureValue(value: string): boolean {
 
         // check to see if input value looks like a credit card number
         // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
-        const ccRegex = /^(?:(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11}))$/
+        const ccRegex =
+            /^(?:(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11}))$/
         if (ccRegex.test((value || '').replace(/[- ]/g, ''))) {
             return false
         }
