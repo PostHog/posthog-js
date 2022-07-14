@@ -12,7 +12,7 @@ export class AsymmetricMatcher<T> {
 }
 
 class Truth extends AsymmetricMatcher<(value: any) => boolean> {
-    constructor(sample: (value: any) => boolean, inverse: boolean = false) {
+    constructor(sample: (value: any) => boolean, inverse = false) {
         if (typeof sample !== 'function') {
             throw new Error('Expected is not a function')
         }
