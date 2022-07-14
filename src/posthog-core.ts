@@ -42,7 +42,6 @@ import {
     isFeatureEnabledOptions,
     OptInOutCapturingOptions,
     PersistenceClass,
-    PostHogClass,
     PostHogConfig,
     Properties,
     Property,
@@ -64,7 +63,7 @@ enum InitType {
 }
 
 let init_type: InitType
-let posthog_master: Record<string, PostHogClass> & { init: () => void }
+let posthog_master: Record<string, PostHogLib> & { init: () => void }
 
 // some globals for comparisons
 const __NOOP = () => {}
@@ -160,7 +159,7 @@ const defaultConfig = (): PostHogConfig => ({
  * declared before this file has loaded).
  */
 const create_mplib = function (token: string, config?: PostHogConfig, name: string) {
-    let instance
+    let instance: PostHogLib
     const target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
 
     if (target && init_type === InitType.INIT_MODULE) {
@@ -175,8 +174,8 @@ const create_mplib = function (token: string, config?: PostHogConfig, name: stri
 
     instance._init(token, config, name)
 
-    instance['people'] = new PostHogPeople()
-    instance['people']._init(instance)
+    instance.people = new PostHogPeople()
+    instance.people._init(instance)
 
     instance.featureFlags = new PostHogFeatureFlags(instance)
     instance.feature_flags = instance.featureFlags
@@ -187,15 +186,15 @@ const create_mplib = function (token: string, config?: PostHogConfig, name: stri
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance['__autocapture_enabled'] = instance.get_config('autocapture')
+    instance.__autocapture_enabled = instance.get_config('autocapture')
     if (instance.get_config('autocapture')) {
-        var num_buckets = 100
-        var num_enabled_buckets = 100
+        const num_buckets = 100
+        const num_enabled_buckets = 100
         if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
-            instance['__autocapture_enabled'] = false
+            instance.__autocapture_enabled = false
             logger.log('Not in active bucket: disabling Automatic Event Collection.')
         } else if (!autocapture.isBrowserSupported()) {
-            instance['__autocapture_enabled'] = false
+            instance.__autocapture_enabled = false
             logger.log('Disabling Automatic Event Collection because this browser is not supported')
         } else {
             autocapture.init(instance)
@@ -211,7 +210,7 @@ const create_mplib = function (token: string, config?: PostHogConfig, name: stri
     if (typeof target !== 'undefined' && _isArray(target)) {
         // Crunch through the people queue first - we queue this data up &
         // flush on identify, so it's better to do all these operations first
-        instance._execute_array.call(instance['people'], target['people'])
+        instance._execute_array.call(instance.people, target.people)
         instance._execute_array(target)
     }
 
@@ -244,6 +243,7 @@ export class PostHogLib {
     __captureHooks: any
     __request_queue: any
     __autocapture_enabled: any
+    decideEndpointWasHit = false
 
     // Initialization methods
 
@@ -412,9 +412,9 @@ export class PostHogLib {
             // if the user gives us a callback, we store as a random
             // property on this instances jsc function and update our
             // callback string to reflect that.
-            var jsc = this._jsc
-            var randomized_cb = '' + Math.floor(Math.random() * 100000000)
-            var callback_string = this.get_config('callback_fn') + '[' + randomized_cb + ']'
+            const jsc = this._jsc
+            const randomized_cb = '' + Math.floor(Math.random() * 100000000)
+            const callback_string = this.get_config('callback_fn') + '[' + randomized_cb + ']'
             jsc[randomized_cb] = function (response) {
                 delete jsc[randomized_cb]
                 callback(response, data)
@@ -575,7 +575,7 @@ export class PostHogLib {
                 function (item) {
                     if (_isArray(item[0])) {
                         // chained call
-                        var caller = context
+                        const caller = context
                         _each(item, function (call) {
                             caller = caller[call[0]].apply(caller, call.slice(1))
                         })
@@ -642,7 +642,7 @@ export class PostHogLib {
         }
 
         options = options || __NOOPTIONS
-        var transport = options['transport'] // external API, don't minify 'transport' prop
+        const transport = options['transport'] // external API, don't minify 'transport' prop
         if (transport) {
             options.transport = transport // 'transport' prop name can be minified internally
         }
@@ -728,7 +728,7 @@ export class PostHogLib {
 
         // set $duration if time_event was previously called for this event
         if (typeof start_timestamp !== 'undefined') {
-            var duration_in_ms = new Date().getTime() - start_timestamp
+            const duration_in_ms = new Date().getTime() - start_timestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
 
@@ -748,7 +748,7 @@ export class PostHogLib {
             properties = _extend(properties, getPerformanceData())
         }
 
-        var property_blacklist = this.get_config('property_blacklist')
+        const property_blacklist = this.get_config('property_blacklist')
         if (_isArray(property_blacklist)) {
             _each(property_blacklist, function (blacklisted_prop) {
                 delete properties[blacklisted_prop]
@@ -757,7 +757,7 @@ export class PostHogLib {
             console.error('Invalid value for property_blacklist config: ' + property_blacklist)
         }
 
-        var sanitize_properties = this.get_config('sanitize_properties')
+        const sanitize_properties = this.get_config('sanitize_properties')
         if (sanitize_properties) {
             properties = sanitize_properties(properties, event_name)
         }
@@ -991,7 +991,7 @@ export class PostHogLib {
 
         this._captureMetrics.incr('group')
 
-        var existingGroups = this.getGroups()
+        const existingGroups = this.getGroups()
 
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
@@ -1080,7 +1080,7 @@ export class PostHogLib {
             return -2
         }
 
-        var _this = this
+        const _this = this
         if (_isUndefined(original)) {
             original = this.get_distinct_id()
         }
@@ -1364,7 +1364,7 @@ export class PostHogLib {
      * @param {boolean} [options.enable_persistence] If true, will re-enable sdk persistence
      */
     _gdpr_update_persistence(options): void {
-        var disabled
+        const disabled
         if (options && options['clear_persistence']) {
             disabled = true
         } else if (options && options['enable_persistence']) {
@@ -1489,7 +1489,7 @@ export class PostHogLib {
      *
      * ### Usage
      *
-     *     var has_opted_in = posthog.has_opted_in_capturing();
+     *     const has_opted_in = posthog.has_opted_in_capturing();
      *     // use has_opted_in value
      *
      * @param {Object} [options] A dictionary of config options to override
@@ -1506,7 +1506,7 @@ export class PostHogLib {
      *
      * ### Usage
      *
-     *     var has_opted_out = posthog.has_opted_out_capturing();
+     *     const has_opted_out = posthog.has_opted_out_capturing();
      *     // use has_opted_out value
      *
      * @param {Object} [options] A dictionary of config options to override
@@ -1645,7 +1645,7 @@ const override_ph_init_func = function () {
             }
             return posthog_master[name]
         } else {
-            var instance = posthog_master
+            const instance = posthog_master
 
             if (instances[PRIMARY_INSTANCE_NAME]) {
                 // main posthog lib already initialized
@@ -1708,7 +1708,7 @@ const add_dom_loaded_handler = function () {
         document.attachEvent('onreadystatechange', dom_loaded_handler)
 
         // check to make sure we arn't in a frame
-        var toplevel = false
+        const toplevel = false
         try {
             toplevel = window.frameElement === null
         } catch (e) {

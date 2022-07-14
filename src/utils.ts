@@ -26,7 +26,7 @@ const nativeBind = FuncProto.bind,
 // Console override
 const logger = {
     /** @type {function(...*)} */
-    log: function () {
+    log: function (...args: any[]) {
         if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
             // Don't log PostHog debug messages in rrweb
             const log = window.console.log['__rrweb_original__']
@@ -34,18 +34,18 @@ const logger = {
                 : window.console.log
 
             try {
-                log.apply(window.console, arguments)
+                log.apply(window.console, args)
             } catch (err) {
-                _each(arguments, function (arg) {
+                _each(args, function (arg) {
                     log(arg)
                 })
             }
         }
     },
     /** @type {function(...*)} */
-    error: function () {
+    error: function (..._args: any[]) {
         if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
-            let args = ['PostHog error:', ...arguments]
+            const args = ['PostHog error:', ..._args]
             // Don't log PostHog debug messages in rrweb
             const error = window.console.error['__rrweb_original__']
                 ? window.console.error['__rrweb_original__']
@@ -60,9 +60,9 @@ const logger = {
         }
     },
     /** @type {function(...*)} */
-    critical: function () {
+    critical: function (..._args: any[]) {
         if (!_isUndefined(window.console) && window.console) {
-            let args = ['PostHog error:', ...arguments]
+            const args = ['PostHog error:', ..._args]
             // Don't log PostHog debug messages in rrweb
             const error = window.console.error['__rrweb_original__']
                 ? window.console.error['__rrweb_original__']

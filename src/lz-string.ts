@@ -45,7 +45,7 @@ export var LZString = {
         }
     },
 
-    decompressFromBase64: function (input) {
+    decompressFromBase64: function (input: string | null): string | null {
         if (input == null) return ''
         if (input == '') return null
         return LZString._decompress(input.length, 32, function (index) {
@@ -53,7 +53,7 @@ export var LZString = {
         })
     },
 
-    compressToUTF16: function (input) {
+    compressToUTF16: function (input: string | null): string | null {
         if (input == null) return ''
         return (
             LZString._compress(input, 15, function (a) {
@@ -62,7 +62,7 @@ export var LZString = {
         )
     },
 
-    decompressFromUTF16: function (compressed) {
+    decompressFromUTF16: function (compressed: string | null): string | null {
         if (compressed == null) return ''
         if (compressed == '') return null
         return LZString._decompress(compressed.length, 16384, function (index) {
@@ -71,12 +71,12 @@ export var LZString = {
     },
 
     //compress into uint8array (UCS-2 big endian format)
-    compressToUint8Array: function (uncompressed) {
-        var compressed = LZString.compress(uncompressed)
-        var buf = new Uint8Array(compressed.length * 2) // 2 bytes per character
+    compressToUint8Array: function (uncompressed: string | null): Uint8Array {
+        const compressed = LZString.compress(uncompressed)
+        const buf = new Uint8Array(compressed.length * 2) // 2 bytes per character
 
-        for (var i = 0, TotalLen = compressed.length; i < TotalLen; i++) {
-            var current_value = compressed.charCodeAt(i)
+        for (let i = 0, TotalLen = compressed.length; i < TotalLen; i++) {
+            const current_value = compressed.charCodeAt(i)
             buf[i * 2] = current_value >>> 8
             buf[i * 2 + 1] = current_value % 256
         }
@@ -84,16 +84,16 @@ export var LZString = {
     },
 
     //decompress from uint8array (UCS-2 big endian format)
-    decompressFromUint8Array: function (compressed) {
+    decompressFromUint8Array: function (compressed: Uint8Array): string | null {
         if (compressed === null || compressed === undefined) {
             return LZString.decompress(compressed)
         } else {
-            var buf = new Array(compressed.length / 2) // 2 bytes per character
-            for (var i = 0, TotalLen = buf.length; i < TotalLen; i++) {
+            const buf = new Array(compressed.length / 2) // 2 bytes per character
+            for (let i = 0, TotalLen = buf.length; i < TotalLen; i++) {
                 buf[i] = compressed[i * 2] * 256 + compressed[i * 2 + 1]
             }
 
-            var result = []
+            const result = []
             buf.forEach(function (c) {
                 result.push(f(c))
             })
@@ -102,7 +102,7 @@ export var LZString = {
     },
 
     //compress into a string that is already URI encoded
-    compressToEncodedURIComponent: function (input) {
+    compressToEncodedURIComponent: function (input: string | null): string | null {
         if (input == null) return ''
         return LZString._compress(input, 6, function (a) {
             return keyStrUriSafe.charAt(a)
@@ -110,7 +110,7 @@ export var LZString = {
     },
 
     //decompress from an output of compressToEncodedURIComponent
-    decompressFromEncodedURIComponent: function (input) {
+    decompressFromEncodedURIComponent: function (input: string | null): string | null {
         if (input == null) return ''
         if (input == '') return null
         input = input.replace(/ /g, '+')
@@ -119,27 +119,31 @@ export var LZString = {
         })
     },
 
-    compress: function (uncompressed) {
+    compress: function (uncompressed: string | null): string {
         return LZString._compress(uncompressed, 16, function (a) {
             return f(a)
         })
     },
-    _compress: function (uncompressed, bitsPerChar, getCharFromInt) {
+    _compress: function (
+        uncompressed: string | null,
+        bitsPerChar: number,
+        getCharFromInt: (number: number) => string
+    ): string {
         if (uncompressed == null) return ''
-        var i,
+        let i,
             value,
-            context_dictionary = {},
-            context_dictionaryToCreate = {},
             context_c = '',
             context_wc = '',
             context_w = '',
             context_enlargeIn = 2, // Compensate for the first entry which should not count
             context_dictSize = 3,
             context_numBits = 2,
-            context_data = [],
             context_data_val = 0,
             context_data_position = 0,
             ii
+        const context_dictionary = {},
+            context_dictionaryToCreate = {},
+            context_data = []
 
         for (ii = 0; ii < uncompressed.length; ii += 1) {
             context_c = uncompressed.charAt(ii)

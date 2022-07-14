@@ -1,4 +1,10 @@
 export class RequestQueueScaffold {
+    isPolling: boolean // flag to continue to recursively poll or not
+    _event_queue: any[]
+    _empty_queue_count: number // to track empty polls
+    _poller: () => void // to become interval for reference to clear later
+    _pollInterval: number
+
     constructor(pollInterval = 3000) {
         this.isPolling = true // flag to continue to recursively poll or not
         this._event_queue = []
@@ -7,7 +13,7 @@ export class RequestQueueScaffold {
         this._pollInterval = pollInterval
     }
 
-    setPollInterval(interval) {
+    setPollInterval(interval: number): void {
         this._pollInterval = interval
         // Reset interval if running already
         if (this.isPolling) {
@@ -15,19 +21,19 @@ export class RequestQueueScaffold {
         }
     }
 
-    enqueue() {
+    enqueue(): void {
         return
     }
 
-    poll() {
+    poll(): void {
         return
     }
 
-    unload() {
+    unload(): void {
         return
     }
 
-    getTime() {
+    getTime(): number {
         return new Date().getTime()
     }
 }

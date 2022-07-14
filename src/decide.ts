@@ -10,7 +10,7 @@ export class Decide {
         this.instance.decideEndpointWasHit = false
     }
 
-    call() {
+    call(): void {
         /*
         Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
         */
@@ -29,7 +29,7 @@ export class Decide {
         )
     }
 
-    parseDecideResponse(response) {
+    parseDecideResponse(response): void {
         if (response?.status === 0) {
             console.error('Failed to fetch feature flags from PostHog.')
             return

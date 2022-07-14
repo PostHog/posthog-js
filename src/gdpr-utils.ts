@@ -69,7 +69,7 @@ export function optOut(token, options) {
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @returns {boolean} whether the user has opted in to the given opt type
  */
-export function hasOptedIn(token, options) {
+export function hasOptedIn(token, options): boolean {
     return _getStorageValue(token, options) === '1'
 }
 
@@ -82,7 +82,7 @@ export function hasOptedIn(token, options) {
  * @param {boolean} [options.respectDnt] - flag to take browser DNT setting into account
  * @returns {boolean} whether the user has opted out of the given opt type
  */
-export function hasOptedOut(token, options) {
+export function hasOptedOut(token, options): boolean {
     if (_hasDoNotTrackFlagOn(options)) {
         return true
     }
