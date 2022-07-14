@@ -2,12 +2,12 @@
 
 import { _each, _isObject } from './utils'
 
-/** @const */ var SET_ACTION = '$set'
-/** @const */ var SET_ONCE_ACTION = '$set_once'
+/** @const */ const SET_ACTION = '$set'
+/** @const */ const SET_ONCE_ACTION = '$set_once'
 
 // Internal methods for posthog.people API.
 // These methods shouldn't involve network I/O.
-var apiActions = {
+const apiActions = {
     set_action: function (prop, to) {
         return this.apiActionParser(SET_ACTION, prop, to)
     },
@@ -17,8 +17,8 @@ var apiActions = {
     },
 
     apiActionParser: function (actionType, prop, to) {
-        var data = {}
-        var props = {}
+        const data = {}
+        const props = {}
 
         if (_isObject(prop)) {
             _each(

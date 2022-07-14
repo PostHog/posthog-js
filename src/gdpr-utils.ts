@@ -24,7 +24,7 @@ import { cookieStore, localStore, localPlusCookieStore } from './storage'
 
 /** Public **/
 
-var GDPR_DEFAULT_PERSISTENCE_PREFIX = '__ph_opt_in_out_'
+const GDPR_DEFAULT_PERSISTENCE_PREFIX = '__ph_opt_in_out_'
 
 /**
  * Opt the user in to data capturing and cookies/localstorage for the given token
@@ -191,9 +191,9 @@ function _getStorageValue(token, options) {
  */
 function _hasDoNotTrackFlagOn(options) {
     if (options && options.respectDnt) {
-        var win = (options && options.window) || window
-        var nav = win['navigator'] || {}
-        var hasDntOn = false
+        const win = (options && options.window) || window
+        const nav = win['navigator'] || {}
+        let hasDntOn = false
         _each(
             [
                 nav['doNotTrack'], // standard
@@ -262,14 +262,14 @@ function _optInOut(optValue, token, options) {
  */
 function _addOptOutCheck(method, getConfigValue, silenceErrors) {
     return function () {
-        var optedOut = false
+        let optedOut = false
 
         try {
-            var token = getConfigValue.call(this, 'token')
-            var respectDnt = getConfigValue.call(this, 'respect_dnt')
-            var persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type')
-            var persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix')
-            var win = getConfigValue.call(this, 'window') // used to override window during browser tests
+            const token = getConfigValue.call(this, 'token')
+            const respectDnt = getConfigValue.call(this, 'respect_dnt')
+            const persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type')
+            const persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix')
+            const win = getConfigValue.call(this, 'window') // used to override window during browser tests
 
             if (token) {
                 // if there was an issue getting the token, continue method execution as normal
@@ -290,7 +290,7 @@ function _addOptOutCheck(method, getConfigValue, silenceErrors) {
             return method.apply(this, arguments)
         }
 
-        var callback = arguments[arguments.length - 1]
+        const callback = arguments[arguments.length - 1]
         if (typeof callback === 'function') {
             callback(0)
         }

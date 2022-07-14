@@ -24,8 +24,8 @@ export class RequestQueue extends RequestQueueScaffold {
         this._poller = setTimeout(() => {
             if (this._event_queue.length > 0) {
                 const requests = this.formatQueue()
-                for (let key in requests) {
-                    let { url, data, options } = requests[key]
+                for (const key in requests) {
+                    const { url, data, options } = requests[key]
                     _each(data, (_, dataKey) => {
                         data[dataKey]['offset'] = Math.abs(data[dataKey]['timestamp'] - this.getTime())
                         delete data[dataKey]['timestamp']
@@ -63,8 +63,8 @@ export class RequestQueue extends RequestQueueScaffold {
 
     updateUnloadMetrics() {
         const requests = this.formatQueue()
-        for (let key in requests) {
-            let { url, data } = requests[key]
+        for (const key in requests) {
+            const { url, data } = requests[key]
 
             this.captureMetrics.incr('batch-unload-requests')
             this.captureMetrics.incr(`batch-unload-requests-${url.slice(url.length - 2)}`)
@@ -77,7 +77,7 @@ export class RequestQueue extends RequestQueueScaffold {
         clearTimeout(this._poller)
         const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
         this._event_queue.length = 0
-        for (let key in requests) {
+        for (const key in requests) {
             const { url, data, options } = requests[key]
             this.handlePollRequest(url, data, { ...options, transport: 'sendbeacon' })
         }

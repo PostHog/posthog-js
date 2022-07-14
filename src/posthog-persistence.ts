@@ -7,22 +7,22 @@ import { Properties } from './types'
 /*
  * Constants
  */
-/** @const */ var SET_QUEUE_KEY = '__mps'
-/** @const */ var SET_ONCE_QUEUE_KEY = '__mpso'
-/** @const */ var UNSET_QUEUE_KEY = '__mpus'
-/** @const */ var ADD_QUEUE_KEY = '__mpa'
-/** @const */ var APPEND_QUEUE_KEY = '__mpap'
-/** @const */ var REMOVE_QUEUE_KEY = '__mpr'
-/** @const */ var UNION_QUEUE_KEY = '__mpu'
+/** @const */ const SET_QUEUE_KEY = '__mps'
+/** @const */ const SET_ONCE_QUEUE_KEY = '__mpso'
+/** @const */ const UNSET_QUEUE_KEY = '__mpus'
+/** @const */ const ADD_QUEUE_KEY = '__mpa'
+/** @const */ const APPEND_QUEUE_KEY = '__mpap'
+/** @const */ const REMOVE_QUEUE_KEY = '__mpr'
+/** @const */ const UNION_QUEUE_KEY = '__mpu'
 // This key is deprecated, but we want to check for it to see whether aliasing is allowed.
-/** @const */ var PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id'
-/** @const */ var ALIAS_ID_KEY = '__alias'
-/** @const */ var CAMPAIGN_IDS_KEY = '__cmpns'
-/** @const */ var EVENT_TIMERS_KEY = '__timers'
-/** @const */ var SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
-/** @const */ var SESSION_ID = '$sesid'
-/** @const */ var ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
-/** @const */ var RESERVED_PROPERTIES = [
+/** @const */ const PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id'
+/** @const */ const ALIAS_ID_KEY = '__alias'
+/** @const */ const CAMPAIGN_IDS_KEY = '__cmpns'
+/** @const */ const EVENT_TIMERS_KEY = '__timers'
+/** @const */ const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
+/** @const */ const SESSION_ID = '$sesid'
+/** @const */ const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
+/** @const */ const RESERVED_PROPERTIES = [
     SET_QUEUE_KEY,
     SET_ONCE_QUEUE_KEY,
     UNSET_QUEUE_KEY,
@@ -43,7 +43,7 @@ import { Properties } from './types'
  * PostHog Persistence Object
  * @constructor
  */
-var PostHogPersistence = function (config) {
+const PostHogPersistence = function (config) {
     // clean chars that aren't accepted by the http spec for cookie values
     // https://datatracker.ietf.org/doc/html/rfc2616#section-2.2
     let token = ''
@@ -61,7 +61,7 @@ var PostHogPersistence = function (config) {
         this.name = 'ph_' + token + '_posthog'
     }
 
-    var storage_type = config['persistence'].toLowerCase()
+    let storage_type = config['persistence'].toLowerCase()
     if (storage_type !== 'cookie' && storage_type.indexOf('localstorage') === -1 && storage_type !== 'memory') {
         logger.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
         storage_type = config['persistence'] = 'cookie'
@@ -82,12 +82,12 @@ var PostHogPersistence = function (config) {
 }
 
 PostHogPersistence.prototype.properties = function () {
-    var p = {}
+    const p = {}
     // Filter out reserved properties
     _each(this['props'], function (v, k) {
         if (k === ENABLED_FEATURE_FLAGS && typeof v === 'object') {
-            var keys = Object.keys(v)
-            for (var i = 0; i < keys.length; i++) {
+            const keys = Object.keys(v)
+            for (let i = 0; i < keys.length; i++) {
                 p[`$feature/${keys[i]}`] = v[keys[i]]
             }
         } else if (!_include(RESERVED_PROPERTIES, k)) {
@@ -102,7 +102,7 @@ PostHogPersistence.prototype.load = function () {
         return
     }
 
-    var entry = this.storage.parse(this.name)
+    const entry = this.storage.parse(this.name)
 
     if (entry) {
         this['props'] = _extend({}, entry)
@@ -268,15 +268,15 @@ PostHogPersistence.prototype.set_secure = function (secure) {
 }
 
 PostHogPersistence.prototype.set_event_timer = function (event_name, timestamp) {
-    var timers = this['props'][EVENT_TIMERS_KEY] || {}
+    const timers = this['props'][EVENT_TIMERS_KEY] || {}
     timers[event_name] = timestamp
     this['props'][EVENT_TIMERS_KEY] = timers
     this.save()
 }
 
 PostHogPersistence.prototype.remove_event_timer = function (event_name) {
-    var timers = this['props'][EVENT_TIMERS_KEY] || {}
-    var timestamp = timers[event_name]
+    const timers = this['props'][EVENT_TIMERS_KEY] || {}
+    const timestamp = timers[event_name]
     if (!_isUndefined(timestamp)) {
         delete this['props'][EVENT_TIMERS_KEY][event_name]
         this.save()

@@ -7,7 +7,7 @@ import { _base64Encode, _copyAndTruncateStrings, _encodeDates, _extend, _info, _
  * PostHog People Object
  * @constructor
  */
-var PostHogPeople = function () {}
+const PostHogPeople = function () {}
 
 _extend(PostHogPeople.prototype, apiActions)
 
@@ -35,7 +35,7 @@ PostHogPeople.prototype._init = function (posthog_instance) {
  * @param {Function} [callback] If provided, the callback will be called after captureing the event.
  */
 PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, callback) {
-    var data = this.set_action(prop, to)
+    const data = this.set_action(prop, to)
     if (_isObject(prop)) {
         callback = to
     }
@@ -76,7 +76,7 @@ PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, ca
  * @param {Function} [callback] If provided, the callback will be called after captureing the event.
  */
 PostHogPeople.prototype.set_once = addOptOutCheckPostHogPeople(function (prop, to, callback) {
-    var data = this.set_once_action(prop, to)
+    const data = this.set_once_action(prop, to)
     if (_isObject(prop)) {
         callback = to
     }
@@ -90,9 +90,9 @@ PostHogPeople.prototype.toString = function () {
 PostHogPeople.prototype._send_request = function (data, callback) {
     data['$token'] = this._get_config('token')
     data['$distinct_id'] = this._posthog.get_distinct_id()
-    var device_id = this._posthog.get_property('$device_id')
-    var user_id = this._posthog.get_property('$user_id')
-    var had_persisted_distinct_id = this._posthog.get_property('$had_persisted_distinct_id')
+    const device_id = this._posthog.get_property('$device_id')
+    const user_id = this._posthog.get_property('$user_id')
+    const had_persisted_distinct_id = this._posthog.get_property('$had_persisted_distinct_id')
     if (device_id) {
         data['$device_id'] = device_id
     }
@@ -103,10 +103,10 @@ PostHogPeople.prototype._send_request = function (data, callback) {
         data['$had_persisted_distinct_id'] = had_persisted_distinct_id
     }
 
-    var date_encoded_data = _encodeDates(data)
-    var truncated_data = _copyAndTruncateStrings(date_encoded_data, this._get_config('properties_string_max_length'))
-    var json_data = JSON.stringify(date_encoded_data)
-    var encoded_data = _base64Encode(json_data)
+    const date_encoded_data = _encodeDates(data)
+    const truncated_data = _copyAndTruncateStrings(date_encoded_data, this._get_config('properties_string_max_length'))
+    const json_data = JSON.stringify(date_encoded_data)
+    const encoded_data = _base64Encode(json_data)
 
     this._posthog._send_request(
         this._get_config('api_host') + '/engage/',

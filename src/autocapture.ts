@@ -40,15 +40,15 @@ const autocapture = {
     },
 
     _getPropertiesFromElement: function (elem, maskInputs, maskText) {
-        var tag_name = elem.tagName.toLowerCase()
-        var props = {
+        const tag_name = elem.tagName.toLowerCase()
+        const props = {
             tag_name: tag_name,
         }
         if (usefulElements.indexOf(tag_name) > -1 && !maskText) {
             props['$el_text'] = getSafeText(elem)
         }
 
-        var classes = getClassName(elem)
+        const classes = getClassName(elem)
         if (classes.length > 0)
             props['classes'] = classes.split(' ').filter(function (c) {
                 return c !== ''
@@ -63,9 +63,9 @@ const autocapture = {
             }
         })
 
-        var nthChild = 1
-        var nthOfType = 1
-        var currentElem = elem
+        let nthChild = 1
+        let nthOfType = 1
+        let currentElem = elem
         while ((currentElem = this._previousElementSibling(currentElem))) {
             // eslint-disable-line no-cond-assign
             nthChild++
@@ -87,9 +87,9 @@ const autocapture = {
     },
 
     _extractCustomPropertyValue: function (customProperty) {
-        var propValues = []
+        const propValues = []
         _each(document.querySelectorAll(customProperty['css_selector']), function (matchedElem) {
-            var value
+            let value
 
             if (['input', 'select'].indexOf(matchedElem.tagName.toLowerCase()) > -1) {
                 value = matchedElem['value']
@@ -105,14 +105,14 @@ const autocapture = {
     },
 
     _getCustomProperties: function (targetElementList) {
-        var props = {}
+        const props = {}
         _each(
             this._customProperties,
             function (customProperty) {
                 _each(
                     customProperty['event_selectors'],
                     function (eventSelector) {
-                        var eventElements = document.querySelectorAll(eventSelector)
+                        const eventElements = document.querySelectorAll(eventSelector)
                         _each(
                             eventElements,
                             function (eventElement) {
@@ -145,7 +145,7 @@ const autocapture = {
 
     _captureEvent: function (e, instance) {
         /*** Don't mess with this code without running IE8 tests on it ***/
-        var target = this._getEventTarget(e)
+        let target = this._getEventTarget(e)
         if (isTextNode(target)) {
             // defeat Safari bug (see: http://www.quirksmode.org/js/events_properties.html)
             target = target.parentNode
@@ -156,8 +156,8 @@ const autocapture = {
         }
 
         if (shouldCaptureDomEvent(target, e)) {
-            var targetElementList = [target]
-            var curEl = target
+            const targetElementList = [target]
+            let curEl = target
             while (curEl.parentNode && !isTag(curEl, 'body')) {
                 if (curEl.parentNode.nodeType === 11) {
                     targetElementList.push(curEl.parentNode.host)
@@ -168,13 +168,13 @@ const autocapture = {
                 curEl = curEl.parentNode
             }
 
-            var elementsJson = []
-            var href,
+            const elementsJson = []
+            let href,
                 explicitNoCapture = false
             _each(
                 targetElementList,
                 function (el) {
-                    var shouldCaptureEl = shouldCaptureElement(el)
+                    const shouldCaptureEl = shouldCaptureElement(el)
 
                     // if the element or a parent element is an anchor tag
                     // include the href as a property
@@ -184,7 +184,7 @@ const autocapture = {
                     }
 
                     // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
-                    var classes = getClassName(el).split(' ')
+                    const classes = getClassName(el).split(' ')
                     if (_includes(classes, 'ph-no-capture')) {
                         explicitNoCapture = true
                     }
@@ -232,7 +232,7 @@ const autocapture = {
     },
 
     _addDomEventHandlers: function (instance) {
-        var handler = _bind(function (e) {
+        const handler = _bind(function (e) {
             e = e || window.event
             this._captureEvent(e, instance)
         }, this)
@@ -242,12 +242,13 @@ const autocapture = {
     },
 
     _customProperties: {},
+
     init: function (instance) {
         this.rageclicks = new RageClick(instance)
     },
 
     afterDecideResponse: function (response, instance) {
-        var token = instance.get_config('token')
+        const token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
             logger.log('autocapture already initialized for token "' + token + '"')
             return

@@ -9,25 +9,25 @@
 // LZ-based compression algorithm, version 1.4.4
 
 // private property
-var f = String.fromCharCode
-var keyStrBase64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
-var keyStrUriSafe = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$'
-var baseReverseDic = {}
+const f = String.fromCharCode
+const keyStrBase64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+const keyStrUriSafe = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$'
+const baseReverseDic = {}
 
 function getBaseValue(alphabet, character) {
     if (!baseReverseDic[alphabet]) {
         baseReverseDic[alphabet] = {}
-        for (var i = 0; i < alphabet.length; i++) {
+        for (let i = 0; i < alphabet.length; i++) {
             baseReverseDic[alphabet][alphabet.charAt(i)] = i
         }
     }
     return baseReverseDic[alphabet][character]
 }
 
-export var LZString = {
+export const LZString = {
     compressToBase64: function (input) {
         if (input == null) return ''
-        var res = LZString._compress(input, 6, function (a) {
+        const res = LZString._compress(input, 6, function (a) {
             return keyStrBase64.charAt(a)
         })
         switch (
@@ -350,7 +350,7 @@ export var LZString = {
     },
 
     _decompress: function (length, resetValue, getNextValue) {
-        var dictionary = [],
+        let dictionary = [],
             enlargeIn = 4,
             dictSize = 4,
             numBits = 3,

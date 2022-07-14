@@ -243,7 +243,7 @@ export class PostHogLib {
     __captureHooks: any
     __request_queue: any
     __autocapture_enabled: any
-    decideEndpointWasHit = false
+    // decideEndpointWasHit = false
 
     // Initialization methods
 
@@ -1584,7 +1584,7 @@ export class PostHogLib {
                         '/recordings/#sessionRecordingId=' +
                         _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
                 }
-                let data = {
+                const data = {
                     $sentry_event_id: event.event_id,
                     $sentry_exception: event.exception,
                 }
@@ -1645,7 +1645,7 @@ const override_ph_init_func = function () {
             }
             return posthog_master[name]
         } else {
-            const instance = posthog_master
+            let instance = posthog_master
 
             if (instances[PRIMARY_INSTANCE_NAME]) {
                 // main posthog lib already initialized

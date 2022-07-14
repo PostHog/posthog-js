@@ -33,19 +33,19 @@ export const cookieStore = {
 
     set: function (name, value, days, cross_subdomain, is_secure) {
         try {
-            var cdomain = '',
+            let cdomain = '',
                 expires = '',
                 secure = ''
 
             if (cross_subdomain) {
-                var matches = document.location.hostname.match(DOMAIN_MATCH_REGEX),
+                const matches = document.location.hostname.match(DOMAIN_MATCH_REGEX),
                     domain = matches ? matches[0] : ''
 
                 cdomain = domain ? '; domain=.' + domain : ''
             }
 
             if (days) {
-                var date = new Date()
+                const date = new Date()
                 date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000)
                 expires = '; expires=' + date.toGMTString()
             }
@@ -54,7 +54,7 @@ export const cookieStore = {
                 secure = '; secure'
             }
 
-            var new_cookie_val =
+            const new_cookie_val =
                 name + '=' + encodeURIComponent(JSON.stringify(value)) + expires + '; path=/' + cdomain + secure
             document.cookie = new_cookie_val
             return new_cookie_val
@@ -72,17 +72,17 @@ export const cookieStore = {
     },
 }
 
-var _localStorage_supported = null
+let _localStorage_supported = null
 export const localStore = {
     is_supported: function () {
         if (_localStorage_supported !== null) {
             return _localStorage_supported
         }
 
-        var supported = true
+        let supported = true
         if (window) {
             try {
-                var key = '__mplssupport__',
+                const key = '__mplssupport__',
                     val = 'xyz'
                 localStore.set(key, val)
                 if (localStore.get(key) !== '"xyz"') {
@@ -222,7 +222,7 @@ export const sessionStore = {
         sessionStore.sessionStorageSupported = true
         if (window) {
             try {
-                let key = '__support__',
+                const key = '__support__',
                     val = 'xyz'
                 sessionStore.set(key, val)
                 if (sessionStore.get(key) !== '"xyz"') {

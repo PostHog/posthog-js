@@ -111,7 +111,7 @@ export const _bind = function (func, context) {
 }
 
 export const _bind_instance_methods = function (obj) {
-    for (let func in obj) {
+    for (const func in obj) {
         if (typeof obj[func] === 'function') {
             obj[func] = _bind(obj[func], obj)
         }
@@ -140,7 +140,7 @@ export const _each = function <V = any, O = Record<string, V> | V[], C = any>(
             }
         }
     } else {
-        for (let key in obj) {
+        for (const key in obj) {
             if (hasOwnProperty.call(obj, key)) {
                 if (iterator.call(context, obj[key], key, obj) === breaker) {
                     return
@@ -152,7 +152,7 @@ export const _each = function <V = any, O = Record<string, V> | V[], C = any>(
 
 export const _extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
     _each(args, function (source) {
-        for (let prop in source) {
+        for (const prop in source) {
             if (source[prop] !== void 0) {
                 obj[prop] = source[prop]
             }
@@ -360,7 +360,7 @@ export const _copyAndTruncateStrings = <T = any>(object: T, maxStringLength: num
     })
 
 export const _base64Encode = function (data) {
-    let b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+    const b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
     let o1,
         o2,
         o3,
@@ -424,7 +424,7 @@ export const _utf8Encode = function (string: string): string {
     stringl = string.length
 
     for (n = 0; n < stringl; n++) {
-        let c1 = string.charCodeAt(n)
+        const c1 = string.charCodeAt(n)
         let enc = null
 
         if (c1 < 128) {
@@ -468,7 +468,7 @@ export const _UUID = (function () {
     }
 
     // Math.Random entropy
-    let R = function () {
+    const R = function () {
         return Math.random().toString(16).replace('.', '')
     }
 
@@ -476,7 +476,7 @@ export const _UUID = (function () {
     // This function takes the user agent string, and then xors
     // together each sequence of 8 bytes.  This produces a final
     // sequence of 8 bytes which it returns as hex.
-    let UA = function () {
+    const UA = function () {
         let ua = userAgent,
             i,
             ch,
@@ -509,7 +509,7 @@ export const _UUID = (function () {
     }
 
     return function () {
-        let se = (window.screen.height * window.screen.width).toString(16)
+        const se = (window.screen.height * window.screen.width).toString(16)
         return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
     }
 })()
@@ -595,14 +595,14 @@ export const _register_event = (function () {
         if (element.addEventListener && !oldSchool) {
             element.addEventListener(type, handler, !!useCapture)
         } else {
-            let ontype = 'on' + type
-            let old_handler = element[ontype] // can be undefined
+            const ontype = 'on' + type
+            const old_handler = element[ontype] // can be undefined
             element[ontype] = makeHandler(element, handler, old_handler)
         }
     }
 
     function makeHandler(element, new_handler, old_handlers) {
-        let handler = function (event) {
+        const handler = function (event) {
             event = event || fixEvent(window.event)
 
             // this basically happens in firefox whenever another script
@@ -656,7 +656,7 @@ export const _info = {
         )
         const params = {}
         _each(campaign_keywords, function (kwkey) {
-            let kw = _getQueryParam(document.URL, kwkey)
+            const kw = _getQueryParam(document.URL, kwkey)
             if (kw.length) {
                 params[kwkey] = kw
             }
@@ -680,14 +680,14 @@ export const _info = {
     },
 
     searchInfo: function (referrer: string) {
-        let search = _info.searchEngine(referrer),
+        const search = _info.searchEngine(referrer),
             param = search != 'yahoo' ? 'q' : 'p',
             ret = {}
 
         if (search !== null) {
             ret['$search_engine'] = search
 
-            let keyword = _getQueryParam(referrer, param)
+            const keyword = _getQueryParam(referrer, param)
             if (keyword.length) {
                 ret['ph_keyword'] = keyword
             }
@@ -753,8 +753,8 @@ export const _info = {
      * http://www.useragentstring.com/pages/useragentstring.php
      */
     browserVersion: function (userAgent, vendor, opera) {
-        let browser = _info.browser(userAgent, vendor, opera)
-        let versionRegexs = {
+        const browser = _info.browser(userAgent, vendor, opera)
+        const versionRegexs = {
             'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
             'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
             Chrome: /Chrome\/(\d+(\.\d+)?)/,
@@ -772,11 +772,11 @@ export const _info = {
             'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
             Mozilla: /rv:(\d+(\.\d+)?)/,
         }
-        let regex = versionRegexs[browser]
+        const regex = versionRegexs[browser]
         if (regex === undefined) {
             return null
         }
-        let matches = userAgent.match(regex)
+        const matches = userAgent.match(regex)
         if (!matches) {
             return null
         }
@@ -784,7 +784,7 @@ export const _info = {
     },
 
     os: function () {
-        let a = userAgent
+        const a = userAgent
         if (/Windows/i.test(a)) {
             if (/Phone/.test(a) || /WPDesktop/.test(a)) {
                 return 'Windows Phone'
@@ -839,7 +839,7 @@ export const _info = {
     },
 
     referringDomain: function (referrer: string): string {
-        let split = referrer.split('/')
+        const split = referrer.split('/')
         if (split.length >= 3) {
             return split[2]
         }
