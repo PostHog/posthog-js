@@ -12,9 +12,9 @@
 const f = String.fromCharCode
 const keyStrBase64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
 const keyStrUriSafe = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$'
-const baseReverseDic = {}
+const baseReverseDic: Record<string, Record<string, number>> = {}
 
-function getBaseValue(alphabet, character) {
+function getBaseValue(alphabet: string, character: string) {
     if (!baseReverseDic[alphabet]) {
         baseReverseDic[alphabet] = {}
         for (let i = 0; i < alphabet.length; i++) {
@@ -25,7 +25,7 @@ function getBaseValue(alphabet, character) {
 }
 
 export const LZString = {
-    compressToBase64: function (input) {
+    compressToBase64: function (input: null | string) {
         if (input == null) return ''
         const res = LZString._compress(input, 6, function (a) {
             return keyStrBase64.charAt(a)
@@ -341,7 +341,7 @@ export const LZString = {
         return context_data.join('')
     },
 
-    decompress: function (compressed) {
+    decompress: function (compressed: string | null) {
         if (compressed == null) return ''
         if (compressed == '') return null
         return LZString._decompress(compressed.length, 32768, function (index) {
@@ -349,7 +349,7 @@ export const LZString = {
         })
     },
 
-    _decompress: function (length, resetValue, getNextValue) {
+    _decompress: function (length: string, resetValue, getNextValue) {
         let dictionary = [],
             enlargeIn = 4,
             dictSize = 4,

@@ -457,13 +457,13 @@ export const _UUID = (function () {
     // Time/ticks information
     // 1*new Date() is a cross browser version of Date.now()
     const T = function () {
-        let d = 1 * new Date(),
-            i = 0
+        const d = new Date().valueOf()
+        let i = 0
 
         // this while loop figures how many browser ticks go by
         // before 1*new Date() returns a new number, ie the amount
         // of ticks that go by per millisecond
-        while (d == 1 * new Date()) {
+        while (d == new Date().valueOf()) {
             i++
         }
 
@@ -480,13 +480,13 @@ export const _UUID = (function () {
     // together each sequence of 8 bytes.  This produces a final
     // sequence of 8 bytes which it returns as hex.
     const UA = function () {
-        let ua = userAgent,
-            i,
+        const ua = userAgent
+        let i,
             ch,
-            buffer = [],
-            ret = 0
+            ret = 0,
+            buffer: number[] = []
 
-        function xor(result, byte_array) {
+        function xor(result: number, byte_array: number[]) {
             let j,
                 tmp = 0
             for (j = 0; j < byte_array.length; j++) {
@@ -535,7 +535,7 @@ export const _isBlockedUA = function (ua: string): boolean {
  * @param {Object=} formdata
  * @param {string=} arg_separator
  */
-export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_separator = '&') {
+export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_separator = '&'): string {
     let use_val: string
     let use_key: string
     const tph_arr: string[] = []
@@ -653,11 +653,11 @@ export const _register_event = (function () {
 })()
 
 export const _info = {
-    campaignParams: function () {
+    campaignParams: function (): Record<string, any> {
         const campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term gclid fbclid msclkid'.split(
             ' '
         )
-        const params = {}
+        const params: Record<string, any> = {}
         _each(campaign_keywords, function (kwkey) {
             const kw = _getQueryParam(document.URL, kwkey)
             if (kw.length) {
@@ -682,10 +682,10 @@ export const _info = {
         }
     },
 
-    searchInfo: function (referrer: string) {
+    searchInfo: function (referrer: string): Record<string, any> {
         const search = _info.searchEngine(referrer),
             param = search != 'yahoo' ? 'q' : 'p',
-            ret = {}
+            ret: Record<string, any> = {}
 
         if (search !== null) {
             ret['$search_engine'] = search
@@ -704,7 +704,7 @@ export const _info = {
      * The order of the checks are important since many user agents
      * include key words used in later checks.
      */
-    browser: function (user_agent: string, vendor, opera): string {
+    browser: function (user_agent: string, vendor: string, opera?: any): string {
         vendor = vendor || '' // vendor is undefined for at least IE9
         if (opera || _includes(user_agent, ' OPR/')) {
             if (_includes(user_agent, 'Mini')) {
@@ -755,7 +755,7 @@ export const _info = {
      * parsing major and minor version (e.g., 42.1). User agent strings from:
      * http://www.useragentstring.com/pages/useragentstring.php
      */
-    browserVersion: function (userAgent, vendor, opera) {
+    browserVersion: function (userAgent: string, vendor: string, opera: string): number | null {
         const browser = _info.browser(userAgent, vendor, opera)
         const versionRegexs = {
             'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
@@ -786,7 +786,7 @@ export const _info = {
         return parseFloat(matches[matches.length - 2])
     },
 
-    os: function () {
+    os: function (): string {
         const a = userAgent
         if (/Windows/i.test(a)) {
             if (/Phone/.test(a) || /WPDesktop/.test(a)) {
@@ -810,7 +810,7 @@ export const _info = {
         }
     },
 
-    device: function (user_agent) {
+    device: function (user_agent: string): string {
         if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
             return 'Windows Phone'
         } else if (/iPad/.test(user_agent)) {
@@ -830,7 +830,7 @@ export const _info = {
         }
     },
 
-    deviceType: function (user_agent: string) {
+    deviceType: function (user_agent: string): string {
         const device = this.device(user_agent)
         if (device === 'iPad' || device === 'Android Tablet') {
             return 'Tablet'

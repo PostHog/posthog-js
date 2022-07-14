@@ -1,25 +1,26 @@
 import { LZString } from './lz-string'
-import { strToU8, gzipSync } from 'fflate'
+import { gzipSync, strToU8 } from 'fflate'
 import { _base64Encode } from './utils'
+import { Compression } from './types'
 
-export function decideCompression(compressionSupport) {
-    if (compressionSupport['gzip-js']) {
-        return 'gzip-js'
-    } else if (compressionSupport['lz64']) {
-        return 'lz64'
+export function decideCompression(compressionSupport: Record<Compression, boolean>): Compression {
+    if (compressionSupport[Compression.GZipJS]) {
+        return Compression.GZipJS
+    } else if (compressionSupport[Compression.LZ64]) {
+        return Compression.LZ64
     } else {
-        return 'base64'
+        return Compression.Base64
     }
 }
 
-export function compressData(compression, jsonData, options) {
-    if (compression === 'lz64') {
-        return [{ data: LZString.compressToBase64(jsonData), compression: 'lz64' }, options]
-    } else if (compression === 'gzip-js') {
+export function compressData(compression: Compression, jsonData: string, options) {
+    if (compression === Compression.LZ64) {
+        return [{ data: LZString.compressToBase64(jsonData), compression: Compression.LZ64 }, options]
+    } else if (compression === Compression.GZipJS) {
         // :TRICKY: This returns an UInt8Array. We don't encode this to a string - returning a blob will do this for us.
         return [
             gzipSync(strToU8(jsonData), { mtime: 0 }),
-            { ...options, blob: true, urlQueryArgs: { compression: 'gzip-js' } },
+            { ...options, blob: true, urlQueryArgs: { compression: Compression.GZipJS } },
         ]
     } else {
         return [{ data: _base64Encode(jsonData) }, options]

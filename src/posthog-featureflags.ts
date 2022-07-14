@@ -1,11 +1,12 @@
 import { _base64Encode, _extend } from './utils'
+import { PostHogLib } from './posthog-core'
 
 export const parseFeatureFlagDecideResponse = (response, persistence) => {
     const flags = response['featureFlags']
     if (flags) {
         // using the v1 api
         if (Array.isArray(flags)) {
-            const $enabled_feature_flags = {}
+            const $enabled_feature_flags: Record<string, boolean> = {}
             if (flags) {
                 for (let i = 0; i < flags.length; i++) {
                     $enabled_feature_flags[flags[i]] = true
@@ -33,7 +34,15 @@ export const parseFeatureFlagDecideResponse = (response, persistence) => {
 }
 
 export class PostHogFeatureFlags {
-    constructor(instance) {
+    instance: PostHogLib
+    _override_warning: boolean
+    flagCallReported: Record<string, boolean>
+    featureFlagEventHandlers: ((flags: string[], variants: Record<string, string | boolean>) => void)[]
+    reloadFeatureFlagsQueued: boolean
+    reloadFeatureFlagsInAction: boolean
+    $anon_distinct_id: string | undefined
+
+    constructor(instance: PostHogLib) {
         this.instance = instance
         this._override_warning = false
         this.flagCallReported = {}
@@ -43,11 +52,11 @@ export class PostHogFeatureFlags {
         this.reloadFeatureFlagsInAction = false
     }
 
-    getFlags() {
+    getFlags(): string[] {
         return Object.keys(this.getFlagVariants())
     }
 
-    getFlagVariants() {
+    getFlagVariants(): Record<string, string | boolean> {
         const enabledFlags = this.instance.get_property('$enabled_feature_flags')
         const overriddenFlags = this.instance.get_property('$override_feature_flags')
         if (!overriddenFlags) {
@@ -83,26 +92,26 @@ export class PostHogFeatureFlags {
      * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
      * 3. Don't call this during initial load (as /decide will be called instead), see posthog-core.js
      */
-    reloadFeatureFlags() {
+    reloadFeatureFlags(): void {
         if (!this.reloadFeatureFlagsQueued) {
             this.reloadFeatureFlagsQueued = true
             this._startReloadTimer()
         }
     }
 
-    setAnonymousDistinctId(anon_distinct_id) {
+    setAnonymousDistinctId(anon_distinct_id: string): void {
         this.$anon_distinct_id = anon_distinct_id
     }
 
-    setReloadingPaused(isPaused) {
+    setReloadingPaused(isPaused: boolean): void {
         this.reloadFeatureFlagsInAction = isPaused
     }
 
-    resetRequestQueue() {
+    resetRequestQueue(): void {
         this.reloadFeatureFlagsQueued = false
     }
 
-    _startReloadTimer() {
+    _startReloadTimer(): void {
         if (this.reloadFeatureFlagsQueued && !this.reloadFeatureFlagsInAction) {
             setTimeout(() => {
                 if (!this.reloadFeatureFlagsInAction && this.reloadFeatureFlagsQueued) {
@@ -113,7 +122,7 @@ export class PostHogFeatureFlags {
         }
     }
 
-    _reloadFeatureFlagsRequest() {
+    _reloadFeatureFlagsRequest(): void {
         this.setReloadingPaused(true)
         const token = this.instance.get_config('token')
         const json_data = JSON.stringify({
@@ -152,7 +161,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} key Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    getFeatureFlag(key, options = {}) {
+    getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string {
         if (!this.getFlags()) {
             console.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
@@ -175,7 +184,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} key Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key, options = {}) {
+    isFeatureEnabled(key: string, options?: { send_event?: boolean } = {}): boolean {
         if (!this.getFlags()) {
             console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
@@ -183,11 +192,11 @@ export class PostHogFeatureFlags {
         return !!this.getFeatureFlag(key, options)
     }
 
-    addFeatureFlagsHandler(handler) {
+    addFeatureFlagsHandler(handler): void {
         this.featureFlagEventHandlers.push(handler)
     }
 
-    receivedFeatureFlags(response) {
+    receivedFeatureFlags(response): void {
         parseFeatureFlagDecideResponse(response, this.instance.persistence)
         const flags = this.getFlags()
         const variants = this.getFlagVariants()
@@ -205,13 +214,13 @@ export class PostHogFeatureFlags {
      *
      * @param {Object|Array|String} flags Flags to override with.
      */
-    override(flags) {
+    override(flags: boolean | string[] | Record<string, string | boolean>): void {
         this._override_warning = false
 
         if (flags === false) {
             this.instance.persistence.unregister('$override_feature_flags')
         } else if (Array.isArray(flags)) {
-            const flagsObj = {}
+            const flagsObj: Record<string, string | boolean> = {}
             for (let i = 0; i < flags.length; i++) {
                 flagsObj[flags[i]] = true
             }
@@ -231,7 +240,7 @@ export class PostHogFeatureFlags {
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
      *                              It'll return a list of feature flags enabled for the user.
      */
-    onFeatureFlags(callback) {
+    onFeatureFlags(callback): void {
         this.addFeatureFlagsHandler(callback)
         if (this.instance.decideEndpointWasHit) {
             const flags = this.getFlags()

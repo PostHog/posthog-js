@@ -27,7 +27,7 @@ export class Toolbar {
      * 1. In the URL hash params if the customer is using an old snippet
      * 2. From session storage under the key `editorParams` if the editor was initialized on a previous page
      */
-    maybeLoadEditor(location = window.location, localStorage, history = window.history) {
+    maybeLoadEditor(location = window.location, localStorage = undefined, history = window.history) {
         try {
             // Before running the code we check if we can access localStorage, if not we opt-out
             if (!localStorage) {

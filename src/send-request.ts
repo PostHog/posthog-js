@@ -1,5 +1,6 @@
 import { _each, _HTTPBuildQuery, logger } from './utils'
 import Config from './config'
+import { NetworkRequestOptions } from './types'
 
 export const addParamsToURL = (
     url: string,
@@ -26,7 +27,7 @@ export const addParamsToURL = (
     return url + argSeparator + _HTTPBuildQuery(args)
 }
 
-export const encodePostData = (data, options) => {
+export const encodePostData = (data: any, options: Partial<NetworkRequestOptions>): string | Blob | null => {
     if (options.blob && data.buffer) {
         return new Blob([data.buffer], { type: 'text/plain' })
     }

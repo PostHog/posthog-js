@@ -255,80 +255,28 @@ export declare class PeopleClass {
     static toString(): string
 }
 
-export declare class SessionManagerClass {
-    /*
-     * Allows you to manually reset the current session id. By default, the session id is reset after 30 minutes
-     * of inactivity, but with this function, you can reset it earlier. This will also result in a new session recording.
-     *
-     *
-     * ### Usage:
-     *
-     *     posthog.sessionManager.resetSessionId()
-     *
-     */
-    static resetSessionId(): void
-}
-
-export declare class FeatureFlagsClass {
-    static getFlags(): string[]
-    static getFlagVariants(): Record<string, boolean | string>
-
-    static reloadFeatureFlags(): void
-
-    /*
-     * Get feature flag variant for user
-     *
-     * ### Usage:
-     *
-     *     if(posthog.getFeatureFlag('beta-feature')) { // do something }
-     *     if(posthog.getFeatureFlag('feature-with-variant') === 'some-value') { // do something }
-     *
-     * @param {Object|String} prop Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
-     */
-    static getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined
-
-    /*
-     * See if feature flag is enabled for user.
-     *
-     * ### Usage:
-     *
-     *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
-     *
-     * @param {Object|String} prop Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
-     */
-    static isFeatureEnabled(key: string, options?: { send_event?: boolean }): boolean
-
-    /*
-     * See if feature flags are available.
-     *
-     * ### Usage:
-     *
-     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
-     *
-     * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
-     */
-    static onFeatureFlags(
-        callback: (flags: string[], variants: Record<string, boolean | string>) => void
-    ): false | undefined
-
-    /*
-     * Override flags locally.
-     *
-     * ### Usage:
-     *
-     *     - posthog.feature_flags.override(false)
-     *     - posthog.feature_flags.override(['beta-feature'])
-     *     - posthog.feature_flags.override({'beta-feature': 'variant', 'other-feature': True})
-     *
-     * @param {Function} [callback] The callback function will be called once the feature flags are ready. It'll return a list of feature flags enabled for the user.
-     */
-    static override(flags: false | string[] | Record<string, boolean | string>): void
-}
-
 export declare class SentryIntegration implements Integration {
     constructor(posthog: PostHogLib, organization?: string, projectId?: number, prefix?: string)
     name: string
     setupOnce(addGlobalEventProcessor: (callback: EventProcessor) => void, getCurrentHub: () => Hub): void
 }
+
+export enum Compression {
+    GZipJS = 'gzip-js',
+    LZ64 = 'lz64',
+    Base64 = 'base64',
+}
+
+export interface NetworkRequestOptions {
+    sendBeacon: boolean
+    blob: boolean
+    method: 'POST' | 'GET'
+}
+
+export interface XHROptions {
+    transport: 'XHR' | 'sendBeacon'
+    method: 'POST' | 'GET'
+    urlQueryArgs?: { compressin: Compression }
+}
+
+export interface RetryQueueElement {}

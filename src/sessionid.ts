@@ -1,13 +1,25 @@
 import { SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
 import { _UUID } from './utils'
+import { PersistenceClass, PostHogConfig } from './types'
 
 const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
-    constructor(config, persistence) {
+    persistence: PersistenceClass
+    _windowId: string | null | undefined
+    _sessionId: string | null | undefined
+    window_id_storage_key: string
+    _sessionStartTimestamp: number | null
+    _sessionActivityTimestamp: number | null
+
+    constructor(config: Partial<PostHogConfig>, persistence) {
         this.persistence = persistence
+        this._windowId = undefined
+        this._sessionId = undefined
+        this._sessionStartTimestamp = null
+        this._sessionActivityTimestamp = null
 
         if (config['persistence_name']) {
             this.window_id_storage_key = 'ph_' + config['persistence_name'] + '_window_id'
@@ -20,7 +32,7 @@ export class SessionIdManager {
     // and persists page loads/reloads. So it's uniquely suited for storing the windowId. This function also respects
     // when persistence is disabled (by user config) and when sessionStorage is not supported (it *should* be supported on all browsers),
     // and in that case, it falls back to memory (which sadly, won't persist page loads)
-    _setWindowId(windowId) {
+    _setWindowId(windowId: string): void {
         if (windowId !== this._windowId) {
             this._windowId = windowId
             if (!this.persistence.disabled && sessionStore.is_supported()) {
@@ -29,7 +41,7 @@ export class SessionIdManager {
         }
     }
 
-    _getWindowId() {
+    _getWindowId(): string | null {
         if (this._windowId) {
             return this._windowId
         }
@@ -41,7 +53,11 @@ export class SessionIdManager {
 
     // Note: 'this.persistence.register' can be disabled in the config.
     // In that case, this works by storing sessionId and the timestamp in memory.
-    _setSessionId(sessionId, sessionActivityTimestamp, sessionStartTimestamp) {
+    _setSessionId(
+        sessionId: string | null,
+        sessionActivityTimestamp: number | null,
+        sessionStartTimestamp: number | null
+    ): void {
         if (
             sessionId !== this._sessionId ||
             sessionActivityTimestamp !== this._sessionActivityTimestamp ||
@@ -56,11 +72,11 @@ export class SessionIdManager {
         }
     }
 
-    _getSessionId() {
+    _getSessionId(): [number, string, number] {
         if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
             return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
-        const sessionId = this.persistence['props'][SESSION_ID]
+        const sessionId = this.persistence.props[SESSION_ID]
 
         if (Array.isArray(sessionId) && sessionId.length === 2) {
             // Storage does not yet have a session start time. Add the last activity timestamp as the start time
@@ -72,7 +88,7 @@ export class SessionIdManager {
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
     // new ids will be generated.
-    resetSessionId() {
+    resetSessionId(): void {
         this._setSessionId(null, null, null)
     }
 
@@ -92,8 +108,8 @@ export class SessionIdManager {
      * @param {boolean} readOnly (optional) Defaults to False. Should be set to True when the call to the function should not extend or cycle the session (e.g. being called for non-user generated events)
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
-    checkAndGetSessionAndWindowId(readOnly = false, timestamp = null) {
-        timestamp = timestamp || new Date().getTime()
+    checkAndGetSessionAndWindowId(readOnly = false, _timestamp = null) {
+        const timestamp = _timestamp || new Date().getTime()
 
         let [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
         let windowId = this._getWindowId()

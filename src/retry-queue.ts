@@ -1,14 +1,24 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
+import { CaptureMetrics } from './capture-metrics'
+import { RetryQueueElement } from './types'
 
 export class RetryQueue extends RequestQueueScaffold {
-    constructor(captureMetrics, onXHRError) {
+    captureMetrics: CaptureMetrics
+    queue: RetryQueueElement[]
+    isPolling: boolean
+    areWeOnline: boolean
+    onXHRError: (failedRequest: XMLHttpRequest) => void
+    _poller: NodeJS.Timeout | undefined
+
+    constructor(captureMetrics: CaptureMetrics, onXHRError: (failedRequest: XMLHttpRequest) => void) {
         super()
         this.captureMetrics = captureMetrics
         this.isPolling = false
         this.queue = []
         this.areWeOnline = true
         this.onXHRError = onXHRError
+        this._poller = undefined
 
         if ('onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
@@ -21,7 +31,7 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    enqueue(requestData) {
+    enqueue(requestData): void {
         const retriesPerformedSoFar = requestData.retriesPerformedSoFar || 0
         if (retriesPerformedSoFar >= 10) {
             return
@@ -36,17 +46,17 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    poll() {
-        clearTimeout(this._poller)
+    poll(): void {
+        this._poller && clearTimeout(this._poller)
         this._poller = setTimeout(() => {
             if (this.areWeOnline && this.queue.length > 0) {
                 this.flush()
             }
             this.poll()
-        }, this._pollInterval)
+        }, this._pollInterval) as NodeJS.Timeout
     }
 
-    flush() {
+    flush(): void {
         // using Date.now to make tests easier as recommended here https://codewithhugo.com/mocking-the-current-date-in-jest-tests/
         const now = new Date(Date.now())
         const toFlush = this.queue.filter(({ retryAt }) => retryAt < now)
@@ -58,8 +68,11 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    unload() {
-        clearTimeout(this._poller)
+    unload(): void {
+        if (this._poller) {
+            clearTimeout(this._poller)
+            this._poller = undefined
+        }
         for (const { requestData } of this.queue) {
             const { url, data, options } = requestData
             try {
@@ -75,7 +88,7 @@ export class RetryQueue extends RequestQueueScaffold {
         this.queue = []
     }
 
-    _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }) {
+    _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }): void {
         xhr({
             url,
             data: data || {},
@@ -89,7 +102,7 @@ export class RetryQueue extends RequestQueueScaffold {
         })
     }
 
-    _handleWeAreNowOnline() {
+    _handleWeAreNowOnline(): void {
         this.areWeOnline = true
         this.flush()
     }

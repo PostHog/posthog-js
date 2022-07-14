@@ -2,7 +2,7 @@
 
 import { _each, _extend, _include, _info, _isObject, _isUndefined, _strip_empty_properties, logger } from './utils'
 import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
-import { Properties } from './types'
+import { PostHogConfig, Properties } from './types'
 
 /*
  * Constants
@@ -231,7 +231,7 @@ PostHogPersistence.prototype.safe_merge = function (props) {
     return props
 }
 
-PostHogPersistence.prototype.update_config = function (config) {
+PostHogPersistence.prototype.update_config = function (config: Partial<PostHogConfig>) {
     this.default_expiry = this.expire_days = config['cookie_expiration']
     this.set_disabled(config['disable_persistence'])
     this.set_cross_subdomain(config['cross_subdomain_cookie'])

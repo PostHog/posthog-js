@@ -37,7 +37,7 @@ import { getPerformanceData } from './apm'
 import {
     CaptureResult,
     ClearOptInOutCapturingOptions,
-    FeatureFlagsClass,
+    Compression,
     HasOptedInOutCapturingOptions,
     isFeatureEnabledOptions,
     OptInOutCapturingOptions,
@@ -45,7 +45,9 @@ import {
     PostHogConfig,
     Properties,
     Property,
+    XHROptions,
 } from './types'
+import { FeatureFlags } from '../react'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -158,7 +160,7 @@ const defaultConfig = (): PostHogConfig => ({
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_mplib = function (token: string, config?: PostHogConfig, name: string) {
+const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string): PostHogLib {
     let instance: PostHogLib
     const target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
 
@@ -227,8 +229,8 @@ export class PostHogLib {
 
     people: PostHogPeople
     persistence: PersistenceClass
-    featureFlags: FeatureFlagsClass
-    feature_flags: FeatureFlagsClass
+    featureFlags: FeatureFlags
+    feature_flags: FeatureFlags
     sessionManager: SessionIdManager
     toolbar: Toolbar
     sessionRecording: SessionRecording
@@ -238,12 +240,17 @@ export class PostHogLib {
     _retryQueue: RetryQueue
 
     _triggered_notifs: any
-    compression: any
+    compression: Partial<Record<Compression, boolean>>
     _jsc: any
     __captureHooks: any
     __request_queue: any
-    __autocapture_enabled: any
-    // decideEndpointWasHit = false
+    __autocapture_enabled: boolean
+    decideEndpointWasHit: boolean
+
+    constructor() {
+        this.compression = {}
+        this.decideEndpointWasHit = false
+    }
 
     // Initialization methods
 
@@ -263,7 +270,7 @@ export class PostHogLib {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    init(token: string, config: Partial<PostHogConfig>, name: string) {
+    init(token: string, config: Partial<PostHogConfig>, name: string): PostHogLib | void {
         if (_isUndefined(name)) {
             console.error('You must name your new library: init(token, config, name)')
             return
@@ -287,11 +294,10 @@ export class PostHogLib {
     // method is this one initializes the actual instance, whereas the
     // init(...) method sets up a new library and calls _init on it.
     //
-    _init(token: string, config: Partial<PostHogConfig>, name: string) {
+    _init(token: string, config: Partial<PostHogConfig>, name: string): void {
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
-        this.compression = {}
 
         this.set_config(
             _extend({}, defaultConfig(), config, {
@@ -398,7 +404,7 @@ export class PostHogLib {
      * If we are going to use script tags, this returns a string to use as the
      * callback GET param.
      */
-    _prepare_callback(callback, data) {
+    _prepare_callback(callback, data?) {
         if (_isUndefined(callback)) {
             return null
         }
@@ -447,22 +453,12 @@ export class PostHogLib {
         this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
     }
 
-    __compress_and_send_json_request(
-        url: string,
-        jsonData: Record<string, any>,
-        options?: { transport: 'XHR' | 'sendBeacon' },
-        callback
-    ): void {
+    __compress_and_send_json_request(url: string, jsonData: string, options?: XHROptions, callback): void {
         const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
         this._send_request(url, data, _options, callback)
     }
 
-    _send_request(
-        url: string,
-        data: Record<string, any>,
-        options?: { transport: 'XHR' | 'sendBeacon' },
-        callback
-    ): void {
+    _send_request(url: string, data: Record<string, any>, options: Partial<XHROptions>, callback): void {
         if (ENQUEUE_REQUESTS) {
             this.__request_queue.push(arguments)
             return
@@ -479,7 +475,7 @@ export class PostHogLib {
             options.method = 'GET'
         }
 
-        const useSendBeacon = window.navigator.sendBeacon && options.transport.toLowerCase() === 'sendbeacon'
+        const useSendBeacon = 'sendBeacon' in window.navigator && options.transport.toLowerCase() === 'sendbeacon'
         url = addParamsToURL(url, options.urlQueryArgs, {
             ip: this.get_config('ip'),
         })
@@ -539,7 +535,7 @@ export class PostHogLib {
      *
      * @param {Array} array
      */
-    _execute_array(array) {
+    _execute_array(array): void {
         let fn_name
         const alias_calls = []
         const other_calls = []
@@ -604,7 +600,7 @@ export class PostHogLib {
      *
      * @param {Array} item A [function_name, args...] array to be executed
      */
-    push(item) {
+    push(item): void {
         this._execute_array([item])
     }
 
@@ -706,16 +702,16 @@ export class PostHogLib {
         return data
     }
 
-    _addCaptureHook(callback) {
+    _addCaptureHook(callback): void {
         this.__captureHooks.push(callback)
     }
 
-    _invokeCaptureHooks(eventName, eventData) {
+    _invokeCaptureHooks(eventName: string, eventData: CaptureResult): void {
         this.config._onCapture(eventName, eventData)
         _each(this.__captureHooks, (callback) => callback(eventName))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties, start_timestamp) {
+    _calculate_event_properties(event_name: string, event_properties: Properties, start_timestamp: number): Properties {
         // set defaults
         let properties = { ...event_properties }
         properties['token'] = this.get_config('token')
@@ -820,7 +816,7 @@ export class PostHogLib {
         this.persistence.unregister(property)
     }
 
-    _register_single(prop, value) {
+    _register_single(prop: string, value: Property) {
         this.register({ [prop]: value })
     }
 
@@ -1473,15 +1469,15 @@ export class PostHogLib {
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
     opt_out_capturing(options?: OptInOutCapturingOptions): void {
-        options = _extend(
+        const _options = _extend(
             {
                 clear_persistence: true,
             },
-            options
+            options || {}
         )
 
-        this._gdpr_call_func(optOut, options)
-        this._gdpr_update_persistence(options)
+        this._gdpr_call_func(optOut, _options)
+        this._gdpr_update_persistence(_options)
     }
 
     /**
@@ -1542,15 +1538,15 @@ export class PostHogLib {
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
     clear_opt_in_out_capturing(options?: ClearOptInOutCapturingOptions): void {
-        options = _extend(
+        const _options = _extend(
             {
                 enable_persistence: true,
             },
-            options
+            options ?? {}
         )
 
-        this._gdpr_call_func(clearOptInOut, options)
-        this._gdpr_update_persistence(options)
+        this._gdpr_call_func(clearOptInOut, _options)
+        this._gdpr_update_persistence(_options)
     }
 
     /**
@@ -1602,10 +1598,10 @@ export class PostHogLib {
         }
     }
 
-    debug(debug): void {
-        if (debug === false) {
+    debug(debug: boolean): void {
+        if (!debug) {
             window.console.log("You've disabled debug mode.")
-            localStorage && localStorage.setItem('ph_debug', undefined)
+            localStorage && localStorage.removeItem('ph_debug')
             this.set_config({ debug: false })
         } else {
             window.console.log(
