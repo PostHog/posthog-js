@@ -29,9 +29,10 @@ const logger = {
     log: function (...args: any[]) {
         if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
             // Don't log PostHog debug messages in rrweb
-            const log = window.console.log['__rrweb_original__']
-                ? window.console.log['__rrweb_original__']
-                : window.console.log
+            const log =
+                '__rrweb_original__' in window.console.log
+                    ? (window.console.log as any)['__rrweb_original__']
+                    : window.console.log
 
             try {
                 log.apply(window.console, args)
@@ -47,9 +48,10 @@ const logger = {
         if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
             const args = ['PostHog error:', ..._args]
             // Don't log PostHog debug messages in rrweb
-            const error = window.console.error['__rrweb_original__']
-                ? window.console.error['__rrweb_original__']
-                : window.console.error
+            const error =
+                '__rrweb_original__' in window.console.error
+                    ? (window.console.error as any)['__rrweb_original__']
+                    : window.console.error
             try {
                 error.apply(window.console, args)
             } catch (err) {
@@ -64,9 +66,10 @@ const logger = {
         if (!_isUndefined(window.console) && window.console) {
             const args = ['PostHog error:', ..._args]
             // Don't log PostHog debug messages in rrweb
-            const error = window.console.error['__rrweb_original__']
-                ? window.console.error['__rrweb_original__']
-                : window.console.error
+            const error =
+                '__rrweb_original__' in window.console.error
+                    ? (window.console.error as any)['__rrweb_original__']
+                    : window.console.error
             try {
                 error.apply(window.console, args)
             } catch (err) {
@@ -80,7 +83,7 @@ const logger = {
 
 // UNDERSCORE
 // Embed part of the Underscore Library
-export const _trim = function (str) {
+export const _trim = function (str: string): string {
     return str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
 }
 
