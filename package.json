@@ -14,7 +14,7 @@
         "build-es-module": "rollup -i src/loader-module.js -f es -o dist/es.js -c rollup.config.js",
         "build-react": "cd react; yarn; yarn build;",
         "process-types": "mkdir -p dist; eslint src --ext .ts --fix && tsc && cp -f src/*.d.ts dist/",
-        "lint": "eslint src/**/*.{ts,tsx}",
+        "lint": "eslint ./src/**/*.{ts,js}",
         "prettier": "prettier --write src/**/*",
         "prepublishOnly": "yarn lint && yarn test && yarn build && yarn test-react",
         "test": "jest",

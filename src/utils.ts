@@ -1,20 +1,21 @@
 import Config from './config'
+import { Properties } from './types'
 
 /*
  * Saved references to long variable names, so that closure compiler can
  * minimize file size.
  */
 
-const ArrayProto = Array.prototype,
-    FuncProto = Function.prototype,
-    ObjProto = Object.prototype,
-    slice = ArrayProto.slice,
-    toString = ObjProto.toString,
-    hasOwnProperty = ObjProto.hasOwnProperty,
-    win = typeof window !== 'undefined' ? window : {},
-    navigator = win.navigator || { userAgent: '' },
-    document = win.document || {},
-    userAgent = navigator.userAgent
+const ArrayProto = Array.prototype
+const FuncProto = Function.prototype
+const ObjProto = Object.prototype
+const slice = ArrayProto.slice
+const toString = ObjProto.toString
+const hasOwnProperty = ObjProto.hasOwnProperty
+const win: typeof window = typeof window !== 'undefined' ? window : ({} as typeof window)
+const navigator = win.navigator || { userAgent: '' }
+const document = win.document || {}
+const userAgent = navigator.userAgent
 
 const nativeBind = FuncProto.bind,
     nativeForEach = ArrayProto.forEach,
@@ -193,18 +194,18 @@ export const _include = function (obj, target) {
     return found
 }
 
-export const _includes = function (str, needle) {
+export const _includes = function (str: string | string[], needle: string): boolean {
     return str.indexOf(needle) !== -1
 }
 
 // Underscore Addons
-export const _isObject = function (obj) {
+export const _isObject = function (obj: any): obj is Record<string, any> {
     return obj === Object(obj) && !_isArray(obj)
 }
 
-export const _isEmptyObject = function (obj) {
+export const _isEmptyObject = function (obj: any): obj is Record<string, any> {
     if (_isObject(obj)) {
-        for (let key in obj) {
+        for (const key in obj) {
             if (hasOwnProperty.call(obj, key)) {
                 return false
             }
@@ -214,23 +215,23 @@ export const _isEmptyObject = function (obj) {
     return false
 }
 
-export const _isUndefined = function (obj) {
+export const _isUndefined = function (obj: any): obj is undefined {
     return obj === void 0
 }
 
-export const _isString = function (obj) {
+export const _isString = function (obj: any): obj is string {
     return toString.call(obj) == '[object String]'
 }
 
-export const _isDate = function (obj) {
+export const _isDate = function (obj: any): obj is Date {
     return toString.call(obj) == '[object Date]'
 }
 
-export const _isNumber = function (obj) {
+export const _isNumber = function (obj: any): obj is number {
     return toString.call(obj) == '[object Number]'
 }
 
-export const _encodeDates = function (obj) {
+export const _encodeDates = function (obj: any) {
     _each(obj, function (v, k) {
         if (_isDate(v)) {
             obj[k] = _formatDate(v)
@@ -283,22 +284,22 @@ export const _safewrap = function (f) {
     }
 }
 
-export const _safewrap_class = function (klass, functions) {
+export const _safewrap_class = function (klass, functions): void {
     for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]] = _safewrap(klass.prototype[functions[i]])
     }
 }
 
-export const _safewrap_instance_methods = function (obj) {
-    for (let func in obj) {
+export const _safewrap_instance_methods = function (obj): void {
+    for (const func in obj) {
         if (typeof obj[func] === 'function') {
             obj[func] = _safewrap(obj[func])
         }
     }
 }
 
-export const _strip_empty_properties = function (p) {
-    let ret = {}
+export const _strip_empty_properties = function (p: Properties): Properties {
+    const ret: Properties = {}
     _each(p, function (v, k) {
         if (_isString(v) && v.length > 0) {
             ret[k] = v
@@ -320,7 +321,7 @@ const COPY_IN_PROGRESS_ATTRIBUTE =
  * @param [key] if provided this is the object key associated with the value to be copied. It allows the customizer function to have context when it runs
  * @returns {{}|undefined|*}
  */
-function deepCircularCopy(value, customizer, key) {
+function deepCircularCopy<T = any>(value: T, customizer?: (value: T, key?: string) => T, key?: string): T {
     if (value !== Object(value)) return customizer ? customizer(value, key) : value // primitive value
 
     if (value[COPY_IN_PROGRESS_ATTRIBUTE]) return undefined
@@ -347,13 +348,13 @@ function deepCircularCopy(value, customizer, key) {
 
 const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
 
-export const _copyAndTruncateStrings = (object, maxStringLength) =>
+export const _copyAndTruncateStrings = <T = any>(object: T, maxStringLength: number): T =>
     deepCircularCopy(object, (value, key) => {
         if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key) > -1) {
             return value
         }
         if (typeof value === 'string' && maxStringLength !== null) {
-            value = value.slice(0, maxStringLength)
+            return value.slice(0, maxStringLength)
         }
         return value
     })
@@ -452,7 +453,7 @@ export const _utf8Encode = function (string: string): string {
 export const _UUID = (function () {
     // Time/ticks information
     // 1*new Date() is a cross browser version of Date.now()
-    let T = function () {
+    const T = function () {
         let d = 1 * new Date(),
             i = 0
 
@@ -516,7 +517,7 @@ export const _UUID = (function () {
 // _.isBlockedUA()
 // This is to block various web spiders from executing our JS and
 // sending false captureing data
-export const _isBlockedUA = function (ua) {
+export const _isBlockedUA = function (ua: string): boolean {
     if (
         /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog)/i.test(
             ua
@@ -531,14 +532,10 @@ export const _isBlockedUA = function (ua) {
  * @param {Object=} formdata
  * @param {string=} arg_separator
  */
-export const _HTTPBuildQuery = function (formdata, arg_separator) {
-    let use_val,
-        use_key,
-        tph_arr = []
-
-    if (_isUndefined(arg_separator)) {
-        arg_separator = '&'
-    }
+export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_separator = '&') {
+    let use_val: string
+    let use_key: string
+    const tph_arr: string[] = []
 
     _each(formdata, function (val, key) {
         use_val = encodeURIComponent(val.toString())
@@ -549,13 +546,13 @@ export const _HTTPBuildQuery = function (formdata, arg_separator) {
     return tph_arr.join(arg_separator)
 }
 
-export const _getQueryParam = function (url, param) {
+export const _getQueryParam = function (url: string, param: string): string {
     // Expects a raw URL
 
-    param = param.replace(/[[]/, '\\[').replace(/[\]]/, '\\]')
-    let regexS = '[\\?&]' + param + '=([^&#]*)',
-        regex = new RegExp(regexS),
-        results = regex.exec(url)
+    const cleanParam = param.replace(/[[]/, '\\[').replace(/[\]]/, '\\]')
+    const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
+    const regex = new RegExp(regexS)
+    const results = regex.exec(url)
     if (results === null || (results && typeof results[1] !== 'string' && results[1].length)) {
         return ''
     } else {
@@ -569,8 +566,8 @@ export const _getQueryParam = function (url, param) {
     }
 }
 
-export const _getHashParam = function (hash, param) {
-    let matches = hash.match(new RegExp(param + '=([^&]*)'))
+export const _getHashParam = function (hash: string, param: string): string | null {
+    const matches = hash.match(new RegExp(param + '=([^&]*)'))
     return matches ? matches[1] : null
 }
 
@@ -589,7 +586,7 @@ export const _register_event = (function () {
      * @param {boolean=} oldSchool
      * @param {boolean=} useCapture
      */
-    let register_event = function (element, type, handler, oldSchool, useCapture) {
+    const register_event = function (element, type, handler, oldSchool, useCapture) {
         if (!element) {
             logger.error('No valid element provided to register_event')
             return
@@ -668,7 +665,7 @@ export const _info = {
         return params
     },
 
-    searchEngine: function (referrer) {
+    searchEngine: function (referrer: string): string | null {
         if (referrer.search('https?://(.*)google.([^/?]*)') === 0) {
             return 'google'
         } else if (referrer.search('https?://(.*)bing.com') === 0) {
@@ -682,7 +679,7 @@ export const _info = {
         }
     },
 
-    searchInfo: function (referrer) {
+    searchInfo: function (referrer: string) {
         let search = _info.searchEngine(referrer),
             param = search != 'yahoo' ? 'q' : 'p',
             ret = {}
@@ -704,7 +701,7 @@ export const _info = {
      * The order of the checks are important since many user agents
      * include key words used in later checks.
      */
-    browser: function (user_agent, vendor, opera) {
+    browser: function (user_agent: string, vendor, opera): string {
         vendor = vendor || '' // vendor is undefined for at least IE9
         if (opera || _includes(user_agent, ' OPR/')) {
             if (_includes(user_agent, 'Mini')) {
@@ -830,7 +827,7 @@ export const _info = {
         }
     },
 
-    deviceType: function (user_agent) {
+    deviceType: function (user_agent: string) {
         const device = this.device(user_agent)
         if (device === 'iPad' || device === 'Android Tablet') {
             return 'Tablet'
@@ -841,7 +838,7 @@ export const _info = {
         }
     },
 
-    referringDomain: function (referrer) {
+    referringDomain: function (referrer: string): string {
         let split = referrer.split('/')
         if (split.length >= 3) {
             return split[2]
@@ -849,7 +846,7 @@ export const _info = {
         return ''
     },
 
-    properties: function () {
+    properties: function (): Properties {
         return _extend(
             _strip_empty_properties({
                 $os: _info.os(),
@@ -874,7 +871,7 @@ export const _info = {
         )
     },
 
-    people_properties: function () {
+    people_properties: function (): Properties {
         return _extend(
             _strip_empty_properties({
                 $os: _info.os(),

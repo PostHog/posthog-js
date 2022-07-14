@@ -1,4 +1,3 @@
-/* eslint camelcase: "off" */
 import { LZString } from './lz-string'
 import Config from './config'
 import {
@@ -35,6 +34,7 @@ import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { getPerformanceData } from './apm'
+import { PostHogConfig } from './types'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -147,9 +147,9 @@ export const PostHogLib = function () {}
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-var create_mplib = function (token, config, name) {
-    var instance,
-        target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
+const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string) {
+    let instance
+    const target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
 
     if (target && init_type === INIT_MODULE) {
         instance = target
@@ -224,7 +224,7 @@ var create_mplib = function (token, config, name) {
  * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
  * @param {String} [name]    The name for the new posthog instance that you want created
  */
-PostHogLib.prototype.init = function (token, config, name) {
+PostHogLib.prototype.init = function (token: string, config: Partial<PostHogConfig>, name: string) {
     if (_isUndefined(name)) {
         console.error('You must name your new library: init(token, config, name)')
         return
@@ -248,7 +248,7 @@ PostHogLib.prototype.init = function (token, config, name) {
 // method is this one initializes the actual instance, whereas the
 // init(...) method sets up a new library and calls _init on it.
 //
-PostHogLib.prototype._init = function (token, config, name) {
+PostHogLib.prototype._init = function (token: string, config: Partial<PostHogConfig>, name: string) {
     this['__loaded'] = true
     this['config'] = {}
     this['_triggered_notifs'] = []

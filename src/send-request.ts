@@ -1,7 +1,11 @@
 import { _each, _HTTPBuildQuery, logger } from './utils'
 import Config from './config'
 
-export const addParamsToURL = (url, urlQueryArgs, parameterOptions) => {
+export const addParamsToURL = (
+    url: string,
+    urlQueryArgs: Record<string, any>,
+    parameterOptions: { ip?: string }
+): string => {
     const args = urlQueryArgs || {}
     args['ip'] = parameterOptions['ip'] ? 1 : 0
     args['_'] = new Date().getTime().toString()

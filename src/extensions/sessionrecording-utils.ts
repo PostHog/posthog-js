@@ -12,7 +12,7 @@ export var replacementImageURI =
  */
 export function filterDataURLsFromLargeDataObjects(data) {
     if (data && typeof data === 'object') {
-        var stringifiedData = JSON.stringify(data)
+        let stringifiedData = JSON.stringify(data)
         // String length of 5000000 is an approximation of 5mb
         // Note: with compression, this limit may be able to be increased
         // but we're assuming most of the size is from a data uri which
@@ -22,9 +22,9 @@ export function filterDataURLsFromLargeDataObjects(data) {
             // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
             // 2) Extracts the mime type of the data uri in the first group
             // 3) Determines when the data URI ends.Depending on if it's used in the src tag or css, it can end with a ) or "
-            var dataURIRegex = /data:([\w\/\-\.]+);(\w+),([^)"]*)/gim
-            var matches = stringifiedData.matchAll(dataURIRegex)
-            for (var match of matches) {
+            const dataURIRegex = /data:([\w\/\-\.]+);(\w+),([^)"]*)/gim
+            const matches = stringifiedData.matchAll(dataURIRegex)
+            for (const match of matches) {
                 if (match[1].toLocaleLowerCase().slice(0, 6) === 'image/') {
                     stringifiedData = stringifiedData.replace(match[0], replacementImageURI)
                 } else {
