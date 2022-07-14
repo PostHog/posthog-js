@@ -16,8 +16,9 @@ jest.mock('../decide')
 given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
 describe('identify()', () => {
-    given('subject', () => () =>
-        given.lib.identify(given.identity, given.userPropertiesToSet, given.userPropertiesToSetOnce)
+    given(
+        'subject',
+        () => () => given.lib.identify(given.identity, given.userPropertiesToSet, given.userPropertiesToSetOnce)
     )
 
     given('identity', () => 'a-new-id')
@@ -186,8 +187,9 @@ describe('identify()', () => {
 describe('capture()', () => {
     given('eventName', () => '$event')
 
-    given('subject', () => () =>
-        given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
+    given(
+        'subject',
+        () => () => given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
     )
 
     given('config', () => ({
@@ -578,8 +580,9 @@ describe('_handle_unload()', () => {
 })
 
 describe('__compress_and_send_json_request', () => {
-    given('subject', () => () =>
-        given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
+    given(
+        'subject',
+        () => () => given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
     )
 
     given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
@@ -662,7 +665,7 @@ describe('init()', () => {
         jest.spyOn(given.lib.persistence, 'register').mockImplementation()
 
         // Autocapture
-        expect(given.lib['__autocapture_enabled']).toEqual(undefined)
+        expect(given.lib.__autocapture_enabled).toEqual(undefined)
         expect(autocapture.init).not.toHaveBeenCalled()
         expect(autocapture.afterDecideResponse).not.toHaveBeenCalled()
 
