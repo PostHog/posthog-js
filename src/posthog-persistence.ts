@@ -2,6 +2,7 @@
 
 import { _each, _extend, _include, _info, _isObject, _isUndefined, _strip_empty_properties, logger } from './utils'
 import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
+import { Properties } from './types'
 
 /*
  * Constants
@@ -133,7 +134,7 @@ PostHogPersistence.prototype.clear = function () {
  * @param {*=} default_value
  * @param {number=} days
  */
-PostHogPersistence.prototype.register_once = function (props, default_value, days) {
+PostHogPersistence.prototype.register_once = function (props: Properties, default_value, days) {
     if (_isObject(props)) {
         if (typeof default_value === 'undefined') {
             default_value = 'None'
@@ -143,8 +144,8 @@ PostHogPersistence.prototype.register_once = function (props, default_value, day
         _each(
             props,
             function (val, prop) {
-                if (!this['props'].hasOwnProperty(prop) || this['props'][prop] === default_value) {
-                    this['props'][prop] = val
+                if (!this.props.hasOwnProperty(prop) || this.props[prop] === default_value) {
+                    this.props[prop] = val
                 }
             },
             this

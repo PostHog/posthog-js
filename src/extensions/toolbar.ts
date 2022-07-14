@@ -1,4 +1,5 @@
 import { loadScript } from '../autocapture-utils'
+import { _getHashParam, _register_event } from '../utils'
 
 export class Toolbar {
     constructor(instance) {

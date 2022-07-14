@@ -1,15 +1,15 @@
-import { logger } from './utils'
+import { _extend, logger } from './utils'
 
-var DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
+const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
 
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore = {
     get: function (name) {
         try {
-            var nameEQ = name + '='
-            var ca = document.cookie.split(';')
-            for (var i = 0; i < ca.length; i++) {
-                var c = ca[i]
+            const nameEQ = name + '='
+            const ca = document.cookie.split(';')
+            for (let i = 0; i < ca.length; i++) {
+                const c = ca[i]
                 while (c.charAt(0) == ' ') {
                     c = c.substring(1, c.length)
                 }
@@ -22,7 +22,7 @@ export const cookieStore = {
     },
 
     parse: function (name) {
-        var cookie
+        let cookie
         try {
             cookie = JSON.parse(cookieStore.get(name)) || {}
         } catch (err) {

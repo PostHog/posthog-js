@@ -4,6 +4,7 @@ import { CaptureMetrics } from '../capture-metrics'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
 import { _info } from '../utils'
+import { truth } from './helpers/truth'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
@@ -682,12 +683,6 @@ describe('init()', () => {
     })
 
     describe('device id behavior', () => {
-        const uuid = '1811a3ce5b0363-0052debf84392a-3a50387c-0-1811a3ce5b1ad2'
-
-        beforeEach(() => {
-            jest.spyOn(________, 'UUID').mockReturnValue(uuid)
-        })
-
         it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
             given('distinct_id', () => undefined)
 
@@ -695,8 +690,8 @@ describe('init()', () => {
 
             expect(given.lib.register_once).toHaveBeenCalledWith(
                 {
-                    $device_id: uuid,
-                    distinct_id: uuid,
+                    $device_id: truth((val) => val.match(/^[0-9a-f\-]+$/)),
+                    distinct_id: truth((val) => val.match(/^[0-9a-f\-]+$/)),
                 },
                 ''
             )
@@ -720,8 +715,8 @@ describe('init()', () => {
 
             expect(given.lib.register_once).toHaveBeenCalledWith(
                 {
-                    $device_id: 'custom-1811a3ce',
-                    distinct_id: 'custom-1811a3ce',
+                    $device_id: truth((val) => val.match(/^custom\-[0-9a-f]+/)),
+                    distinct_id: truth((val) => val.match(/^custom\-[0-9a-f]+/)),
                 },
                 ''
             )

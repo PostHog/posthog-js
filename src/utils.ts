@@ -44,7 +44,7 @@ const logger = {
     /** @type {function(...*)} */
     error: function () {
         if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
-            var args = ['PostHog error:', ...arguments]
+            let args = ['PostHog error:', ...arguments]
             // Don't log PostHog debug messages in rrweb
             const error = window.console.error['__rrweb_original__']
                 ? window.console.error['__rrweb_original__']
@@ -61,7 +61,7 @@ const logger = {
     /** @type {function(...*)} */
     critical: function () {
         if (!_isUndefined(window.console) && window.console) {
-            var args = ['PostHog error:', ...arguments]
+            let args = ['PostHog error:', ...arguments]
             // Don't log PostHog debug messages in rrweb
             const error = window.console.error['__rrweb_original__']
                 ? window.console.error['__rrweb_original__']
@@ -84,7 +84,7 @@ export const _trim = function (str) {
 }
 
 export const _bind = function (func, context) {
-    var args, bound
+    let args, bound
     if (nativeBind && func.bind === nativeBind) {
         return nativeBind.apply(func, slice.call(arguments, 1))
     }
@@ -96,11 +96,11 @@ export const _bind = function (func, context) {
         if (!(this instanceof bound)) {
             return func.apply(context, args.concat(slice.call(arguments)))
         }
-        var ctor = {}
+        const ctor = {}
         ctor.prototype = func.prototype
-        var self = new ctor()
+        const self = new ctor()
         ctor.prototype = null
-        var result = func.apply(self, args.concat(slice.call(arguments)))
+        const result = func.apply(self, args.concat(slice.call(arguments)))
         if (Object(result) === result) {
             return result
         }
@@ -110,7 +110,7 @@ export const _bind = function (func, context) {
 }
 
 export const _bind_instance_methods = function (obj) {
-    for (var func in obj) {
+    for (let func in obj) {
         if (typeof obj[func] === 'function') {
             obj[func] = _bind(obj[func], obj)
         }
@@ -122,20 +122,24 @@ export const _bind_instance_methods = function (obj) {
  * @param {function(...*)=} iterator
  * @param {Object=} context
  */
-export const _each = function (obj, iterator, context?) {
+export const _each = function <V = any, O = Record<string, V> | V[], C = any>(
+    obj: O,
+    iterator: (value: V, key: O extends Record<string, V> ? keyof O : number) => void,
+    context?: C
+): void {
     if (obj === null || obj === undefined) {
         return
     }
-    if (nativeForEach && obj.forEach === nativeForEach) {
+    if (nativeForEach && 'forEach' in obj && obj.forEach === nativeForEach) {
         obj.forEach(iterator, context)
-    } else if (obj.length === +obj.length) {
-        for (var i = 0, l = obj.length; i < l; i++) {
+    } else if ('length' in obj && obj.length === +obj.length) {
+        for (let i = 0, l = obj.length; i < l; i++) {
             if (i in obj && iterator.call(context, obj[i], i, obj) === breaker) {
                 return
             }
         }
     } else {
-        for (var key in obj) {
+        for (let key in obj) {
             if (hasOwnProperty.call(obj, key)) {
                 if (iterator.call(context, obj[key], key, obj) === breaker) {
                     return
@@ -147,7 +151,7 @@ export const _each = function (obj, iterator, context?) {
 
 export const _extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
     _each(args, function (source) {
-        for (var prop in source) {
+        for (let prop in source) {
             if (source[prop] !== void 0) {
                 obj[prop] = source[prop]
             }
@@ -164,7 +168,7 @@ export const _isArray =
 
 // from a comment on http://dbj.org/dbj/?p=286
 // fails on only one very rare and deliberate custom object:
-// var bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
+// let bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
 export const _isFunction = function (f) {
     try {
         return /^\s*\bfunction\b/.test(f)
@@ -174,7 +178,7 @@ export const _isFunction = function (f) {
 }
 
 export const _include = function (obj, target) {
-    var found = false
+    let found = false
     if (obj === null) {
         return found
     }
@@ -200,7 +204,7 @@ export const _isObject = function (obj) {
 
 export const _isEmptyObject = function (obj) {
     if (_isObject(obj)) {
-        for (var key in obj) {
+        for (let key in obj) {
             if (hasOwnProperty.call(obj, key)) {
                 return false
             }
@@ -280,13 +284,13 @@ export const _safewrap = function (f) {
 }
 
 export const _safewrap_class = function (klass, functions) {
-    for (var i = 0; i < functions.length; i++) {
+    for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]] = _safewrap(klass.prototype[functions[i]])
     }
 }
 
 export const _safewrap_instance_methods = function (obj) {
-    for (var func in obj) {
+    for (let func in obj) {
         if (typeof obj[func] === 'function') {
             obj[func] = _safewrap(obj[func])
         }
@@ -294,7 +298,7 @@ export const _safewrap_instance_methods = function (obj) {
 }
 
 export const _strip_empty_properties = function (p) {
-    var ret = {}
+    let ret = {}
     _each(p, function (v, k) {
         if (_isString(v) && v.length > 0) {
             ret[k] = v
@@ -355,8 +359,8 @@ export const _copyAndTruncateStrings = (object, maxStringLength) =>
     })
 
 export const _base64Encode = function (data) {
-    var b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
-    var o1,
+    let b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+    let o1,
         o2,
         o3,
         h1,
@@ -409,18 +413,18 @@ export const _base64Encode = function (data) {
 export const _utf8Encode = function (string: string): string {
     string = (string + '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
-    var utftext = '',
+    let utftext = '',
         start,
         end
-    var stringl = 0,
+    let stringl = 0,
         n
 
     start = end = 0
     stringl = string.length
 
     for (n = 0; n < stringl; n++) {
-        var c1 = string.charCodeAt(n)
-        var enc = null
+        let c1 = string.charCodeAt(n)
+        let enc = null
 
         if (c1 < 128) {
             end++
@@ -448,8 +452,8 @@ export const _utf8Encode = function (string: string): string {
 export const _UUID = (function () {
     // Time/ticks information
     // 1*new Date() is a cross browser version of Date.now()
-    var T = function () {
-        var d = 1 * new Date(),
+    let T = function () {
+        let d = 1 * new Date(),
             i = 0
 
         // this while loop figures how many browser ticks go by
@@ -463,7 +467,7 @@ export const _UUID = (function () {
     }
 
     // Math.Random entropy
-    var R = function () {
+    let R = function () {
         return Math.random().toString(16).replace('.', '')
     }
 
@@ -471,15 +475,15 @@ export const _UUID = (function () {
     // This function takes the user agent string, and then xors
     // together each sequence of 8 bytes.  This produces a final
     // sequence of 8 bytes which it returns as hex.
-    var UA = function () {
-        var ua = userAgent,
+    let UA = function () {
+        let ua = userAgent,
             i,
             ch,
             buffer = [],
             ret = 0
 
         function xor(result, byte_array) {
-            var j,
+            let j,
                 tmp = 0
             for (j = 0; j < byte_array.length; j++) {
                 tmp |= buffer[j] << (j * 8)
@@ -504,7 +508,7 @@ export const _UUID = (function () {
     }
 
     return function () {
-        var se = (window.screen.height * window.screen.width).toString(16)
+        let se = (window.screen.height * window.screen.width).toString(16)
         return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
     }
 })()
@@ -528,7 +532,7 @@ export const _isBlockedUA = function (ua) {
  * @param {string=} arg_separator
  */
 export const _HTTPBuildQuery = function (formdata, arg_separator) {
-    var use_val,
+    let use_val,
         use_key,
         tph_arr = []
 
@@ -549,13 +553,13 @@ export const _getQueryParam = function (url, param) {
     // Expects a raw URL
 
     param = param.replace(/[[]/, '\\[').replace(/[\]]/, '\\]')
-    var regexS = '[\\?&]' + param + '=([^&#]*)',
+    let regexS = '[\\?&]' + param + '=([^&#]*)',
         regex = new RegExp(regexS),
         results = regex.exec(url)
     if (results === null || (results && typeof results[1] !== 'string' && results[1].length)) {
         return ''
     } else {
-        var result = results[1]
+        let result = results[1]
         try {
             result = decodeURIComponent(result)
         } catch (err) {
@@ -566,7 +570,7 @@ export const _getQueryParam = function (url, param) {
 }
 
 export const _getHashParam = function (hash, param) {
-    var matches = hash.match(new RegExp(param + '=([^&]*)'))
+    let matches = hash.match(new RegExp(param + '=([^&]*)'))
     return matches ? matches[1] : null
 }
 
@@ -585,7 +589,7 @@ export const _register_event = (function () {
      * @param {boolean=} oldSchool
      * @param {boolean=} useCapture
      */
-    var register_event = function (element, type, handler, oldSchool, useCapture) {
+    let register_event = function (element, type, handler, oldSchool, useCapture) {
         if (!element) {
             logger.error('No valid element provided to register_event')
             return
@@ -594,14 +598,14 @@ export const _register_event = (function () {
         if (element.addEventListener && !oldSchool) {
             element.addEventListener(type, handler, !!useCapture)
         } else {
-            var ontype = 'on' + type
-            var old_handler = element[ontype] // can be undefined
+            let ontype = 'on' + type
+            let old_handler = element[ontype] // can be undefined
             element[ontype] = makeHandler(element, handler, old_handler)
         }
     }
 
     function makeHandler(element, new_handler, old_handlers) {
-        var handler = function (event) {
+        let handler = function (event) {
             event = event || fixEvent(window.event)
 
             // this basically happens in firefox whenever another script
@@ -613,8 +617,8 @@ export const _register_event = (function () {
                 return undefined
             }
 
-            var ret = true
-            var old_result, new_result
+            let ret = true
+            let old_result, new_result
 
             if (_isFunction(old_handlers)) {
                 old_result = old_handlers(event)
@@ -679,14 +683,14 @@ export const _info = {
     },
 
     searchInfo: function (referrer) {
-        var search = _info.searchEngine(referrer),
+        let search = _info.searchEngine(referrer),
             param = search != 'yahoo' ? 'q' : 'p',
             ret = {}
 
         if (search !== null) {
             ret['$search_engine'] = search
 
-            var keyword = _getQueryParam(referrer, param)
+            let keyword = _getQueryParam(referrer, param)
             if (keyword.length) {
                 ret['ph_keyword'] = keyword
             }
@@ -752,8 +756,8 @@ export const _info = {
      * http://www.useragentstring.com/pages/useragentstring.php
      */
     browserVersion: function (userAgent, vendor, opera) {
-        var browser = _info.browser(userAgent, vendor, opera)
-        var versionRegexs = {
+        let browser = _info.browser(userAgent, vendor, opera)
+        let versionRegexs = {
             'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
             'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
             Chrome: /Chrome\/(\d+(\.\d+)?)/,
@@ -771,11 +775,11 @@ export const _info = {
             'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
             Mozilla: /rv:(\d+(\.\d+)?)/,
         }
-        var regex = versionRegexs[browser]
+        let regex = versionRegexs[browser]
         if (regex === undefined) {
             return null
         }
-        var matches = userAgent.match(regex)
+        let matches = userAgent.match(regex)
         if (!matches) {
             return null
         }
@@ -783,7 +787,7 @@ export const _info = {
     },
 
     os: function () {
-        var a = userAgent
+        let a = userAgent
         if (/Windows/i.test(a)) {
             if (/Phone/.test(a) || /WPDesktop/.test(a)) {
                 return 'Windows Phone'
@@ -838,7 +842,7 @@ export const _info = {
     },
 
     referringDomain: function (referrer) {
-        var split = referrer.split('/')
+        let split = referrer.split('/')
         if (split.length >= 3) {
             return split[2]
         }
