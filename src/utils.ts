@@ -197,8 +197,8 @@ export const _include = function (obj, target) {
     return found
 }
 
-export const _includes = function (str: string | string[], needle: string): boolean {
-    return str.indexOf(needle) !== -1
+export function _includes<T extends any>(str: T[] | string, needle: T): boolean {
+    return (str as any).indexOf(needle) !== -1
 }
 
 // Underscore Addons

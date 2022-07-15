@@ -388,6 +388,7 @@ describe('Autocapture system', () => {
             config: {
                 enable_collect_everything: true,
             },
+            // TODO: delete custom_properties after changeless typescript refactor
             custom_properties: [
                 {
                     event_selectors: ['.event-element-1', '.event-element-2'],

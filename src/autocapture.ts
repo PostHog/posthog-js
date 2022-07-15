@@ -22,26 +22,30 @@ import {
     shouldCaptureValue,
     usefulElements,
     isAngularStyleAttr,
+    isDocumentFragment,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
+import { AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
+import { PostHogLib } from './posthog-core'
 
 const autocapture = {
-    _initializedTokens: [],
+    _initializedTokens: [] as string[],
 
-    _previousElementSibling: function (el) {
+    _previousElementSibling: function (el: Element): Element | null {
         if (el.previousElementSibling) {
             return el.previousElementSibling
         } else {
+            let _el: Element | null = el
             do {
-                el = el.previousSibling
-            } while (el && !isElementNode(el))
-            return el
+                _el = _el.previousSibling as Element | null // resolves to ChildNode->Node, which is Element's parent class
+            } while (_el && !isElementNode(_el))
+            return _el
         }
     },
 
-    _getPropertiesFromElement: function (elem, maskInputs, maskText) {
+    _getPropertiesFromElement: function (elem: Element, maskInputs: boolean, maskText: boolean): Properties {
         const tag_name = elem.tagName.toLowerCase()
-        const props = {
+        const props: Properties = {
             tag_name: tag_name,
         }
         if (usefulElements.indexOf(tag_name) > -1 && !maskText) {
@@ -65,7 +69,7 @@ const autocapture = {
 
         let nthChild = 1
         let nthOfType = 1
-        let currentElem = elem
+        let currentElem: Element | null = elem
         while ((currentElem = this._previousElementSibling(currentElem))) {
             // eslint-disable-line no-cond-assign
             nthChild++
@@ -79,15 +83,15 @@ const autocapture = {
         return props
     },
 
-    _getDefaultProperties: function (eventType) {
+    _getDefaultProperties: function (eventType: string): Properties {
         return {
             $event_type: eventType,
             $ce_version: 1,
         }
     },
 
-    _extractCustomPropertyValue: function (customProperty) {
-        const propValues = []
+    _extractCustomPropertyValue: function (customProperty: AutoCaptureCustomProperty): string {
+        const propValues: string[] = []
         _each(document.querySelectorAll(customProperty['css_selector']), function (matchedElem) {
             let value
 
@@ -104,8 +108,9 @@ const autocapture = {
         return propValues.join(', ')
     },
 
-    _getCustomProperties: function (targetElementList) {
-        const props = {}
+    // TODO: delete custom_properties after changeless typescript refactor
+    _getCustomProperties: function (targetElementList: Element[]): Properties {
+        const props: Properties = {} // will be deleted
         _each(
             this._customProperties,
             function (customProperty) {
@@ -131,44 +136,44 @@ const autocapture = {
         return props
     },
 
-    _getEventTarget: function (e) {
+    _getEventTarget: function (e: Event): Element | null {
         // https://developer.mozilla.org/en-US/docs/Web/API/Event/target#Compatibility_notes
         if (typeof e.target === 'undefined') {
-            return e.srcElement
+            return (e.srcElement as Element) || null
         } else {
-            if (e.target.shadowRoot) {
-                return e.composedPath()[0]
+            if ((e.target as HTMLElement)?.shadowRoot) {
+                return (e.composedPath()[0] as Element) || null
             }
-            return e.target
+            return (e.target as Element) || null
         }
     },
 
-    _captureEvent: function (e, instance) {
+    _captureEvent: function (e: Event, instance: PostHogLib): boolean | void {
         /*** Don't mess with this code without running IE8 tests on it ***/
         let target = this._getEventTarget(e)
         if (isTextNode(target)) {
             // defeat Safari bug (see: http://www.quirksmode.org/js/events_properties.html)
-            target = target.parentNode
+            target = (target.parentNode || null) as Element | null
         }
 
-        if (e.type === 'click') {
-            this.rageclicks.click(e.clientX, e.clientY, new Date().getTime())
+        if (e.type === 'click' && e instanceof MouseEvent) {
+            this.rageclicks?.click(e.clientX, e.clientY, new Date().getTime())
         }
 
-        if (shouldCaptureDomEvent(target, e)) {
+        if (target && shouldCaptureDomEvent(target, e)) {
             const targetElementList = [target]
             let curEl = target
             while (curEl.parentNode && !isTag(curEl, 'body')) {
-                if (curEl.parentNode.nodeType === 11) {
-                    targetElementList.push(curEl.parentNode.host)
-                    curEl = curEl.parentNode.host
+                if (isDocumentFragment(curEl.parentNode)) {
+                    targetElementList.push((curEl.parentNode as any).host)
+                    curEl = (curEl.parentNode as any).host
                     continue
                 }
-                targetElementList.push(curEl.parentNode)
-                curEl = curEl.parentNode
+                targetElementList.push(curEl.parentNode as Element)
+                curEl = curEl.parentNode as Element
             }
 
-            const elementsJson = []
+            const elementsJson: Properties[] = []
             let href,
                 explicitNoCapture = false
             _each(
@@ -227,11 +232,11 @@ const autocapture = {
 
     // only reason is to stub for unit tests
     // since you can't override window.location props
-    _navigate: function (href: string) {
+    _navigate: function (href: string): void {
         window.location.href = href
     },
 
-    _addDomEventHandlers: function (instance) {
+    _addDomEventHandlers: function (instance: PostHogLib): void {
         const handler = _bind(function (e) {
             e = e || window.event
             this._captureEvent(e, instance)
@@ -241,13 +246,14 @@ const autocapture = {
         _register_event(document, 'click', handler, false, true)
     },
 
-    _customProperties: {},
+    _customProperties: [] as AutoCaptureCustomProperty[],
+    rageclicks: null as RageClick | null,
 
-    init: function (instance) {
+    init: function (instance: PostHogLib): void {
         this.rageclicks = new RageClick(instance)
     },
 
-    afterDecideResponse: function (response, instance) {
+    afterDecideResponse: function (response: DecideResponse, instance: PostHogLib): void {
         const token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
             logger.log('autocapture already initialized for token "' + token + '"')
@@ -259,9 +265,10 @@ const autocapture = {
         if (
             response &&
             response['config'] &&
-            response['config']['enable_collect_everything'] === true &&
+            response['config']['enable_collect_everything'] &&
             instance.get_config('autocapture')
         ) {
+            // TODO: delete custom_properties after changeless typescript refactor
             if (response['custom_properties']) {
                 this._customProperties = response['custom_properties']
             }

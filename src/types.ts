@@ -280,3 +280,19 @@ export interface XHROptions {
 }
 
 export interface RetryQueueElement {}
+
+export interface DecideResponse {
+    status: number
+    supportedCompression: Compression[]
+    config: {
+        enable_collect_everything: boolean
+    }
+    custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
+}
+
+// TODO: delete custom_properties after changeless typescript refactor
+export interface AutoCaptureCustomProperty {
+    name: string
+    css_selector: string
+    event_selectors: string[]
+}

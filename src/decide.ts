@@ -1,6 +1,7 @@
 import { autocapture } from './autocapture'
 import { _base64Encode } from './utils'
 import { PostHogLib } from './posthog-core'
+import { Compression, DecideResponse } from './types'
 
 export class Decide {
     instance: PostHogLib
@@ -29,7 +30,7 @@ export class Decide {
         )
     }
 
-    parseDecideResponse(response): void {
+    parseDecideResponse(response: DecideResponse): void {
         if (response?.status === 0) {
             console.error('Failed to fetch feature flags from PostHog.')
             return
@@ -50,7 +51,7 @@ export class Decide {
         this.instance.featureFlags.receivedFeatureFlags(response)
 
         if (response['supportedCompression']) {
-            const compression = {}
+            const compression: Partial<Record<Compression, boolean>> = {}
             for (const method of response['supportedCompression']) {
                 compression[method] = true
             }
