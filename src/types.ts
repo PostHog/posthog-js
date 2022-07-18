@@ -319,4 +319,4 @@ export interface GDPROptions {
     secureCookie: boolean /** whether the opt-in cookie is set as secure or not */
 }
 
-export type RequestCallback = (response: Properties, data?: Properties) => void
+export type RequestCallback = (response: Record<string, any>, data?: Properties) => void

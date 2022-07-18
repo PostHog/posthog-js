@@ -269,7 +269,7 @@ function _optInOut(optValue, token: string, options: GDPROptions) {
 function _addOptOutCheck<M extends (...args: any[]) => any = (...args: any[]) => any>(
     method: M,
     getConfigValue: <K extends keyof PostHogConfig = keyof PostHogConfig>(key: K) => PostHogConfig[K],
-    silenceErrors: boolean
+    silenceErrors?: boolean
 ): M {
     return function (...args) {
         let optedOut = false

@@ -490,7 +490,7 @@ export const _UUID = (function () {
 
 // _.isBlockedUA()
 // This is to block various web spiders from executing our JS and
-// sending false captureing data
+// sending false capturing data
 export const _isBlockedUA = function (ua: string): boolean {
     if (
         /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog)/i.test(

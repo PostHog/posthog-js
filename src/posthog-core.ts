@@ -177,8 +177,7 @@ const create_mplib = function (token: string, config: Partial<PostHogConfig>, na
 
     instance._init(token, config, name)
 
-    instance.people = new PostHogPeople()
-    instance.people._init(instance)
+    instance.people = new PostHogPeople(instance)
 
     instance.featureFlags = new PostHogFeatureFlags(instance)
     instance.feature_flags = instance.featureFlags
@@ -405,16 +404,16 @@ export class PostHogLib {
      * If we are going to use script tags, this returns a string to use as the
      * callback GET param.
      */
-    _prepare_callback(callback: RequestCallback, data?: Properties) {
+    _prepare_callback(callback: RequestCallback, data?: Properties): RequestCallback | null | string {
         if (_isUndefined(callback)) {
             return null
         }
 
         if (USE_XHR) {
-            const callback_function = function (response) {
+            const callbackFunction: RequestCallback = function (response) {
                 callback(response, data)
             }
-            return callback_function
+            return callbackFunction
         } else {
             // if the user gives us a callback, we store as a random
             // property on this instances jsc function and update our
@@ -1435,7 +1434,7 @@ export class PostHogLib {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    opt_in_capturing(options?: OptInOutCapturingOptions): void {
+    opt_in_capturing(options?: Partial<OptInOutCapturingOptions>): void {
         options = _extend(
             {
                 enable_persistence: true,
@@ -1469,7 +1468,7 @@ export class PostHogLib {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    opt_out_capturing(options?: OptInOutCapturingOptions): void {
+    opt_out_capturing(options?: Partial<OptInOutCapturingOptions>): void {
         const _options = _extend(
             {
                 clear_persistence: true,
@@ -1494,7 +1493,7 @@ export class PostHogLib {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-in status
      */
-    has_opted_in_capturing(options?: HasOptedInOutCapturingOptions): boolean {
+    has_opted_in_capturing(options?: Partial<HasOptedInOutCapturingOptions>): boolean {
         return this._gdpr_call_func(hasOptedIn, options)
     }
 
@@ -1511,7 +1510,7 @@ export class PostHogLib {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-out status
      */
-    has_opted_out_capturing(options?: HasOptedInOutCapturingOptions): boolean {
+    has_opted_out_capturing(options?: Partial<HasOptedInOutCapturingOptions>): boolean {
         return this._gdpr_call_func(hasOptedOut, options)
     }
 
@@ -1538,7 +1537,7 @@ export class PostHogLib {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    clear_opt_in_out_capturing(options?: ClearOptInOutCapturingOptions): void {
+    clear_opt_in_out_capturing(options?: Partial<ClearOptInOutCapturingOptions>): void {
         const _options = _extend(
             {
                 enable_persistence: true,
