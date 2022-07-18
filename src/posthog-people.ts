@@ -2,6 +2,7 @@
 import { addOptOutCheckPostHogPeople } from './gdpr-utils'
 import { SET_ACTION, apiActions } from './api-actions'
 import { _base64Encode, _copyAndTruncateStrings, _encodeDates, _extend, _info, _isObject } from './utils'
+import { PostHogConfig, Properties } from './types'
 
 /**
  * PostHog People Object
@@ -75,7 +76,11 @@ PostHogPeople.prototype.set = addOptOutCheckPostHogPeople(function (prop, to, ca
  * @param {*} [to] A value to set on the given property name
  * @param {Function} [callback] If provided, the callback will be called after captureing the event.
  */
-PostHogPeople.prototype.set_once = addOptOutCheckPostHogPeople(function (prop, to, callback) {
+PostHogPeople.prototype.set_once = addOptOutCheckPostHogPeople(function (
+    prop: string | Properties,
+    to?: string,
+    callback
+) {
     const data = this.set_once_action(prop, to)
     if (_isObject(prop)) {
         callback = to
@@ -118,11 +123,11 @@ PostHogPeople.prototype._send_request = function (data, callback) {
     return truncated_data
 }
 
-PostHogPeople.prototype._get_config = function (conf_var) {
+PostHogPeople.prototype._get_config = function (conf_var: keyof PostHogConfig) {
     return this._posthog.get_config(conf_var)
 }
 
-PostHogPeople.prototype._is_reserved_property = function (prop) {
+PostHogPeople.prototype._is_reserved_property = function (prop: string) {
     return (
         prop === '$distinct_id' ||
         prop === '$token' ||

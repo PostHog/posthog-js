@@ -349,7 +349,7 @@ export const LZString = {
         })
     },
 
-    _decompress: function (length: string, resetValue, getNextValue) {
+    _decompress: function (length: number, resetValue: number, getNextValue: (index: number) => string) {
         let dictionary = [],
             enlargeIn = 4,
             dictSize = 4,

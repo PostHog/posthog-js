@@ -1,13 +1,15 @@
 import { window } from './utils'
 import Config from './config'
+import { Properties } from './types'
 
 function isFloat(n) {
     return Number(n) === n && n % 1 !== 0
 }
 
-export function optimisePerformanceData(performanceEntries) {
+export function optimisePerformanceData(performanceEntries: PerformanceEntryList) {
     performanceEntries.forEach((performanceEntry, index) => {
-        for (const performanceEntryItemKey in performanceEntry) {
+        for (const performanceEntryItemKey_ in performanceEntry) {
+            const performanceEntryItemKey = performanceEntryItemKey_ as keyof PerformanceEntry
             if (
                 isFloat(performanceEntry[performanceEntryItemKey]) &&
                 performanceEntry[performanceEntryItemKey].toString().match(/^\d+\.\d{4,}$/)
@@ -41,7 +43,7 @@ export function optimisePerformanceData(performanceEntries) {
     return deduplicateKeys(performanceEntries)
 }
 
-export function getPerformanceEntriesByType(type) {
+export function getPerformanceEntriesByType(type: string) {
     // wide support but not available pre IE 10
     try {
         // stringifying and then parsing made data collection more reliable
@@ -65,7 +67,7 @@ export function getPerformanceEntriesByType(type) {
  * @param performanceEntries
  * @returns {(string[]|*)[]}
  */
-export function deduplicateKeys(performanceEntries) {
+export function deduplicateKeys(performanceEntries: PerformanceEntryList) {
     if (performanceEntries.length === 0) {
         return []
     }
@@ -82,7 +84,7 @@ https://developer.mozilla.org/en-US/docs/Web/API/PerformanceNavigationTiming
 
 Even in browsers that implement it, it is not always available to us
  */
-export function pageLoadFrom(performanceData) {
+export function pageLoadFrom(performanceData): number | void {
     const keys = performanceData.navigation && performanceData.navigation[0]
     const values = performanceData.navigation && performanceData.navigation[1] && performanceData.navigation[1][0]
 
@@ -100,7 +102,7 @@ export function pageLoadFrom(performanceData) {
     }
 }
 
-export function getPerformanceData() {
+export function getPerformanceData(): Properties {
     const performanceEntries = {
         navigation: getPerformanceEntriesByType('navigation'),
         paint: getPerformanceEntriesByType('paint'),
@@ -111,7 +113,7 @@ export function getPerformanceData() {
         window.performance.clearResourceTimings()
     }
 
-    const properties = {}
+    const properties: Properties = {}
 
     const pageLoad = pageLoadFrom(performanceEntries)
     if (pageLoad) {

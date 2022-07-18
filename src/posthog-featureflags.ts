@@ -1,5 +1,6 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHogLib } from './posthog-core'
+import { DecideResponse } from './types'
 
 export const parseFeatureFlagDecideResponse = (response, persistence) => {
     const flags = response['featureFlags']
@@ -196,7 +197,7 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers.push(handler)
     }
 
-    receivedFeatureFlags(response): void {
+    receivedFeatureFlags(response: DecideResponse): void {
         parseFeatureFlagDecideResponse(response, this.instance.persistence)
         const flags = this.getFlags()
         const variants = this.getFlagVariants()

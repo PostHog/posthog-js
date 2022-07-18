@@ -105,9 +105,9 @@ export function shouldCaptureDomEvent(el: Element, event: Event): boolean {
     }
 
     let parentIsUsefulElement = false
-    const targetElementList = [el] // TODO: remove this var, it's never queried
+    const targetElementList: Element[] = [el] // TODO: remove this var, it's never queried
     let parentNode: Element | boolean = true
-    let curEl = el
+    let curEl: Element = el
     while (curEl.parentNode && !isTag(curEl, 'body')) {
         // If element is a shadow root, we skip it
         if (isDocumentFragment(curEl.parentNode)) {
@@ -212,7 +212,7 @@ export function isSensitiveElement(el: Element): boolean {
     // a risk of clientside javascript placing sensitive data in attributes
     const allowedInputTypes = ['button', 'checkbox', 'submit', 'reset']
     if (
-        (isTag(el, 'input') && !allowedInputTypes.includes(el.type)) ||
+        (isTag(el, 'input') && !allowedInputTypes.includes((el as HTMLInputElement).type)) ||
         isTag(el, 'select') ||
         isTag(el, 'textarea') ||
         el.getAttribute('contenteditable') === 'true'

@@ -13,6 +13,7 @@
 
 import { _each, _includes, _isNumber, _isString, window } from './utils'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
+import { GDPROptions, PostHogConfig } from './types'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)
@@ -41,7 +42,7 @@ const GDPR_DEFAULT_PERSISTENCE_PREFIX = '__ph_opt_in_out_'
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
-export function optIn(token, options) {
+export function optIn(token: string, options: GDPROptions): void {
     _optInOut(true, token, options)
 }
 
@@ -57,7 +58,7 @@ export function optIn(token, options) {
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-out cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-out cookie is set as secure or not
  */
-export function optOut(token, options) {
+export function optOut(token: string, options: GDPROptions): void {
     _optInOut(false, token, options)
 }
 
@@ -69,7 +70,7 @@ export function optOut(token, options) {
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @returns {boolean} whether the user has opted in to the given opt type
  */
-export function hasOptedIn(token, options): boolean {
+export function hasOptedIn(token: string, options: GDPROptions): boolean {
     return _getStorageValue(token, options) === '1'
 }
 
@@ -82,7 +83,7 @@ export function hasOptedIn(token, options): boolean {
  * @param {boolean} [options.respectDnt] - flag to take browser DNT setting into account
  * @returns {boolean} whether the user has opted out of the given opt type
  */
-export function hasOptedOut(token, options): boolean {
+export function hasOptedOut(token: string, options: GDPROptions): boolean {
     if (_hasDoNotTrackFlagOn(options)) {
         return true
     }
@@ -111,9 +112,13 @@ export function addOptOutCheckPostHogLib(method, silenceErrors) {
  * If the user has opted out, return early instead of executing the method.
  * If a callback argument was provided, execute it passing the 0 error code.
  * @param {function} method - wrapped method to be executed if the user has not opted out
+ * @param silenceErrors
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
-export function addOptOutCheckPostHogPeople(method, silenceErrors) {
+export function addOptOutCheckPostHogPeople<M extends (...args: any[]) => any = (...args: any[]) => any>(
+    method: M,
+    silenceErrors?: boolean
+): M {
     return _addOptOutCheck(
         method,
         function (name) {
@@ -135,7 +140,7 @@ export function addOptOutCheckPostHogPeople(method, silenceErrors) {
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
-export function clearOptInOut(token, options) {
+export function clearOptInOut(token: string, options: GDPROptions) {
     options = options || {}
     _getStorage(options).remove(_getStorageKey(token, options), !!options.crossSubdomainCookie, options.cookieDomain)
 }
@@ -148,7 +153,7 @@ export function clearOptInOut(token, options) {
  * @param {string} [options.persistenceType]
  * @returns {object} either cookieStore or localStore
  */
-function _getStorage(options) {
+function _getStorage(options: GDPROptions) {
     options = options || {}
     if (options.persistenceType === 'localStorage') {
         return localStore
@@ -166,7 +171,7 @@ function _getStorage(options) {
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @returns {string} the name of the cookie for the given opt type
  */
-function _getStorageKey(token, options) {
+function _getStorageKey(token: string, options: GDPROptions) {
     options = options || {}
     return (options.persistencePrefix || GDPR_DEFAULT_PERSISTENCE_PREFIX) + token
 }
@@ -178,7 +183,7 @@ function _getStorageKey(token, options) {
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @returns {string} the value of the cookie for the given opt type
  */
-function _getStorageValue(token, options) {
+function _getStorageValue(token: string, options: GDPROptions) {
     return _getStorage(options).get(_getStorageKey(token, options))
 }
 
@@ -189,7 +194,7 @@ function _getStorageValue(token, options) {
  * @param {boolean} [options.respectDnt] - flag to take browser DNT setting into account
  * @returns {boolean} whether the DNT setting is true
  */
-function _hasDoNotTrackFlagOn(options) {
+function _hasDoNotTrackFlagOn(options: GDPROptions) {
     if (options && options.respectDnt) {
         const win = (options && options.window) || window
         const nav = win['navigator'] || {}
@@ -226,7 +231,7 @@ function _hasDoNotTrackFlagOn(options) {
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
-function _optInOut(optValue, token, options) {
+function _optInOut(optValue, token: string, options: GDPROptions) {
     if (!_isString(token) || !token.length) {
         console.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
         return
@@ -258,10 +263,15 @@ function _optInOut(optValue, token, options) {
  * If a callback argument was provided, execute it passing the 0 error code.
  * @param {function} method - wrapped method to be executed if the user has not opted out
  * @param {function} getConfigValue - getter function for the PostHog API token and other options to be used with opt-out check
+ * @param silenceErrors
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
-function _addOptOutCheck(method, getConfigValue, silenceErrors) {
-    return function () {
+function _addOptOutCheck<M extends (...args: any[]) => any = (...args: any[]) => any>(
+    method: M,
+    getConfigValue: <K extends keyof PostHogConfig = keyof PostHogConfig>(key: K) => PostHogConfig[K],
+    silenceErrors: boolean
+): M {
+    return function (...args) {
         let optedOut = false
 
         try {
@@ -287,14 +297,14 @@ function _addOptOutCheck(method, getConfigValue, silenceErrors) {
         }
 
         if (!optedOut) {
-            return method.apply(this, arguments)
+            return method.apply(this, args)
         }
 
-        const callback = arguments[arguments.length - 1]
+        const callback = args[args.length - 1]
         if (typeof callback === 'function') {
             callback(0)
         }
 
         return
-    }
+    } as M
 }

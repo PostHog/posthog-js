@@ -7,9 +7,7 @@ import { Properties } from './types'
  */
 
 const ArrayProto = Array.prototype
-const FuncProto = Function.prototype
 const ObjProto = Object.prototype
-const slice = ArrayProto.slice
 const toString = ObjProto.toString
 const hasOwnProperty = ObjProto.hasOwnProperty
 const win: typeof window = typeof window !== 'undefined' ? window : ({} as typeof window)
@@ -17,8 +15,7 @@ const navigator = win.navigator || { userAgent: '' }
 const document = win.document || {}
 const userAgent = navigator.userAgent
 
-const nativeBind = FuncProto.bind,
-    nativeForEach = ArrayProto.forEach,
+const nativeForEach = ArrayProto.forEach,
     nativeIndexOf = ArrayProto.indexOf,
     nativeIsArray = Array.isArray,
     breaker = {}
@@ -87,36 +84,10 @@ export const _trim = function (str: string): string {
     return str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
 }
 
-export const _bind = function (func, context) {
-    let args, bound
-    if (nativeBind && func.bind === nativeBind) {
-        return nativeBind.apply(func, slice.call(arguments, 1))
-    }
-    if (!_isFunction(func)) {
-        throw new TypeError()
-    }
-    args = slice.call(arguments, 2)
-    bound = function () {
-        if (!(this instanceof bound)) {
-            return func.apply(context, args.concat(slice.call(arguments)))
-        }
-        const ctor = {}
-        ctor.prototype = func.prototype
-        const self = new ctor()
-        ctor.prototype = null
-        const result = func.apply(self, args.concat(slice.call(arguments)))
-        if (Object(result) === result) {
-            return result
-        }
-        return self
-    }
-    return bound
-}
-
-export const _bind_instance_methods = function (obj) {
+export const _bind_instance_methods = function (obj: Record<string, any>): void {
     for (const func in obj) {
         if (typeof obj[func] === 'function') {
-            obj[func] = _bind(obj[func], obj)
+            obj[func] = obj[func].bind(obj)
         }
     }
 }
@@ -234,7 +205,7 @@ export const _isNumber = function (obj: any): obj is number {
     return toString.call(obj) == '[object Number]'
 }
 
-export const _encodeDates = function (obj: any) {
+export const _encodeDates = function (obj: Properties): Properties {
     _each(obj, function (v, k) {
         if (_isDate(v)) {
             obj[k] = _formatDate(v)
@@ -245,7 +216,7 @@ export const _encodeDates = function (obj: any) {
     return obj
 }
 
-export const _timestamp = function () {
+export const _timestamp = function (): number {
     Date.now =
         Date.now ||
         function () {
@@ -254,7 +225,7 @@ export const _timestamp = function () {
     return Date.now()
 }
 
-export const _formatDate = function (d) {
+export const _formatDate = function (d: Date): string {
     // YYYY-MM-DDTHH:MM:SS in UTC
     function pad(n) {
         return n < 10 ? '0' + n : n

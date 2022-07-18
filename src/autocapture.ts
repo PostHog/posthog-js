@@ -1,5 +1,4 @@
 import {
-    _bind,
     _bind_instance_methods,
     _each,
     _extend,
@@ -111,28 +110,16 @@ const autocapture = {
     // TODO: delete custom_properties after changeless typescript refactor
     _getCustomProperties: function (targetElementList: Element[]): Properties {
         const props: Properties = {} // will be deleted
-        _each(
-            this._customProperties,
-            function (customProperty) {
-                _each(
-                    customProperty['event_selectors'],
-                    function (eventSelector) {
-                        const eventElements = document.querySelectorAll(eventSelector)
-                        _each(
-                            eventElements,
-                            function (eventElement) {
-                                if (_includes(targetElementList, eventElement) && shouldCaptureElement(eventElement)) {
-                                    props[customProperty['name']] = this._extractCustomPropertyValue(customProperty)
-                                }
-                            },
-                            this
-                        )
-                    },
-                    this
-                )
-            },
-            this
-        )
+        _each(this._customProperties, (customProperty) => {
+            _each(customProperty['event_selectors'], (eventSelector) => {
+                const eventElements = document.querySelectorAll(eventSelector)
+                _each(eventElements, (eventElement) => {
+                    if (_includes(targetElementList, eventElement) && shouldCaptureElement(eventElement)) {
+                        props[customProperty['name']] = this._extractCustomPropertyValue(customProperty)
+                    }
+                })
+            })
+        })
         return props
     },
 
@@ -176,34 +163,30 @@ const autocapture = {
             const elementsJson: Properties[] = []
             let href,
                 explicitNoCapture = false
-            _each(
-                targetElementList,
-                function (el) {
-                    const shouldCaptureEl = shouldCaptureElement(el)
+            _each(targetElementList, (el) => {
+                const shouldCaptureEl = shouldCaptureElement(el)
 
-                    // if the element or a parent element is an anchor tag
-                    // include the href as a property
-                    if (el.tagName.toLowerCase() === 'a') {
-                        href = el.getAttribute('href')
-                        href = shouldCaptureEl && shouldCaptureValue(href) && href
-                    }
+                // if the element or a parent element is an anchor tag
+                // include the href as a property
+                if (el.tagName.toLowerCase() === 'a') {
+                    href = el.getAttribute('href')
+                    href = shouldCaptureEl && shouldCaptureValue(href) && href
+                }
 
-                    // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
-                    const classes = getClassName(el).split(' ')
-                    if (_includes(classes, 'ph-no-capture')) {
-                        explicitNoCapture = true
-                    }
+                // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
+                const classes = getClassName(el).split(' ')
+                if (_includes(classes, 'ph-no-capture')) {
+                    explicitNoCapture = true
+                }
 
-                    elementsJson.push(
-                        this._getPropertiesFromElement(
-                            el,
-                            instance.get_config('mask_all_element_attributes'),
-                            instance.get_config('mask_all_text')
-                        )
+                elementsJson.push(
+                    this._getPropertiesFromElement(
+                        el,
+                        instance.get_config('mask_all_element_attributes'),
+                        instance.get_config('mask_all_text')
                     )
-                },
-                this
-            )
+                )
+            })
 
             if (!instance.get_config('mask_all_text')) {
                 elementsJson[0]['$el_text'] = getSafeText(target)
@@ -237,10 +220,10 @@ const autocapture = {
     },
 
     _addDomEventHandlers: function (instance: PostHogLib): void {
-        const handler = _bind(function (e) {
+        const handler = (e: Event) => {
             e = e || window.event
             this._captureEvent(e, instance)
-        }, this)
+        }
         _register_event(document, 'submit', handler, false, true)
         _register_event(document, 'change', handler, false, true)
         _register_event(document, 'click', handler, false, true)

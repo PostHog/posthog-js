@@ -89,7 +89,7 @@ export class SessionRecording {
             this.captureStarted = true
             loadScript(
                 this.instance.get_config('api_host') + '/static/recorder.js?v=' + Config.LIB_VERSION,
-                _bind(this._onScriptLoaded, this)
+                this._onScriptLoaded.bind(this)
             )
         }
     }

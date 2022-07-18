@@ -21,7 +21,7 @@ export class RequestQueueScaffold {
         }
     }
 
-    enqueue(requestData): void {
+    enqueue(_requestData: Record<string, any>): void {
         return
     }
 

@@ -276,7 +276,7 @@ export interface NetworkRequestOptions {
 export interface XHROptions {
     transport: 'XHR' | 'sendBeacon'
     method: 'POST' | 'GET'
-    urlQueryArgs?: { compressin: Compression }
+    urlQueryArgs?: { compression: Compression }
 }
 
 export interface RetryQueueElement {}
@@ -296,3 +296,27 @@ export interface AutoCaptureCustomProperty {
     css_selector: string
     event_selectors: string[]
 }
+
+export interface CompressionData {
+    data: string
+    compression?: Compression
+}
+export interface CompressionOptions {}
+
+export interface GDPROptions {
+    capture: (
+        event: string,
+        properties: Properties
+    ) => void /** function used for capturing a PostHog event to record the opt-in action */
+    captureEventName: string /** event name to be used for capturing the opt-in action */
+    captureProperties: Properties /** set of properties to be captured along with the opt-in action */
+    persistenceType: string /** persistence mechanism used - cookie or localStorage */
+    persistencePrefix: string /** [__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name */
+    cookieExpiration: number /** number of days until the opt-in cookie expires */
+    cookieDomain: string /** custom cookie domain */
+    crossSiteCookie: boolean /** whether the opt-in cookie is set as cross-site-enabled */
+    crossSubdomainCookie: boolean /** whether the opt-in cookie is set as cross-subdomain or not */
+    secureCookie: boolean /** whether the opt-in cookie is set as secure or not */
+}
+
+export type RequestCallback = (response: Properties, data?: Properties) => void

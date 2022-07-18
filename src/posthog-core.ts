@@ -45,6 +45,7 @@ import {
     PostHogConfig,
     Properties,
     Property,
+    RequestCallback,
     XHROptions,
 } from './types'
 import { FeatureFlags } from '../react'
@@ -229,8 +230,8 @@ export class PostHogLib {
 
     people: PostHogPeople
     persistence: PersistenceClass
-    featureFlags: FeatureFlags
-    feature_flags: FeatureFlags
+    featureFlags: PostHogFeatureFlags
+    feature_flags: PostHogFeatureFlags
     sessionManager: SessionIdManager
     toolbar: Toolbar
     sessionRecording: SessionRecording
@@ -311,7 +312,7 @@ export class PostHogLib {
 
         this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
 
-        this._requestQueue = new RequestQueue(this._captureMetrics, _bind(this._handle_queued_event, this))
+        this._requestQueue = new RequestQueue(this._captureMetrics, this._handle_queued_event.bind(this))
 
         this._retryQueue = new RetryQueue(this._captureMetrics, this.get_config('on_xhr_error'))
         this.__captureHooks = []
@@ -404,7 +405,7 @@ export class PostHogLib {
      * If we are going to use script tags, this returns a string to use as the
      * callback GET param.
      */
-    _prepare_callback(callback, data?) {
+    _prepare_callback(callback: RequestCallback, data?: Properties) {
         if (_isUndefined(callback)) {
             return null
         }
@@ -421,7 +422,7 @@ export class PostHogLib {
             const jsc = this._jsc
             const randomized_cb = '' + Math.floor(Math.random() * 100000000)
             const callback_string = this.get_config('callback_fn') + '[' + randomized_cb + ']'
-            jsc[randomized_cb] = function (response) {
+            jsc[randomized_cb] = function (response: any) {
                 delete jsc[randomized_cb]
                 callback(response, data)
             }
@@ -1378,7 +1379,7 @@ export class PostHogLib {
     _gdpr_call_func(func, options) {
         options = _extend(
             {
-                capture: _bind(this.capture, this),
+                capture: this.capture.bind(this),
                 persistence_type: this.get_config('opt_out_capturing_persistence_type'),
                 cookie_prefix: this.get_config('opt_out_capturing_cookie_prefix'),
                 cookie_expiration: this.get_config('cookie_expiration'),
