@@ -1,8 +1,9 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHogLib } from './posthog-core'
-import { DecideResponse } from './types'
+import { DecideResponse, FeatureFlagsCallback } from './types'
+import { PostHogPersistence } from './posthog-persistence'
 
-export const parseFeatureFlagDecideResponse = (response, persistence) => {
+export const parseFeatureFlagDecideResponse = (response: DecideResponse, persistence: PostHogPersistence) => {
     const flags = response['featureFlags']
     if (flags) {
         // using the v1 api
@@ -38,7 +39,7 @@ export class PostHogFeatureFlags {
     instance: PostHogLib
     _override_warning: boolean
     flagCallReported: Record<string, boolean>
-    featureFlagEventHandlers: ((flags: string[], variants: Record<string, string | boolean>) => void)[]
+    featureFlagEventHandlers: FeatureFlagsCallback[]
     reloadFeatureFlagsQueued: boolean
     reloadFeatureFlagsInAction: boolean
     $anon_distinct_id: string | undefined
@@ -143,7 +144,7 @@ export class PostHogFeatureFlags {
                 // makes it through
                 this.$anon_distinct_id = undefined
 
-                this.receivedFeatureFlags(response)
+                this.receivedFeatureFlags(response as DecideResponse)
 
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
@@ -185,7 +186,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} key Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key: string, options?: { send_event?: boolean } = {}): boolean {
+    isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean {
         if (!this.getFlags()) {
             console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
@@ -193,7 +194,7 @@ export class PostHogFeatureFlags {
         return !!this.getFeatureFlag(key, options)
     }
 
-    addFeatureFlagsHandler(handler): void {
+    addFeatureFlagsHandler(handler: FeatureFlagsCallback): void {
         this.featureFlagEventHandlers.push(handler)
     }
 
@@ -241,7 +242,7 @@ export class PostHogFeatureFlags {
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
      *                              It'll return a list of feature flags enabled for the user.
      */
-    onFeatureFlags(callback): void {
+    onFeatureFlags(callback: FeatureFlagsCallback): void {
         this.addFeatureFlagsHandler(callback)
         if (this.instance.decideEndpointWasHit) {
             const flags = this.getFlags()

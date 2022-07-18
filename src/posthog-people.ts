@@ -14,8 +14,8 @@ const SET_ONCE_ACTION = '$set_once'
 class PostHogPeople {
     _posthog: PostHogLib
 
-    set: (prop: string | Properties, to: string, callback: RequestCallback) => void
-    set_once: (prop: string | Properties, to: string, callback: RequestCallback) => void
+    set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
+    set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
 
     constructor(posthog_instance: PostHogLib) {
         this._posthog = posthog_instance
@@ -39,7 +39,7 @@ class PostHogPeople {
          * @param {*} [to] A value to set on the given property name
          * @param {Function} [callback] If provided, the callback will be called after capturing the event.
          */
-        this.set = addOptOutCheckPostHogPeople((prop: string | Properties, to: string, callback: RequestCallback) => {
+        this.set = addOptOutCheckPostHogPeople((prop: string | Properties, to?: string, callback?: RequestCallback) => {
             const data = this.set_action(prop, to)
             if (_isObject(prop)) {
                 callback = to as any
@@ -81,7 +81,7 @@ class PostHogPeople {
          * @param {Function} [callback] If provided, the callback will be called after capturing the event.
          */
         this.set_once = addOptOutCheckPostHogPeople(
-            (prop: string | Properties, to: string, callback: RequestCallback) => {
+            (prop: string | Properties, to?: string, callback?: RequestCallback) => {
                 const data = this.set_once_action(prop, to)
                 if (_isObject(prop)) {
                     callback = to as any
@@ -95,7 +95,7 @@ class PostHogPeople {
         return this._posthog.toString() + '.people'
     }
 
-    _send_request(data: Properties, callback: RequestCallback): Properties {
+    _send_request(data: Properties, callback?: RequestCallback): Properties {
         data['$token'] = this._get_config('token')
         data['$distinct_id'] = this._posthog.get_distinct_id()
         const device_id = this._posthog.get_property('$device_id')
@@ -145,15 +145,15 @@ class PostHogPeople {
 
     // Internal methods for posthog.people API.
     // These methods shouldn't involve network I/O.
-    private set_action(prop: string | Properties, to: string): Properties {
+    private set_action(prop: string | Properties, to?: string): Properties {
         return this.apiActionParser(SET_ACTION, prop, to)
     }
 
-    private set_once_action(prop: string | Properties, to: string): Properties {
+    private set_once_action(prop: string | Properties, to?: string): Properties {
         return this.apiActionParser(SET_ONCE_ACTION, prop, to)
     }
 
-    private apiActionParser(actionType: '$set' | '$set_once', prop: string | Properties, to: string): Properties {
+    private apiActionParser(actionType: '$set' | '$set_once', prop: string | Properties, to?: string): Properties {
         const data: Properties = {}
         const props: Properties = {}
 

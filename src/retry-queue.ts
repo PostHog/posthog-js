@@ -1,7 +1,8 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
 import { CaptureMetrics } from './capture-metrics'
-import { RetryQueueElement } from './types'
+import { QueuedRequestData, RetryQueueElement } from './types'
+import Config from './config'
 
 export class RetryQueue extends RequestQueueScaffold {
     captureMetrics: CaptureMetrics
@@ -31,7 +32,7 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    enqueue(requestData): void {
+    enqueue(requestData: QueuedRequestData): void {
         const retriesPerformedSoFar = requestData.retriesPerformedSoFar || 0
         if (retriesPerformedSoFar >= 10) {
             return
@@ -80,7 +81,7 @@ export class RetryQueue extends RequestQueueScaffold {
             } catch (e) {
                 // Note sendBeacon automatically retries, and after the first retry it will loose reference to contextual `this`.
                 // This means in some cases `this.getConfig` will be undefined.
-                if (this.get_config?.('debug')) {
+                if (Config.DEBUG) {
                     console.error(e)
                 }
             }
@@ -88,7 +89,7 @@ export class RetryQueue extends RequestQueueScaffold {
         this.queue = []
     }
 
-    _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }): void {
+    _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }: QueuedRequestData): void {
         xhr({
             url,
             data: data || {},

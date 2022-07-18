@@ -1,20 +1,20 @@
-import { SESSION_ID } from './posthog-persistence'
+import { PostHogPersistence, SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
 import { _UUID } from './utils'
-import { PersistenceClass, PostHogConfig } from './types'
+import { PostHogConfig } from './types'
 
 const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
-    persistence: PersistenceClass
+    persistence: PostHogPersistence
     _windowId: string | null | undefined
     _sessionId: string | null | undefined
     window_id_storage_key: string
     _sessionStartTimestamp: number | null
     _sessionActivityTimestamp: number | null
 
-    constructor(config: Partial<PostHogConfig>, persistence) {
+    constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence) {
         this.persistence = persistence
         this._windowId = undefined
         this._sessionId = undefined
@@ -111,6 +111,7 @@ export class SessionIdManager {
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp = null) {
         const timestamp = _timestamp || new Date().getTime()
 
+        // eslint-disable-next-line prefer-const
         let [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
         let windowId = this._getWindowId()
 

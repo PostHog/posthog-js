@@ -1,14 +1,24 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { _each } from './utils'
+import { CaptureMetrics } from './capture-metrics'
+import { Properties, XHROptions } from './types'
 
 export class RequestQueue extends RequestQueueScaffold {
-    constructor(captureMetrics, handlePollRequest, pollInterval = 3000) {
+    captureMetrics: CaptureMetrics
+    handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void
+    _poller: number | undefined
+
+    constructor(
+        captureMetrics: CaptureMetrics,
+        handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void,
+        pollInterval = 3000
+    ) {
         super(pollInterval)
         this.handlePollRequest = handlePollRequest
         this.captureMetrics = captureMetrics
     }
 
-    enqueue(url, data, options) {
+    enqueue(url: string, data: Properties, options: XHROptions): void {
         this.captureMetrics.incr('batch-enqueue')
 
         this._event_queue.push({ url, data, options })
@@ -19,7 +29,7 @@ export class RequestQueue extends RequestQueueScaffold {
         }
     }
 
-    poll() {
+    poll(): void {
         clearTimeout(this._poller)
         this._poller = setTimeout(() => {
             if (this._event_queue.length > 0) {

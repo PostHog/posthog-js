@@ -63,7 +63,12 @@ import { logger } from './utils'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type Property = any
 export type Properties = Record<string, Property>
-export type CaptureResult = { event: string; properties: Properties }
+export interface CaptureResult {
+    event: string
+    properties: Properties
+    $set: Properties | undefined
+    timestamp: Date | undefined
+}
 export type CaptureCallback = (response: any, data: any) => void
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -157,105 +162,6 @@ export interface SessionRecordingOptions {
     inlineStylesheet?: boolean
 }
 
-export declare class PersistenceClass {
-    static properties(): Properties
-
-    static load(): void
-
-    static save(): void
-
-    static remove(): void
-
-    static clear(): void
-
-    /**
-     * @param {Object} props
-     * @param {*=} default_value
-     * @param {number=} days
-     */
-    static register_once(props: Properties, default_value?: Property, days?: number): boolean
-
-    /**
-     * @param {Object} props
-     * @param {number=} days
-     */
-    static register(props: Properties, days?: number): boolean
-
-    static unregister(prop: string): void
-
-    static update_campaign_params(): void
-
-    static update_search_keyword(referrer: string): void
-
-    static update_referrer_info(referrer: string): void
-
-    static get_referrer_info(): Properties
-
-    static safe_merge(props: Properties): Properties
-
-    static update_config(config: PostHogConfig): void
-
-    static set_disabled(disabled: boolean): void
-
-    static set_cross_subdomain(cross_subdomain: boolean): void
-
-    static get_cross_subdomain(): boolean
-
-    static set_secure(secure: boolean): void
-
-    static set_event_timer(event_name: string, timestamp: Date): void
-
-    static remove_event_timer(event_name: string): Date | undefined
-}
-
-export declare class PeopleClass {
-    /*
-     * Set properties on a user record.
-     *
-     * ### Usage:
-     *
-     *     posthog.people.set('gender', 'm');
-     *
-     *     // or set multiple properties at once
-     *     posthog.people.set({
-     *         'Company': 'Acme',
-     *         'Plan': 'Premium',
-     *         'Upgrade date': new Date()
-     *     });
-     *     // properties can be strings, integers, dates, or lists
-     *
-     * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
-     * @param {*} [to] A value to set on the given property name
-     * @param {Function} [callback] If provided, the callback will be called after capturing the event.
-     */
-    static set(prop: Properties | string, to?: Property, callback?: CaptureCallback): Properties
-
-    /*
-     * Set properties on a user record, only if they do not yet exist.
-     * This will not overwrite previous people property values, unlike
-     * people.set().
-     *
-     * ### Usage:
-     *
-     *     posthog.people.set_once('First Login Date', new Date());
-     *
-     *     // or set multiple properties at once
-     *     posthog.people.set_once({
-     *         'First Login Date': new Date(),
-     *         'Starting Plan': 'Premium'
-     *     });
-     *
-     *     // properties can be strings, integers or dates
-     *
-     * @param {Object|String} prop If a string, this is the name of the property. If an object, this is an associative array of names and values.
-     * @param {*} [to] A value to set on the given property name
-     * @param {Function} [callback] If provided, the callback will be called after capturing the event.
-     */
-    static set_once(prop: Properties | string, to?: Property, callback?: CaptureCallback): Properties
-
-    static toString(): string
-}
-
 export declare class SentryIntegration implements Integration {
     constructor(posthog: PostHogLib, organization?: string, projectId?: number, prefix?: string)
     name: string
@@ -280,8 +186,18 @@ export interface XHROptions {
     urlQueryArgs?: { compression: Compression }
 }
 
-export interface RetryQueueElement {}
-
+export interface RetryQueueElement {
+    retryAt: Date
+    requestData: QueuedRequestData
+}
+export interface QueuedRequestData {
+    url: string
+    data: Properties
+    options: XHROptions
+    headers: Properties
+    callback: RequestCallback
+    retriesPerformedSoFar: number
+}
 export interface DecideResponse {
     status: number
     supportedCompression: Compression[]
@@ -289,7 +205,10 @@ export interface DecideResponse {
         enable_collect_everything: boolean
     }
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
+    featureFlags: Record<string, string | boolean>
 }
+
+export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
 
 // TODO: delete custom_properties after changeless typescript refactor
 export interface AutoCaptureCustomProperty {

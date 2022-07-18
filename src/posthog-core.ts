@@ -14,7 +14,6 @@ import {
     _isArray,
     _safewrap_class,
     _register_event,
-    _bind,
     _UUID,
     _info,
 } from './utils'
@@ -41,14 +40,12 @@ import {
     HasOptedInOutCapturingOptions,
     isFeatureEnabledOptions,
     OptInOutCapturingOptions,
-    PersistenceClass,
     PostHogConfig,
     Properties,
     Property,
     RequestCallback,
     XHROptions,
 } from './types'
-import { FeatureFlags } from '../react'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -161,12 +158,12 @@ const defaultConfig = (): PostHogConfig => ({
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string): PostHogLib {
+const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string): PostHogLib | void {
     let instance: PostHogLib
     const target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
 
     if (target && init_type === InitType.INIT_MODULE) {
-        instance = target
+        instance = target as any
     } else {
         if (target && !_isArray(target)) {
             console.error('You have already initialized ' + name)
@@ -404,7 +401,7 @@ export class PostHogLib {
      * If we are going to use script tags, this returns a string to use as the
      * callback GET param.
      */
-    _prepare_callback(callback: RequestCallback, data?: Properties): RequestCallback | null | string {
+    _prepare_callback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
         if (_isUndefined(callback)) {
             return null
         }
@@ -448,7 +445,7 @@ export class PostHogLib {
         this._retryQueue.unload()
     }
 
-    _handle_queued_event(url: string, data: Record<string, any>, options?: { transport: 'XHR' | 'sendBeacon' }): void {
+    _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
         const jsonData = JSON.stringify(data)
         this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
     }
@@ -666,7 +663,7 @@ export class PostHogLib {
 
         let data: CaptureResult = {
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties, start_timestamp),
+            properties: this._calculate_event_properties(event_name, properties || {}, start_timestamp),
         }
 
         if (event_name === '$identify' && options.$set) {
