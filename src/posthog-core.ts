@@ -228,7 +228,7 @@ export class PostHogLib {
     config: PostHogConfig
 
     people: PostHogPeople
-    persistence: PersistenceClass
+    persistence: PostHogPersistence
     featureFlags: PostHogFeatureFlags
     feature_flags: PostHogFeatureFlags
     sessionManager: SessionIdManager

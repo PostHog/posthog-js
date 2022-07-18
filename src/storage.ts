@@ -1,15 +1,23 @@
 import { _extend, logger } from './utils'
+import { PersistentStore, Properties } from './types'
+import Config from './config'
 
 const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
 
 // Methods partially borrowed from quirksmode.org/js/cookies.html
-export const cookieStore = {
+export const cookieStore: PersistentStore = {
+    is_supported: () => true,
+
+    error: function (msg) {
+        logger.error('cookieStore error: ' + msg)
+    },
+
     get: function (name) {
         try {
             const nameEQ = name + '='
             const ca = document.cookie.split(';')
             for (let i = 0; i < ca.length; i++) {
-                const c = ca[i]
+                let c = ca[i]
                 while (c.charAt(0) == ' ') {
                     c = c.substring(1, c.length)
                 }
@@ -47,7 +55,7 @@ export const cookieStore = {
             if (days) {
                 const date = new Date()
                 date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000)
-                expires = '; expires=' + date.toGMTString()
+                expires = '; expires=' + date.toUTCString()
             }
 
             if (is_secure) {
@@ -72,8 +80,9 @@ export const cookieStore = {
     },
 }
 
-let _localStorage_supported = null
-export const localStore = {
+let _localStorage_supported: boolean | null = null
+
+export const localStore: PersistentStore = {
     is_supported: function () {
         if (_localStorage_supported !== null) {
             return _localStorage_supported
@@ -145,11 +154,11 @@ export const localStore = {
 // Use localstorage for most data but still use cookie for distinct_id
 // This solves issues with cookies having too much data in them causing headers too large
 // Also makes sure we don't have to send a ton of data to the server
-export const localPlusCookieStore = {
+export const localPlusCookieStore: PersistentStore = {
     ...localStore,
     parse: function (name) {
         try {
-            let extend = {}
+            let extend: Properties = {}
             try {
                 // See if there's a cookie stored with data.
                 extend = cookieStore.parse(name) || {}
@@ -187,16 +196,20 @@ export const localPlusCookieStore = {
     },
 }
 
-const memoryStorage = {}
+const memoryStorage: Properties = {}
 
 // Storage that only lasts the length of the pageview if we don't want to use cookies
-export const memoryStore = {
+export const memoryStore: PersistentStore = {
     is_supported: function () {
         return true
     },
 
     error: function (msg) {
         logger.error('memoryStorage error: ' + msg)
+    },
+
+    get: function (name) {
+        return memoryStorage[name] || null
     },
 
     parse: function (name) {
@@ -212,31 +225,35 @@ export const memoryStore = {
     },
 }
 
+let sessionStorageSupported: boolean | null = null
+export const resetSessionStorageSupported = () => {
+    sessionStorageSupported = null
+}
 // Storage that only lasts the length of a tab/window. Survives page refreshes
-export const sessionStore = {
-    sessionStorageSupported: null,
+export const sessionStore: PersistentStore = {
     is_supported: function () {
-        if (sessionStore.sessionStorageSupported !== null) {
-            return sessionStore.sessionStorageSupported
+        if (sessionStorageSupported !== null) {
+            return sessionStorageSupported
         }
-        sessionStore.sessionStorageSupported = true
+        sessionStorageSupported = true
         if (window) {
             try {
                 const key = '__support__',
                     val = 'xyz'
                 sessionStore.set(key, val)
                 if (sessionStore.get(key) !== '"xyz"') {
-                    sessionStore.sessionStorageSupported = false
+                    sessionStorageSupported = false
                 }
                 sessionStore.remove(key)
             } catch (err) {
-                sessionStore.sessionStorageSupported = false
+                sessionStorageSupported = false
             }
         } else {
-            sessionStore.sessionStorageSupported = false
+            sessionStorageSupported = false
         }
-        return sessionStore.sessionStorageSupported
+        return sessionStorageSupported
     },
+
     error: function (msg) {
         if (Config.DEBUG) {
             logger.error('sessionStorage error: ', msg)

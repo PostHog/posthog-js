@@ -1,6 +1,7 @@
 import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { EventProcessor, Hub, Integration } from '@sentry/types'
 import { PostHogLib } from './posthog-core'
+import { logger } from './utils'
 
 // namespacing everything with *Class to keep the definitions separate from the implementation
 //
@@ -320,3 +321,12 @@ export interface GDPROptions {
 }
 
 export type RequestCallback = (response: Record<string, any>, data?: Properties) => void
+
+export interface PersistentStore {
+    is_supported: () => boolean
+    error: (error: any) => void
+    parse: (name: string) => any
+    get: (name: string) => any
+    set: (name: string, value: any, expire_days?: number, cross_subdomain?: boolean, secure?: boolean) => void
+    remove: (name: string, cross_subdomain?: boolean) => void
+}
