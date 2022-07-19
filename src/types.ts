@@ -203,7 +203,7 @@ export interface QueuedRequestData {
     data: Properties
     options: XHROptions
     headers: Properties
-    callback: RequestCallback
+    callback?: RequestCallback
     retriesPerformedSoFar: number
 }
 

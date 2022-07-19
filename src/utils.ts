@@ -34,7 +34,7 @@ const logger = {
             try {
                 log.apply(window.console, args)
             } catch (err) {
-                _each(args, function (arg) {
+                _eachArray(args, function (arg) {
                     log(arg)
                 })
             }
@@ -52,7 +52,7 @@ const logger = {
             try {
                 error.apply(window.console, args)
             } catch (err) {
-                _each(args, function (arg) {
+                _eachArray(args, function (arg) {
                     error(arg)
                 })
             }
@@ -70,7 +70,7 @@ const logger = {
             try {
                 error.apply(window.console, args)
             } catch (err) {
-                _each(args, function (arg) {
+                _eachArray(args, function (arg) {
                     error(arg)
                 })
             }

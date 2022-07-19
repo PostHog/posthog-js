@@ -1,6 +1,7 @@
 import {
     _bind_instance_methods,
     _each,
+    _eachArray,
     _extend,
     _includes,
     _isFunction,
@@ -57,7 +58,7 @@ const autocapture = {
                 return c !== ''
             })
 
-        _each(elem.attributes, function (attr) {
+        _eachArray(elem.attributes, function (attr) {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
 

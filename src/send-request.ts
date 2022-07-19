@@ -69,7 +69,7 @@ export const xhr = ({
     onXHRError,
 }: XHRParams) => {
     const req = new XMLHttpRequest()
-    req.open(options.method, url, true)
+    req.open(options.method || 'GET', url, true)
 
     const body = encodePostData(data, options)
 
@@ -123,11 +123,7 @@ export const xhr = ({
                 }
 
                 if (callback) {
-                    if (options.verbose) {
-                        callback({ status: 0, error: error })
-                    } else {
-                        callback(0)
-                    }
+                    callback({ status: 0 })
                 }
             }
         }

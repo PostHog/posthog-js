@@ -17,6 +17,7 @@ import {
     _UUID,
     _info,
     _eachArray,
+    _eachObject,
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
@@ -163,7 +164,7 @@ const defaultConfig = (): PostHogConfig => ({
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string): PostHogLib | void {
+const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string): PostHogLib {
     let instance: PostHogLib
     const target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
 
@@ -274,7 +275,7 @@ export class PostHogLib {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    init(token: string, config: Partial<PostHogConfig>, name: string): PostHogLib | void {
+    init(token: string, config: Partial<PostHogConfig>, name: string): PostHogLib {
         if (_isUndefined(name)) {
             console.error('You must name your new library: init(token, config, name)')
             return
@@ -284,7 +285,7 @@ export class PostHogLib {
             return
         }
 
-        const instance = create_mplib(token, config, name)
+        const instance: PostHogLib = create_mplib(token, config, name)
         posthog_master[name] = instance
         instance._loaded()
 
@@ -523,7 +524,7 @@ export class PostHogLib {
             script.defer = true
             script.src = url
             const s = document.getElementsByTagName('script')[0]
-            s.parentNode.insertBefore(script, s)
+            s.parentNode?.insertBefore(script, s)
         }
     }
 
@@ -1563,7 +1564,7 @@ export class PostHogLib {
 
 _safewrap_class(PostHogLib, ['identify'])
 
-const instances = {}
+const instances: Record<string, PostHogLib> = {}
 const extend_mp = function () {
     // add all the sub posthog instances
     _each(instances, function (instance, name) {
@@ -1617,7 +1618,7 @@ const add_dom_loaded_handler = function () {
 
         ENQUEUE_REQUESTS = false
 
-        _each(instances, function (inst) {
+        _eachObject(instances, function (inst) {
             inst._dom_loaded()
         })
     }

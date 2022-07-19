@@ -93,7 +93,7 @@ export const LZString = {
                 buf[i] = compressed[i * 2] * 256 + compressed[i * 2 + 1]
             }
 
-            const result = []
+            const result: string[] = []
             buf.forEach(function (c) {
                 result.push(f(c))
             })
@@ -115,7 +115,7 @@ export const LZString = {
         if (input == '') return null
         input = input.replace(/ /g, '+')
         return LZString._decompress(input.length, 32, function (index) {
-            return getBaseValue(keyStrUriSafe, input.charAt(index))
+            return getBaseValue(keyStrUriSafe, (input as string).charAt(index))
         })
     },
 
@@ -141,8 +141,8 @@ export const LZString = {
             context_data_val = 0,
             context_data_position = 0,
             ii
-        const context_dictionary = {},
-            context_dictionaryToCreate = {},
+        const context_dictionary: Record<string, number> = {},
+            context_dictionaryToCreate: Record<string, boolean> = {},
             context_data = []
 
         for (ii = 0; ii < uncompressed.length; ii += 1) {
@@ -349,21 +349,21 @@ export const LZString = {
         })
     },
 
-    _decompress: function (length: number, resetValue: number, getNextValue: (index: number) => string) {
-        let dictionary = [],
-            enlargeIn = 4,
+    _decompress: function (length: number, resetValue: number, getNextValue: (index: number) => number) {
+        const dictionary: (string | number)[] = [],
+            result = [],
+            data = { val: getNextValue(0), position: resetValue, index: 1 }
+        let enlargeIn = 4,
             dictSize = 4,
             numBits = 3,
             entry = '',
-            result = [],
-            i,
-            w,
-            bits,
-            resb,
-            maxpower,
-            power,
-            c,
-            data = { val: getNextValue(0), position: resetValue, index: 1 }
+            i: number,
+            w: string | number,
+            bits: number,
+            resb: number,
+            maxpower: number,
+            power: number,
+            c: string | number
 
         for (i = 0; i < 3; i += 1) {
             dictionary[i] = i
@@ -419,8 +419,14 @@ export const LZString = {
             case 2:
                 return ''
         }
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         dictionary[3] = c
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         w = c
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         result.push(c)
         while (true) {
             if (data.index > length) {
@@ -489,10 +495,10 @@ export const LZString = {
             }
 
             if (dictionary[c]) {
-                entry = dictionary[c]
+                entry = dictionary[c] as string
             } else {
                 if (c === dictSize) {
-                    entry = w + w.charAt(0)
+                    entry = w + (w as string).charAt(0)
                 } else {
                     return null
                 }
