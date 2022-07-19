@@ -16,6 +16,7 @@ import {
     _register_event,
     _UUID,
     _info,
+    _eachArray,
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
@@ -150,6 +151,8 @@ const defaultConfig = (): PostHogConfig => ({
     _onCapture: __NOOP,
     _capture_metrics: false,
     _capture_performance: false,
+    name: 'posthog',
+    callback_fn: 'posthog._jsc',
 })
 
 /**
@@ -242,8 +245,8 @@ export class PostHogLib {
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
     _jsc: any
-    __captureHooks: any
-    __request_queue: any
+    __captureHooks: ((eventName: string) => void)[]
+    __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
     __autocapture_enabled: boolean
     decideEndpointWasHit: boolean
 
@@ -382,16 +385,12 @@ export class PostHogLib {
 
     _dom_loaded(): void {
         if (!this.has_opted_out_capturing()) {
-            _each(
-                this.__request_queue,
-                function (item) {
-                    this._send_request.apply(this, item)
-                },
-                this
-            )
+            _eachArray(this.__request_queue, (item) => {
+                this._send_request(...item)
+            })
         }
 
-        delete this.__request_queue
+        this.__request_queue = []
 
         this._start_queue_if_opted_in()
     }
@@ -411,10 +410,9 @@ export class PostHogLib {
         }
 
         if (USE_XHR) {
-            const callbackFunction: RequestCallback = function (response) {
+            return function (response) {
                 callback(response, data)
             }
-            return callbackFunction
         } else {
             // if the user gives us a callback, we store as a random
             // property on this instances jsc function and update our
@@ -449,19 +447,24 @@ export class PostHogLib {
         this._retryQueue.unload()
     }
 
-    _handle_queued_event(url: string, data: Record<string, any>, options?: Partial<XHROptions>): void {
+    _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
         const jsonData = JSON.stringify(data)
         this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
     }
 
-    __compress_and_send_json_request(url: string, jsonData: string, options?: Partial<XHROptions>, callback): void {
+    __compress_and_send_json_request(
+        url: string,
+        jsonData: string,
+        options: XHROptions,
+        callback?: RequestCallback
+    ): void {
         const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
         this._send_request(url, data, _options, callback)
     }
 
-    _send_request(url: string, data: Record<string, any>, options: Partial<XHROptions>, callback): void {
+    _send_request(url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback): void {
         if (ENQUEUE_REQUESTS) {
-            this.__request_queue.push(arguments)
+            this.__request_queue.push([url, data, options, callback])
             return
         }
 
@@ -541,33 +544,25 @@ export class PostHogLib {
         const alias_calls = []
         const other_calls = []
         const capturing_calls = []
-        _each(
-            array,
-            function (item) {
-                if (item) {
-                    fn_name = item[0]
-                    if (_isArray(fn_name)) {
-                        capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
-                    } else if (typeof item === 'function') {
-                        item.call(this)
-                    } else if (_isArray(item) && fn_name === 'alias') {
-                        alias_calls.push(item)
-                    } else if (
-                        _isArray(item) &&
-                        fn_name.indexOf('capture') !== -1 &&
-                        typeof this[fn_name] === 'function'
-                    ) {
-                        capturing_calls.push(item)
-                    } else {
-                        other_calls.push(item)
-                    }
+        _eachArray(array, (item) => {
+            if (item) {
+                fn_name = item[0]
+                if (_isArray(fn_name)) {
+                    capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
+                } else if (typeof item === 'function') {
+                    item.call(this)
+                } else if (_isArray(item) && fn_name === 'alias') {
+                    alias_calls.push(item)
+                } else if (_isArray(item) && fn_name.indexOf('capture') !== -1 && typeof this[fn_name] === 'function') {
+                    capturing_calls.push(item)
+                } else {
+                    other_calls.push(item)
                 }
-            },
-            this
-        )
+            }
+        })
 
         const execute = function (calls, context) {
-            _each(
+            _eachArray(
                 calls,
                 function (item) {
                     if (_isArray(item[0])) {
@@ -622,11 +617,7 @@ export class PostHogLib {
      * @param {Object} [options] Optional configuration for this capture request.
      * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
      */
-    capture(
-        event_name: string,
-        properties?: Properties,
-        options?: { transport: 'XHR' | 'sendBeacon' }
-    ): CaptureResult | void {
+    capture(event_name: string, properties?: Properties, options: CaptureOptions = __NOOPTIONS): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded) {
@@ -644,6 +635,7 @@ export class PostHogLib {
             options.transport = transport // 'transport' prop name can be minified internally
         }
 
+        // typing doesn't prevent interesting data
         if (_isUndefined(event_name) || typeof event_name !== 'string') {
             console.error('No event name provided to posthog.capture')
             return
@@ -703,7 +695,7 @@ export class PostHogLib {
         return data
     }
 
-    _addCaptureHook(callback): void {
+    _addCaptureHook(callback: (eventName: string) => void): void {
         this.__captureHooks.push(callback)
     }
 

@@ -95,28 +95,24 @@ export const _bind_instance_methods = function (obj: Record<string, any>): void 
 /**
  * @param {*=} obj
  * @param {function(...*)=} iterator
- * @param {Object=} context
+ * @param {Object=} thisArg
  */
-export const _each = function <V = any, O = Record<string, V> | V[], C = any>(
-    obj: O,
-    iterator: (value: V, key: O extends Record<string, V> ? keyof O : number) => void,
-    context?: C
-): void {
+export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
     if (obj === null || obj === undefined) {
         return
     }
-    if (nativeForEach && 'forEach' in obj && obj.forEach === nativeForEach) {
-        obj.forEach(iterator, context)
+    if (nativeForEach && Array.isArray(obj) && obj.forEach === nativeForEach) {
+        obj.forEach(iterator, thisArg)
     } else if ('length' in obj && obj.length === +obj.length) {
         for (let i = 0, l = obj.length; i < l; i++) {
-            if (i in obj && iterator.call(context, obj[i], i, obj) === breaker) {
+            if (i in obj && iterator.call(thisArg, obj[i], i, obj) === breaker) {
                 return
             }
         }
     } else {
         for (const key in obj) {
             if (hasOwnProperty.call(obj, key)) {
-                if (iterator.call(context, obj[key], key, obj) === breaker) {
+                if (iterator.call(thisArg, obj[key], key, obj) === breaker) {
                     return
                 }
             }
@@ -124,8 +120,43 @@ export const _each = function <V = any, O = Record<string, V> | V[], C = any>(
     }
 }
 
+export function _eachArray<E = any>(
+    obj: E[] | null | undefined,
+    iterator: (value: E, key: number) => void | Breaker,
+    thisArg?: any
+): void {
+    if (Array.isArray(obj)) {
+        if (nativeForEach && obj.forEach === nativeForEach) {
+            obj.forEach(iterator, thisArg)
+        } else if ('length' in obj && obj.length === +obj.length) {
+            for (let i = 0, l = obj.length; i < l; i++) {
+                if (i in obj && iterator.call(thisArg, obj[i], i) === breaker) {
+                    return
+                }
+            }
+        }
+    }
+}
+
+export function _eachObject<O extends Record<string, any> = Record<string, any>, K extends keyof O = keyof O>(
+    obj: O,
+    iterator: (value: O[K], key: K) => void | Breaker,
+    thisArg?: any
+): void {
+    if (obj === null || obj === undefined || Array.isArray(obj)) {
+        return
+    }
+    for (const key in obj) {
+        if (hasOwnProperty.call(obj, key)) {
+            if (iterator.call(thisArg, obj[key], key, obj) === breaker) {
+                return
+            }
+        }
+    }
+}
+
 export const _extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
-    _each(args, function (source) {
+    _eachArray(args, function (source) {
         for (const prop in source) {
             if (source[prop] !== void 0) {
                 obj[prop] = source[prop]
@@ -312,7 +343,7 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
 
     if (_isArray(value)) {
         result = [] as any as T
-        _each(value, (it) => {
+        _eachArray(value, (it) => {
             result.push(deepCircularCopy(it, customizer))
         })
     } else {

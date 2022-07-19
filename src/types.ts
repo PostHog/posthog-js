@@ -67,8 +67,8 @@ export type Properties = Record<string, Property>
 export interface CaptureResult {
     event: string
     properties: Properties
-    $set: Properties | undefined
-    timestamp: Date | undefined
+    $set?: Properties
+    timestamp?: Date
 }
 export type CaptureCallback = (response: any, data: any) => void
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -119,6 +119,8 @@ export interface PostHogConfig {
     advanced_disable_decide: boolean
     advanced_disable_toolbar_metrics: boolean
     get_device_id: (uuid: string) => string
+    name: string
+    callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     _capture_metrics: boolean
     _capture_performance: boolean
@@ -176,8 +178,8 @@ export enum Compression {
 }
 
 export interface XHROptions {
-    transport: 'XHR' | 'sendBeacon'
-    method: 'POST' | 'GET'
+    transport?: 'XHR' | 'sendBeacon'
+    method?: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
     verbose?: boolean
     blob?: boolean
