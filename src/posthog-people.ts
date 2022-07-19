@@ -1,5 +1,5 @@
 /* eslint camelcase: "off" */
-import { addOptOutCheckPostHogPeople } from './gdpr-utils'
+import { addOptOutCheck } from './gdpr-utils'
 import { _base64Encode, _copyAndTruncateStrings, _each, _encodeDates, _extend, _info, _isObject } from './utils'
 import { PostHogConfig, Properties, RequestCallback } from './types'
 import { PostHogLib } from './posthog-core'
@@ -17,8 +17,8 @@ class PostHogPeople {
     set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
     set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
 
-    constructor(posthog_instance: PostHogLib) {
-        this._posthog = posthog_instance
+    constructor(posthog: PostHogLib) {
+        this._posthog = posthog
 
         /*
          * Set properties on a user record.
@@ -39,7 +39,7 @@ class PostHogPeople {
          * @param {*} [to] A value to set on the given property name
          * @param {Function} [callback] If provided, the callback will be called after capturing the event.
          */
-        this.set = addOptOutCheckPostHogPeople((prop: string | Properties, to?: string, callback?: RequestCallback) => {
+        this.set = addOptOutCheck(posthog, (prop: string | Properties, to?: string, callback?: RequestCallback) => {
             const data = this.set_action(prop, to)
             if (_isObject(prop)) {
                 callback = to as any
@@ -80,7 +80,8 @@ class PostHogPeople {
          * @param {*} [to] A value to set on the given property name
          * @param {Function} [callback] If provided, the callback will be called after capturing the event.
          */
-        this.set_once = addOptOutCheckPostHogPeople(
+        this.set_once = addOptOutCheck(
+            posthog,
             (prop: string | Properties, to?: string, callback?: RequestCallback) => {
                 const data = this.set_once_action(prop, to)
                 if (_isObject(prop)) {

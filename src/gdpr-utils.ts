@@ -13,7 +13,8 @@
 
 import { _each, _includes, _isNumber, _isString, window } from './utils'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
-import { GDPROptions, PostHogConfig } from './types'
+import { GDPROptions } from './types'
+import { PostHogLib } from './posthog-core'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)
@@ -88,44 +89,6 @@ export function hasOptedOut(token: string, options: GDPROptions): boolean {
         return true
     }
     return _getStorageValue(token, options) === '0'
-}
-
-/**
- * Wrap a PostHogLib method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
- * If the user has opted out, return early instead of executing the method.
- * If a callback argument was provided, execute it passing the 0 error code.
- * @param {function} method - wrapped method to be executed if the user has not opted out
- * @returns {*} the result of executing method OR undefined if the user has opted out
- */
-export function addOptOutCheckPostHogLib(method, silenceErrors) {
-    return _addOptOutCheck(
-        method,
-        function (name) {
-            return this.get_config(name)
-        },
-        silenceErrors
-    )
-}
-
-/**
- * Wrap a PostHogPeople method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
- * If the user has opted out, return early instead of executing the method.
- * If a callback argument was provided, execute it passing the 0 error code.
- * @param {function} method - wrapped method to be executed if the user has not opted out
- * @param silenceErrors
- * @returns {*} the result of executing method OR undefined if the user has opted out
- */
-export function addOptOutCheckPostHogPeople<M extends (...args: any[]) => any = (...args: any[]) => any>(
-    method: M,
-    silenceErrors?: boolean
-): M {
-    return _addOptOutCheck(
-        method,
-        function (name) {
-            return this._get_config(name)
-        },
-        silenceErrors
-    )
 }
 
 /**
@@ -261,25 +224,25 @@ function _optInOut(optValue, token: string, options: GDPROptions) {
  * Wrap a method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
  * If the user has opted out, return early instead of executing the method.
  * If a callback argument was provided, execute it passing the 0 error code.
+ * @param {PostHogLib} posthog - the posthog instance
  * @param {function} method - wrapped method to be executed if the user has not opted out
- * @param {function} getConfigValue - getter function for the PostHog API token and other options to be used with opt-out check
  * @param silenceErrors
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
-function _addOptOutCheck<M extends (...args: any[]) => any = (...args: any[]) => any>(
+export function addOptOutCheck<M extends (...args: any[]) => any = (...args: any[]) => any>(
+    posthog: PostHogLib,
     method: M,
-    getConfigValue: <K extends keyof PostHogConfig = keyof PostHogConfig>(key: K) => PostHogConfig[K],
     silenceErrors?: boolean
 ): M {
     return function (...args) {
         let optedOut = false
 
         try {
-            const token = getConfigValue.call(this, 'token')
-            const respectDnt = getConfigValue.call(this, 'respect_dnt')
-            const persistenceType = getConfigValue.call(this, 'opt_out_capturing_persistence_type')
-            const persistencePrefix = getConfigValue.call(this, 'opt_out_capturing_cookie_prefix')
-            const win = getConfigValue.call(this, 'window') // used to override window during browser tests
+            const token = posthog.get_config('token')
+            const respectDnt = posthog.get_config('respect_dnt')
+            const persistenceType = posthog.get_config('opt_out_capturing_persistence_type')
+            const persistencePrefix = posthog.get_config('opt_out_capturing_cookie_prefix')
+            const win = posthog.get_config('window') // used to override window during browser tests
 
             if (token) {
                 // if there was an issue getting the token, continue method execution as normal
