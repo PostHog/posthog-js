@@ -105,14 +105,14 @@ export function _each(obj: any, iterator: (value: any, key: any) => void | Break
         obj.forEach(iterator, thisArg)
     } else if ('length' in obj && obj.length === +obj.length) {
         for (let i = 0, l = obj.length; i < l; i++) {
-            if (i in obj && iterator.call(thisArg, obj[i], i, obj) === breaker) {
+            if (i in obj && iterator.call(thisArg, obj[i], i) === breaker) {
                 return
             }
         }
     } else {
         for (const key in obj) {
             if (hasOwnProperty.call(obj, key)) {
-                if (iterator.call(thisArg, obj[key], key, obj) === breaker) {
+                if (iterator.call(thisArg, obj[key], key) === breaker) {
                     return
                 }
             }
@@ -138,23 +138,6 @@ export function _eachArray<E = any>(
     }
 }
 
-export function _eachObject<O extends Record<string, any> = Record<string, any>, K extends keyof O = keyof O>(
-    obj: O,
-    iterator: (value: O[K], key: K) => void | Breaker,
-    thisArg?: any
-): void {
-    if (obj === null || obj === undefined || Array.isArray(obj)) {
-        return
-    }
-    for (const key in obj) {
-        if (hasOwnProperty.call(obj, key)) {
-            if (iterator.call(thisArg, obj[key], key, obj) === breaker) {
-                return
-            }
-        }
-    }
-}
-
 export const _extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
     _eachArray(args, function (source) {
         for (const prop in source) {
@@ -175,7 +158,7 @@ export const _isArray =
 // from a comment on http://dbj.org/dbj/?p=286
 // fails on only one very rare and deliberate custom object:
 // let bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
-export const _isFunction = function (f) {
+export const _isFunction = function (f: any): f is (...args: any[]) => any {
     try {
         return /^\s*\bfunction\b/.test(f)
     } catch (x) {
@@ -262,7 +245,7 @@ export const _timestamp = function (): number {
 
 export const _formatDate = function (d: Date): string {
     // YYYY-MM-DDTHH:MM:SS in UTC
-    function pad(n) {
+    function pad(n: number) {
         return n < 10 ? '0' + n : n
     }
     return (
@@ -280,26 +263,28 @@ export const _formatDate = function (d: Date): string {
     )
 }
 
-export const _safewrap = function (f) {
-    return function () {
+export const _safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {
+    return function (...args) {
         try {
-            return f.apply(this, arguments)
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            return f.apply(this, args)
         } catch (e) {
             logger.critical('Implementation error. Please turn on debug and contact support@posthog.com.')
             if (Config.DEBUG) {
                 logger.critical(e)
             }
         }
-    }
+    } as F
 }
 
-export const _safewrap_class = function (klass, functions): void {
+export const _safewrap_class = function (klass: (...args: any[]) => any, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]] = _safewrap(klass.prototype[functions[i]])
     }
 }
 
-export const _safewrap_instance_methods = function (obj): void {
+export const _safewrap_instance_methods = function (obj: Record<string, any>): void {
     for (const func in obj) {
         if (typeof obj[func] === 'function') {
             obj[func] = _safewrap(obj[func])
@@ -332,10 +317,10 @@ const COPY_IN_PROGRESS_ATTRIBUTE =
  */
 function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
     value: T,
-    customizer?: (value: T, key?: string) => T,
+    customizer?: <K extends keyof T = keyof T>(value: T[K], key?: K) => T[K],
     key?: string
 ): T | undefined {
-    if (value !== Object(value)) return customizer ? customizer(value, key) : value // primitive value
+    if (value !== Object(value)) return customizer ? customizer(value as any, key) : value // primitive value
 
     if (value[COPY_IN_PROGRESS_ATTRIBUTE as any]) return undefined
     ;(value as any)[COPY_IN_PROGRESS_ATTRIBUTE] = true
@@ -364,8 +349,8 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
     object: T,
     maxStringLength: number | null
 ): T {
-    return deepCircularCopy(object, (value, key) => {
-        if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key) > -1) {
+    return deepCircularCopy(object, (value: any, key) => {
+        if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key as string) > -1) {
             return value
         }
         if (typeof value === 'string' && maxStringLength !== null) {
@@ -626,7 +611,11 @@ export const _register_event = (function () {
         }
     }
 
-    function makeHandler(element: Element, new_handler: EventHandler, old_handlers: EventHandler) {
+    function makeHandler(
+        element: Element | Window | Document | Node,
+        new_handler: EventHandler,
+        old_handlers: EventHandler
+    ) {
         return function (event: Event): boolean | void {
             event = event || fixEvent(window.event)
 

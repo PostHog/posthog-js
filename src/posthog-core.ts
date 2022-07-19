@@ -17,7 +17,6 @@ import {
     _UUID,
     _info,
     _eachArray,
-    _eachObject,
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
@@ -1623,7 +1622,7 @@ const add_dom_loaded_handler = function () {
 
         ENQUEUE_REQUESTS = false
 
-        _eachObject(instances, function (inst) {
+        _each(instances, function (inst: PostHogLib) {
             inst._dom_loaded()
         })
     }
