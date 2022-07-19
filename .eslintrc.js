@@ -9,10 +9,14 @@ module.exports = {
         sourceType: 'module',
     },
     plugins: ['prettier', '@typescript-eslint', 'eslint-plugin-react', 'eslint-plugin-react-hooks'],
-    extends: ['plugin:@typescript-eslint/recommended', 'plugin:react/recommended', 'plugin:react-hooks/recommended'],
+    extends: [
+        'plugin:@typescript-eslint/recommended',
+        'plugin:react/recommended',
+        'plugin:react-hooks/recommended',
+        'prettier',
+    ],
     rules: {
         'prettier/prettier': 'error',
-        'no-unused-vars': ['error', { ignoreRestSiblings: true }],
         '@typescript-eslint/no-empty-function': 'off',
     },
     settings: {
