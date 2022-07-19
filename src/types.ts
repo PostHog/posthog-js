@@ -1,7 +1,8 @@
 import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { EventProcessor, Hub, Integration } from '@sentry/types'
 import { PostHogLib } from './posthog-core'
-import { logger } from './utils'
+import { CaptureMetrics } from './capture-metrics'
+import { RetryQueue } from './retry-queue'
 
 // namespacing everything with *Class to keep the definitions separate from the implementation
 //
@@ -174,16 +175,21 @@ export enum Compression {
     Base64 = 'base64',
 }
 
-export interface NetworkRequestOptions {
-    sendBeacon: boolean
-    blob: boolean
-    method: 'POST' | 'GET'
-}
-
 export interface XHROptions {
     transport: 'XHR' | 'sendBeacon'
     method: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
+    verbose?: boolean
+    blob?: boolean
+    sendBeacon?: boolean
+}
+
+export interface CaptureOptions extends XHROptions {
+    $set?: Properties /** used with $identify */
+    _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
+    endpoint?: string /** defaults to '/e/' */
+    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
+    send_instantly?: boolean /** if set skips the batched queue */
 }
 
 export interface RetryQueueElement {
@@ -198,6 +204,13 @@ export interface QueuedRequestData {
     callback: RequestCallback
     retriesPerformedSoFar: number
 }
+
+export interface XHRParams extends QueuedRequestData {
+    captureMetrics: CaptureMetrics
+    retryQueue: RetryQueue
+    onXHRError: (req: XMLHttpRequest) => void
+}
+
 export interface DecideResponse {
     status: number
     supportedCompression: Compression[]
@@ -221,7 +234,6 @@ export interface CompressionData {
     data: string
     compression?: Compression
 }
-export interface CompressionOptions {}
 
 export interface GDPROptions {
     capture: (
@@ -256,4 +268,10 @@ export type EventHandler = (event: Event) => boolean | void
 export interface EditorParams {
     jsURL?: string
     apiURL?: string
+}
+
+export interface PostData {
+    buffer?: BlobPart
+    compression?: Compression
+    data?: string
 }

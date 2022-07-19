@@ -1,7 +1,7 @@
 import { LZString } from './lz-string'
 import { gzipSync, strToU8 } from 'fflate'
 import { _base64Encode } from './utils'
-import { Compression, CompressionData, CompressionOptions } from './types'
+import { Compression, CompressionData, XHROptions } from './types'
 
 export function decideCompression(compressionSupport: Record<Compression, boolean>): Compression {
     if (compressionSupport[Compression.GZipJS]) {
@@ -16,8 +16,8 @@ export function decideCompression(compressionSupport: Record<Compression, boolea
 export function compressData(
     compression: Compression,
     jsonData: string,
-    options: CompressionOptions
-): [CompressionData | Uint8Array, CompressionOptions] {
+    options: XHROptions
+): [CompressionData | Uint8Array, XHROptions] {
     if (compression === Compression.LZ64) {
         return [{ data: LZString.compressToBase64(jsonData), compression: Compression.LZ64 }, options]
     } else if (compression === Compression.GZipJS) {

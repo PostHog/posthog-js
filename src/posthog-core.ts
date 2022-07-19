@@ -34,6 +34,7 @@ import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { getPerformanceData } from './apm'
 import {
+    CaptureOptions,
     CaptureResult,
     ClearOptInOutCapturingOptions,
     Compression,
@@ -445,12 +446,12 @@ export class PostHogLib {
         this._retryQueue.unload()
     }
 
-    _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
+    _handle_queued_event(url: string, data: Record<string, any>, options?: Partial<XHROptions>): void {
         const jsonData = JSON.stringify(data)
         this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
     }
 
-    __compress_and_send_json_request(url: string, jsonData: string, options?: XHROptions, callback): void {
+    __compress_and_send_json_request(url: string, jsonData: string, options?: Partial<XHROptions>, callback): void {
         const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
         this._send_request(url, data, _options, callback)
     }
@@ -1069,11 +1070,11 @@ export class PostHogLib {
         // posthog.people.identify() call made for this user. It is VERY BAD to make an alias with
         // this ID, as it will duplicate users.
         if (alias === this.get_property(PEOPLE_DISTINCT_ID_KEY)) {
-            console.critical('Attempting to create alias for existing People user - aborting.')
+            logger.critical('Attempting to create alias for existing People user - aborting.')
             return -2
         }
 
-        const _this = this
+        const _this: PostHogLib = this
         if (_isUndefined(original)) {
             original = this.get_distinct_id()
         }

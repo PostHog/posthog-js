@@ -1,6 +1,6 @@
 import { _each, _HTTPBuildQuery, logger } from './utils'
 import Config from './config'
-import { NetworkRequestOptions } from './types'
+import { PostData, XHROptions, XHRParams } from './types'
 
 export const addParamsToURL = (
     url: string,
@@ -27,13 +27,13 @@ export const addParamsToURL = (
     return url + argSeparator + _HTTPBuildQuery(args)
 }
 
-export const encodePostData = (data: any, options: Partial<NetworkRequestOptions>): string | Blob | null => {
+export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHROptions>): string | BlobPart | null => {
     if (options.blob && data.buffer) {
         return new Blob([data.buffer], { type: 'text/plain' })
     }
 
     if (options.sendBeacon || options.blob) {
-        const body = encodePostData(data, { method: 'POST' })
+        const body = encodePostData(data, { method: 'POST' }) as BlobPart
         return new Blob([body], { type: 'application/x-www-form-urlencoded' })
     }
 
@@ -42,15 +42,16 @@ export const encodePostData = (data: any, options: Partial<NetworkRequestOptions
     }
 
     let body_data
-    const isUint8Array = (d) => Object.prototype.toString.call(d) === '[object Uint8Array]'
+    const isUint8Array = (d: unknown): d is Uint8Array => Object.prototype.toString.call(d) === '[object Uint8Array]'
     if (Array.isArray(data) || isUint8Array(data)) {
+        // TODO: eh? passing an Array here?
         body_data = 'data=' + encodeURIComponent(data)
     } else {
-        body_data = 'data=' + encodeURIComponent(data['data'])
+        body_data = 'data=' + encodeURIComponent(data.data)
     }
 
-    if (data['compression']) {
-        body_data += '&compression=' + data['compression']
+    if ('compression' in data && data.compression) {
+        body_data += '&compression=' + data.compression
     }
 
     return body_data
@@ -66,7 +67,7 @@ export const xhr = ({
     retriesPerformedSoFar,
     retryQueue,
     onXHRError,
-}) => {
+}: XHRParams) => {
     const req = new XMLHttpRequest()
     req.open(options.method, url, true)
 

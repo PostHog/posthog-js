@@ -344,7 +344,10 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
     }) as T
 }
 
-export const _base64Encode = function (data: string | undefined | null) {
+export function _base64Encode(data: null): null
+export function _base64Encode(data: undefined): undefined
+export function _base64Encode(data: string): string
+export function _base64Encode(data: string | null | undefined): string | null | undefined {
     const b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
     let o1,
         o2,
@@ -356,8 +359,8 @@ export const _base64Encode = function (data: string | undefined | null) {
         bits,
         i = 0,
         ac = 0,
-        enc = '',
-        tmp_arr = []
+        enc = ''
+    const tmp_arr: string[] = []
 
     if (!data) {
         return data
