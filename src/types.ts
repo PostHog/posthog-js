@@ -188,11 +188,12 @@ export interface XHROptions {
 
 export interface CaptureOptions extends XHROptions {
     $set?: Properties /** used with $identify */
+    $set_once?: Properties /** used with $identify */
+    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
+    _metrics?: Properties
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     endpoint?: string /** defaults to '/e/' */
-    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     send_instantly?: boolean /** if set skips the batched queue */
-    _metrics?: Properties
 }
 
 export interface RetryQueueElement {

@@ -861,7 +861,7 @@ export class PostHogLib {
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
      *                              It'll return a list of feature flags enabled for the user.
      */
-    onFeatureFlags(callback: (flags: string[], variants: Record<string, boolean | string>) => void): false | undefined {
+    onFeatureFlags(callback: (flags: string[], variants: Record<string, boolean | string>) => void): void {
         return this.featureFlags.onFeatureFlags(callback)
     }
 

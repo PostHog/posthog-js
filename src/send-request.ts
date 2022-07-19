@@ -5,7 +5,7 @@ import { PostData, XHROptions, XHRParams } from './types'
 export const addParamsToURL = (
     url: string,
     urlQueryArgs: Record<string, any> | undefined,
-    parameterOptions: { ip?: string }
+    parameterOptions: { ip?: boolean }
 ): string => {
     const args = urlQueryArgs || {}
     args['ip'] = parameterOptions['ip'] ? 1 : 0

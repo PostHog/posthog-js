@@ -3,7 +3,7 @@ import { gzipSync, strToU8 } from 'fflate'
 import { _base64Encode } from './utils'
 import { Compression, CompressionData, XHROptions } from './types'
 
-export function decideCompression(compressionSupport: Record<Compression, boolean>): Compression {
+export function decideCompression(compressionSupport: Partial<Record<Compression, boolean>>): Compression {
     if (compressionSupport[Compression.GZipJS]) {
         return Compression.GZipJS
     } else if (compressionSupport[Compression.LZ64]) {
