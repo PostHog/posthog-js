@@ -58,7 +58,7 @@ const autocapture = {
                 return c !== ''
             })
 
-        _eachArray(elem.attributes, function (attr) {
+        _each(elem.attributes, function (attr: Attr) {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
 

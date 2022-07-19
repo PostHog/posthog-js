@@ -606,7 +606,7 @@ export const _register_event = (function () {
      * @param {boolean=} useCapture
      */
     const register_event = function (
-        element: Element | Window,
+        element: Element | Window | Document | Node,
         type: string,
         handler: EventHandler,
         oldSchool?: boolean,

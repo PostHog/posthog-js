@@ -26,7 +26,7 @@ export class Decide {
             `${this.instance.get_config('api_host')}/decide/?v=2`,
             { data: encoded_data, verbose: true },
             { method: 'POST' },
-            (response: DecideResponse) => this.parseDecideResponse(response)
+            (response) => this.parseDecideResponse(response as DecideResponse)
         )
     }
 

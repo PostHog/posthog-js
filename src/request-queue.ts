@@ -1,7 +1,7 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { _each } from './utils'
 import { CaptureMetrics } from './capture-metrics'
-import { Properties, XHROptions } from './types'
+import { Properties, QueuedRequestData, XHROptions } from './types'
 
 export class RequestQueue extends RequestQueueScaffold {
     captureMetrics: CaptureMetrics
@@ -88,12 +88,12 @@ export class RequestQueue extends RequestQueueScaffold {
         this._event_queue.length = 0
         for (const key in requests) {
             const { url, data, options } = requests[key]
-            this.handlePollRequest(url, data, { ...options, transport: 'sendbeacon' })
+            this.handlePollRequest(url, data, { ...options, transport: 'sendBeacon' })
         }
     }
 
-    formatQueue(): void {
-        const requests = {}
+    formatQueue(): Record<string, QueuedRequestData> {
+        const requests: Record<string, QueuedRequestData> = {}
         _each(this._event_queue, (request) => {
             const { url, data, options } = request
             const key = (options ? options._batchKey : null) || url
@@ -106,9 +106,10 @@ export class RequestQueue extends RequestQueueScaffold {
                 options &&
                 requests[key].options &&
                 requests[key].options._metrics &&
-                !requests[key].options._metrics['rrweb_full_snapshot']
+                !(requests[key].options._metrics as any)['rrweb_full_snapshot']
             ) {
-                requests[key].options._metrics['rrweb_full_snapshot'] = options._metrics['rrweb_full_snapshot']
+                ;(requests[key].options._metrics as any)['rrweb_full_snapshot'] =
+                    options._metrics['rrweb_full_snapshot']
             }
             requests[key].data.push(data)
         })

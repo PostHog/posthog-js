@@ -202,10 +202,10 @@ export interface RetryQueueElement {
 export interface QueuedRequestData {
     url: string
     data: Properties
-    options: XHROptions
-    headers: Properties
+    options: CaptureOptions
+    headers?: Properties
     callback?: RequestCallback
-    retriesPerformedSoFar: number
+    retriesPerformedSoFar?: number
 }
 
 export interface XHRParams extends QueuedRequestData {

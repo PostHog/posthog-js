@@ -565,7 +565,7 @@ describe('_handle_unload()', () => {
         it('captures $pageleave', () => {
             given.subject()
 
-            expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendbeacon' })
+            expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
         })
 
         it('does not capture $pageleave when capture_pageview=false', () => {

@@ -1,6 +1,6 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHogLib } from './posthog-core'
-import { DecideResponse, FeatureFlagsCallback } from './types'
+import { DecideResponse, FeatureFlagsCallback, RequestCallback } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
 export const parseFeatureFlagDecideResponse = (response: DecideResponse, persistence: PostHogPersistence) => {
@@ -149,7 +149,7 @@ export class PostHogFeatureFlags {
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
                 this._startReloadTimer()
-            })
+            }) as RequestCallback
         )
     }
 

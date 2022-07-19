@@ -405,6 +405,7 @@ export class PostHogLib {
      * If we are going to use script tags, this returns a string to use as the
      * callback GET param.
      */
+    // TODO: get rid of the "| string"
     _prepare_callback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
         if (_isUndefined(callback)) {
             return null
@@ -432,7 +433,7 @@ export class PostHogLib {
     _handle_unload(): void {
         if (!this.get_config('request_batching')) {
             if (this.get_config('capture_pageview')) {
-                this.capture('$pageleave', null, { transport: 'sendbeacon' })
+                this.capture('$pageleave', null, { transport: 'sendBeacon' })
             }
             return
         }
@@ -480,8 +481,8 @@ export class PostHogLib {
             options.method = 'GET'
         }
 
-        const useSendBeacon = 'sendBeacon' in window.navigator && options.transport.toLowerCase() === 'sendbeacon'
-        url = addParamsToURL(url, options.urlQueryArgs, {
+        const useSendBeacon = 'sendBeacon' in window.navigator && options.transport === 'sendBeacon'
+        url = addParamsToURL(url, options.urlQueryArgs || {}, {
             ip: this.get_config('ip'),
         })
 
@@ -618,7 +619,11 @@ export class PostHogLib {
      * @param {Object} [options] Optional configuration for this capture request.
      * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
      */
-    capture(event_name: string, properties?: Properties, options: CaptureOptions = __NOOPTIONS): CaptureResult | void {
+    capture(
+        event_name: string,
+        properties?: Properties | null,
+        options: CaptureOptions = __NOOPTIONS
+    ): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded) {

@@ -124,7 +124,7 @@ class PostHogPeople {
             this._get_config('api_host') + '/engage/',
             { data: encoded_data },
             {},
-            this._posthog._prepare_callback(callback, truncated_data)
+            this._posthog._prepare_callback(callback, truncated_data) as RequestCallback
         )
 
         return truncated_data
