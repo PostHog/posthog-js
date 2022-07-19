@@ -1,12 +1,15 @@
 import { loadScript } from '../autocapture-utils'
 import { _getHashParam, _register_event } from '../utils'
+import { PostHogLib } from '../posthog-core'
+import { DecideResponse, EditorParams, Properties } from '../types'
 
 export class Toolbar {
-    constructor(instance) {
+    instance: PostHogLib
+    constructor(instance: PostHogLib) {
         this.instance = instance
     }
 
-    afterDecideResponse(response) {
+    afterDecideResponse(response: DecideResponse) {
         const editorParams =
             response['editorParams'] ||
             (response['toolbarVersion'] ? { toolbarVersion: response['toolbarVersion'] } : {})
@@ -27,7 +30,11 @@ export class Toolbar {
      * 1. In the URL hash params if the customer is using an old snippet
      * 2. From session storage under the key `editorParams` if the editor was initialized on a previous page
      */
-    maybeLoadEditor(location = window.location, localStorage = undefined, history = window.history) {
+    maybeLoadEditor(
+        location = window.location,
+        localStorage: Storage | undefined = undefined,
+        history = window.history
+    ) {
         try {
             // Before running the code we check if we can access localStorage, if not we opt-out
             if (!localStorage) {
@@ -85,7 +92,7 @@ export class Toolbar {
         }
     }
 
-    _loadEditor(editorParams) {
+    _loadEditor(editorParams: EditorParams) {
         if (!window['_postHogToolbarLoaded']) {
             // only load the codeless event editor once, even if there are multiple instances of PostHogLib
             window['_postHogToolbarLoaded'] = true

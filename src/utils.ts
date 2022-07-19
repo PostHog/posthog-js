@@ -1,5 +1,5 @@
 import Config from './config'
-import { Properties } from './types'
+import { Breaker, EventHandler, Properties } from './types'
 
 /*
  * Saved references to long variable names, so that closure compiler can
@@ -18,7 +18,7 @@ const userAgent = navigator.userAgent
 const nativeForEach = ArrayProto.forEach,
     nativeIndexOf = ArrayProto.indexOf,
     nativeIsArray = Array.isArray,
-    breaker = {}
+    breaker: Breaker = {}
 
 // Console override
 const logger = {
@@ -152,7 +152,10 @@ export const _isFunction = function (f) {
     }
 }
 
-export const _include = function (obj, target) {
+export const _include = function (
+    obj: null | string | Array<any> | Record<string, any>,
+    target: any
+): boolean | Breaker {
     let found = false
     if (obj === null) {
         return found
@@ -164,11 +167,12 @@ export const _include = function (obj, target) {
         if (found || (found = value === target)) {
             return breaker
         }
+        return
     })
     return found
 }
 
-export function _includes<T extends any>(str: T[] | string, needle: T): boolean {
+export function _includes<T = any>(str: T[] | string, needle: T): boolean {
     return (str as any).indexOf(needle) !== -1
 }
 
@@ -295,45 +299,52 @@ const COPY_IN_PROGRESS_ATTRIBUTE =
  * @param [key] if provided this is the object key associated with the value to be copied. It allows the customizer function to have context when it runs
  * @returns {{}|undefined|*}
  */
-function deepCircularCopy<T = any>(value: T, customizer?: (value: T, key?: string) => T, key?: string): T {
+function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
+    value: T,
+    customizer?: (value: T, key?: string) => T,
+    key?: string
+): T | undefined {
     if (value !== Object(value)) return customizer ? customizer(value, key) : value // primitive value
 
-    if (value[COPY_IN_PROGRESS_ATTRIBUTE]) return undefined
-
-    value[COPY_IN_PROGRESS_ATTRIBUTE] = true
-    let result
+    if (value[COPY_IN_PROGRESS_ATTRIBUTE as any]) return undefined
+    ;(value as any)[COPY_IN_PROGRESS_ATTRIBUTE] = true
+    let result: T
 
     if (_isArray(value)) {
-        result = []
+        result = [] as any as T
         _each(value, (it) => {
             result.push(deepCircularCopy(it, customizer))
         })
     } else {
-        result = {}
+        result = {} as T
         _each(value, (val, key) => {
             if (key !== COPY_IN_PROGRESS_ATTRIBUTE) {
-                result[key] = deepCircularCopy(val, customizer, key)
+                ;(result as any)[key] = deepCircularCopy(val, customizer, key)
             }
         })
     }
-    delete value[COPY_IN_PROGRESS_ATTRIBUTE]
+    delete value[COPY_IN_PROGRESS_ATTRIBUTE as any]
     return result
 }
 
 const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
 
-export const _copyAndTruncateStrings = <T = any>(object: T, maxStringLength: number): T =>
-    deepCircularCopy(object, (value, key) => {
+export function _copyAndTruncateStrings<T extends Record<string, any> = Record<string, any>>(
+    object: T,
+    maxStringLength: number
+): T {
+    return deepCircularCopy(object, (value, key) => {
         if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key) > -1) {
             return value
         }
         if (typeof value === 'string' && maxStringLength !== null) {
-            return value.slice(0, maxStringLength)
+            return (value as string).slice(0, maxStringLength)
         }
         return value
-    })
+    }) as T
+}
 
-export const _base64Encode = function (data) {
+export const _base64Encode = function (data: string | undefined | null) {
     const b64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
     let o1,
         o2,
@@ -527,7 +538,7 @@ export const _getQueryParam = function (url: string, param: string): string {
     const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
     const regex = new RegExp(regexS)
     const results = regex.exec(url)
-    if (results === null || (results && typeof results[1] !== 'string' && results[1].length)) {
+    if (results === null || (results && typeof results[1] !== 'string' && (results[1] as any).length)) {
         return ''
     } else {
         let result = results[1]
@@ -560,7 +571,13 @@ export const _register_event = (function () {
      * @param {boolean=} oldSchool
      * @param {boolean=} useCapture
      */
-    const register_event = function (element, type, handler, oldSchool, useCapture) {
+    const register_event = function (
+        element: Element | Window,
+        type: string,
+        handler: EventHandler,
+        oldSchool?: boolean,
+        useCapture?: boolean
+    ) {
         if (!element) {
             logger.error('No valid element provided to register_event')
             return
@@ -570,13 +587,13 @@ export const _register_event = (function () {
             element.addEventListener(type, handler, !!useCapture)
         } else {
             const ontype = 'on' + type
-            const old_handler = element[ontype] // can be undefined
-            element[ontype] = makeHandler(element, handler, old_handler)
+            const old_handler = (element as any)[ontype] // can be undefined
+            ;(element as any)[ontype] = makeHandler(element, handler, old_handler)
         }
     }
 
-    function makeHandler(element, new_handler, old_handlers) {
-        const handler = function (event) {
+    function makeHandler(element: Element, new_handler: EventHandler, old_handlers: EventHandler) {
+        return function (event: Event): boolean | void {
             event = event || fixEvent(window.event)
 
             // this basically happens in firefox whenever another script
@@ -589,12 +606,12 @@ export const _register_event = (function () {
             }
 
             let ret = true
-            let old_result, new_result
+            let old_result: any
 
             if (_isFunction(old_handlers)) {
                 old_result = old_handlers(event)
             }
-            new_result = new_handler.call(element, event)
+            const new_result = new_handler.call(element, event)
 
             if (false === old_result || false === new_result) {
                 ret = false
@@ -602,11 +619,9 @@ export const _register_event = (function () {
 
             return ret
         }
-
-        return handler
     }
 
-    function fixEvent(event) {
+    function fixEvent(event: Event | undefined): Event | undefined {
         if (event) {
             event.preventDefault = fixEvent.preventDefault
             event.stopPropagation = fixEvent.stopPropagation
@@ -614,10 +629,10 @@ export const _register_event = (function () {
         return event
     }
     fixEvent.preventDefault = function () {
-        this.returnValue = false
+        ;(this as any as Event).returnValue = false
     }
     fixEvent.stopPropagation = function () {
-        this.cancelBubble = true
+        ;(this as any as Event).cancelBubble = true
     }
 
     return register_event
@@ -746,7 +761,7 @@ export const _info = {
             'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
             Mozilla: /rv:(\d+(\.\d+)?)/,
         }
-        const regex = versionRegexs[browser]
+        const regex: RegExp | undefined = versionRegexs[browser as keyof typeof versionRegexs]
         if (regex === undefined) {
             return null
         }
@@ -824,7 +839,7 @@ export const _info = {
         return _extend(
             _strip_empty_properties({
                 $os: _info.os(),
-                $browser: _info.browser(userAgent, navigator.vendor, window.opera),
+                $browser: _info.browser(userAgent, navigator.vendor, (window as any).opera),
                 $device: _info.device(userAgent),
                 $device_type: _info.deviceType(userAgent),
             }),
@@ -832,7 +847,7 @@ export const _info = {
                 $current_url: window.location.href,
                 $host: window.location.host,
                 $pathname: window.location.pathname,
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor, window.opera),
+                $browser_version: _info.browserVersion(userAgent, navigator.vendor, (window as any).opera),
                 $screen_height: window.screen.height,
                 $screen_width: window.screen.width,
                 $viewport_height: window.innerHeight,
@@ -849,10 +864,10 @@ export const _info = {
         return _extend(
             _strip_empty_properties({
                 $os: _info.os(),
-                $browser: _info.browser(userAgent, navigator.vendor, window.opera),
+                $browser: _info.browser(userAgent, navigator.vendor, (window as any).opera),
             }),
             {
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor, window.opera),
+                $browser_version: _info.browserVersion(userAgent, navigator.vendor, (window as any).opera),
             }
         )
     },

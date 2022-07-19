@@ -2,7 +2,7 @@ export class RequestQueueScaffold {
     isPolling: boolean // flag to continue to recursively poll or not
     _event_queue: any[]
     _empty_queue_count: number // to track empty polls
-    _poller: NodeJS.Timeout | undefined // to become interval for reference to clear later
+    _poller: number | undefined // to become interval for reference to clear later
     _pollInterval: number
 
     constructor(pollInterval = 3000) {
@@ -21,9 +21,10 @@ export class RequestQueueScaffold {
         }
     }
 
-    enqueue(_requestData: Record<string, any>): void {
-        return
-    }
+    // // eslint-disable-next-line no-unused-vars
+    // enqueue(_requestData: Record<string, any>): void {
+    //     return
+    // }
 
     poll(): void {
         return

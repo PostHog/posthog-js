@@ -249,3 +249,11 @@ export interface PersistentStore {
     set: (name: string, value: any, expire_days?: number, cross_subdomain?: boolean, secure?: boolean) => void
     remove: (name: string, cross_subdomain?: boolean) => void
 }
+
+export type Breaker = {}
+export type EventHandler = (event: Event) => boolean | void
+
+export interface EditorParams {
+    jsURL?: string
+    apiURL?: string
+}

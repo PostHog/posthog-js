@@ -6,7 +6,6 @@ import { Properties, XHROptions } from './types'
 export class RequestQueue extends RequestQueueScaffold {
     captureMetrics: CaptureMetrics
     handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void
-    _poller: number | undefined
 
     constructor(
         captureMetrics: CaptureMetrics,
@@ -68,10 +67,10 @@ export class RequestQueue extends RequestQueueScaffold {
             if (this.isPolling) {
                 this.poll()
             }
-        }, this._pollInterval)
+        }, this._pollInterval) as any as number
     }
 
-    updateUnloadMetrics() {
+    updateUnloadMetrics(): void {
         const requests = this.formatQueue()
         for (const key in requests) {
             const { url, data } = requests[key]
@@ -83,7 +82,7 @@ export class RequestQueue extends RequestQueueScaffold {
         }
     }
 
-    unload() {
+    unload(): void {
         clearTimeout(this._poller)
         const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
         this._event_queue.length = 0
@@ -93,7 +92,7 @@ export class RequestQueue extends RequestQueueScaffold {
         }
     }
 
-    formatQueue() {
+    formatQueue(): void {
         const requests = {}
         _each(this._event_queue, (request) => {
             const { url, data, options } = request

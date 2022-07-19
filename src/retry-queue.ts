@@ -10,7 +10,6 @@ export class RetryQueue extends RequestQueueScaffold {
     isPolling: boolean
     areWeOnline: boolean
     onXHRError: (failedRequest: XMLHttpRequest) => void
-    _poller: NodeJS.Timeout | undefined
 
     constructor(captureMetrics: CaptureMetrics, onXHRError: (failedRequest: XMLHttpRequest) => void) {
         super()
@@ -19,7 +18,6 @@ export class RetryQueue extends RequestQueueScaffold {
         this.queue = []
         this.areWeOnline = true
         this.onXHRError = onXHRError
-        this._poller = undefined
 
         if ('onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
@@ -54,7 +52,7 @@ export class RetryQueue extends RequestQueueScaffold {
                 this.flush()
             }
             this.poll()
-        }, this._pollInterval) as NodeJS.Timeout
+        }, this._pollInterval) as any as number
     }
 
     flush(): void {
