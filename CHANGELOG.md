@@ -1,3 +1,7 @@
+## 1.26.0 - 2022-07-19
+
+- fix: dont set initial referrer (#426)
+
 ## 1.25.2 - 2022-07-12
 
 - feat: Add msclkid param to campaign keywords (#424)
