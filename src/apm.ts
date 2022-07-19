@@ -2,36 +2,35 @@ import { window } from './utils'
 import Config from './config'
 import { Properties } from './types'
 
-function isFloat(n) {
+function isFloat(n: any): n is number {
     return Number(n) === n && n % 1 !== 0
 }
 
-export function optimisePerformanceData(performanceEntries: PerformanceEntryList) {
+export function optimisePerformanceData(performanceEntries: PerformanceResourceTiming[]) {
     performanceEntries.forEach((performanceEntry, index) => {
         for (const performanceEntryItemKey_ in performanceEntry) {
-            const performanceEntryItemKey = performanceEntryItemKey_ as keyof PerformanceEntry
+            const performanceEntryItemKey = performanceEntryItemKey_ as keyof PerformanceResourceTiming
             if (
                 isFloat(performanceEntry[performanceEntryItemKey]) &&
                 performanceEntry[performanceEntryItemKey].toString().match(/^\d+\.\d{4,}$/)
             ) {
-                performanceEntries[index][performanceEntryItemKey] = Number(
-                    performanceEntry[performanceEntryItemKey].toFixed(3)
+                ;(performanceEntries[index][performanceEntryItemKey] as number) = Number(
+                    (performanceEntry[performanceEntryItemKey] as number).toFixed(3)
                 )
             }
 
-            if (
-                ['serverTiming', 'workerTiming'].includes(performanceEntryItemKey) &&
-                performanceEntry[performanceEntryItemKey].length === 0
-            ) {
-                delete performanceEntries[index][performanceEntryItemKey]
+            if (performanceEntryItemKey === 'serverTiming' && performanceEntry[performanceEntryItemKey].length === 0) {
+                delete (performanceEntries[index] as any)[performanceEntryItemKey]
             }
 
             if (performanceEntryItemKey === 'entryType' && performanceEntry[performanceEntryItemKey] === 'resource') {
-                delete performanceEntries[index][performanceEntryItemKey]
+                // Writeable<> doesn't support inherited attributes from PerformanceEntry on PerformanceResourceTiming
+                delete (performanceEntries[index] as any)[performanceEntryItemKey]
             }
 
             if (performanceEntryItemKey === 'nextHopProtocol') {
-                delete performanceEntries[index][performanceEntryItemKey]
+                // Writeable<> doesn't support inherited attributes from PerformanceEntry on PerformanceResourceTiming
+                delete (performanceEntries[index] as any)[performanceEntryItemKey]
             }
 
             if (performanceEntry[performanceEntryItemKey] === 0) {
@@ -43,7 +42,7 @@ export function optimisePerformanceData(performanceEntries: PerformanceEntryList
     return deduplicateKeys(performanceEntries)
 }
 
-export function getPerformanceEntriesByType(type: string) {
+export function getPerformanceEntriesByType(type: string): any[][] {
     // wide support but not available pre IE 10
     try {
         // stringifying and then parsing made data collection more reliable
@@ -67,12 +66,12 @@ export function getPerformanceEntriesByType(type: string) {
  * @param performanceEntries
  * @returns {(string[]|*)[]}
  */
-export function deduplicateKeys(performanceEntries: PerformanceEntryList) {
+export function deduplicateKeys(performanceEntries: PerformanceEntryList): [string[], any[]] | [] {
     if (performanceEntries.length === 0) {
         return []
     }
     const keys = Object.keys(performanceEntries[0])
-    return [keys, performanceEntries.map((obj) => keys.map((key) => obj[key]))]
+    return [keys, performanceEntries.map((obj) => keys.map((key) => (obj as any)[key]))]
 }
 
 /*
@@ -84,7 +83,11 @@ https://developer.mozilla.org/en-US/docs/Web/API/PerformanceNavigationTiming
 
 Even in browsers that implement it, it is not always available to us
  */
-export function pageLoadFrom(performanceData): number | void {
+export function pageLoadFrom(performanceData: {
+    navigation: any[][]
+    paint: any[][]
+    resource: any[][]
+}): number | void {
     const keys = performanceData.navigation && performanceData.navigation[0]
     const values = performanceData.navigation && performanceData.navigation[1] && performanceData.navigation[1][0]
 

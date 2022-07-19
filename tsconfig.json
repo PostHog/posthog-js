@@ -18,7 +18,8 @@
         "noUnusedParameters": true,
         "sourceMap": true,
         "inlineSources": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "downlevelIteration": true
     },
     "include": ["src/*.ts"]
 }

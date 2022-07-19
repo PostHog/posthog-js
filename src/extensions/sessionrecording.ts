@@ -5,7 +5,7 @@ import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './
 import { PostHogLib } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
 import type { record } from 'rrweb'
-import { eventWithTime, listenerHandler, recordOptions } from 'rrweb/typings/types'
+import { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -164,7 +164,9 @@ export class SessionRecording {
 
         this.stopRrweb = this.rrwebRecord?.({
             emit: (event) => {
-                event = truncateLargeConsoleLogs(filterDataURLsFromLargeDataObjects(event))
+                event = truncateLargeConsoleLogs(
+                    filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
+                ) as eventWithTime
 
                 this._updateWindowAndSessionIds(event)
 

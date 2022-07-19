@@ -225,6 +225,9 @@ export interface DecideResponse {
     sessionRecording?: {
         endpoint?: string
     }
+    editorParams: EditorParams
+    toolbarVersion: 'toolbar' /** deprecated, moved to editorParams */
+    isAuthenticated: boolean
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
@@ -269,12 +272,14 @@ export interface PersistentStore {
     remove: (name: string, cross_subdomain?: boolean) => void
 }
 
+// eslint-disable-next-line @typescript-eslint/ban-types
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
 export interface EditorParams {
     jsURL?: string
     apiURL?: string
+    toolbarVersion?: 'toolbar'
 }
 
 export interface PostData {

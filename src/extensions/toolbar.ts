@@ -1,7 +1,7 @@
 import { loadScript } from '../autocapture-utils'
 import { _getHashParam, _register_event } from '../utils'
 import { PostHogLib } from '../posthog-core'
-import { DecideResponse, EditorParams, Properties } from '../types'
+import { DecideResponse, EditorParams } from '../types'
 
 export class Toolbar {
     instance: PostHogLib
@@ -93,9 +93,9 @@ export class Toolbar {
     }
 
     _loadEditor(editorParams: EditorParams) {
-        if (!window['_postHogToolbarLoaded']) {
+        if (!(window as any)['_postHogToolbarLoaded']) {
             // only load the codeless event editor once, even if there are multiple instances of PostHogLib
-            window['_postHogToolbarLoaded'] = true
+            ;(window as any)['_postHogToolbarLoaded'] = true
             const host = editorParams['jsURL'] || editorParams['apiURL'] || this.instance.get_config('api_host')
             const toolbarScript = 'toolbar.js'
             const editorUrl =
@@ -105,11 +105,11 @@ export class Toolbar {
                 this.instance.get_config('advanced_disable_toolbar_metrics')
             editorParams = { ...editorParams, ...(disableToolbarMetrics ? { instrument: false } : {}) }
             loadScript(editorUrl, () => {
-                window['ph_load_editor'](editorParams, this.instance)
+                ;(window as any)['ph_load_editor'](editorParams, this.instance)
             })
             // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
             _register_event(window, 'turbolinks:load', () => {
-                window['_postHogToolbarLoaded'] = false
+                ;(window as any)['_postHogToolbarLoaded'] = false
                 this._loadEditor(editorParams)
             })
             return true
