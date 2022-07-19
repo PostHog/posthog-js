@@ -238,19 +238,20 @@ export interface CompressionData {
 }
 
 export interface GDPROptions {
-    capture: (
+    capture?: (
         event: string,
-        properties: Properties
+        properties: Properties,
+        options: CaptureOptions
     ) => void /** function used for capturing a PostHog event to record the opt-in action */
-    captureEventName: string /** event name to be used for capturing the opt-in action */
-    captureProperties: Properties /** set of properties to be captured along with the opt-in action */
-    persistenceType: string /** persistence mechanism used - cookie or localStorage */
-    persistencePrefix: string /** [__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name */
-    cookieExpiration: number /** number of days until the opt-in cookie expires */
-    cookieDomain: string /** custom cookie domain */
-    crossSiteCookie: boolean /** whether the opt-in cookie is set as cross-site-enabled */
-    crossSubdomainCookie: boolean /** whether the opt-in cookie is set as cross-subdomain or not */
-    secureCookie: boolean /** whether the opt-in cookie is set as secure or not */
+    captureEventName?: string /** event name to be used for capturing the opt-in action */
+    captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
+    persistenceType?: string /** persistence mechanism used - cookie or localStorage */
+    persistencePrefix?: string /** [__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name */
+    cookieExpiration?: number /** number of days until the opt-in cookie expires */
+    crossSubdomainCookie?: boolean /** whether the opt-in cookie is set as cross-subdomain or not */
+    secureCookie?: boolean /** whether the opt-in cookie is set as secure or not */
+    respectDnt?: boolean
+    window?: Window
 }
 
 export type RequestCallback = (response: Record<string, any>, data?: Properties) => void
@@ -260,7 +261,7 @@ export interface PersistentStore {
     error: (error: any) => void
     parse: (name: string) => any
     get: (name: string) => any
-    set: (name: string, value: any, expire_days?: number, cross_subdomain?: boolean, secure?: boolean) => void
+    set: (name: string, value: any, expire_days?: number | null, cross_subdomain?: boolean, secure?: boolean) => void
     remove: (name: string, cross_subdomain?: boolean) => void
 }
 

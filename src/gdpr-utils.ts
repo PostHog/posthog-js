@@ -13,7 +13,7 @@
 
 import { _each, _includes, _isNumber, _isString, window } from './utils'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
-import { GDPROptions } from './types'
+import { GDPROptions, PersistentStore } from './types'
 import { PostHogLib } from './posthog-core'
 
 /**
@@ -38,8 +38,6 @@ const GDPR_DEFAULT_PERSISTENCE_PREFIX = '__ph_opt_in_out_'
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @param {Number} [options.cookieExpiration] - number of days until the opt-in cookie expires
- * @param {string} [options.cookieDomain] - custom cookie domain
- * @param {boolean} [options.crossSiteCookie] - whether the opt-in cookie is set as cross-site-enabled
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
@@ -54,8 +52,6 @@ export function optIn(token: string, options: GDPROptions): void {
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @param {Number} [options.cookieExpiration] - number of days until the opt-out cookie expires
- * @param {string} [options.cookieDomain] - custom cookie domain
- * @param {boolean} [options.crossSiteCookie] - whether the opt-in cookie is set as cross-site-enabled
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-out cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-out cookie is set as secure or not
  */
@@ -84,7 +80,7 @@ export function hasOptedIn(token: string, options: GDPROptions): boolean {
  * @param {boolean} [options.respectDnt] - flag to take browser DNT setting into account
  * @returns {boolean} whether the user has opted out of the given opt type
  */
-export function hasOptedOut(token: string, options: GDPROptions): boolean {
+export function hasOptedOut(token: string, options: Partial<GDPROptions>): boolean {
     if (_hasDoNotTrackFlagOn(options)) {
         return true
     }
@@ -98,14 +94,12 @@ export function hasOptedOut(token: string, options: GDPROptions): boolean {
  * @param {string} [options.persistenceType] Persistence mechanism used - cookie or localStorage
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @param {Number} [options.cookieExpiration] - number of days until the opt-in cookie expires
- * @param {string} [options.cookieDomain] - custom cookie domain
- * @param {boolean} [options.crossSiteCookie] - whether the opt-in cookie is set as cross-site-enabled
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
 export function clearOptInOut(token: string, options: GDPROptions) {
     options = options || {}
-    _getStorage(options).remove(_getStorageKey(token, options), !!options.crossSubdomainCookie, options.cookieDomain)
+    _getStorage(options).remove(_getStorageKey(token, options), !!options.crossSubdomainCookie)
 }
 
 /** Private **/
@@ -116,7 +110,7 @@ export function clearOptInOut(token: string, options: GDPROptions) {
  * @param {string} [options.persistenceType]
  * @returns {object} either cookieStore or localStore
  */
-function _getStorage(options: GDPROptions) {
+function _getStorage(options: GDPROptions): PersistentStore {
     options = options || {}
     if (options.persistenceType === 'localStorage') {
         return localStore
@@ -165,8 +159,8 @@ function _hasDoNotTrackFlagOn(options: GDPROptions) {
         _each(
             [
                 nav['doNotTrack'], // standard
-                nav['msDoNotTrack'],
-                win['doNotTrack'],
+                (nav as any)['msDoNotTrack'],
+                (win as any)['doNotTrack'],
             ],
             function (dntValue) {
                 if (_includes([true, 1, '1', 'yes'], dntValue)) {
@@ -189,12 +183,10 @@ function _hasDoNotTrackFlagOn(options: GDPROptions) {
  * @param {Object} [options.captureProperties] - set of properties to be captured along with the opt-in action
  * @param {string} [options.persistencePrefix=__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name
  * @param {Number} [options.cookieExpiration] - number of days until the opt-in cookie expires
- * @param {string} [options.cookieDomain] - custom cookie domain
- * @param {boolean} [options.crossSiteCookie] - whether the opt-in cookie is set as cross-site-enabled
  * @param {boolean} [options.crossSubdomainCookie] - whether the opt-in cookie is set as cross-subdomain or not
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
-function _optInOut(optValue, token: string, options: GDPROptions) {
+function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
     if (!_isString(token) || !token.length) {
         console.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
         return
@@ -206,16 +198,14 @@ function _optInOut(optValue, token: string, options: GDPROptions) {
         _getStorageKey(token, options),
         optValue ? 1 : 0,
         _isNumber(options.cookieExpiration) ? options.cookieExpiration : null,
-        !!options.crossSubdomainCookie,
-        !!options.secureCookie,
-        !!options.crossSiteCookie,
-        options.cookieDomain
+        options.crossSubdomainCookie,
+        options.secureCookie
     )
 
     if (options.capture && optValue) {
         // only capture event if opting in (optValue=true)
-        options.capture(options.captureEventName || '$opt_in', options.captureProperties, {
-            send_immediately: true,
+        options.capture(options.captureEventName || '$opt_in', options.captureProperties || {}, {
+            send_instantly: true,
         })
     }
 }
@@ -241,8 +231,8 @@ export function addOptOutCheck<M extends (...args: any[]) => any = (...args: any
             const token = posthog.get_config('token')
             const respectDnt = posthog.get_config('respect_dnt')
             const persistenceType = posthog.get_config('opt_out_capturing_persistence_type')
-            const persistencePrefix = posthog.get_config('opt_out_capturing_cookie_prefix')
-            const win = posthog.get_config('window') // used to override window during browser tests
+            const persistencePrefix = posthog.get_config('opt_out_capturing_cookie_prefix') || undefined
+            const win = posthog.get_config('window' as any) as Window | undefined // used to override window during browser tests
 
             if (token) {
                 // if there was an issue getting the token, continue method execution as normal
@@ -260,6 +250,8 @@ export function addOptOutCheck<M extends (...args: any[]) => any = (...args: any
         }
 
         if (!optedOut) {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
             return method.apply(this, args)
         }
 
