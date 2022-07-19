@@ -946,8 +946,7 @@ export class PostHogLib {
                     distinct_id: new_distinct_id,
                     $anon_distinct_id: previous_distinct_id,
                 },
-                { $set: userPropertiesToSet || {} },
-                { $set_once: userPropertiesToSetOnce || {} }
+                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
             )
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency

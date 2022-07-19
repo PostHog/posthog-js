@@ -63,8 +63,7 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: {} },
-            { $set_once: {} }
+            { $set: {}, $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
@@ -81,8 +80,7 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: {} },
-            { $set_once: {} }
+            { $set: {}, $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
@@ -110,8 +108,7 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: { email: 'john@example.com' } },
-            { $set_once: { howOftenAmISet: 'once!' } }
+            { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } }
         )
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
