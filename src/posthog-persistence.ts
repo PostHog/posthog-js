@@ -286,7 +286,7 @@ export class PostHogPersistence {
         this.save()
     }
 
-    remove_event_timer(event_name: string): void {
+    remove_event_timer(event_name: string): number {
         const timers = this.props[EVENT_TIMERS_KEY] || {}
         const timestamp = timers[event_name]
         if (!_isUndefined(timestamp)) {

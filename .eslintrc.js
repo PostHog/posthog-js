@@ -18,6 +18,7 @@ module.exports = {
     rules: {
         'prettier/prettier': 'error',
         '@typescript-eslint/no-empty-function': 'off',
+        '@typescript-eslint/no-this-alias': 'off',
     },
     settings: {
         react: {

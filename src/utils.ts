@@ -331,7 +331,7 @@ const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
 
 export function _copyAndTruncateStrings<T extends Record<string, any> = Record<string, any>>(
     object: T,
-    maxStringLength: number
+    maxStringLength: number | null
 ): T {
     return deepCircularCopy(object, (value, key) => {
         if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key) > -1) {
