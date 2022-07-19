@@ -160,10 +160,10 @@ describe('SessionRecording', () => {
                 emit: expect.anything(),
                 maskAllInputs: false,
                 blockClass: 'ph-no-capture',
-                blockSelector: null,
+                blockSelector: undefined,
                 ignoreClass: 'ph-ignore-input',
                 maskInputOptions: {},
-                maskInputFn: null,
+                maskInputFn: undefined,
                 slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],
@@ -193,7 +193,6 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
-                    _forceCompression: true,
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                     _metrics: expect.anything(),
@@ -210,7 +209,6 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
-                    _forceCompression: true,
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                     _metrics: expect.anything(),
@@ -245,32 +243,32 @@ describe('SessionRecording', () => {
         })
 
         it('session recording can be turned on and off', () => {
-            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.stopRrweb).toEqual(undefined)
 
             given.sessionRecording.startRecordingIfEnabled()
 
             expect(given.sessionRecording.started()).toEqual(true)
             expect(given.sessionRecording.captureStarted).toEqual(true)
-            expect(given.sessionRecording.stopRrweb).not.toEqual(null)
+            expect(given.sessionRecording.stopRrweb).not.toEqual(undefined)
 
             given.sessionRecording.stopRecording()
 
-            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.stopRrweb).toEqual(undefined)
             expect(given.sessionRecording.captureStarted).toEqual(false)
         })
 
         it('session recording can be turned on after being turned off', () => {
-            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.stopRrweb).toEqual(undefined)
 
             given.sessionRecording.startRecordingIfEnabled()
 
             expect(given.sessionRecording.started()).toEqual(true)
             expect(given.sessionRecording.captureStarted).toEqual(true)
-            expect(given.sessionRecording.stopRrweb).not.toEqual(null)
+            expect(given.sessionRecording.stopRrweb).not.toEqual(undefined)
 
             given.sessionRecording.stopRecording()
 
-            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.stopRrweb).toEqual(undefined)
             expect(given.sessionRecording.captureStarted).toEqual(false)
         })
 

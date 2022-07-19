@@ -192,6 +192,7 @@ export interface CaptureOptions extends XHROptions {
     endpoint?: string /** defaults to '/e/' */
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     send_instantly?: boolean /** if set skips the batched queue */
+    _metrics?: Properties
 }
 
 export interface RetryQueueElement {
@@ -221,6 +222,9 @@ export interface DecideResponse {
     }
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
+    sessionRecording?: {
+        endpoint?: string
+    }
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void

@@ -108,7 +108,7 @@ export class SessionIdManager {
      * @param {boolean} readOnly (optional) Defaults to False. Should be set to True when the call to the function should not extend or cycle the session (e.g. being called for non-user generated events)
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
-    checkAndGetSessionAndWindowId(readOnly = false, _timestamp = null) {
+    checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
         const timestamp = _timestamp || new Date().getTime()
 
         // eslint-disable-next-line prefer-const

@@ -2,7 +2,10 @@ import { loadScript } from '../autocapture-utils'
 import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
-import { _bind } from '../utils'
+import { PostHogLib } from '../posthog-core'
+import { DecideResponse, Properties } from '../types'
+import type { record } from 'rrweb'
+import { eventWithTime, listenerHandler, recordOptions } from 'rrweb/typings/types'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -13,13 +16,24 @@ export const PLUGIN_EVENT_TYPE = 6
 export const MUTATION_SOURCE_TYPE = 0
 
 export class SessionRecording {
-    constructor(instance) {
+    instance: PostHogLib
+    captureStarted: boolean
+    snapshots: any[]
+    emit: boolean
+    endpoint: string
+    stopRrweb: listenerHandler | undefined
+    windowId: string | null
+    sessionId: string | null
+    receivedDecide: boolean
+    rrwebRecord: typeof record | undefined
+
+    constructor(instance: PostHogLib) {
         this.instance = instance
         this.captureStarted = false
         this.snapshots = []
         this.emit = false // Controls whether data is sent to the server or not
         this.endpoint = BASE_ENDPOINT
-        this.stopRrweb = null
+        this.stopRrweb = undefined
         this.windowId = null
         this.sessionId = null
         this.receivedDecide = false
@@ -40,7 +54,7 @@ export class SessionRecording {
     stopRecording() {
         if (this.captureStarted && this.stopRrweb) {
             this.stopRrweb()
-            this.stopRrweb = null
+            this.stopRrweb = undefined
             this.captureStarted = false
         }
     }
@@ -51,7 +65,7 @@ export class SessionRecording {
         return enabled_server_side && enabled_client_side
     }
 
-    afterDecideResponse(response) {
+    afterDecideResponse(response: DecideResponse) {
         this.receivedDecide = true
         if (this.instance.persistence) {
             this.instance.persistence.register({
@@ -94,7 +108,7 @@ export class SessionRecording {
         }
     }
 
-    _updateWindowAndSessionIds(event) {
+    _updateWindowAndSessionIds(event: eventWithTime) {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
@@ -111,7 +125,7 @@ export class SessionRecording {
             (this.windowId !== windowId || this.sessionId !== sessionId) &&
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1
         ) {
-            this.rrwebRecord.takeFullSnapshot()
+            this.rrwebRecord?.takeFullSnapshot()
         }
         this.windowId = windowId
         this.sessionId = sessionId
@@ -119,32 +133,36 @@ export class SessionRecording {
 
     _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
-        const sessionRecordingOptions = {
+        const sessionRecordingOptions: recordOptions<eventWithTime> = {
             // select set of rrweb config options we expose to our users
             // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
             blockClass: 'ph-no-capture',
-            blockSelector: null,
+            blockSelector: undefined,
             ignoreClass: 'ph-ignore-input',
             maskAllInputs: true,
             maskInputOptions: {},
-            maskInputFn: null,
+            maskInputFn: undefined,
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
 
         // only allows user to set our 'whitelisted' options
         const userSessionRecordingOptions = this.instance.get_config('session_recording')
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
                 sessionRecordingOptions[key] = value
             }
         }
 
-        this.stopRrweb = this.rrwebRecord({
+        this.stopRrweb = this.rrwebRecord?.({
             emit: (event) => {
                 event = truncateLargeConsoleLogs(filterDataURLsFromLargeDataObjects(event))
 
@@ -166,8 +184,8 @@ export class SessionRecording {
                 }
             },
             plugins:
-                window.rrwebConsoleRecord && this.instance.get_config('enable_recording_console_log')
-                    ? [window.rrwebConsoleRecord.getRecordConsolePlugin()]
+                (window as any).rrwebConsoleRecord && this.instance.get_config('enable_recording_console_log')
+                    ? [(window as any).rrwebConsoleRecord.getRecordConsolePlugin()]
                     : [],
             ...sessionRecordingOptions,
         })
@@ -176,18 +194,17 @@ export class SessionRecording {
         //   Dropping the initial event is fine (it's always captured by rrweb).
         this.instance._addCaptureHook((eventName) => {
             if (eventName === '$pageview') {
-                this.rrwebRecord.addCustomEvent('$pageview', { href: window.location.href })
+                this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
             }
         })
     }
 
-    _captureSnapshot(properties) {
+    _captureSnapshot(properties: Properties) {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
             transport: 'XHR',
             method: 'POST',
             endpoint: this.endpoint,
-            _forceCompression: true,
             _noTruncate: true,
             _batchKey: 'sessionRecording',
             _metrics: {
