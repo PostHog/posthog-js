@@ -1096,7 +1096,6 @@ export class PostHogLib {
             return -2
         }
 
-        const _this: PostHogLib = this
         if (_isUndefined(original)) {
             original = this.get_distinct_id()
         }

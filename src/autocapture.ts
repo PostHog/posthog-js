@@ -1,7 +1,6 @@
 import {
     _bind_instance_methods,
     _each,
-    _eachArray,
     _extend,
     _includes,
     _isFunction,

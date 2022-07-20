@@ -55,7 +55,6 @@ export function truncateLargeConsoleLogs(event: pluginEvent<{ payload: string[] 
         typeof event.data === 'object' &&
         event.data.plugin === CONSOLE_LOG_PLUGIN_NAME
     ) {
-        const payload = event.data.payload?.payload as string[]
         // Note: event.data.payload.payload comes from rr-web, and is an array of strings
         if (event.data.payload.payload.length > MAX_STRINGS_PER_LOG) {
             event.data.payload.payload = event.data.payload.payload.slice(0, MAX_STRINGS_PER_LOG)
