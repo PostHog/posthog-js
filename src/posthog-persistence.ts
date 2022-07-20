@@ -206,16 +206,6 @@ export class PostHogPersistence {
     // EXPORTED METHOD, we test this directly.
 
     update_referrer_info(referrer: string): void {
-        // If referrer doesn't exist, we want to note the fact that it was type-in traffic.
-        // Register once, so first touch
-        this.register_once(
-            {
-                $initial_referrer: referrer || '$direct',
-                $initial_referring_domain: _info.referringDomain(referrer) || '$direct',
-            },
-            ''
-        )
-        // Register the current referrer but override if it's different, hence register
         this.register({
             $referrer: referrer || this.props['$referrer'] || '$direct',
             $referring_domain: _info.referringDomain(referrer) || this.props['$referring_domain'] || '$direct',
@@ -224,8 +214,8 @@ export class PostHogPersistence {
 
     get_referrer_info(): Properties {
         return _strip_empty_properties({
-            $initial_referrer: this.props['$initial_referrer'],
-            $initial_referring_domain: this.props['$initial_referring_domain'],
+            $referrer: this['props']['$referrer'],
+            $referring_domain: this['props']['$referring_domain'],
         })
     }
 
