@@ -127,21 +127,11 @@ export interface PostHogConfig {
 }
 
 export interface OptInOutCapturingOptions {
-    clear_persistence: boolean
-    persistence_type: string
-    cookie_prefix: string
-    cookie_expiration: number
-    cross_subdomain_cookie: boolean
-    secure_cookie: boolean
-}
-
-export interface HasOptedInOutCapturingOptions {
-    persistence_type: string
-    cookie_prefix: string
-}
-
-export interface ClearOptInOutCapturingOptions {
+    capture: (event: string, properties: Properties, options: CaptureOptions) => void
+    capture_event_name: string
+    capture_properties: Properties
     enable_persistence: boolean
+    clear_persistence: boolean
     persistence_type: string
     cookie_prefix: string
     cookie_expiration: number
@@ -288,3 +278,10 @@ export interface PostData {
     compression?: Compression
     data?: string
 }
+
+export interface JSC {
+    (): void
+    [key: string]: (response: any) => void
+}
+
+export type SnippetArrayItem = [method: string, ...args: any[]]

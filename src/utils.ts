@@ -278,7 +278,8 @@ export const _safewrap = function <F extends (...args: any[]) => any = (...args:
     } as F
 }
 
-export const _safewrap_class = function (klass: (...args: any[]) => any, functions: string[]): void {
+// eslint-disable-next-line @typescript-eslint/ban-types
+export const _safewrap_class = function (klass: Function, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]] = _safewrap(klass.prototype[functions[i]])
     }

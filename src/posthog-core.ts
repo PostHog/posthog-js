@@ -37,15 +37,16 @@ import { getPerformanceData } from './apm'
 import {
     CaptureOptions,
     CaptureResult,
-    ClearOptInOutCapturingOptions,
     Compression,
-    HasOptedInOutCapturingOptions,
+    GDPROptions,
     isFeatureEnabledOptions,
+    JSC,
     OptInOutCapturingOptions,
     PostHogConfig,
     Properties,
     Property,
     RequestCallback,
+    SnippetArrayItem,
     XHROptions,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
@@ -66,7 +67,11 @@ enum InitType {
 }
 
 let init_type: InitType
-let posthog_master: Record<string, PostHogLib> & { init: () => void }
+let posthog_master:
+    | PostHogLib
+    | (Record<string, PostHogLib> & {
+          init: (token: string, config: Partial<PostHogConfig>, name: string) => void
+      })
 
 // some globals for comparisons
 const __NOOP = () => {}
@@ -244,7 +249,7 @@ export class PostHogLib {
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
-    _jsc: any
+    _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
     __autocapture_enabled: boolean
@@ -311,7 +316,7 @@ export class PostHogLib {
             })
         )
 
-        this._jsc = function () {}
+        this._jsc = function () {} as JSC
 
         this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
 
@@ -540,21 +545,25 @@ export class PostHogLib {
      *
      * @param {Array} array
      */
-    _execute_array(array): void {
+    _execute_array(array: SnippetArrayItem[]): void {
         let fn_name
-        const alias_calls = []
-        const other_calls = []
-        const capturing_calls = []
+        const alias_calls: SnippetArrayItem[] = []
+        const other_calls: SnippetArrayItem[] = []
+        const capturing_calls: SnippetArrayItem[] = []
         _eachArray(array, (item) => {
             if (item) {
                 fn_name = item[0]
                 if (_isArray(fn_name)) {
                     capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
                 } else if (typeof item === 'function') {
-                    item.call(this)
+                    ;(item as any).call(this)
                 } else if (_isArray(item) && fn_name === 'alias') {
                     alias_calls.push(item)
-                } else if (_isArray(item) && fn_name.indexOf('capture') !== -1 && typeof this[fn_name] === 'function') {
+                } else if (
+                    _isArray(item) &&
+                    fn_name.indexOf('capture') !== -1 &&
+                    typeof (this as any)[fn_name] === 'function'
+                ) {
                     capturing_calls.push(item)
                 } else {
                     other_calls.push(item)
@@ -562,21 +571,23 @@ export class PostHogLib {
             }
         })
 
-        const execute = function (calls, context) {
+        const execute = function (calls: SnippetArrayItem[], thisArg: any) {
             _eachArray(
                 calls,
                 function (item) {
                     if (_isArray(item[0])) {
                         // chained call
-                        const caller = context
+                        let caller = thisArg
                         _each(item, function (call) {
                             caller = caller[call[0]].apply(caller, call.slice(1))
                         })
                     } else {
+                        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                        // @ts-ignore
                         this[item[0]].apply(this, item.slice(1))
                     }
                 },
-                context
+                thisArg
             )
         }
 
@@ -597,7 +608,7 @@ export class PostHogLib {
      *
      * @param {Array} item A [function_name, args...] array to be executed
      */
-    push(item): void {
+    push(item: SnippetArrayItem): void {
         this._execute_array([item])
     }
 
@@ -1356,8 +1367,8 @@ export class PostHogLib {
      * @param {boolean} [options.clear_persistence] If true, will delete all data stored by the sdk in persistence and disable it
      * @param {boolean} [options.enable_persistence] If true, will re-enable sdk persistence
      */
-    _gdpr_update_persistence(options): void {
-        const disabled
+    _gdpr_update_persistence(options: Partial<OptInOutCapturingOptions>): void {
+        let disabled
         if (options && options['clear_persistence']) {
             disabled = true
         } else if (options && options['enable_persistence']) {
@@ -1372,7 +1383,10 @@ export class PostHogLib {
     }
 
     // call a base gdpr function after constructing the appropriate token and options args
-    _gdpr_call_func(func, options) {
+    _gdpr_call_func<R = any>(
+        func: (token: string, options: GDPROptions) => R,
+        options?: Partial<OptInOutCapturingOptions>
+    ): R {
         options = _extend(
             {
                 capture: this.capture.bind(this),
@@ -1382,7 +1396,7 @@ export class PostHogLib {
                 cross_subdomain_cookie: this.get_config('cross_subdomain_cookie'),
                 secure_cookie: this.get_config('secure_cookie'),
             },
-            options
+            options || {}
         )
 
         // check if localStorage can be used for recording opt out status, fall back to cookie if not
@@ -1436,7 +1450,7 @@ export class PostHogLib {
             {
                 enable_persistence: true,
             },
-            options
+            options || {}
         )
 
         this._gdpr_call_func(optIn, options)
@@ -1490,7 +1504,7 @@ export class PostHogLib {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-in status
      */
-    has_opted_in_capturing(options?: Partial<HasOptedInOutCapturingOptions>): boolean {
+    has_opted_in_capturing(options?: Partial<OptInOutCapturingOptions>): boolean {
         return this._gdpr_call_func(hasOptedIn, options)
     }
 
@@ -1507,7 +1521,7 @@ export class PostHogLib {
      * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-out status
      */
-    has_opted_out_capturing(options?: Partial<HasOptedInOutCapturingOptions>): boolean {
+    has_opted_out_capturing(options?: Partial<OptInOutCapturingOptions>): boolean {
         return this._gdpr_call_func(hasOptedOut, options)
     }
 
@@ -1534,8 +1548,8 @@ export class PostHogLib {
      * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
      * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
      */
-    clear_opt_in_out_capturing(options?: Partial<ClearOptInOutCapturingOptions>): void {
-        const _options = _extend(
+    clear_opt_in_out_capturing(options?: Partial<OptInOutCapturingOptions>): void {
+        const _options: Partial<OptInOutCapturingOptions> = _extend(
             {
                 enable_persistence: true,
             },
@@ -1561,7 +1575,7 @@ export class PostHogLib {
     }
 
     decodeLZ64(input: string | null | undefined): string | null {
-        return LZString.decompressFromBase64(input)
+        return LZString.decompressFromBase64(input || null)
     }
 }
 
@@ -1580,7 +1594,7 @@ const extend_mp = function () {
 const override_ph_init_func = function () {
     // we override the snippets init function to handle the case where a
     // user initializes the posthog library after the script loads & runs
-    posthog_master['init'] = function (token, config, name) {
+    posthog_master['init'] = function (token: string, config: Partial<PostHogConfig>, name: string) {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
@@ -1589,7 +1603,7 @@ const override_ph_init_func = function () {
             }
             return posthog_master[name]
         } else {
-            let instance = posthog_master
+            let instance: PostHogLib = posthog_master
 
             if (instances[PRIMARY_INSTANCE_NAME]) {
                 // main posthog lib already initialized
@@ -1606,6 +1620,7 @@ const override_ph_init_func = function () {
                 window[PRIMARY_INSTANCE_NAME] = posthog_master
             }
             extend_mp()
+            return instance
         }
     }
 }
@@ -1626,42 +1641,14 @@ const add_dom_loaded_handler = function () {
         })
     }
 
-    function do_scroll_check() {
-        try {
-            document.documentElement.doScroll('left')
-        } catch (e) {
-            setTimeout(do_scroll_check, 1)
-            return
-        }
-
+    if (document.readyState === 'complete') {
+        // safari 4 can fire the DOMContentLoaded event before loading all
+        // external JS (including this file). you will see some copypasta
+        // on the internet that checks for 'complete' and 'loaded', but
+        // 'loaded' is an IE thing
         dom_loaded_handler()
-    }
-
-    if (document.addEventListener) {
-        if (document.readyState === 'complete') {
-            // safari 4 can fire the DOMContentLoaded event before loading all
-            // external JS (including this file). you will see some copypasta
-            // on the internet that checks for 'complete' and 'loaded', but
-            // 'loaded' is an IE thing
-            dom_loaded_handler()
-        } else {
-            document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
-        }
-    } else if (document.attachEvent) {
-        // IE
-        document.attachEvent('onreadystatechange', dom_loaded_handler)
-
-        // check to make sure we arn't in a frame
-        const toplevel = false
-        try {
-            toplevel = window.frameElement === null
-        } catch (e) {
-            // noop
-        }
-
-        if (document.documentElement.doScroll && toplevel) {
-            do_scroll_check()
-        }
+    } else {
+        document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
     }
 
     // fallback handler, always will work
@@ -1670,8 +1657,10 @@ const add_dom_loaded_handler = function () {
 
 export function init_from_snippet() {
     init_type = InitType.INIT_SNIPPET
-    if (_isUndefined(window.posthog)) window.posthog = []
-    posthog_master = window.posthog
+    if (_isUndefined((window as any).posthog)) {
+        ;(window as any).posthog = {}
+    }
+    posthog_master = (window as any).posthog
 
     if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
         // lib has already been loaded at least once; we don't want to override the global object this time so bomb early
