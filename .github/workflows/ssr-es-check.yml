@@ -13,7 +13,7 @@ jobs:
         with:
           node-version: 14
 
-      - run: yarn install && yarn build-module && yarn build
+      - run: yarn install && yarn build
 
       - name: Run es-check to check if our bundle is ES5 compatible
         run: npx es-check@6.1.1 es5 dist/{array,module}.js
