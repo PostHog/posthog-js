@@ -16,4 +16,4 @@ jobs:
       - run: yarn install && yarn build
 
       - name: Cypress run
-        uses: cypress-io/github-action@v2
+        uses: cypress-io/github-action@v4
