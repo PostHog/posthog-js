@@ -255,13 +255,19 @@ export class PostHogLib {
     _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
-    __autocapture_enabled: boolean
+    __autocapture_enabled: boolean | undefined
     decideEndpointWasHit: boolean
 
     constructor() {
         this.compression = {}
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
+        this.__captureHooks = []
+        this.__request_queue = []
+        this.config = defaultConfig()
+        this.__loaded = false
+        this.__autocapture_enabled = undefined
+        this._jsc = function () {} as JSC
     }
 
     // Initialization methods
