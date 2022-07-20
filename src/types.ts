@@ -4,64 +4,6 @@ import { PostHog } from './posthog-core'
 import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'
 
-// namespacing everything with *Class to keep the definitions separate from the implementation
-//
-// export declare class PostHogClass {
-//     /**
-//      * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
-//      *
-//      * ### Usage
-//      *
-//      *     Sentry.init({
-//      *          dsn: 'https://example',
-//      *          integrations: [
-//      *              new posthog.SentryIntegration(posthog)
-//      *          ]
-//      *     })
-//      *
-//      * @param {Object} [posthog] The posthog object
-//      * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
-//      * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
-//      * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
-//      */
-//     static SentryIntegration: typeof SentryIntegration
-//
-//     static toString(): string
-//
-//     /* Will log all capture requests to the Javascript console, including event properties for easy debugging */
-//     static debug(): void
-//
-//     /*
-//      * Starts session recording and updates disable_session_recording to false.
-//      * Used for manual session recording management. By default, session recording is enabled and
-//      * starts automatically.
-//      *
-//      * ### Usage:
-//      *
-//      *     posthog.startSessionRecording()
-//      */
-//     static startSessionRecording(): void
-//
-//     /*
-//      * Stops session recording and updates disable_session_recording to true.
-//      *
-//      * ### Usage:
-//      *
-//      *     posthog.stopSessionRecording()
-//      */
-//     static stopSessionRecording(): void
-//
-//     /*
-//      * Check if session recording is currently running.
-//      *
-//      * ### Usage:
-//      *
-//      *     const isSessionRecordingOn = posthog.sessionRecordingStarted()
-//      */
-//     static sessionRecordingStarted(): boolean
-// }
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export type Property = any
 export type Properties = Record<string, Property>
 export interface CaptureResult {
@@ -71,7 +13,6 @@ export interface CaptureResult {
     timestamp?: Date
 }
 export type CaptureCallback = (response: any, data: any) => void
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export interface PostHogConfig {
     api_host: string
