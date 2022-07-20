@@ -807,7 +807,7 @@ describe('group()', () => {
 
             expect(given.captureQueue).toHaveBeenCalledTimes(1)
 
-            const [_endpoint, eventPayload] = given.captureQueue.mock.calls[0]
+            const [, eventPayload] = given.captureQueue.mock.calls[0]
             expect(eventPayload.event).toEqual('some_event')
             expect(eventPayload.properties.$groups).toEqual({
                 organization: 'org::5',

@@ -10,7 +10,7 @@ const ArrayProto = Array.prototype
 const ObjProto = Object.prototype
 const toString = ObjProto.toString
 const hasOwnProperty = ObjProto.hasOwnProperty
-const win: Window = typeof window !== 'undefined' ? window : ({} as typeof window)
+const win: Window & typeof globalThis = typeof window !== 'undefined' ? window : ({} as typeof window)
 const navigator = win.navigator || { userAgent: '' }
 const document = win.document || {}
 const userAgent = navigator.userAgent
