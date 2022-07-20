@@ -67,11 +67,11 @@ enum InitType {
 }
 
 let init_type: InitType
-let posthog_master:
-    | PostHogLib
-    | (Record<string, PostHogLib> & {
-          init: (token: string, config: Partial<PostHogConfig>, name: string) => void
-      })
+
+// TODO: the type of this is very loose. Sometimes it's also PostHogLib itself
+let posthog_master: Record<string, PostHogLib> & {
+    init: (token: string, config: Partial<PostHogConfig>, name: string) => void
+}
 
 // some globals for comparisons
 const __NOOP = () => {}
@@ -177,6 +177,9 @@ const create_mplib = function (token: string, config: Partial<PostHogConfig>, na
     } else {
         if (target && !_isArray(target)) {
             console.error('You have already initialized ' + name)
+            // TODO: throw something instead?
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
             return
         }
         instance = new PostHogLib()
@@ -219,7 +222,7 @@ const create_mplib = function (token: string, config: Partial<PostHogConfig>, na
     if (typeof target !== 'undefined' && _isArray(target)) {
         // Crunch through the people queue first - we queue this data up &
         // flush on identify, so it's better to do all these operations first
-        instance._execute_array.call(instance.people, target.people)
+        instance._execute_array.call(instance.people, (target as any).people)
         instance._execute_array(target)
     }
 
@@ -279,7 +282,7 @@ export class PostHogLib {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    init(token: string, config: Partial<PostHogConfig>, name: string): PostHogLib {
+    init(token: string, config: Partial<PostHogConfig>, name: string): PostHogLib | void {
         if (_isUndefined(name)) {
             console.error('You must name your new library: init(token, config, name)')
             return
@@ -1594,30 +1597,30 @@ const extend_mp = function () {
 const override_ph_init_func = function () {
     // we override the snippets init function to handle the case where a
     // user initializes the posthog library after the script loads & runs
-    posthog_master['init'] = function (token: string, config: Partial<PostHogConfig>, name: string) {
+    posthog_master['init'] = function (token?: string, config?: Partial<PostHogConfig>, name?: string) {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_mplib(token, config, name)
+                posthog_master[name] = instances[name] = create_mplib(token || '', config || {}, name)
                 posthog_master[name]._loaded()
             }
             return posthog_master[name]
         } else {
-            let instance: PostHogLib = posthog_master
+            let instance: PostHogLib = posthog_master as any as PostHogLib
 
             if (instances[PRIMARY_INSTANCE_NAME]) {
                 // main posthog lib already initialized
                 instance = instances[PRIMARY_INSTANCE_NAME]
             } else if (token) {
                 // intialize the main posthog lib
-                instance = create_mplib(token, config, PRIMARY_INSTANCE_NAME)
+                instance = create_mplib(token, config || {}, PRIMARY_INSTANCE_NAME)
                 instance._loaded()
                 instances[PRIMARY_INSTANCE_NAME] = instance
             }
 
-            posthog_master = instance
+            ;(posthog_master as any) = instance
             if (init_type === InitType.INIT_SNIPPET) {
-                window[PRIMARY_INSTANCE_NAME] = posthog_master
+                ;(window as any)[PRIMARY_INSTANCE_NAME] = posthog_master
             }
             extend_mp()
             return instance
@@ -1629,10 +1632,10 @@ const add_dom_loaded_handler = function () {
     // Cross browser DOM Loaded support
     function dom_loaded_handler() {
         // function flag since we only want to execute this once
-        if (dom_loaded_handler.done) {
+        if ((dom_loaded_handler as any).done) {
             return
         }
-        dom_loaded_handler.done = true
+        ;(dom_loaded_handler as any).done = true
 
         ENQUEUE_REQUESTS = false
 
@@ -1675,7 +1678,7 @@ export function init_from_snippet() {
     })
 
     override_ph_init_func()
-    posthog_master['init']()
+    ;(posthog_master['init'] as any)()
 
     // Fire loaded events after updating the window's posthog object
     _each(instances, function (instance) {
@@ -1687,10 +1690,10 @@ export function init_from_snippet() {
 
 export function init_as_module() {
     init_type = InitType.INIT_MODULE
-    posthog_master = new PostHogLib()
+    ;(posthog_master as any) = new PostHogLib()
 
     override_ph_init_func()
-    posthog_master['init']()
+    ;(posthog_master['init'] as any)()
     add_dom_loaded_handler()
 
     return posthog_master

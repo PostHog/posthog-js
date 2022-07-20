@@ -151,7 +151,7 @@ export const _extend = function (obj: Record<string, any>, ...args: Record<strin
 
 export const _isArray =
     nativeIsArray ||
-    function (obj) {
+    function (obj: any): obj is any[] {
         return toString.call(obj) === '[object Array]'
     }
 
