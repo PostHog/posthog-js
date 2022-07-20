@@ -210,6 +210,33 @@ function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
     }
 }
 
+export function userOptedOut(posthog: PostHog, silenceErrors: boolean | undefined) {
+    let optedOut = false
+
+    try {
+        const token = posthog.get_config('token')
+        const respectDnt = posthog.get_config('respect_dnt')
+        const persistenceType = posthog.get_config('opt_out_capturing_persistence_type')
+        const persistencePrefix = posthog.get_config('opt_out_capturing_cookie_prefix') || undefined
+        const win = posthog.get_config('window' as any) as Window | undefined // used to override window during browser tests
+
+        if (token) {
+            // if there was an issue getting the token, continue method execution as normal
+            optedOut = hasOptedOut(token, {
+                respectDnt,
+                persistenceType,
+                persistencePrefix,
+                window: win,
+            })
+        }
+    } catch (err) {
+        if (!silenceErrors) {
+            console.error('Unexpected error when checking capturing opt-out status: ' + err)
+        }
+    }
+    return optedOut
+}
+
 /**
  * Wrap a method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
  * If the user has opted out, return early instead of executing the method.
@@ -225,29 +252,7 @@ export function addOptOutCheck<M extends (...args: any[]) => any = (...args: any
     silenceErrors?: boolean
 ): M {
     return function (...args) {
-        let optedOut = false
-
-        try {
-            const token = posthog.get_config('token')
-            const respectDnt = posthog.get_config('respect_dnt')
-            const persistenceType = posthog.get_config('opt_out_capturing_persistence_type')
-            const persistencePrefix = posthog.get_config('opt_out_capturing_cookie_prefix') || undefined
-            const win = posthog.get_config('window' as any) as Window | undefined // used to override window during browser tests
-
-            if (token) {
-                // if there was an issue getting the token, continue method execution as normal
-                optedOut = hasOptedOut(token, {
-                    respectDnt,
-                    persistenceType,
-                    persistencePrefix,
-                    window: win,
-                })
-            }
-        } catch (err) {
-            if (!silenceErrors) {
-                console.error('Unexpected error when checking capturing opt-out status: ' + err)
-            }
-        }
+        const optedOut = userOptedOut(posthog, silenceErrors)
 
         if (!optedOut) {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
