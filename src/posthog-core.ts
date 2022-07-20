@@ -1676,6 +1676,13 @@ export function init_from_snippet(): void {
         return
     }
 
+    // Load instances of the PostHog Library
+    _each(posthog_master['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
+        if (item && _isArray(item)) {
+            instances[item[2]] = create_mplib(...item)
+        }
+    })
+
     override_ph_init_func()
     ;(posthog_master['init'] as any)()
 
