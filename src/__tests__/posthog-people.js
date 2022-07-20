@@ -1,7 +1,7 @@
-import { PostHogLib } from '../posthog-core'
+import { PostHog } from '../posthog-core'
 import { PostHogPeople } from '../posthog-people'
 
-given('lib', () => Object.assign(new PostHogLib(), given.overrides))
+given('lib', () => Object.assign(new PostHog(), given.overrides))
 given('people', () =>
     Object.assign(new PostHogPeople(given.lib), {
         _send_request: jest.fn(),

@@ -25,7 +25,7 @@ import {
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
-import { PostHogLib } from './posthog-core'
+import { PostHog } from './posthog-core'
 
 const autocapture = {
     _initializedTokens: [] as string[],
@@ -135,7 +135,7 @@ const autocapture = {
         }
     },
 
-    _captureEvent: function (e: Event, instance: PostHogLib): boolean | void {
+    _captureEvent: function (e: Event, instance: PostHog): boolean | void {
         /*** Don't mess with this code without running IE8 tests on it ***/
         let target = this._getEventTarget(e)
         if (isTextNode(target)) {
@@ -219,7 +219,7 @@ const autocapture = {
         window.location.href = href
     },
 
-    _addDomEventHandlers: function (instance: PostHogLib): void {
+    _addDomEventHandlers: function (instance: PostHog): void {
         const handler = (e: Event) => {
             e = e || window.event
             this._captureEvent(e, instance)
@@ -232,11 +232,11 @@ const autocapture = {
     _customProperties: [] as AutoCaptureCustomProperty[],
     rageclicks: null as RageClick | null,
 
-    init: function (instance: PostHogLib): void {
+    init: function (instance: PostHog): void {
         this.rageclicks = new RageClick(instance)
     },
 
-    afterDecideResponse: function (response: DecideResponse, instance: PostHogLib): void {
+    afterDecideResponse: function (response: DecideResponse, instance: PostHog): void {
         const token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
             logger.log('autocapture already initialized for token "' + token + '"')

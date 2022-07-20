@@ -1,6 +1,6 @@
 import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { EventProcessor, Hub, Integration } from '@sentry/types'
-import { PostHogLib } from './posthog-core'
+import { PostHog } from './posthog-core'
 import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'
 
@@ -84,7 +84,7 @@ export interface PostHogConfig {
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie'
     persistence_name: string
     cookie_name: string
-    loaded: (posthog_instance: PostHogLib) => void
+    loaded: (posthog_instance: PostHog) => void
     store_google: boolean
     save_referrer: boolean
     test: boolean
@@ -156,7 +156,7 @@ export interface SessionRecordingOptions {
 }
 
 export declare class SentryIntegration implements Integration {
-    constructor(posthog: PostHogLib, organization?: string, projectId?: number, prefix?: string)
+    constructor(posthog: PostHog, organization?: string, projectId?: number, prefix?: string)
     name: string
     setupOnce(addGlobalEventProcessor: (callback: EventProcessor) => void, getCurrentHub: () => Hub): void
 }

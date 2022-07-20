@@ -1,5 +1,5 @@
 import { _base64Encode, _extend } from './utils'
-import { PostHogLib } from './posthog-core'
+import { PostHog } from './posthog-core'
 import { DecideResponse, FeatureFlagsCallback, RequestCallback } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -36,7 +36,7 @@ export const parseFeatureFlagDecideResponse = (response: DecideResponse, persist
 }
 
 export class PostHogFeatureFlags {
-    instance: PostHogLib
+    instance: PostHog
     _override_warning: boolean
     flagCallReported: Record<string, boolean>
     featureFlagEventHandlers: FeatureFlagsCallback[]
@@ -44,7 +44,7 @@ export class PostHogFeatureFlags {
     reloadFeatureFlagsInAction: boolean
     $anon_distinct_id: string | undefined
 
-    constructor(instance: PostHogLib) {
+    constructor(instance: PostHog) {
         this.instance = instance
         this._override_warning = false
         this.flagCallReported = {}

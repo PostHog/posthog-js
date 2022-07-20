@@ -17,13 +17,13 @@
  */
 import { EventProcessor, Hub } from '@sentry/types'
 import { Properties } from '../types'
-import { PostHogLib } from '../posthog-core'
+import { PostHog } from '../posthog-core'
 
 export class SentryIntegration {
     name: string
     setupOnce: (addGlobalEventProcessor: (callback: EventProcessor) => void, getCurrentHub: () => Hub) => void
 
-    constructor(_posthog: PostHogLib, organization: string, projectId: number, prefix: string) {
+    constructor(_posthog: PostHog, organization: string, projectId: number, prefix: string) {
         // setupOnce gets called by Sentry when it intializes the plugin
         // 'this' is not this: PostHogLib object, but the new class that's created.
         // TODO: refactor to a real class. The types

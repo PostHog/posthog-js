@@ -2,7 +2,7 @@
 import { addOptOutCheck } from './gdpr-utils'
 import { _base64Encode, _copyAndTruncateStrings, _each, _encodeDates, _extend, _info, _isObject } from './utils'
 import { PostHogConfig, Properties, RequestCallback } from './types'
-import { PostHogLib } from './posthog-core'
+import { PostHog } from './posthog-core'
 
 const SET_ACTION = '$set'
 const SET_ONCE_ACTION = '$set_once'
@@ -12,12 +12,12 @@ const SET_ONCE_ACTION = '$set_once'
  * @constructor
  */
 class PostHogPeople {
-    _posthog: PostHogLib
+    _posthog: PostHog
 
     set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
     set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
 
-    constructor(posthog: PostHogLib) {
+    constructor(posthog: PostHog) {
         this._posthog = posthog
 
         /*

@@ -2,7 +2,7 @@ import { loadScript } from '../autocapture-utils'
 import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
-import { PostHogLib } from '../posthog-core'
+import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
 import type { record } from 'rrweb'
 import { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
@@ -16,7 +16,7 @@ export const PLUGIN_EVENT_TYPE = 6
 export const MUTATION_SOURCE_TYPE = 0
 
 export class SessionRecording {
-    instance: PostHogLib
+    instance: PostHog
     captureStarted: boolean
     snapshots: any[]
     emit: boolean
@@ -27,7 +27,7 @@ export class SessionRecording {
     receivedDecide: boolean
     rrwebRecord: typeof record | undefined
 
-    constructor(instance: PostHogLib) {
+    constructor(instance: PostHog) {
         this.instance = instance
         this.captureStarted = false
         this.snapshots = []

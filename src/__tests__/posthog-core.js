@@ -1,4 +1,4 @@
-import { init_as_module, PostHogLib } from '../posthog-core'
+import { init_as_module, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
 import { Decide } from '../decide'
@@ -12,7 +12,7 @@ jest.mock('../gdpr-utils', () => ({
 }))
 jest.mock('../decide')
 
-given('lib', () => Object.assign(new PostHogLib(), given.overrides))
+given('lib', () => Object.assign(new PostHog(), given.overrides))
 
 describe('identify()', () => {
     given(

@@ -1,12 +1,12 @@
 import { autocapture } from './autocapture'
 import { _base64Encode } from './utils'
-import { PostHogLib } from './posthog-core'
+import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
 
 export class Decide {
-    instance: PostHogLib
+    instance: PostHog
 
-    constructor(instance: PostHogLib) {
+    constructor(instance: PostHog) {
         this.instance = instance
         this.instance.decideEndpointWasHit = false
     }

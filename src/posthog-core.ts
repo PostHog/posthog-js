@@ -69,7 +69,7 @@ enum InitType {
 let init_type: InitType
 
 // TODO: the type of this is very loose. Sometimes it's also PostHogLib itself
-let posthog_master: Record<string, PostHogLib> & {
+let posthog_master: Record<string, PostHog> & {
     init: (token: string, config: Partial<PostHogConfig>, name: string) => void
 }
 
@@ -168,8 +168,8 @@ const defaultConfig = (): PostHogConfig => ({
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string): PostHogLib {
-    let instance: PostHogLib
+const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string): PostHog {
+    let instance: PostHog
     const target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
 
     if (target && init_type === InitType.INIT_MODULE) {
@@ -182,7 +182,7 @@ const create_mplib = function (token: string, config: Partial<PostHogConfig>, na
             // @ts-ignore
             return
         }
-        instance = new PostHogLib()
+        instance = new PostHog()
     }
 
     instance._init(token, config, name)
@@ -226,7 +226,7 @@ const create_mplib = function (token: string, config: Partial<PostHogConfig>, na
  * PostHog Library Object
  * @constructor
  */
-export class PostHogLib {
+export class PostHog {
     __loaded: boolean
     config: PostHogConfig
 
@@ -293,7 +293,7 @@ export class PostHogLib {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    init(token: string, config: Partial<PostHogConfig>, name: string): PostHogLib | void {
+    init(token: string, config: Partial<PostHogConfig>, name: string): PostHog | void {
         if (_isUndefined(name)) {
             console.error('You must name your new library: init(token, config, name)')
             return
@@ -303,7 +303,7 @@ export class PostHogLib {
             return
         }
 
-        const instance: PostHogLib = create_mplib(token, config, name)
+        const instance: PostHog = create_mplib(token, config, name)
         posthog_master[name] = instance
         instance._loaded()
 
@@ -1587,9 +1587,9 @@ export class PostHogLib {
     }
 }
 
-_safewrap_class(PostHogLib, ['identify'])
+_safewrap_class(PostHog, ['identify'])
 
-const instances: Record<string, PostHogLib> = {}
+const instances: Record<string, PostHog> = {}
 const extend_mp = function () {
     // add all the sub posthog instances
     _each(instances, function (instance, name) {
@@ -1611,7 +1611,7 @@ const override_ph_init_func = function () {
             }
             return posthog_master[name]
         } else {
-            let instance: PostHogLib = posthog_master as any as PostHogLib
+            let instance: PostHog = posthog_master as any as PostHog
 
             if (instances[PRIMARY_INSTANCE_NAME]) {
                 // main posthog lib already initialized
@@ -1644,7 +1644,7 @@ const add_dom_loaded_handler = function () {
 
         ENQUEUE_REQUESTS = false
 
-        _each(instances, function (inst: PostHogLib) {
+        _each(instances, function (inst: PostHog) {
             inst._dom_loaded()
         })
     }
@@ -1687,9 +1687,9 @@ export function init_from_snippet(): void {
     add_dom_loaded_handler()
 }
 
-export function init_as_module(): PostHogLib {
+export function init_as_module(): PostHog {
     init_type = InitType.INIT_MODULE
-    ;(posthog_master as any) = new PostHogLib()
+    ;(posthog_master as any) = new PostHog()
 
     override_ph_init_func()
     ;(posthog_master['init'] as any)()

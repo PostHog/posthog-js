@@ -1,11 +1,11 @@
 import { loadScript } from '../autocapture-utils'
 import { _getHashParam, _register_event } from '../utils'
-import { PostHogLib } from '../posthog-core'
+import { PostHog } from '../posthog-core'
 import { DecideResponse, EditorParams } from '../types'
 
 export class Toolbar {
-    instance: PostHogLib
-    constructor(instance: PostHogLib) {
+    instance: PostHog
+    constructor(instance: PostHog) {
         this.instance = instance
     }
 

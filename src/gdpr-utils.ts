@@ -14,7 +14,7 @@
 import { _each, _includes, _isNumber, _isString, window } from './utils'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
-import { PostHogLib } from './posthog-core'
+import { PostHog } from './posthog-core'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)
@@ -214,13 +214,13 @@ function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
  * Wrap a method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
  * If the user has opted out, return early instead of executing the method.
  * If a callback argument was provided, execute it passing the 0 error code.
- * @param {PostHogLib} posthog - the posthog instance
+ * @param {PostHog} posthog - the posthog instance
  * @param {function} method - wrapped method to be executed if the user has not opted out
  * @param silenceErrors
  * @returns {*} the result of executing method OR undefined if the user has opted out
  */
 export function addOptOutCheck<M extends (...args: any[]) => any = (...args: any[]) => any>(
-    posthog: PostHogLib,
+    posthog: PostHog,
     method: M,
     silenceErrors?: boolean
 ): M {
