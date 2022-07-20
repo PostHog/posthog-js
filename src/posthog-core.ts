@@ -98,7 +98,7 @@ const defaultConfig = (): PostHogConfig => ({
     token: '',
     autocapture: true,
     rageclick: false,
-    cross_subdomain_cookie: document.location.hostname.indexOf('herokuapp.com') === -1,
+    cross_subdomain_cookie: document?.location?.hostname?.indexOf('herokuapp.com') === -1,
     persistence: 'cookie',
     persistence_name: '',
     cookie_name: '',
@@ -116,7 +116,7 @@ const defaultConfig = (): PostHogConfig => ({
     disable_persistence: false,
     disable_cookie: false,
     enable_recording_console_log: false,
-    secure_cookie: window.location.protocol === 'https:',
+    secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
@@ -1649,14 +1649,16 @@ const add_dom_loaded_handler = function () {
         })
     }
 
-    if (document.readyState === 'complete') {
-        // safari 4 can fire the DOMContentLoaded event before loading all
-        // external JS (including this file). you will see some copypasta
-        // on the internet that checks for 'complete' and 'loaded', but
-        // 'loaded' is an IE thing
-        dom_loaded_handler()
-    } else {
-        document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
+    if (document.addEventListener) {
+        if (document.readyState === 'complete') {
+            // safari 4 can fire the DOMContentLoaded event before loading all
+            // external JS (including this file). you will see some copypasta
+            // on the internet that checks for 'complete' and 'loaded', but
+            // 'loaded' is an IE thing
+            dom_loaded_handler()
+        } else {
+            document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
+        }
     }
 
     // fallback handler, always will work
