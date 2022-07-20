@@ -19,8 +19,7 @@
         "sourceMap": true,
         "inlineSources": true,
         "resolveJsonModule": true,
-        "downlevelIteration": true,
-        "noEmit": true
+        "downlevelIteration": true
     },
     "include": ["src/*.ts"]
 }
