@@ -1663,7 +1663,7 @@ const add_dom_loaded_handler = function () {
     _register_event(window, 'load', dom_loaded_handler, true)
 }
 
-export function init_from_snippet() {
+export function init_from_snippet(): void {
     init_type = InitType.INIT_SNIPPET
     if (_isUndefined((window as any).posthog)) {
         ;(window as any).posthog = {}
@@ -1687,7 +1687,7 @@ export function init_from_snippet() {
     add_dom_loaded_handler()
 }
 
-export function init_as_module() {
+export function init_as_module(): PostHogLib {
     init_type = InitType.INIT_MODULE
     ;(posthog_master as any) = new PostHogLib()
 
@@ -1695,5 +1695,5 @@ export function init_as_module() {
     ;(posthog_master['init'] as any)()
     add_dom_loaded_handler()
 
-    return posthog_master
+    return posthog_master as any
 }
