@@ -186,13 +186,6 @@ const create_mplib = function (token: string, config: Partial<PostHogConfig>, na
     }
 
     instance._init(token, config, name)
-
-    instance.people = new PostHogPeople(instance)
-
-    instance.featureFlags = new PostHogFeatureFlags(instance)
-    instance.feature_flags = instance.featureFlags
-
-    instance.toolbar = new Toolbar(instance)
     instance.toolbar.maybeLoadEditor()
 
     instance.sessionRecording = new SessionRecording(instance)
@@ -237,14 +230,13 @@ export class PostHogLib {
     __loaded: boolean
     config: PostHogConfig
 
-    SentryIntegration: typeof SentryIntegration
-    people: PostHogPeople
     persistence: PostHogPersistence
+    sessionManager: SessionIdManager
+    people: PostHogPeople
     featureFlags: PostHogFeatureFlags
     feature_flags: PostHogFeatureFlags
-    sessionManager: SessionIdManager
     toolbar: Toolbar
-    sessionRecording: SessionRecording
+    sessionRecording: SessionRecording | undefined
 
     _captureMetrics: CaptureMetrics
     _requestQueue: RequestQueue
@@ -258,16 +250,29 @@ export class PostHogLib {
     __autocapture_enabled: boolean | undefined
     decideEndpointWasHit: boolean
 
+    SentryIntegration: typeof SentryIntegration
+
     constructor() {
+        this.config = defaultConfig()
         this.compression = {}
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.__captureHooks = []
         this.__request_queue = []
-        this.config = defaultConfig()
         this.__loaded = false
         this.__autocapture_enabled = undefined
         this._jsc = function () {} as JSC
+        this.people = new PostHogPeople(this)
+        this.featureFlags = new PostHogFeatureFlags(this)
+        this.feature_flags = this.featureFlags
+        this.toolbar = new Toolbar(this)
+
+        // these are created in _init() after we have the config
+        this._captureMetrics = undefined as any
+        this._requestQueue = undefined as any
+        this._retryQueue = undefined as any
+        this.persistence = undefined as any
+        this.sessionManager = undefined as any
     }
 
     // Initialization methods
@@ -328,9 +333,7 @@ export class PostHogLib {
         this._jsc = function () {} as JSC
 
         this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
-
         this._requestQueue = new RequestQueue(this._captureMetrics, this._handle_queued_event.bind(this))
-
         this._retryQueue = new RetryQueue(this._captureMetrics, this.get_config('on_xhr_error'))
         this.__captureHooks = []
         this.__request_queue = []
@@ -1291,7 +1294,7 @@ export class PostHogLib {
      * is currently running
      */
     sessionRecordingStarted(): boolean {
-        return this.sessionRecording.started()
+        return !!this.sessionRecording?.started()
     }
 
     /**
