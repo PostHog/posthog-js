@@ -1093,10 +1093,7 @@ export class PostHogLib {
         }
         if (alias !== original) {
             this._register_single(ALIAS_ID_KEY, alias)
-            return this.capture('$create_alias', { alias: alias, distinct_id: original }, function () {
-                // Flush the people queue
-                _this.identify(alias)
-            })
+            return this.capture('$create_alias', { alias: alias, distinct_id: original })
         } else {
             console.error('alias matches current distinct_id - skipping api call.')
             this.identify(alias)
@@ -1670,12 +1667,6 @@ export function init_from_snippet() {
         console.error('PostHog library has already been downloaded at least once.')
         return
     }
-    // Load instances of the PostHog Library
-    _each(posthog_master['_i'], function (item) {
-        if (item && _isArray(item)) {
-            instances[item[item.length - 1]] = create_mplib.apply(this, item)
-        }
-    })
 
     override_ph_init_func()
     ;(posthog_master['init'] as any)()
