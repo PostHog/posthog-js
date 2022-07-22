@@ -4,7 +4,6 @@ env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
   BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
   SECRET_KEY: 'abcdefghijklmnopqrst4' # unsafe - for testing only
-  PG_DATABASE: 'test_posthog'
   REDIS_URL: 'redis://localhost'
   TEST: 'true'
   BROWSERSTACK_DEBUG: 'true'
