@@ -30,6 +30,7 @@ export const initPosthog = ClientFunction((configParams = {}) => {
     if (!('api_host' in configParams)) {
         configParams['api_host'] = 'http://localhost:8000'
     }
+    configParams['debug'] = true
     window.posthog.init('e2e_token_1239', configParams)
 })
 
@@ -72,6 +73,8 @@ export async function queryAPI() {
     }
 
     const { results } = JSON.parse(await response.text())
+    console.log('results', results)
+    console.log('response', response)
     return results
 }
 
