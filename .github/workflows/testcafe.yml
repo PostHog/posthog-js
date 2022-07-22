@@ -72,8 +72,7 @@ jobs:
           cd posthog
           ./bin/migrate
           python manage.py setup_dev --no-data
-          ./bin/plugin-server &> plugin_logs &
-          ./bin/docker-worker-celery --with-scheduler &> worker_logs &
+          ./bin/docker-worker &> worker_logs &
           ./bin/docker-server &> server_logs &
 
       - name: Run chrome test
@@ -85,9 +84,6 @@ jobs:
       - name: Run safari test
         run: npx testcafe "browserstack:safari" testcafe/*.spec.js
 
-      - name: PostHog plugin server logs
-        if: ${{ failure() }}
-        run: cat posthog/plugin_logs
       - name: PostHog worker logs
         if: ${{ failure() }}
         run: cat posthog/worker_logs
