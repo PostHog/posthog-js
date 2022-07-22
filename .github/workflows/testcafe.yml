@@ -56,8 +56,8 @@ jobs:
       - name: Install python dependencies
         if: steps.cache-backend-tests.outputs.cache-hit != 'true'
         run: |
-          python -m pip install -r requirements-dev.txt
-          python -m pip install -r requirements.txt
+          python -m pip install -r ./posthog/requirements-dev.txt
+          python -m pip install -r ./posthog/requirements.txt
 
       - name: Add Kafka to /etc/hosts
         shell: bash
