@@ -25,7 +25,7 @@ import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './post
 import { SessionRecording } from './extensions/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
-import { addOptOutCheck, clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
+import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { CaptureMetrics } from './capture-metrics'
