@@ -73,8 +73,6 @@ export async function queryAPI() {
     }
 
     const { results } = JSON.parse(await response.text())
-    console.log('results', results)
-    console.log('response', response)
     return results
 }
 
