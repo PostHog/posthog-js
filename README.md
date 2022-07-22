@@ -6,7 +6,6 @@
 Please see [PostHog Docs](https://posthog.com/docs).
 Specifically, [browser JS library details](https://posthog.com/docs/libraries/js).
 
-editing readme so as to run check in master
 
 ## Testing
 
