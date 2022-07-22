@@ -517,7 +517,11 @@ _.UUID = (function () {
 // This is to block various web spiders from executing our JS and
 // sending false captureing data
 _.isBlockedUA = function (ua) {
-    if (/(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot)/i.test(ua)) {
+    if (
+        /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog)/i.test(
+            ua
+        )
+    ) {
         return true
     }
     return false
@@ -650,7 +654,9 @@ _.register_event = (function () {
 
 _.info = {
     campaignParams: function () {
-        const campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term gclid fbclid'.split(' ')
+        const campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term gclid fbclid msclkid'.split(
+            ' '
+        )
         const params = {}
         _.each(campaign_keywords, function (kwkey) {
             let kw = _.getQueryParam(document.URL, kwkey)

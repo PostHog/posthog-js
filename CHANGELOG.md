@@ -1,3 +1,26 @@
+## 1.26.0 - 2022-07-19
+
+- fix: dont set initial referrer (#426)
+
+## 1.25.2 - 2022-07-12
+
+- feat: Add msclkid param to campaign keywords (#424)
+- chore(deps): Update @sentry/types for 7.2.0 (#412)
+
+## 1.25.1 - 2022-06-29
+
+- fix: Add facebook crawlers to blocked user agents (#417)
+
+## 1.25.0 - 2022-06-28
+
+- feat(feature-flags): Enable experience continuity (#404)
+- chore: Update changelog for 1.24.0 (#411)
+
+## 1.24.0 - 2022-06-01
+
+- feat: Limit session recordings to 24 hours (#405)
+    - a new recording is immediately started and no data is lost 
+
 ## 1.23.0 - 2022-06-01
 
 - feat: Allow overriding device id generation (#401)

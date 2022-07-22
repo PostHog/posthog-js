@@ -1,6 +1,6 @@
 // Type definitions for exported methods
 
-import { EventProcessor, Integration } from '@sentry/types'
+import { EventProcessor, Hub, Integration } from '@sentry/types'
 import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 
 declare class posthog {
@@ -851,7 +851,7 @@ declare namespace posthog {
 export class SentryIntegration implements Integration {
     constructor(posthog: posthog, organization?: string, projectId?: number, prefix?: string)
     name: string
-    setupOnce(addGlobalEventProcessor: (callback: EventProcessor) => void): void
+    setupOnce(addGlobalEventProcessor: (callback: EventProcessor) => void, getCurrentHub: () => Hub): void
 }
 
 export type PostHog = typeof posthog
