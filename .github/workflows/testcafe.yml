@@ -42,7 +42,7 @@ jobs:
       - uses: syphar/restore-pip-download-cache@v1
         if: steps.cache-virtualenv.outputs.cache-hit != 'true'
 
-      - name: Set up Node 14
+      - name: Set up Node 16
         uses: actions/setup-node@v2
         with:
             node-version: 16
