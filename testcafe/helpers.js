@@ -67,6 +67,10 @@ export async function queryAPI() {
         headers: HEADERS,
     })
 
+    if (!response.ok) {
+        throw new Error(JSON.stringify(response))
+    }
+
     const { results } = JSON.parse(await response.text())
     return results
 }
