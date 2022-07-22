@@ -76,7 +76,7 @@ jobs:
         run: |
           cd posthog
           python manage.py setup_dev --no-data
-          ./bin/docker-migrate
+          ./bin/migrate
           ./bin/plugin-server &> plugin_logs &
           ./bin/docker-worker-celery --with-scheduler &> worker_logs &
           ./bin/docker-server &> server_logs &
