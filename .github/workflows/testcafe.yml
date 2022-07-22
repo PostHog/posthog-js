@@ -62,8 +62,6 @@ jobs:
         run: ./posthog/bin/check_kafka_clickhouse_up
 
       - name: Set up databases
-        env:
-            PG_DATABASE: 'posthog' # override for setup_test_environment command
         run: cd posthog && python manage.py setup_test_environment
 
       - name: Serve static files
