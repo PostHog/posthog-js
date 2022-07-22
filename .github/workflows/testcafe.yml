@@ -67,6 +67,12 @@ jobs:
       - name: Set up posthog-js
         run: yarn; yarn build-array; mkdir -p posthog/frontend/dist; cp dist/array.js posthog/frontend/dist; python posthog/manage.py collectstatic --noinput
 
+      - name: Setup plugin server
+        run: |
+          cd posthog/plugin-server
+          yarn
+          yarn run build
+
       - name: Start server
         run: |
           cd posthog
