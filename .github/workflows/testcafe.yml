@@ -4,7 +4,7 @@ env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
   BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
   SECRET_KEY: 'abcdef' # unsafe - for testing only
-  DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/test_posthog'
+  PG_DATABASE: 'test_posthog'
   REDIS_URL: 'redis://localhost'
   TEST: 'true'
   BROWSERSTACK_DEBUG: 'true'
@@ -17,24 +17,6 @@ jobs:
   browsers:
     name: Test on Chrome, IE11, and Safari
     runs-on: ubuntu-latest
-    services:
-        postgres:
-            image: postgres:12
-            env:
-                POSTGRES_USER: posthog
-                POSTGRES_PASSWORD: posthog
-                POSTGRES_DB: test_posthog
-            ports: ['5432:5432']
-            options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-        redis:
-            image: redis
-            ports:
-                - '6379:6379'
-            options: >-
-                --health-cmd "redis-cli ping"
-                --health-interval 10s
-                --health-timeout 5s
-                --health-retries 5
 
     steps:
       - name: Check out posthog-js server
@@ -45,7 +27,7 @@ jobs:
         with:
             repository: 'PostHog/posthog'
             path: 'posthog/'
-            ref: server-debugging
+            ref: master
 
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -60,9 +42,22 @@ jobs:
       - name: Install requirements.txt dependencies with pip
         run: python -m pip install --upgrade pip && python -m pip install -r posthog/requirements.txt && python -m pip install freezegun fakeredis pytest pytest-mock pytest-django
 
+      - name: Add Kafka to /etc/hosts
+        shell: bash
+        run: echo "127.0.0.1 kafka" | sudo tee -a /etc/hosts
+
+      - name: Stop/Start stack with Docker Compose
+        run: |
+            cd posthog
+            docker-compose -f docker-compose.dev.yml down
+            docker-compose -f docker-compose.dev.yml up -d
+
+      - name: Wait for ClickHouse
+        run: ./posthog/bin/check_kafka_clickhouse_up
+
       - name: Set up databases
         env:
-            DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/posthog' # override for setup_test_environment command
+            PG_DATABASE: 'posthog' # override for setup_test_environment command
         run: cd posthog && python manage.py setup_test_environment
 
       - name: Serve static files
