@@ -3,7 +3,7 @@ import path from 'path'
 import { RequestLogger, RequestMock, ClientFunction } from 'testcafe'
 import fetch from 'node-fetch'
 
-const HEADERS = { Authorization: 'Bearer e2e_demo_api_key' }
+const HEADERS = { Authorization: `Bearer ${process.env.POSTHOG_API_KEY}` }
 
 export const captureLogger = RequestLogger(/ip=1/, {
     logRequestHeaders: true,
@@ -27,10 +27,16 @@ export const staticFilesMock = RequestMock()
     })
 
 export const initPosthog = ClientFunction((configParams = {}) => {
+    const testSessionId = Math.round(Math.random() * 10000000000).toString()
     if (!('api_host' in configParams)) {
-        configParams['api_host'] = 'http://localhost:8000'
+        configParams['api_host'] = 'https://app.posthog.com'
     }
-    window.posthog.init('e2e_token_1239', configParams)
+    window.posthog.init('phc_ChmcdLbC770zgl23gp3Lax6SERzC2szOUxtp0Uy4nTf', configParams)
+    window.posthog.register({
+        testSessionId,
+    })
+
+    return testSessionId
 })
 
 export async function retryUntilResults(operation, target_results, limit = 100) {
@@ -51,15 +57,12 @@ export async function retryUntilResults(operation, target_results, limit = 100) 
     return new Promise((...args) => attempt(0, ...args))
 }
 
-export async function queryAPI() {
-    const response = await fetch('http://localhost:8000/api/event', {
+export async function queryAPI(testSessionId) {
+    const url = `https://app.posthog.com/api/event?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]`
+    const response = await fetch(url, {
         headers: HEADERS,
     })
 
     const { results } = JSON.parse(await response.text())
     return results
-}
-
-export async function clearEvents() {
-    await fetch('http://localhost:8000/delete_events/', { headers: HEADERS })
 }
