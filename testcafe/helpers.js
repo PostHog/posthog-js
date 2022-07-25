@@ -3,7 +3,9 @@ import path from 'path'
 import { RequestLogger, RequestMock, ClientFunction } from 'testcafe'
 import fetch from 'node-fetch'
 
-const { POSTHOG_API_KEY, POSTHOG_PROJECT_KEY, POSTHOG_API_HOST = "https://app.posthog.com"} = process.env
+const { POSTHOG_API_KEY, POSTHOG_PROJECT_KEY } = process.env
+const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST || 'https://app.posthog.com'
+
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
