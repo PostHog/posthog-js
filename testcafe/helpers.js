@@ -27,14 +27,6 @@ export const staticFilesMock = RequestMock()
     })
 
 export const initPosthog = (config = {}) => {
-    if (!('api_host' in config)) {
-        config['api_host'] = 'http://localhost:8000'
-    }
-    config['debug'] = true
-    if (!'api_key' in config) {
-        config['api_key'] = 'e2e_token_1239'
-    }
-
     return ClientFunction((configParams = {}) => {
         var testSessionId = Math.round(Math.random() * 10000000000).toString()
         window.posthog.init(configParams.api_key, configParams)
@@ -45,6 +37,9 @@ export const initPosthog = (config = {}) => {
         return testSessionId
     })({
         ...config,
+        debug: true,
+        api_host: 'http://localhost:8000',
+        api_key: 'e2e_token_1239',
     })
 }
 
