@@ -6,7 +6,7 @@ env:
   SECRET_KEY: 'abcdefghijklmnopqrst4' # unsafe - for testing only
   DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/posthog'
   REDIS_URL: 'redis://localhost'
-  TEST: 'true'
+  DEBUG: 1
   BROWSERSTACK_DEBUG: 'true'
   BROWSERSTACK_NETWORK_LOGS: 'true'
   BROWSERSTACK_CONSOLE: 'info'
@@ -80,8 +80,7 @@ jobs:
           yarn 
           yarn build-array 
           mkdir -p posthog/frontend/dist
-          cp dist/array.js 
-          posthog/frontend/dist 
+          cp dist/array.js posthog/frontend/dist 
           python posthog/manage.py collectstatic --noinput
 
       - name: Setup plugin server
