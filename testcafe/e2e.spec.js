@@ -66,9 +66,11 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     // Captures text content if mask_all_text isn't set
     await t.expect(autocapturedLinkElement['text']).eql('Sensitive text!')
 
+    const attrKeys = Object.keys(autocapturedButtonElement.attributes)
+    attrKeys.sort()
     await t
-        .expect(Object.keys(autocapturedButtonElement.attributes))
-        .eql(['attr__id', 'attr__class', 'attr__data-sensitive', 'attr__data-cy-button-sensitive-attributes'])
+        .expect(attrKeys)
+        .eql(['attr__class', 'attr__data-cy-button-sensitive-attributes', 'attr__data-sensitive', 'attr__id'])
 })
 
 test('Config options change autocapture behavior accordingly', async (t) => {
