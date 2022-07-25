@@ -32,11 +32,11 @@ export const initPosthog = (configParams = {}) => {
     }
     configParams['debug'] = true
     if (!'api_key' in configParams) {
-        configParams['api_key'] = e2e_token_1239
+        configParams['api_key'] = 'e2e_token_1239'
     }
-    return ClientFunction((configParams = {}) => {
+    return ClientFunction((config = {}) => {
         var testSessionId = Math.round(Math.random() * 10000000000).toString()
-        window.posthog.init(configParams.api_key, configParams)
+        window.posthog.init(config.api_key, configParams)
         window.posthog.register({
             testSessionId,
         })
@@ -44,8 +44,6 @@ export const initPosthog = (configParams = {}) => {
         return testSessionId
     })({
         ...config,
-        api_host: process.env.POSTHOG_API_HOST || 'https://app.posthog.com',
-        api_key: process.env.POSTHOG_PROJECT_KEY,
     })
 }
 
