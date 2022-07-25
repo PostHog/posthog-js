@@ -35,13 +35,3 @@ jobs:
 
       - name: Run safari test
         run: npx testcafe "browserstack:safari" testcafe/*.spec.js
-
-      - name: PostHog plugin server logs
-        if: ${{ failure() }}
-        run: cat posthog/plugin_logs
-      - name: PostHog worker logs
-        if: ${{ failure() }}
-        run: cat posthog/worker_logs
-      - name: PostHog server logs
-        if: ${{ failure() }}
-        run: cat posthog/server_logs
