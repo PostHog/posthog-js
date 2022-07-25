@@ -6,7 +6,6 @@ import fetch from 'node-fetch'
 const { POSTHOG_API_KEY } = process.env
 const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST || 'https://app.posthog.com'
 
-
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
 export const captureLogger = RequestLogger(/ip=1/, {
@@ -30,26 +29,23 @@ export const staticFilesMock = RequestMock()
         res.setBody(html)
     })
 
-export const initPosthog = ClientFunction(
-    (configParams = {}) => {
-        console.log(JSON.stringify(configParams))
-        const testSessionId = Math.round(Math.random() * 10000000000).toString()
-        window.posthog.init(configParams.POSTHOG_PROJECT_KEY, {
-            api_host: configParams.POSTHOG_API_HOST,
-        })
-        window.posthog.register({
-            testSessionId,
-        })
+export const initPosthog = (config) => {
+    return ClientFunction(
+        (configParams = {}) => {
+            var testSessionId = Math.round(Math.random() * 10000000000).toString()
+            window.posthog.init(configParams.api_key, configParams)
+            window.posthog.register({
+                testSessionId,
+            })
 
-        return testSessionId
-    },
-    {
-        dependencies: {
-            POSTHOG_API_HOST: process.env.POSTHOG_API_HOST || 'https://app.posthog.com',
-            POSTHOG_PROJECT_KEY: process.env.POSTHOG_PROJECT_KEY,
-        },
-    }
-)
+            return testSessionId
+        }
+    )({
+        ...config,
+        api_host: process.env.POSTHOG_API_HOST || 'https://app.posthog.com',
+        api_key: process.env.POSTHOG_PROJECT_KEY,
+    })
+}
 
 export async function retryUntilResults(operation, target_results, limit = 100) {
     const attempt = (count, resolve, reject) => {
