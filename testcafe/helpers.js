@@ -64,5 +64,6 @@ export async function queryAPI(testSessionId) {
     })
 
     const { results } = JSON.parse(await response.text())
+    console.log({results})
     return results
 }
