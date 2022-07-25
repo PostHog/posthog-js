@@ -19,7 +19,7 @@ fixture('posthog.js capture')
     })
 
 test('Custom events work and are accessible via /api/event', async (t) => {
-    await initPosthog()
+    const testSessionId = await initPosthog()
     await t
         .wait(1000)
         .click('[data-cy-custom-event-button]')
@@ -30,7 +30,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI, (results) => results.length === 3)
+    const results = await retryUntilResults(queryAPI(testSessionId), (results) => results.length === 3)
 
     await t.expect(results.length).eql(3)
     await t.expect(results.filter(({ event }) => event === 'custom-event').length).eql(1)
@@ -39,7 +39,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
 })
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
-    await initPosthog()
+    const testSessionId = await initPosthog()
     await t
         .wait(1000)
         .click('[data-cy-link-mask-text]')
@@ -52,7 +52,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
     const results = await retryUntilResults(
-        queryAPI,
+        queryAPI(testSessionId),
         (results) => results.filter((result) => result.event === '$autocapture').length === 2
     )
 
@@ -78,7 +78,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
 })
 
 test('Config options change autocapture behavior accordingly', async (t) => {
-    await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
+    const testSessionId = await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
     await t
         .wait(1000)
         .click('[data-cy-link-mask-text]')
@@ -91,7 +91,7 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
     const results = await retryUntilResults(
-        queryAPI,
+        queryAPI(testSessionId),
         (results) => results.filter((result) => result.event === '$autocapture').length === 2
     )
 

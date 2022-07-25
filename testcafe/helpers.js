@@ -26,13 +26,28 @@ export const staticFilesMock = RequestMock()
         res.setBody(html)
     })
 
-export const initPosthog = ClientFunction((configParams = {}) => {
+export const initPosthog = (configParams = {}) => {
     if (!('api_host' in configParams)) {
         configParams['api_host'] = 'http://localhost:8000'
     }
     configParams['debug'] = true
-    window.posthog.init('e2e_token_1239', configParams)
-})
+    if (!'api_key' in configParams) {
+        configParams['api_key'] = e2e_token_1239
+    }
+    return ClientFunction((configParams = {}) => {
+        var testSessionId = Math.round(Math.random() * 10000000000).toString()
+        window.posthog.init(configParams.api_key, configParams)
+        window.posthog.register({
+            testSessionId,
+        })
+
+        return testSessionId
+    })({
+        ...config,
+        api_host: process.env.POSTHOG_API_HOST || 'https://app.posthog.com',
+        api_key: process.env.POSTHOG_PROJECT_KEY,
+    })
+}
 
 export async function retryUntilResults(operation, predicate, limit = 100) {
     const attempt = (count, resolve, reject) => {
@@ -63,8 +78,10 @@ export async function retryUntilResults(operation, predicate, limit = 100) {
     return new Promise((...args) => attempt(0, ...args))
 }
 
-export async function queryAPI() {
-    const response = await fetch('http://localhost:8000/api/event', {
+export async function queryAPI(testSessionId) {
+    const url = `http://localhost:8000/api/event?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]`
+
+    const response = await fetch(url, {
         headers: HEADERS,
     })
 
