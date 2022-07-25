@@ -75,8 +75,14 @@ jobs:
       - name: Serve static files
         run: python -m http.server 8080 &
 
-      - name: Set up posthog-js
-        run: yarn; yarn build-array; mkdir -p posthog/frontend/dist; cp dist/array.js posthog/frontend/dist; python posthog/manage.py collectstatic --noinput
+      - name: Inject posthog-js into posthog server
+        run: |
+          yarn 
+          yarn build-array 
+          mkdir -p posthog/frontend/dist
+          cp dist/array.js 
+          posthog/frontend/dist 
+          python posthog/manage.py collectstatic --noinput
 
       - name: Setup plugin server
         run: |
