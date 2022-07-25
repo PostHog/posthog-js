@@ -98,12 +98,15 @@ jobs:
           ./bin/docker-server &> server_logs &
 
       - name: Run chrome test
+        timeout-minutes: 5
         run: npx testcafe "browserstack:chrome" testcafe/*.spec.js
 
       - name: Run ie11 test
+        timeout-minutes: 5
         run: npx testcafe "browserstack:ie" testcafe/*.spec.js
 
       - name: Run safari test
+        timeout-minutes: 5
         run: npx testcafe "browserstack:safari" testcafe/*.spec.js
 
       - name: PostHog worker logs
