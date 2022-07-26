@@ -31,7 +31,8 @@
         Sensitive text!
     </a>
 
-    <button data-cy-button-sensitive-attributes class='sensitive' id='sensitive' data-sensitive='sensitive'>
+    <!-- TODO: Remove the ="true" once we have fixed the bug with autocapture to ensure E2E that it works -->
+    <button data-cy-button-sensitive-attributes="true" class='sensitive' id='sensitive' data-sensitive='sensitive'>
         Sensitive attributes!
     </button>
 
