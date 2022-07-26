@@ -5,7 +5,7 @@ import fetch from 'node-fetch'
 
 const { POSTHOG_API_KEY } = process.env
 const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST || 'https://app.posthog.com'
-const POSTHOG_API_PROJECT = process.env.POSTHOG_API_PROJECT || '11031'
+const POSTHOG_API_PROJECT = process.env.POSTHOG_API_PROJECT || '11213'
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
