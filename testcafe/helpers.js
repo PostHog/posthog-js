@@ -74,6 +74,12 @@ export async function queryAPI(testSessionId) {
     })
 
     const data = await response.text()
+
+    if (!response.ok) {
+        console.error("Bad Response", response.status, data)
+        throw new Error("Bad Response")
+    }
+
     const { results } = JSON.parse(data)
     return results
 }
