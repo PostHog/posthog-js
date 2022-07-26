@@ -3,6 +3,8 @@ import path from 'path'
 import { RequestLogger, RequestMock, ClientFunction } from 'testcafe'
 import fetch from 'node-fetch'
 
+// NOTE: These tests are run against a dedicated test project in PostHog cloud
+// but can be overridden to call a local API when running locally
 const { POSTHOG_API_KEY } = process.env
 const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST || 'https://app.posthog.com'
 const POSTHOG_API_PROJECT = process.env.POSTHOG_API_PROJECT || '11213'
