@@ -1,12 +1,9 @@
 import { t } from 'testcafe'
-import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock, clearEvents } from './helpers'
+import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock } from './helpers'
 
 fixture('posthog.js capture')
     .page('http://localhost:8000/playground/cypress/index.html')
     .requestHooks(captureLogger, staticFilesMock)
-    .beforeEach(async () => {
-        await clearEvents()
-    })
     .afterEach(async () => {
         const browserLogs = await t.getBrowserConsoleMessages()
         Object.keys(browserLogs).forEach((level) => {
@@ -19,9 +16,9 @@ fixture('posthog.js capture')
     })
 
 test('Custom events work and are accessible via /api/event', async (t) => {
-    await initPosthog()
+    const testSessionId = await initPosthog()
     await t
-        .wait(1000)
+        .wait(5000)
         .click('[data-cy-custom-event-button]')
         .wait(5000)
         .expect(captureLogger.count(() => true))
@@ -30,7 +27,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI, 3)
+    const results = await retryUntilResults(() => queryAPI(testSessionId), 3)
 
     await t.expect(results.length).eql(3)
     await t.expect(results.filter(({ event }) => event === 'custom-event').length).eql(1)
@@ -39,9 +36,9 @@ test('Custom events work and are accessible via /api/event', async (t) => {
 })
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
-    await initPosthog()
+    const testSessionId = await initPosthog()
     await t
-        .wait(1000)
+        .wait(5000)
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
         .wait(5000)
@@ -51,7 +48,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI, 3)
+    const results = await retryUntilResults(() => queryAPI(testSessionId), 3)
 
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
 
@@ -69,15 +66,18 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
     // Captures text content if mask_all_text isn't set
     await t.expect(autocapturedLinkElement['text']).eql('Sensitive text!')
 
+    const attrKeys = Object.keys(autocapturedButtonElement.attributes)
+    attrKeys.sort()
     await t
-        .expect(Object.keys(autocapturedButtonElement.attributes))
-        .eql(['attr__id', 'attr__class', 'attr__data-sensitive', 'attr__data-cy-button-sensitive-attributes'])
+        .expect(attrKeys)
+        .eql(['attr__class', 'attr__data-cy-button-sensitive-attributes', 'attr__data-sensitive', 'attr__id'])
 })
 
 test('Config options change autocapture behavior accordingly', async (t) => {
-    await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
+    const testSessionId = await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
+
     await t
-        .wait(1000)
+        .wait(5000)
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
         .wait(5000)
@@ -87,7 +87,7 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    const results = await retryUntilResults(queryAPI, 3)
+    const results = await retryUntilResults(() => queryAPI(testSessionId), 3)
 
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
     await t.expect(autocapturedEvents.length).eql(2)
