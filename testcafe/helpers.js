@@ -33,6 +33,7 @@ export const staticFilesMock = RequestMock()
 export const initPosthog = (config) => {
     return ClientFunction((configParams = {}) => {
         var testSessionId = Math.round(Math.random() * 10000000000).toString()
+        configParams.debug = true
         window.posthog.init(configParams.api_key, configParams)
         window.posthog.register({
             testSessionId,
@@ -70,6 +71,7 @@ export async function queryAPI(testSessionId) {
         headers: HEADERS,
     })
 
-    const { results } = JSON.parse(await response.text())
+    const data = await response.text()
+    const { results } = JSON.parse(data)
     return results
 }
