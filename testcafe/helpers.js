@@ -5,6 +5,7 @@ import fetch from 'node-fetch'
 
 const { POSTHOG_API_KEY } = process.env
 const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST || 'https://app.posthog.com'
+const POSTHOG_API_PROJECT = process.env.POSTHOG_API_PROJECT || '11031'
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
@@ -30,17 +31,15 @@ export const staticFilesMock = RequestMock()
     })
 
 export const initPosthog = (config) => {
-    return ClientFunction(
-        (configParams = {}) => {
-            var testSessionId = Math.round(Math.random() * 10000000000).toString()
-            window.posthog.init(configParams.api_key, configParams)
-            window.posthog.register({
-                testSessionId,
-            })
+    return ClientFunction((configParams = {}) => {
+        var testSessionId = Math.round(Math.random() * 10000000000).toString()
+        window.posthog.init(configParams.api_key, configParams)
+        window.posthog.register({
+            testSessionId,
+        })
 
-            return testSessionId
-        }
-    )({
+        return testSessionId
+    })({
         ...config,
         api_host: process.env.POSTHOG_API_HOST || 'https://app.posthog.com',
         api_key: process.env.POSTHOG_PROJECT_KEY,
@@ -66,7 +65,7 @@ export async function retryUntilResults(operation, target_results, limit = 100) 
 }
 
 export async function queryAPI(testSessionId) {
-    const url = `${POSTHOG_API_HOST}/api/event?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]`
+    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]`
     const response = await fetch(url, {
         headers: HEADERS,
     })
