@@ -678,14 +678,15 @@ describe('init()', () => {
         expect(given.lib['compression']).toEqual({})
     })
 
-    describe.skip('device id behavior', () => {
+    describe('device id behavior', () => {
         const uuid = '1811a3ce5b0363-0052debf84392a-3a50387c-0-1811a3ce5b1ad2'
 
+        let spy
         beforeEach(() => {
-            jest.spyOn(_, 'UUID').mockReturnValue(uuid)
+            spy = jest.spyOn(_, 'UUID').mockReturnValue(uuid)
         })
         afterEach(() => {
-            _.UUID.mockRestore()
+            spy.mockRestore()
         })
 
         it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
@@ -947,7 +948,9 @@ describe('reset()', () => {
         persistence: new PostHogPersistence(given.config),
     }))
 
-    given.lib._init('testtoken', given.config, 'testhog')
+    beforeEach(() => {
+        given.lib._init('testtoken', given.config, 'testhog')
+    })
 
     it('clears persistence', () => {
         given.lib.persistence.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
