@@ -15,11 +15,11 @@
  * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
  * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  */
-import { EventProcessor, Hub } from '@sentry/types'
+import { EventProcessor, Hub, Integration } from '@sentry/types'
 import { Properties } from '../types'
 import { PostHog } from '../posthog-core'
 
-export class SentryIntegration {
+export class SentryIntegration implements Integration {
     name: string
     setupOnce: (addGlobalEventProcessor: (callback: EventProcessor) => void, getCurrentHub: () => Hub) => void
 

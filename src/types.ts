@@ -1,5 +1,4 @@
 import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
-import { EventProcessor, Hub, Integration } from '@sentry/types'
 import { PostHog } from './posthog-core'
 import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'
@@ -94,12 +93,6 @@ export interface SessionRecordingOptions {
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
-}
-
-export declare class SentryIntegration implements Integration {
-    constructor(posthog: PostHog, organization?: string, projectId?: number, prefix?: string)
-    name: string
-    setupOnce(addGlobalEventProcessor: (callback: EventProcessor) => void, getCurrentHub: () => Hub): void
 }
 
 export enum Compression {
