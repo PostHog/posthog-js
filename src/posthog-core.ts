@@ -1672,7 +1672,7 @@ const add_dom_loaded_handler = function () {
 export function init_from_snippet(): void {
     init_type = InitType.INIT_SNIPPET
     if (_isUndefined((window as any).posthog)) {
-        ;(window as any).posthog = {}
+        ;(window as any).posthog = []
     }
     posthog_master = (window as any).posthog
 
