@@ -557,7 +557,7 @@ PostHogLib.prototype.push = function (item) {
  * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
  * @param {Object} [options] Optional configuration for this capture request.
  * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
- * @param {Date} [options.timestamp] Timestamp is a Date object.  If not set, it'll automatically be set to the current time.
+ * @param {Date} [options.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
  */
 PostHogLib.prototype.capture = addOptOutCheckPostHogLib(function (event_name, properties, options) {
     // While developing, a developer might purposefully _not_ call init(),
