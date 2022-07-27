@@ -168,9 +168,10 @@ const defaultConfig = (): PostHogConfig => ({
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_mplib = function (token: string, config: Partial<PostHogConfig>, name: string): PostHog {
+const create_mplib = function (token: string, config?: Partial<PostHogConfig>, name?: string): PostHog {
     let instance: PostHog
-    const target = name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : posthog_master[name]
+    const target =
+        name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : name ? posthog_master[name] : undefined
 
     if (target && init_type === InitType.INIT_MODULE) {
         instance = target as any
@@ -293,7 +294,7 @@ export class PostHog {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    init(token: string, config: Partial<PostHogConfig>, name: string): PostHog | void {
+    init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
         if (_isUndefined(name)) {
             console.error('You must name your new library: init(token, config, name)')
             return
@@ -317,7 +318,7 @@ export class PostHog {
     // method is this one initializes the actual instance, whereas the
     // init(...) method sets up a new library and calls _init on it.
     //
-    _init(token: string, config: Partial<PostHogConfig>, name: string): void {
+    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): void {
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
@@ -1571,8 +1572,8 @@ export class PostHog {
         this._gdpr_update_persistence(_options)
     }
 
-    debug(debug: boolean): void {
-        if (!debug) {
+    debug(debug?: boolean): void {
+        if (debug === false) {
             window.console.log("You've disabled debug mode.")
             localStorage && localStorage.removeItem('ph_debug')
             this.set_config({ debug: false })
