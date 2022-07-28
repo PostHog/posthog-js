@@ -1,3 +1,8 @@
+## 1.26.1 - 2022-07-28
+
+- fix(storage): Fix cross subdomain cookies for localpluscookie (#429)
+- fix: Testcafe using Posthog cloud (#428)
+
 ## 1.26.0 - 2022-07-19
 
 - fix: dont set initial referrer (#426)
