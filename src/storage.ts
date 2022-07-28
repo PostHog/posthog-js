@@ -175,21 +175,21 @@ export const localPlusCookieStore: PersistentStore = {
         return null
     },
 
-    set: function (name, value) {
+    set: function (name, value, days, cross_subdomain, is_secure) {
         try {
             localStore.set(name, value)
             if (value.distinct_id) {
-                cookieStore.set(name, { distinct_id: value.distinct_id })
+                cookieStore.set(name, { distinct_id: value.distinct_id }, days, cross_subdomain, is_secure)
             }
         } catch (err) {
             localStore.error(err)
         }
     },
 
-    remove: function (name) {
+    remove: function (name, cross_subdomain) {
         try {
             window.localStorage.removeItem(name)
-            cookieStore.remove(name)
+            cookieStore.remove(name, cross_subdomain)
         } catch (err) {
             localStore.error(err)
         }
