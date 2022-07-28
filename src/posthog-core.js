@@ -941,6 +941,7 @@ PostHogLib.prototype.group = function (groupType, groupKey, groupPropertiesToSet
 PostHogLib.prototype.reset = function (reset_device_id) {
     let device_id = this.get_property('$device_id')
     this['persistence'].clear()
+    this.sessionManager.resetSessionId()
     const uuid = this.get_config('get_device_id')(_.UUID())
     this.register_once(
         {

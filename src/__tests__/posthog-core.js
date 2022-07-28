@@ -681,8 +681,12 @@ describe('init()', () => {
     describe('device id behavior', () => {
         const uuid = '1811a3ce5b0363-0052debf84392a-3a50387c-0-1811a3ce5b1ad2'
 
+        let spy
         beforeEach(() => {
-            jest.spyOn(_, 'UUID').mockReturnValue(uuid)
+            spy = jest.spyOn(_, 'UUID').mockReturnValue(uuid)
+        })
+        afterEach(() => {
+            spy.mockRestore()
         })
 
         it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
@@ -928,5 +932,38 @@ describe('_loaded()', () => {
         expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
         expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
         expect(given.overrides.featureFlags.resetRequestQueue).toHaveBeenCalled()
+    })
+})
+
+describe('reset()', () => {
+    given('subject', () => () => given.lib.reset())
+
+    given('config', () => ({
+        api_host: 'https://test.com',
+        token: 'testtoken',
+        persistence: 'localStorage',
+    }))
+
+    given('overrides', () => ({
+        persistence: new PostHogPersistence(given.config),
+    }))
+
+    beforeEach(() => {
+        given.lib._init('testtoken', given.config, 'testhog')
+    })
+
+    it('clears persistence', () => {
+        given.lib.persistence.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
+        expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
+        given.subject()
+        expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual(undefined)
+    })
+
+    it('resets the session_id and window_id', () => {
+        const initialSessionAndWindowId = given.lib.sessionManager.checkAndGetSessionAndWindowId()
+        given.subject()
+        const nextSessionAndWindowId = given.lib.sessionManager.checkAndGetSessionAndWindowId()
+        expect(initialSessionAndWindowId.sessionId).not.toEqual(nextSessionAndWindowId.sessionId)
+        expect(initialSessionAndWindowId.windowId).not.toEqual(nextSessionAndWindowId.windowId)
     })
 })
