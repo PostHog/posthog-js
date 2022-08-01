@@ -55,6 +55,16 @@ describe('persistence', () => {
         expect(document.cookie).toEqual('')
     })
 
+    it(`should register once LS`, () => {
+        let lib = new PostHogPersistence({ name: 'test', persistence: 'localStorage+cookie' })
+        lib.register_once({ distinct_id: 'hi', test_prop: 'test_val' })
+
+        let lib2 = new PostHogPersistence({ name: 'test', persistence: 'localStorage+cookie' })
+        expect(lib2.props).toEqual({ distinct_id: 'hi', test_prop: 'test_val' })
+        lib.clear()
+        lib2.clear()
+    })
+
     forPersistenceTypes(function (persistenceType) {
         it(`should register once`, () => {
             let lib = new PostHogPersistence({ name: 'test', persistence: persistenceType })

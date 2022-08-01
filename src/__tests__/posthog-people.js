@@ -1,12 +1,12 @@
-import { PostHogLib } from '../posthog-core'
+import { PostHog } from '../posthog-core'
 import { PostHogPeople } from '../posthog-people'
 
+given('lib', () => Object.assign(new PostHog(), given.overrides))
 given('people', () =>
-    Object.assign(new PostHogPeople(), {
+    Object.assign(new PostHogPeople(given.lib), {
         _send_request: jest.fn(),
     })
 )
-given('lib', () => Object.assign(new PostHogLib(), given.overrides))
 
 given('overrides', () => ({
     get_config: () => ({}),
@@ -18,10 +18,6 @@ given('overrides', () => ({
 }))
 
 describe('posthog.people', () => {
-    beforeEach(() => {
-        given.people._init(given.lib)
-    })
-
     it('should process set correctly', () => {
         given.people.set({ set_me: 'set me' })
         expect(given.people._send_request).toHaveBeenCalledWith(

@@ -1,22 +1,23 @@
-import { init_as_module, PostHogLib } from '../posthog-core'
+import { init_as_module, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
-import { _ } from '../utils'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
+import { _info } from '../utils'
+import { truth } from './helpers/truth'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
-    addOptOutCheckPostHogLib: (fn) => fn,
-    addOptOutCheckPostHogPeople: (fn) => fn,
+    addOptOutCheck: (fn) => fn,
 }))
 jest.mock('../decide')
 
-given('lib', () => Object.assign(new PostHogLib(), given.overrides))
+given('lib', () => Object.assign(new PostHog(), given.overrides))
 
 describe('identify()', () => {
-    given('subject', () => () =>
-        given.lib.identify(given.identity, given.userPropertiesToSet, given.userPropertiesToSetOnce)
+    given(
+        'subject',
+        () => () => given.lib.identify(given.identity, given.userPropertiesToSet, given.userPropertiesToSetOnce)
     )
 
     given('identity', () => 'a-new-id')
@@ -62,8 +63,7 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: {} },
-            { $set_once: {} }
+            { $set: {}, $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
@@ -80,8 +80,7 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: {} },
-            { $set_once: {} }
+            { $set: {}, $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
@@ -109,8 +108,7 @@ describe('identify()', () => {
                 distinct_id: 'a-new-id',
                 $anon_distinct_id: 'oldIdentity',
             },
-            { $set: { email: 'john@example.com' } },
-            { $set_once: { howOftenAmISet: 'once!' } }
+            { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } }
         )
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
@@ -185,8 +183,9 @@ describe('identify()', () => {
 describe('capture()', () => {
     given('eventName', () => '$event')
 
-    given('subject', () => () =>
-        given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
+    given(
+        'subject',
+        () => () => given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
     )
 
     given('config', () => ({
@@ -449,7 +448,7 @@ describe('_calculate_event_properties()', () => {
     given('property_blacklist', () => [])
 
     beforeEach(() => {
-        jest.spyOn(_.info, 'properties').mockReturnValue({ $lib: 'web' })
+        jest.spyOn(_info, 'properties').mockReturnValue({ $lib: 'web' })
     })
 
     it('returns calculated properties', () => {
@@ -563,7 +562,7 @@ describe('_handle_unload()', () => {
         it('captures $pageleave', () => {
             given.subject()
 
-            expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendbeacon' })
+            expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
         })
 
         it('does not capture $pageleave when capture_pageview=false', () => {
@@ -577,8 +576,9 @@ describe('_handle_unload()', () => {
 })
 
 describe('__compress_and_send_json_request', () => {
-    given('subject', () => () =>
-        given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
+    given(
+        'subject',
+        () => () => given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
     )
 
     given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
@@ -661,7 +661,7 @@ describe('init()', () => {
         jest.spyOn(given.lib.persistence, 'register').mockImplementation()
 
         // Autocapture
-        expect(given.lib['__autocapture_enabled']).toEqual(undefined)
+        expect(given.lib.__autocapture_enabled).toEqual(undefined)
         expect(autocapture.init).not.toHaveBeenCalled()
         expect(autocapture.afterDecideResponse).not.toHaveBeenCalled()
 
@@ -679,16 +679,6 @@ describe('init()', () => {
     })
 
     describe('device id behavior', () => {
-        const uuid = '1811a3ce5b0363-0052debf84392a-3a50387c-0-1811a3ce5b1ad2'
-
-        let spy
-        beforeEach(() => {
-            spy = jest.spyOn(_, 'UUID').mockReturnValue(uuid)
-        })
-        afterEach(() => {
-            spy.mockRestore()
-        })
-
         it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
             given('distinct_id', () => undefined)
 
@@ -696,8 +686,8 @@ describe('init()', () => {
 
             expect(given.lib.register_once).toHaveBeenCalledWith(
                 {
-                    $device_id: uuid,
-                    distinct_id: uuid,
+                    $device_id: truth((val) => val.match(/^[0-9a-f\-]+$/)),
+                    distinct_id: truth((val) => val.match(/^[0-9a-f\-]+$/)),
                 },
                 ''
             )
@@ -721,8 +711,8 @@ describe('init()', () => {
 
             expect(given.lib.register_once).toHaveBeenCalledWith(
                 {
-                    $device_id: 'custom-1811a3ce',
-                    distinct_id: 'custom-1811a3ce',
+                    $device_id: truth((val) => val.match(/^custom\-[0-9a-f]+/)),
+                    distinct_id: truth((val) => val.match(/^custom\-[0-9a-f]+/)),
                 },
                 ''
             )
@@ -817,7 +807,7 @@ describe('group()', () => {
 
             expect(given.captureQueue).toHaveBeenCalledTimes(1)
 
-            const [_endpoint, eventPayload] = given.captureQueue.mock.calls[0]
+            const [, eventPayload] = given.captureQueue.mock.calls[0]
             expect(eventPayload.event).toEqual('some_event')
             expect(eventPayload.properties.$groups).toEqual({
                 organization: 'org::5',

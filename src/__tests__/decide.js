@@ -1,6 +1,6 @@
 import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
-import { _ } from '../utils'
+import { _base64Encode } from '../utils'
 
 describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))
@@ -49,7 +49,7 @@ describe('Decide', () => {
             expect(given.posthog._send_request).toHaveBeenCalledWith(
                 'https://test.com/decide/?v=2',
                 {
-                    data: _.base64Encode(
+                    data: _base64Encode(
                         JSON.stringify({
                             token: 'testtoken',
                             distinct_id: 'distinctid',

@@ -1,4 +1,4 @@
-import { sessionStore } from '../storage'
+import { resetSessionStorageSupported, sessionStore } from '../storage'
 
 describe('sessionStore', () => {
     it('stores objects as strings', () => {
@@ -29,7 +29,8 @@ describe('sessionStore', () => {
     describe('sessionStore.is_supported', () => {
         beforeEach(() => {
             // Reset the sessionStorageSupported before each test. Otherwise, we'd just be testing the cached value.
-            sessionStore.sessionStorageSupported = null
+            // eslint-disable-next-line no-unused-vars
+            resetSessionStorageSupported()
         })
         it('returns false if sessionStorage is undefined', () => {
             const sessionStorage = global.window.sessionStorage

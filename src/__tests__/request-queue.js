@@ -76,12 +76,12 @@ describe('RequestQueue', () => {
                 { event: 'foo', timestamp: 1_610_000_000 },
                 { event: 'bar', timestamp: 1_630_000_000 },
             ],
-            { transport: 'sendbeacon' }
+            { transport: 'sendBeacon' }
         )
         expect(given.handlePollRequest).toHaveBeenCalledWith(
             '/identify',
             [{ event: '$identify', timestamp: 1_620_000_000 }],
-            { transport: 'sendbeacon' }
+            { transport: 'sendBeacon' }
         )
     })
 
@@ -100,16 +100,16 @@ describe('RequestQueue', () => {
                 { event: 'foo', timestamp: 1_610_000_000 },
                 { event: 'bar', timestamp: 1_630_000_000 },
             ],
-            { transport: 'sendbeacon' }
+            { transport: 'sendBeacon' }
         )
         expect(given.handlePollRequest).toHaveBeenCalledWith(
             '/identify',
             [{ event: '$identify', timestamp: 1_620_000_000 }],
-            { transport: 'sendbeacon' }
+            { transport: 'sendBeacon' }
         )
         expect(given.handlePollRequest).toHaveBeenCalledWith('/e', [{ event: 'zeta', timestamp: 1_640_000_000 }], {
             _batchKey: 'sessionRecording',
-            transport: 'sendbeacon',
+            transport: 'sendBeacon',
         })
     })
 })
