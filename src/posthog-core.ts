@@ -641,6 +641,7 @@ export class PostHog {
      * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
      * @param {Object} [options] Optional configuration for this capture request.
      * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
+     * @param {Date} [options.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
     capture(
         event_name: string,
@@ -703,6 +704,8 @@ export class PostHog {
             data,
             options._noTruncate ? null : this.get_config('properties_string_max_length')
         )
+        data.timestamp = options.timestamp || new Date()
+
         if (this.get_config('debug')) {
             logger.log('PostHog.js send', data)
         }
@@ -717,7 +720,6 @@ export class PostHog {
             (!has_unique_traits || options._batchKey) &&
             !options.send_instantly
         ) {
-            data['timestamp'] = new Date()
             this._requestQueue.enqueue(url, data, options)
         } else {
             this.__compress_and_send_json_request(url, jsonData, options)

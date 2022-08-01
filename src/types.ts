@@ -118,6 +118,7 @@ export interface CaptureOptions extends XHROptions {
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     endpoint?: string /** defaults to '/e/' */
     send_instantly?: boolean /** if set skips the batched queue */
+    timestamp?: Date
 }
 
 export interface RetryQueueElement {
