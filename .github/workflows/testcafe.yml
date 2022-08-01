@@ -3,82 +3,30 @@ on: [pull_request]
 env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
   BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
-  SECRET_KEY: 'abcdef' # unsafe - for testing only
-  DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/test_posthog'
-  REDIS_URL: 'redis://localhost'
-  TEST: 'true'
+  POSTHOG_PROJECT_KEY: "${{ secrets.POSTHOG_PROJECT_KEY }}"
+  POSTHOG_API_KEY: "${{ secrets.POSTHOG_API_KEY }}"
   BROWSERSTACK_DEBUG: 'true'
   BROWSERSTACK_NETWORK_LOGS: 'true'
   BROWSERSTACK_CONSOLE: 'info'
-  PLUGIN_SERVER_INGESTION: 'true'
-  DISABLE_MMDB: 'true'
 
 jobs:
   browsers:
     name: Test on Chrome, IE11, and Safari
     runs-on: ubuntu-latest
-    services:
-        postgres:
-            image: postgres:12
-            env:
-                POSTGRES_USER: posthog
-                POSTGRES_PASSWORD: posthog
-                POSTGRES_DB: test_posthog
-            ports: ['5432:5432']
-            options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-        redis:
-            image: redis
-            ports:
-                - '6379:6379'
-            options: >-
-                --health-cmd "redis-cli ping"
-                --health-interval 10s
-                --health-timeout 5s
-                --health-retries 5
-
     steps:
-      - name: Check out posthog-js server
+      - name: Check out posthog-js
         uses: actions/checkout@v2
-
-      - name: Check out Django server for database setup
-        uses: actions/checkout@v2
-        with:
-            repository: 'PostHog/posthog'
-            path: 'posthog/'
-            ref: server-debugging
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-            python-version: 3.9.0
 
       - name: Set up Node 14
         uses: actions/setup-node@v2
         with:
             node-version: 14
 
-      - name: Install requirements.txt dependencies with pip
-        run: python -m pip install --upgrade pip && python -m pip install -r posthog/requirements.txt && python -m pip install freezegun fakeredis pytest pytest-mock pytest-django
-
-      - name: Set up databases
-        env:
-            DATABASE_URL: 'postgres://posthog:posthog@localhost:5432/posthog' # override for setup_test_environment command
-        run: cd posthog && python manage.py setup_test_environment
-
       - name: Serve static files
         run: python -m http.server 8080 &
 
       - name: Set up posthog-js
-        run: yarn; yarn build-array; mkdir -p posthog/frontend/dist; cp dist/array.js posthog/frontend/dist; python posthog/manage.py collectstatic --noinput
-
-      - name: Start server
-        run: |
-          cd posthog
-          python manage.py setup_dev --no-data
-          ./bin/docker-migrate
-          ./bin/plugin-server &> plugin_logs &
-          ./bin/docker-worker-celery --with-scheduler &> worker_logs &
-          ./bin/docker-server &> server_logs &
+        run: yarn && yarn build-array
 
       - name: Run chrome test
         run: npx testcafe "browserstack:chrome" testcafe/*.spec.js
@@ -88,13 +36,3 @@ jobs:
 
       - name: Run safari test
         run: npx testcafe "browserstack:safari" testcafe/*.spec.js
-
-      - name: PostHog plugin server logs
-        if: ${{ failure() }}
-        run: cat posthog/plugin_logs
-      - name: PostHog worker logs
-        if: ${{ failure() }}
-        run: cat posthog/worker_logs
-      - name: PostHog server logs
-        if: ${{ failure() }}
-        run: cat posthog/server_logs

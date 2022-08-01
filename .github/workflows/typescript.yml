@@ -14,10 +14,10 @@ jobs:
       # Install Node.js
       - uses: actions/setup-node@v1
         with:
-          node-version: 12
+          node-version: 14
 
       # Install your dependencies
       - run: yarn install
 
       # Run test
-      - run: yarn process-types
+      - run: tsc -b

@@ -23,7 +23,6 @@
             "encodedBodySize": 33389,
             "decodedBodySize": 33389,
             "serverTiming": [],
-            "workerTiming": [],
             "unloadEventStart": 158.59999999962747,
             "unloadEventEnd": 164.7999999988824,
             "domInteractive": 346.5,
@@ -73,8 +72,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/index.js?t=1641815759815",
@@ -98,8 +96,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-AY3NAZV7.js",
@@ -123,8 +120,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-POEQBYGC.js",
@@ -148,8 +144,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-5MMMF5K7.js",
@@ -173,8 +168,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-J2TGAWJU.js",
@@ -198,8 +192,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-7NTDJFAM.js",
@@ -223,8 +216,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-D2PC36HL.js",
@@ -248,8 +240,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-FTEHHU22.js",
@@ -273,8 +264,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-B553LOK6.js",
@@ -298,8 +288,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-RO72DXQT.js",
@@ -323,8 +312,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-OZGU6W75.js",
@@ -348,8 +336,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-BCJ5ME6N.js",
@@ -373,8 +360,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-OERFKC5A.js",
@@ -398,8 +384,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-44CU33BR.js",
@@ -423,8 +408,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-KS2HBMFU.js",
@@ -448,8 +432,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-TYHZ5PTA.js",
@@ -473,8 +456,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-NWF2CI6D.js",
@@ -498,8 +480,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-ZGYVZREU.js",
@@ -523,8 +504,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-25I7H6F3.js",
@@ -548,8 +528,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-B44YU6DR.js",
@@ -573,8 +552,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-EOM6WIAG.js",
@@ -598,8 +576,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-NFTHIW2M.js",
@@ -623,8 +600,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-HD7T4UST.js",
@@ -648,8 +624,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-7NIE3UX6.js",
@@ -673,8 +648,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-XPGE43VJ.js",
@@ -698,8 +672,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-L4IYGZIG.js",
@@ -723,8 +696,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-IGTMCF24.js",
@@ -748,8 +720,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-AMOE3OJU.js",
@@ -773,8 +744,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-BO4VDBQ6.js",
@@ -798,8 +768,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-QE52CDVG.js",
@@ -823,8 +792,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-VHSG55N2.js",
@@ -848,8 +816,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-4ZUV5LND.js",
@@ -873,8 +840,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-ASGLZXIV.js",
@@ -898,8 +864,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-LD3TGMGW.js",
@@ -923,8 +888,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-HGNVPWDY.js",
@@ -948,8 +912,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-PRPBRI2E.js",
@@ -973,8 +936,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-YBU6RJ5N.js",
@@ -998,8 +960,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-CA6FFFUC.js",
@@ -1023,8 +984,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-HB4RLT5O.js",
@@ -1048,8 +1008,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-UJJIEZBP.js",
@@ -1073,8 +1032,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-KXP7VI6L.js",
@@ -1098,8 +1056,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-OHMX2FMJ.js",
@@ -1123,8 +1080,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-ATKSJCQX.js",
@@ -1148,8 +1104,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-ISW4ZVZ7.js",
@@ -1173,8 +1128,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-QKTKI7A4.js",
@@ -1198,8 +1152,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-R7YV2WET.js",
@@ -1223,8 +1176,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-VJGIAYQC.js",
@@ -1248,8 +1200,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/toolbar.js?_ts=1641815977354",
@@ -1273,8 +1224,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/static/recorder.js?v=1.17.0",
@@ -1298,8 +1248,7 @@
             "transferSize": 102429,
             "encodedBodySize": 102129,
             "decodedBodySize": 102129,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/e/?ip=1&_=1641815977365",
@@ -1323,8 +1272,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/decide/?v=2&ip=1&_=1641815977367",
@@ -1348,8 +1296,7 @@
             "transferSize": 624,
             "encodedBodySize": 324,
             "decodedBodySize": 324,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/engage/?ip=1&_=1641815977381",
@@ -1373,8 +1320,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-SITTFVSN.js",
@@ -1398,8 +1344,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-L2MXDD5E.js",
@@ -1423,8 +1368,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/PerformanceWaterfall-NDELUB25.js",
@@ -1448,8 +1392,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/actions/",
@@ -1473,8 +1416,7 @@
             "transferSize": 989,
             "encodedBodySize": 689,
             "decodedBodySize": 689,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/annotations/?scope=organization&deleted=false",
@@ -1498,8 +1440,7 @@
             "transferSize": 352,
             "encodedBodySize": 52,
             "decodedBodySize": 52,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/cohorts?limit=600",
@@ -1523,8 +1464,7 @@
             "transferSize": 352,
             "encodedBodySize": 52,
             "decodedBodySize": 52,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/event_definitions/?limit=5000",
@@ -1548,8 +1488,7 @@
             "transferSize": 5736,
             "encodedBodySize": 5436,
             "decodedBodySize": 5436,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/person/properties/",
@@ -1573,8 +1512,7 @@
             "transferSize": 1702,
             "encodedBodySize": 1402,
             "decodedBodySize": 1402,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/@current/property_definitions/?limit=5000",
@@ -1598,8 +1536,7 @@
             "transferSize": 37230,
             "encodedBodySize": 36930,
             "decodedBodySize": 36930,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/instance_status/",
@@ -1623,8 +1560,7 @@
             "transferSize": 24084,
             "encodedBodySize": 23784,
             "decodedBodySize": 23784,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "https://update.posthog.com/",
@@ -1648,8 +1584,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/personal_api_keys/",
@@ -1673,8 +1608,7 @@
             "transferSize": 302,
             "encodedBodySize": 2,
             "decodedBodySize": 2,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/license/",
@@ -1698,8 +1632,7 @@
             "transferSize": 352,
             "encodedBodySize": 52,
             "decodedBodySize": 52,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "https://www.gravatar.com/avatar/2e7d95b60efbe947f71009a1af1ba8d0?s=96&d=404",
@@ -1723,8 +1656,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/dashboards/",
@@ -1748,8 +1680,7 @@
             "transferSize": 593,
             "encodedBodySize": 293,
             "decodedBodySize": 293,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/events?properties=%5B%7B%22key%22%3A%22%24performance_pageLoaded%22%2C%22value%22%3A%220%22%2C%22operator%22%3A%22gt%22%2C%22type%22%3A%22event%22%7D%2C%7B%22key%22%3A%22%24performance_raw%22%2C%22value%22%3A%22is_set%22%2C%22operator%22%3A%22is_set%22%2C%22type%22%3A%22event%22%7D%5D&limit=10",
@@ -1773,8 +1704,7 @@
             "transferSize": 636114,
             "encodedBodySize": 635814,
             "decodedBodySize": 635814,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "https://app.posthog.com/e/?ip=1&_=1641815977640&v=0.0.3",
@@ -1798,8 +1728,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "https://app.posthog.com/e/?ip=1&_=1641815977642&v=0.0.3",
@@ -1823,8 +1752,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/@current/feature_flags/my_flags?groups=%7B%22project%22%3A%22017dde0e-17bf-0000-b67f-e0a7b99463b2%22%2C%22organization%22%3A%22017dde0e-1268-0000-c020-25c8dbb92363%22%2C%22instance%22%3A%22http%3A%2F%2Flocalhost%3A8000%22%7D&temporary_token=udvetBiDQnR0nIdLfoKKLrmI7gmp8JE9hbox_GmMR_E",
@@ -1848,8 +1776,7 @@
             "transferSize": 1335,
             "encodedBodySize": 1035,
             "decodedBodySize": 1035,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/toolbar.css",
@@ -1873,8 +1800,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/static/icons/favicon-dev.ico?v=2021-04-29",
@@ -1898,8 +1824,7 @@
             "transferSize": 15386,
             "encodedBodySize": 15086,
             "decodedBodySize": 15086,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/static/site.webmanifest?v=2021-04-29",
@@ -1923,8 +1848,7 @@
             "transferSize": 763,
             "encodedBodySize": 463,
             "decodedBodySize": 463,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/e/?compression=gzip-js&ip=1&_=1641816000187",
@@ -1948,8 +1872,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816000238",
@@ -1973,8 +1896,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816003252",
@@ -1998,8 +1920,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816006256",
@@ -2023,8 +1944,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816009260",
@@ -2048,8 +1968,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816012263",
@@ -2073,8 +1992,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816015572",
@@ -2098,8 +2016,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/e/?compression=gzip-js&ip=1&_=1641816015575",
@@ -2123,8 +2040,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816018579",
@@ -2148,8 +2064,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/e/?compression=gzip-js&ip=1&_=1641816018581",
@@ -2173,8 +2088,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816021584",
@@ -2198,8 +2112,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816024589",
@@ -2223,8 +2136,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-ZHOMOT2E.js",
@@ -2248,8 +2160,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-OND56O4O.js",
@@ -2273,8 +2184,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-3E33M7NK.js",
@@ -2298,8 +2208,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-5XUXO2RL.js",
@@ -2323,8 +2232,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-MVREFCB3.js",
@@ -2348,8 +2256,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-47WS27E3.js",
@@ -2373,8 +2280,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-IQO5VIH2.js",
@@ -2398,8 +2304,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-3YPBT5ZQ.js",
@@ -2423,8 +2328,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-WS6M3XB7.js",
@@ -2448,8 +2352,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-QSIUQGNX.js",
@@ -2473,8 +2376,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-MOZ4JDJV.js",
@@ -2498,8 +2400,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-MA4VJZ3Y.js",
@@ -2523,8 +2424,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-A6ITTNS6.js",
@@ -2548,8 +2448,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-VYWNZTTM.js",
@@ -2573,8 +2472,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-VD4W2OO5.js",
@@ -2598,8 +2496,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-G25ZPRPF.js",
@@ -2623,8 +2520,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-ZCRZKRW7.js",
@@ -2648,8 +2544,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-TVLQRI4Q.js",
@@ -2673,8 +2568,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-V3ODM6NX.js",
@@ -2698,8 +2592,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/chunk-KLE2BWM4.js",
@@ -2723,8 +2616,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/Events-XJHSU6TX.js",
@@ -2748,8 +2640,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/events/?properties=%5B%5D&orderBy=%5B%22-timestamp%22%5D&after=2021-01-10T12%3A00%3A25.853Z",
@@ -2773,8 +2664,7 @@
             "transferSize": 1221408,
             "encodedBodySize": 1221108,
             "decodedBodySize": 1221108,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/events/?properties=%5B%5D&orderBy=%5B%22-timestamp%22%5D&after=2021-01-10T12%3A00%3A25.853Z",
@@ -2798,8 +2688,7 @@
             "transferSize": 1221408,
             "encodedBodySize": 1221108,
             "decodedBodySize": 1221108,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/events/?properties=%5B%5D&orderBy=%5B%22-timestamp%22%5D&after=2021-01-10T12%3A00%3A25.853Z",
@@ -2823,8 +2712,7 @@
             "transferSize": 1221408,
             "encodedBodySize": 1221108,
             "decodedBodySize": 1221108,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://localhost:8234/static/assets/posthog-icon-FDVNZJ5Z.svg",
@@ -2848,8 +2736,7 @@
             "transferSize": 0,
             "encodedBodySize": 0,
             "decodedBodySize": 0,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/s/?compression=gzip-js&ip=1&_=1641816027596",
@@ -2873,8 +2760,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/e/?compression=gzip-js&ip=1&_=1641816027601",
@@ -2898,8 +2784,7 @@
             "transferSize": 313,
             "encodedBodySize": 13,
             "decodedBodySize": 13,
-            "serverTiming": [],
-            "workerTiming": []
+            "serverTiming": []
         },
         {
             "name": "http://127.0.0.1:8000/api/projects/1/property_definitions?search=&limit=100&offset=0",

@@ -1,6 +1,8 @@
 {
     "compilerOptions": {
-        "target": "es2015",
+        "baseUrl": "./src",
+        "outDir": "./lib",
+        "target": "ES5",
         "lib": ["dom", "dom.iterable", "esnext"],
         "allowJs": true,
         "checkJs": true,
@@ -16,7 +18,9 @@
         "noUnusedParameters": true,
         "sourceMap": true,
         "inlineSources": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "downlevelIteration": true,
+        "declaration": true
     },
     "include": ["src/*.ts"]
 }

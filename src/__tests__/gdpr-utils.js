@@ -480,7 +480,7 @@ describe(`GDPR utils`, () => {
                 get_config: getConfig,
                 capture: undefined,
             }
-            postHogLib.capture = gdpr.addOptOutCheckPostHogLib(capture, silenceErrors).bind(postHogLib)
+            postHogLib.capture = gdpr.addOptOutCheck(postHogLib, capture, silenceErrors)
         }
 
         forPersistenceTypes(function (persistenceType) {
@@ -578,11 +578,14 @@ describe(`GDPR utils`, () => {
             it(`should call the wrapped method if config is undefined`, () => {
                 TOKENS.forEach((token) => {
                     setupMocks(() => undefined, false)
+                    console.error = jest.fn()
 
                     gdpr.optIn(token, { persistenceType })
                     postHogLib.capture(captureEventName, captureProperties)
 
                     expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
+                    // :KLUDGE: Exact error message may vary between runtimes
+                    expect(console.error).toHaveBeenCalled()
                 })
             })
 
@@ -616,7 +619,7 @@ describe(`GDPR utils`, () => {
     describe(`addOptOutCheckPostHogPeople`, () => {
         const setPropertyName = '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞'
         const setPropertyValue = `𝓿𝓪𝓵𝓾𝓮`
-        let getConfig, set, postHogPeople
+        let getConfig, set, postHogPeople, postHogLib
 
         function setupMocks(getConfigFunc, silenceErrors = false) {
             getConfig = sinon.spy((name) => getConfigFunc()[name])
@@ -625,7 +628,10 @@ describe(`GDPR utils`, () => {
                 _get_config: getConfig,
                 set: undefined,
             }
-            postHogPeople.set = gdpr.addOptOutCheckPostHogPeople(set, silenceErrors).bind(postHogPeople)
+            postHogLib = {
+                get_config: getConfig,
+            }
+            postHogPeople.set = gdpr.addOptOutCheck(postHogLib, set, silenceErrors)
         }
 
         forPersistenceTypes(function (persistenceType) {

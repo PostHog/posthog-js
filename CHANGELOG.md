@@ -1,3 +1,63 @@
+## 1.27.0 - 2022-08-01
+
+- refactor: Dummy commit to trigger release (#431)
+- chore(typescript): convert library to typescript (#425)
+
+## 1.26.2 - 2022-07-28
+
+- fix(session-id): reset session_id on reset() call (#430)
+
+## 1.26.1 - 2022-07-28
+
+- fix(storage): Fix cross subdomain cookies for localpluscookie (#429)
+- fix: Testcafe using Posthog cloud (#428)
+
+## 1.26.0 - 2022-07-19
+
+- fix: dont set initial referrer (#426)
+
+## 1.25.2 - 2022-07-12
+
+- feat: Add msclkid param to campaign keywords (#424)
+- chore(deps): Update @sentry/types for 7.2.0 (#412)
+
+## 1.25.1 - 2022-06-29
+
+- fix: Add facebook crawlers to blocked user agents (#417)
+
+## 1.25.0 - 2022-06-28
+
+- feat(feature-flags): Enable experience continuity (#404)
+- chore: Update changelog for 1.24.0 (#411)
+
+## 1.24.0 - 2022-06-01
+
+- feat: Limit session recordings to 24 hours (#405)
+    - a new recording is immediately started and no data is lost 
+
+## 1.23.0 - 2022-06-01
+
+- feat: Allow overriding device id generation (#401)
+- Fix this.get_config undefined error (#397)
+
+## 1.22.0 - 2022-05-31
+
+- feat: add support to `fbclid` campaign parameter (#400)
+
+## 1.21.1 - 2022-05-13
+
+- chore(build): bumping to make release (#396)
+- chore(dep): update rrweb to 1.1.3 (#395)
+
+## 1.21.0 - 2022-05-11
+
+- fix(recordings): mask all input fields for recordings (#388)
+
+## 1.20.5 - 2022-05-10
+
+- feat: add recording url to sentry integration (#371)
+- fix(config): Case-insensitive persistence (#389)
+
 ## 1.20.4 - 2022-04-15
 
 - fix(console-logs): handle undefined and null log (#385)

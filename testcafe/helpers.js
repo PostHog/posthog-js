@@ -3,7 +3,13 @@ import path from 'path'
 import { RequestLogger, RequestMock, ClientFunction } from 'testcafe'
 import fetch from 'node-fetch'
 
-const HEADERS = { Authorization: 'Bearer e2e_demo_api_key' }
+// NOTE: These tests are run against a dedicated test project in PostHog cloud
+// but can be overridden to call a local API when running locally
+const { POSTHOG_API_KEY } = process.env
+const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST || 'https://app.posthog.com'
+const POSTHOG_API_PROJECT = process.env.POSTHOG_API_PROJECT || '11213'
+
+const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
 export const captureLogger = RequestLogger(/ip=1/, {
     logRequestHeaders: true,
@@ -26,12 +32,22 @@ export const staticFilesMock = RequestMock()
         res.setBody(html)
     })
 
-export const initPosthog = ClientFunction((configParams = {}) => {
-    if (!('api_host' in configParams)) {
-        configParams['api_host'] = 'http://localhost:8000'
-    }
-    window.posthog.init('e2e_token_1239', configParams)
-})
+export const initPosthog = (config) => {
+    return ClientFunction((configParams = {}) => {
+        var testSessionId = Math.round(Math.random() * 10000000000).toString()
+        configParams.debug = true
+        window.posthog.init(configParams.api_key, configParams)
+        window.posthog.register({
+            testSessionId,
+        })
+
+        return testSessionId
+    })({
+        ...config,
+        api_host: process.env.POSTHOG_API_HOST || 'https://app.posthog.com',
+        api_key: process.env.POSTHOG_PROJECT_KEY,
+    })
+}
 
 export async function retryUntilResults(operation, target_results, limit = 100) {
     const attempt = (count, resolve, reject) => {
@@ -51,15 +67,19 @@ export async function retryUntilResults(operation, target_results, limit = 100) 
     return new Promise((...args) => attempt(0, ...args))
 }
 
-export async function queryAPI() {
-    const response = await fetch('http://localhost:8000/api/event', {
+export async function queryAPI(testSessionId) {
+    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]`
+    const response = await fetch(url, {
         headers: HEADERS,
     })
 
-    const { results } = JSON.parse(await response.text())
-    return results
-}
+    const data = await response.text()
 
-export async function clearEvents() {
-    await fetch('http://localhost:8000/delete_events/', { headers: HEADERS })
+    if (!response.ok) {
+        console.error("Bad Response", response.status, data)
+        throw new Error("Bad Response")
+    }
+
+    const { results } = JSON.parse(data)
+    return results
 }

@@ -5,7 +5,11 @@ import {
     MUTATION_SOURCE_TYPE,
     SessionRecording,
 } from '../../extensions/sessionrecording'
-import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
+import { PostHogPersistence, SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
+import { SessionIdManager } from '../../sessionid'
+
+// Type and source defined here designate a non-user-generated recording event
+const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
 
 jest.mock('../../autocapture-utils')
 jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
@@ -16,15 +20,16 @@ describe('SessionRecording', () => {
     given('sessionRecording', () => new SessionRecording(given.posthog))
     given('incomingSessionAndWindowId', () => ({ sessionId: 'sessionId', windowId: 'windowId' }))
 
+    given('sessionManager', () => ({
+        checkAndGetSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
+    }))
     given('posthog', () => ({
         get_property: () => given.$session_recording_enabled_server_side,
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
         _captureMetrics: { incr: jest.fn() },
-        sessionManager: {
-            getSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
-        },
+        sessionManager: given.sessionManager,
         _addCaptureHook: jest.fn(),
     }))
 
@@ -34,10 +39,11 @@ describe('SessionRecording', () => {
         enable_recording_console_log: given.enable_recording_console_log,
         autocapture: false, // Assert that session recording works even if `autocapture = false`
         session_recording: {
-            maskAllInputs: true,
+            maskAllInputs: false,
             recordCanvas: true,
             someUnregisteredProp: 'abc',
         },
+        persistence: 'memory',
     }))
     given('$session_recording_enabled_server_side', () => true)
     given('disabled', () => false)
@@ -152,12 +158,12 @@ describe('SessionRecording', () => {
             // someUnregisteredProp should not be present
             expect(window.rrwebRecord).toHaveBeenCalledWith({
                 emit: expect.anything(),
-                maskAllInputs: true,
+                maskAllInputs: false,
                 blockClass: 'ph-no-capture',
-                blockSelector: null,
+                blockSelector: undefined,
                 ignoreClass: 'ph-ignore-input',
                 maskInputOptions: {},
-                maskInputFn: null,
+                maskInputFn: undefined,
                 slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],
@@ -187,7 +193,6 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
-                    _forceCompression: true,
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                     _metrics: expect.anything(),
@@ -204,7 +209,6 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     transport: 'XHR',
                     endpoint: '/e/',
-                    _forceCompression: true,
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
                     _metrics: expect.anything(),
@@ -239,32 +243,32 @@ describe('SessionRecording', () => {
         })
 
         it('session recording can be turned on and off', () => {
-            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.stopRrweb).toEqual(undefined)
 
             given.sessionRecording.startRecordingIfEnabled()
 
             expect(given.sessionRecording.started()).toEqual(true)
             expect(given.sessionRecording.captureStarted).toEqual(true)
-            expect(given.sessionRecording.stopRrweb).not.toEqual(null)
+            expect(given.sessionRecording.stopRrweb).not.toEqual(undefined)
 
             given.sessionRecording.stopRecording()
 
-            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.stopRrweb).toEqual(undefined)
             expect(given.sessionRecording.captureStarted).toEqual(false)
         })
 
         it('session recording can be turned on after being turned off', () => {
-            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.stopRrweb).toEqual(undefined)
 
             given.sessionRecording.startRecordingIfEnabled()
 
             expect(given.sessionRecording.started()).toEqual(true)
             expect(given.sessionRecording.captureStarted).toEqual(true)
-            expect(given.sessionRecording.stopRrweb).not.toEqual(null)
+            expect(given.sessionRecording.stopRrweb).not.toEqual(undefined)
 
             given.sessionRecording.stopRecording()
 
-            expect(given.sessionRecording.stopRrweb).toEqual(null)
+            expect(given.sessionRecording.stopRrweb).toEqual(undefined)
             expect(given.sessionRecording.captureStarted).toEqual(false)
         })
 
@@ -319,29 +323,145 @@ describe('SessionRecording', () => {
                 expect(window.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
-            it('it uses the current timestamp if the event does not have one', () => {
-                const mockDate = new Date(1602107460000)
-                jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
-                expect(given.posthog.sessionManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                })
+            it('it calls checkAndGetSessionAndWindowId with readOnly as true if it not a user interaction', () => {
+                _emit(NON_USER_GENERATED_EVENT)
+                expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(true, undefined)
             })
 
-            it('sends its timestamp and event data to getSessionAndWindowId', () => {
+            it('it calls checkAndGetSessionAndWindowId with readOnly as false if it is a user interaction', () => {
                 _emit({
                     event: 123,
                     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: { source: MUTATION_SOURCE_TYPE },
-                    timestamp: 1602107460000,
                 })
-                expect(given.posthog.sessionManager.getSessionAndWindowId).toHaveBeenCalledWith(1602107460000, {
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: { source: MUTATION_SOURCE_TYPE },
-                    timestamp: 1602107460000,
-                })
+                expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(
+                    false,
+                    undefined
+                )
+            })
+        })
+
+        describe('with a real session id manager', () => {
+            const startingDate = new Date()
+
+            beforeEach(() => {
+                given('sessionManager', () => new SessionIdManager(given.config, new PostHogPersistence(given.config)))
+                given.sessionRecording.startRecordingIfEnabled()
+                given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
+            })
+
+            const emitAtDateTime = (date) =>
+                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: date.getTime() })
+
+            it('takes a full snapshot for the first _emit', () => {
+                emitAtDateTime(startingDate)
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not take a full snapshot for the second _emit', () => {
+                emitAtDateTime(startingDate)
+                emitAtDateTime(
+                    new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    )
+                )
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not change session id for a second _emit', () => {
+                const startingSessionId = given.sessionManager._getSessionId()[1]
+
+                emitAtDateTime(startingDate)
+                emitAtDateTime(
+                    new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    )
+                )
+
+                expect(given.sessionManager._getSessionId()[1]).toEqual(startingSessionId)
+            })
+
+            it('does not take a full snapshot for the third _emit', () => {
+                emitAtDateTime(startingDate)
+
+                emitAtDateTime(
+                    new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    )
+                )
+
+                emitAtDateTime(
+                    new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 2
+                    )
+                )
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+            })
+
+            it('sends a full snapshot if the session is rotated because session has been inactive for 30 minutess', () => {
+                const startingSessionId = given.sessionManager._getSessionId()[1]
+                emitAtDateTime(startingDate)
+                emitAtDateTime(
+                    new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    )
+                )
+
+                const inactivityThresholdLater = new Date(
+                    startingDate.getFullYear(),
+                    startingDate.getMonth(),
+                    startingDate.getDate(),
+                    startingDate.getHours(),
+                    startingDate.getMinutes() + 32
+                )
+                emitAtDateTime(inactivityThresholdLater)
+
+                expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+            })
+
+            it('sends a full snapshot if the session is rotated because max time has passed', () => {
+                const startingSessionId = given.sessionManager._getSessionId()[1]
+                emitAtDateTime(startingDate)
+                emitAtDateTime(
+                    new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 1
+                    )
+                )
+
+                const moreThanADayLater = new Date(
+                    startingDate.getFullYear(),
+                    startingDate.getMonth(),
+                    startingDate.getDate() + 1,
+                    startingDate.getHours() + 1
+                )
+                emitAtDateTime(moreThanADayLater)
+
+                expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
             })
         })
     })

@@ -15,23 +15,16 @@ describe('persistence', () => {
     it('should set referrer', () => {
         // Initial visit
         given.lib.update_referrer_info('https://www.google.com')
-
-        expect(given.lib.props['$initial_referring_domain']).toBe('www.google.com')
         expect(given.lib.props['$referring_domain']).toBe('www.google.com')
         expect(given.lib.props['$referrer']).toBe('https://www.google.com')
 
         //subsequent visit
         given.lib.update_referrer_info('https://www.facebook.com')
-        // first touch
-        expect(given.lib.props['$initial_referring_domain']).toBe('www.google.com')
-
-        // last touch
         expect(given.lib.props['$referring_domain']).toBe('www.facebook.com')
         expect(given.lib.props['$referrer']).toBe('https://www.facebook.com')
 
         // page visit that doesn't have direct referrer
         given.lib.update_referrer_info('')
-        expect(given.lib.props['$initial_referring_domain']).toBe('www.google.com')
         // last touch should still be set to facebook
         expect(given.lib.props['$referring_domain']).toBe('www.facebook.com')
         expect(given.lib.props['$referrer']).toBe('https://www.facebook.com')
@@ -60,6 +53,16 @@ describe('persistence', () => {
         lib2.remove('ph__posthog')
         expect(localStorage.getItem('ph__posthog')).toEqual(null)
         expect(document.cookie).toEqual('')
+    })
+
+    it(`should register once LS`, () => {
+        let lib = new PostHogPersistence({ name: 'test', persistence: 'localStorage+cookie' })
+        lib.register_once({ distinct_id: 'hi', test_prop: 'test_val' })
+
+        let lib2 = new PostHogPersistence({ name: 'test', persistence: 'localStorage+cookie' })
+        expect(lib2.props).toEqual({ distinct_id: 'hi', test_prop: 'test_val' })
+        lib.clear()
+        lib2.clear()
     })
 
     forPersistenceTypes(function (persistenceType) {
