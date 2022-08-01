@@ -1,7 +1,3 @@
-## 1.27.0 - 2022-08-1
-
-- chore(typescript): convert library to typescript (#425) 
-
 ## 1.26.2 - 2022-07-28
 
 - fix(session-id): reset session_id on reset() call (#430)
