@@ -74,5 +74,5 @@ jobs:
               uses: EndBug/add-and-commit@v7
               with:
                   branch: ${{ github.event.pull_request.base.ref }}
-                  message: Bump version to ${{ steps.versions.outputs.new-version }}, update CHANGELOG.md & yarn.lock
+                  message: "chore: Bump version to ${{ steps.versions.outputs.new-version }}"
                   github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
