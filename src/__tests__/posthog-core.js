@@ -924,3 +924,36 @@ describe('_loaded()', () => {
         expect(given.overrides.featureFlags.resetRequestQueue).toHaveBeenCalled()
     })
 })
+
+describe('reset()', () => {
+    given('subject', () => () => given.lib.reset())
+
+    given('config', () => ({
+        api_host: 'https://test.com',
+        token: 'testtoken',
+        persistence: 'localStorage',
+    }))
+
+    given('overrides', () => ({
+        persistence: new PostHogPersistence(given.config),
+    }))
+
+    beforeEach(() => {
+        given.lib._init('testtoken', given.config, 'testhog')
+    })
+
+    it('clears persistence', () => {
+        given.lib.persistence.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
+        expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
+        given.subject()
+        expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual(undefined)
+    })
+
+    it('resets the session_id and window_id', () => {
+        const initialSessionAndWindowId = given.lib.sessionManager.checkAndGetSessionAndWindowId()
+        given.subject()
+        const nextSessionAndWindowId = given.lib.sessionManager.checkAndGetSessionAndWindowId()
+        expect(initialSessionAndWindowId.sessionId).not.toEqual(nextSessionAndWindowId.sessionId)
+        expect(initialSessionAndWindowId.windowId).not.toEqual(nextSessionAndWindowId.windowId)
+    })
+})

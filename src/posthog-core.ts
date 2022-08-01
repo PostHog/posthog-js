@@ -1037,6 +1037,7 @@ export class PostHog {
     reset(reset_device_id?: boolean): void {
         const device_id = this.get_property('$device_id')
         this.persistence.clear()
+        this.sessionManager.resetSessionId()
         const uuid = this.get_config('get_device_id')(_UUID())
         this.register_once(
             {
