@@ -422,7 +422,7 @@ describe('capture()', () => {
             }))
 
             const captured_event = given.subject()
-            expect(captured_event.timestamp).toBe(date.toISOString())
+            expect(captured_event.timestamp).toBe(date)
         })
     })
 })
