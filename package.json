@@ -23,12 +23,15 @@
     "main": "dist/module.js",
     "module": "dist/es.js",
     "types": "dist/module.d.ts",
+    "umd": "dist/array.js",
     "files": [
         "dist/*",
         "react/dist/*"
     ],
     "dependencies": {
         "@sentry/types": "^7.2.0",
+        "babel-plugin-rename-define": "^1.0.1",
+        "babel-plugin-rename-umd-globals": "^1.0.0",
         "fflate": "^0.4.1",
         "rrweb-snapshot": "^1.1.14"
     },
@@ -64,6 +67,7 @@
         "prettier": "^2.7.1",
         "rollup": "^2.77.0",
         "rollup-plugin-dts": "^4.2.2",
+        "rollup-plugin-terser": "^7.0.2",
         "rrweb": "^1.1.3",
         "sinon": "9.0.2",
         "testcafe": "^1.19.0",
