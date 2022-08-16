@@ -9,7 +9,7 @@
         "start": "parcel watch src/loader-globals.ts --out-file dist/array.js",
         "serve": "parcel serve src/loader-globals.ts --port 3001 --out-file dist/array.js",
         "build": "yarn build-rollup && yarn build-react",
-        "build-rollup": "rollup -c",
+        "build-rollup": "tsc -b && rollup -c",
         "build-react": "cd react; yarn; yarn build;",
         "lint": "eslint ./src/**/*.{ts,js}",
         "prettier": "prettier --write src/**/*",
@@ -23,6 +23,7 @@
     "module": "dist/es.js",
     "types": "dist/module.d.ts",
     "files": [
+        "lib/*",
         "dist/*",
         "react/dist/*"
     ],
