@@ -1,3 +1,7 @@
+## 1.29.0 - 2022-08-16
+
+- fix: Use rollup and fix define module issues (#434)
+
 ## 1.27.0 - 2022-08-01
 
 - refactor: Dummy commit to trigger release (#431)
