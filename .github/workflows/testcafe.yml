@@ -26,7 +26,7 @@ jobs:
         run: python -m http.server 8080 &
 
       - name: Set up posthog-js
-        run: yarn && yarn build-array
+        run: yarn && yarn build-rollup
 
       - name: Run chrome test
         run: npx testcafe "browserstack:chrome" testcafe/*.spec.js
