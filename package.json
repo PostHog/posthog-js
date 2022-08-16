@@ -8,9 +8,8 @@
     "scripts": {
         "start": "parcel watch src/loader-globals.ts --out-file dist/array.js",
         "serve": "parcel serve src/loader-globals.ts --port 3001 --out-file dist/array.js",
-        "build": "yarn build-array && yarn build-rollup && yarn build-react",
-        "build-array": "parcel build src/loader-globals.ts --out-file dist/array.js --public-url=/static",
-        "build-rollup": "tsc -b && rollup -c",
+        "build": "yarn build-rollup && yarn build-react",
+        "build-rollup": "rollup -c",
         "build-react": "cd react; yarn; yarn build;",
         "lint": "eslint ./src/**/*.{ts,js}",
         "prettier": "prettier --write src/**/*",
@@ -23,15 +22,12 @@
     "main": "dist/module.js",
     "module": "dist/es.js",
     "types": "dist/module.d.ts",
-    "umd": "dist/array.js",
     "files": [
         "dist/*",
         "react/dist/*"
     ],
     "dependencies": {
         "@sentry/types": "^7.2.0",
-        "babel-plugin-rename-define": "^1.0.1",
-        "babel-plugin-rename-umd-globals": "^1.0.0",
         "fflate": "^0.4.1",
         "rrweb-snapshot": "^1.1.14"
     },

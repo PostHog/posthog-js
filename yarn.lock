@@ -4540,24 +4540,10 @@ babel-plugin-polyfill-regenerator@^0.3.1:
   dependencies:
     "@babel/helper-define-polyfill-provider" "^0.3.1"
 
-babel-plugin-rename-assigned-properties@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/babel-plugin-rename-assigned-properties/-/babel-plugin-rename-assigned-properties-1.0.0.tgz#cdb7750fa22fc8be14a30106aa3e4907b1b48eed"
-  integrity sha512-/Wu9TbUaaLRtryozr2KYlGUz0ot9/bOvOWZdqZkxY3XFNOnIZTUaxXDom6AJL0pdcyChzXSVuN6/WggTkMR10g==
-  dependencies:
-    babel-runtime "^6.11.6"
-
 babel-plugin-rename-define@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/babel-plugin-rename-define/-/babel-plugin-rename-define-1.0.1.tgz#01b1aa8801436b07d9ca4000da266823daf5b40f"
   integrity sha512-M3h+lTpjGfGbgXDp4XQ6IzIOLzKWRcqgjkYvpRYh3BFrR/Y8QuK9iI1gzJyC65cW7pqMyyJrUBIdXmESq+aBCA==
-
-babel-plugin-rename-umd-globals@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/babel-plugin-rename-umd-globals/-/babel-plugin-rename-umd-globals-1.0.0.tgz#84e152dc1e8dd785b6aef688c1dedd9163b9a256"
-  integrity sha512-h2Zz0U8/a1TmIWvvMdrJ7Dmys1Ds3JEJ1ElSRyS9znY9/SA7EPSNUARySwmOzAUVklQs7moHvRzzomS/lSM9dQ==
-  dependencies:
-    babel-plugin-rename-assigned-properties "^1.0.0"
 
 babel-plugin-syntax-trailing-function-commas@^6.22.0:
   version "6.22.0"
