@@ -151,8 +151,7 @@ describe('Toolbar', () => {
         })
 
         it('should use the apiURL in the hash if available', () => {
-
-            given.hashState.apiURL = 'blabla' 
+            given.hashState.apiURL = 'blabla'
 
             given.toolbar.maybeLoadEditor(given.location, given.localStorage, given.history)
 

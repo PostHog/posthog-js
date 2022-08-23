@@ -79,8 +79,8 @@ export class Toolbar {
                 delete editorParams.userIntent
             }
 
-            if(!editorParams['apiURL']) {
-                editorParams['apiURL'] = this.instance.get_config('api_host')
+            if (!editorParams.apiURL) {
+                editorParams.apiURL = this.instance.get_config('api_host')
             }
 
             if (editorParams['token'] && this.instance.get_config('token') === editorParams['token']) {
