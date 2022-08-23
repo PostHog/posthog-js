@@ -89,7 +89,7 @@ describe('Toolbar', () => {
             expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogEditorParams',
-                JSON.stringify(given.editorParams)
+                JSON.stringify(given.hashState)
             )
         })
 
@@ -102,7 +102,7 @@ describe('Toolbar', () => {
             expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogEditorParams',
-                JSON.stringify(given.editorParams)
+                JSON.stringify(given.hashState)
             )
         })
 
@@ -113,7 +113,7 @@ describe('Toolbar', () => {
             expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogEditorParams',
-                JSON.stringify(given.editorParams)
+                JSON.stringify(given.hashState)
             )
         })
 
