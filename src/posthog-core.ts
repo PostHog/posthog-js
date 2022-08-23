@@ -357,8 +357,9 @@ export class PostHog {
                 ''
             )
         }
-        // Set up the window close event handler "unload"
-        window.addEventListener && window.addEventListener('unload', this._handle_unload.bind(this))
+        // Set up event handler for pageleave
+        // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
+        window.addEventListener && window.addEventListener('onpagehide' in self ? 'pagehide': 'unload', this._handle_unload.bind(this))
     }
 
     // Private methods
