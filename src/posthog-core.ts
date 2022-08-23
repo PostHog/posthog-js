@@ -359,7 +359,15 @@ export class PostHog {
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
-        window.addEventListener && window.addEventListener('onpagehide' in self ? 'pagehide': 'unload', this._handle_unload.bind(this))
+        if(window.addEventListener) {
+            window.addEventListener('onpagehide' in self ? 'pagehide': 'unload', this._handle_unload.bind(this))
+            window.addEventListener('visibilitychange', () => {
+                console.log('visiblity change')
+                if (document.visibilityState === 'hidden') {
+                    this._handle_unload.bind(this)
+                }
+            })
+        }
     }
 
     // Private methods
@@ -448,7 +456,7 @@ export class PostHog {
         }
     }
 
-    _handle_unload(): void {
+    _handle_unload(isVisibilityChangeEvent: boolean | undefined): void {
         if (!this.get_config('request_batching')) {
             if (this.get_config('capture_pageview')) {
                 this.capture('$pageleave', null, { transport: 'sendBeacon' })
@@ -456,7 +464,10 @@ export class PostHog {
             return
         }
 
-        if (this.get_config('capture_pageview')) {
+        if (this.get_config('capture_pageview')
+            // visibilitychange gets triggered when a user switches tabs, in which case they may come back, so we don't want to send the $pageleave event yet 
+            && !isVisibilityChangeEvent
+            ) {
             this.capture('$pageleave')
         }
         if (this.get_config('_capture_metrics')) {

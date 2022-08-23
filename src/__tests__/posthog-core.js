@@ -524,7 +524,7 @@ describe('_calculate_event_properties()', () => {
 })
 
 describe('_handle_unload()', () => {
-    given('subject', () => () => given.lib._handle_unload())
+    given('subject', () => (isVisibilityChange) => given.lib._handle_unload(isVisibilityChange))
 
     given('overrides', () => ({
         get_config: (key) => given.config[key],
@@ -547,6 +547,19 @@ describe('_handle_unload()', () => {
     given('batching', () => true)
 
     it('captures $pageleave', () => {
+        given.subject()
+
+        expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave')
+    })
+
+    it('does not capture $pageleave if the event was triggered by visibilitychange', () => {
+        given.subject(true)
+
+        expect(given.overrides.capture).not.toHaveBeenCalled()
+    })
+
+    it('$pageleave is only captured once if both visibilitychange and pagehide were triggered', () => {
+        given.subject(true)
         given.subject()
 
         expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave')
