@@ -155,7 +155,7 @@ describe('Toolbar', () => {
 
             given.toolbar.maybeLoadEditor(given.location, given.localStorage, given.history)
 
-            expect(given.toolbar._loadEditor).toHaveBeenCalledWith({...given.editorParams, apiURL: 'blabla'})
+            expect(given.toolbar._loadEditor).toHaveBeenCalledWith({ ...given.editorParams, apiURL: 'blabla' })
         })
     })
 
