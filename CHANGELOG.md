@@ -1,3 +1,7 @@
+## 1.29.1 - 2022-08-23
+
+- fix(toolbar): Use apiURL from state if set (#438)
+
 ## 1.29.0 - 2022-08-16
 
 - fix: Use rollup and fix define module issues (#434)
