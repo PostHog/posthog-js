@@ -44,9 +44,22 @@ describe('Toolbar', () => {
                 .join('&')
         )
 
+        given('hashState', () => ({
+            action: 'ph_authorize',
+            desiredHash: '#myhash',
+            projectId: 3,
+            projectOwnerId: 722725,
+            readOnly: false,
+            token: 'test_token',
+            userFlags: {
+                flag_1: 0,
+                flag_2: 1,
+            },
+            userId: 12345,
+        }))
         given('hashParams', () => ({
             access_token: given.accessToken,
-            state: encodeURIComponent(JSON.stringify(given.editorParams)),
+            state: encodeURIComponent(JSON.stringify(given.hashState)),
             expires_in: 3600,
         }))
 
@@ -76,7 +89,7 @@ describe('Toolbar', () => {
             expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogEditorParams',
-                JSON.stringify(given.editorParams)
+                JSON.stringify(given.hashState)
             )
         })
 
@@ -89,7 +102,7 @@ describe('Toolbar', () => {
             expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogEditorParams',
-                JSON.stringify(given.editorParams)
+                JSON.stringify(given.hashState)
             )
         })
 
@@ -100,7 +113,7 @@ describe('Toolbar', () => {
             expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogEditorParams',
-                JSON.stringify(given.editorParams)
+                JSON.stringify(given.hashState)
             )
         })
 
@@ -135,6 +148,14 @@ describe('Toolbar', () => {
                 '_postHogEditorParams',
                 JSON.stringify(given.editorParams)
             )
+        })
+
+        it('should use the apiURL in the hash if available', () => {
+            given.hashState.apiURL = 'blabla'
+
+            given.toolbar.maybeLoadEditor(given.location, given.localStorage, given.history)
+
+            expect(given.toolbar._loadEditor).toHaveBeenCalledWith({ ...given.editorParams, apiURL: 'blabla' })
         })
     })
 
