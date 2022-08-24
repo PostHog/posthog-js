@@ -359,7 +359,8 @@ export class PostHog {
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
-        window.addEventListener && window.addEventListener('onpagehide' in self ? 'pagehide': 'unload', this._handle_unload.bind(this))
+        window.addEventListener &&
+            window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
     }
 
     // Private methods
@@ -656,7 +657,7 @@ export class PostHog {
         }
 
         if (userOptedOut(this, false)) {
-             return
+            return
         }
 
         this._captureMetrics.incr('capture')

@@ -16,7 +16,8 @@
         "test": "jest src",
         "test-react": "cd react; yarn test",
         "test-watch": "jest --watch src",
-        "cypress": "cypress open"
+        "cypress": "cypress open",
+        "prepare": "husky install"
     },
     "main": "dist/module.js",
     "module": "dist/es.js",
@@ -74,8 +75,7 @@
         "*.{ts,tsx,js,json}": "prettier --write",
         "*.js": "eslint src --fix",
         "*.{ts,tsx}": [
-            "eslint src --fix",
-            "tsc --noEmit --esModuleInterop --jsx react"
+            "eslint src --fix"
         ]
     }
 }
