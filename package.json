@@ -13,9 +13,9 @@
         "lint": "eslint ./src/**/*.{ts,js}",
         "prettier": "prettier --write src/**/*",
         "prepublishOnly": "yarn lint && yarn test && yarn build && yarn test-react",
-        "test": "jest",
+        "test": "jest src",
         "test-react": "cd react; yarn test",
-        "test-watch": "jest --watch",
+        "test-watch": "jest --watch src",
         "cypress": "cypress open"
     },
     "main": "dist/module.js",

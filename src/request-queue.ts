@@ -84,14 +84,21 @@ export class RequestQueue extends RequestQueueScaffold {
 
     unload(): void {
         clearTimeout(this._poller)
-        let requests = this._event_queue.length > 0 ? this.formatQueue() : {}
+        const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
         this._event_queue.length = 0
-        Object.entries(requests)
-            // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
-            .sort((_, b) => b[1].url.indexOf('/e')) 
-            .map(([_, {url, data, options}]) => {
-                this.handlePollRequest(url, data, { ...options, transport: 'sendBeacon' })
-            })
+        const requestValues = Object.values(requests)
+
+        // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
+        console.log(requestValues)
+        const sortedRequests = [
+            ...requestValues.filter(r => r.url.indexOf('/e') === 0),
+            ...requestValues.filter(r => r.url.indexOf('/e') !== 0),
+        ]
+        console.log(sortedRequests)
+        sortedRequests.map(({url, data, options}) => {
+            this.handlePollRequest(url, data, { ...options, transport: 'sendBeacon' })
+        })
+            
     }
 
     formatQueue(): Record<string, QueuedRequestData> {
