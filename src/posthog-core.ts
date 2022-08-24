@@ -656,7 +656,7 @@ export class PostHog {
         }
 
         if (userOptedOut(this, false)) {
-            return
+             return
         }
 
         this._captureMetrics.incr('capture')

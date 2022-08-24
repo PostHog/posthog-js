@@ -10,7 +10,7 @@
         "build": "yarn build-rollup && yarn build-react",
         "build-rollup": "tsc -b && rollup -c",
         "build-react": "cd react; yarn; yarn build;",
-        "lint": "eslint ./src/**/*.{ts,js}",
+        "lint": "eslint src",
         "prettier": "prettier --write src/**/*",
         "prepublishOnly": "yarn lint && yarn test && yarn build && yarn test-react",
         "test": "jest src",
@@ -72,9 +72,9 @@
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",
-        "*.js": "eslint --fix",
+        "*.js": "eslint src --fix",
         "*.{ts,tsx}": [
-            "eslint --fix",
+            "eslint src --fix",
             "tsc --noEmit --esModuleInterop --jsx react"
         ]
     }
