@@ -71,7 +71,8 @@ describe('RequestQueue', () => {
         given.queue.unload()
 
         expect(given.handlePollRequest).toHaveBeenCalledTimes(3)
-        expect(given.handlePollRequest).toHaveBeenNthCalledWith(1,
+        expect(given.handlePollRequest).toHaveBeenNthCalledWith(
+            1,
             '/e',
             [
                 { event: 'foo', timestamp: 1_610_000_000 },
@@ -79,12 +80,11 @@ describe('RequestQueue', () => {
             ],
             { transport: 'sendBeacon' }
         )
-        expect(given.handlePollRequest).toHaveBeenNthCalledWith(2,
-            '/s',
-            [{ recording_payload: 'example'}],
-            { transport: 'sendBeacon' }
-        )
-        expect(given.handlePollRequest).toHaveBeenNthCalledWith(3,
+        expect(given.handlePollRequest).toHaveBeenNthCalledWith(2, '/s', [{ recording_payload: 'example' }], {
+            transport: 'sendBeacon',
+        })
+        expect(given.handlePollRequest).toHaveBeenNthCalledWith(
+            3,
             '/identify',
             [{ event: '$identify', timestamp: 1_620_000_000 }],
             { transport: 'sendBeacon' }
