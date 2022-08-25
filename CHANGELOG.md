@@ -1,3 +1,7 @@
+## 1.29.2 - 2022-08-25
+
+- fix(typing): rrweb types (#441)
+
 ## 1.29.1 - 2022-08-23
 
 - fix(toolbar): Use apiURL from state if set (#438)
