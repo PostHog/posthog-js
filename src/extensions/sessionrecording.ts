@@ -4,8 +4,8 @@ import Config from '../config'
 import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
-import type { record } from 'rrweb'
-import { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
+import type { record } from 'rrweb/typings'
+import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
 
 const BASE_ENDPOINT = '/e/'
 
