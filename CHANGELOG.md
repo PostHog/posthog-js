@@ -1,3 +1,7 @@
+## 1.29.3 - 2022-08-29
+
+- fix(pageleave): Improve $pageleave reliability (#439)
+
 ## 1.29.2 - 2022-08-25
 
 - fix(typing): rrweb types (#441)
