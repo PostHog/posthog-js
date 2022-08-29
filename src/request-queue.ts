@@ -89,12 +89,10 @@ export class RequestQueue extends RequestQueueScaffold {
         const requestValues = Object.values(requests)
 
         // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
-        console.log(requestValues)
         const sortedRequests = [
             ...requestValues.filter((r) => r.url.indexOf('/e') === 0),
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
-        console.log(sortedRequests)
         sortedRequests.map(({ url, data, options }) => {
             this.handlePollRequest(url, data, { ...options, transport: 'sendBeacon' })
         })
