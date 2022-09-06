@@ -352,8 +352,6 @@ export class PostHog {
             })
         }
 
-        console.log('initing', config.bootstrap, this.persistence['props'])
-
         if (!!config.bootstrap?.featureFlags) {
             const activeFlags = Object.keys(config.bootstrap.featureFlags)
                 .filter(flag => !!config.bootstrap.featureFlags[flag])
@@ -365,13 +363,7 @@ export class PostHog {
             })
         }
 
-        console.log('initing', config.bootstrap, this.persistence['props'])
-
-        console.log('found distinctID', this.persistence['props']['distinct_id'], this.get_distinct_id(), this.get_property('distinct_id'))
-
-
         if (!this.get_distinct_id()) {
-            console.log('NOT found distinctID', this.get_distinct_id())
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persitence
