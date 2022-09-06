@@ -608,6 +608,62 @@ describe('__compress_and_send_json_request', () => {
     })
 })
 
+describe('bootstrapping feature flags', () => {
+
+    given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
+
+    given('overrides', () => ({
+        _send_request: jest.fn(),
+        capture: jest.fn(),
+    }))
+
+    afterEach(() => {
+        given.lib.reset()
+    })
+
+    it('sets the right distinctID', () => {
+        given('config', () => ({
+            bootstrap: {
+                distinctID: 'abcd',
+            }
+        }))
+    
+        given.subject()
+        expect(given.lib.get_distinct_id()).toBe('abcd')
+    })
+
+    it('sets the right feature flags', () => {
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: { 'multivariant': 'variant-1', 'enabled': true, 'disabled': false, 'undef': undefined }
+            }
+        }))
+    
+        given.subject()
+        expect(given.lib.get_distinct_id()).not.toBe('abcd')
+        expect(given.lib.get_distinct_id()).not.toEqual(undefined)
+        expect(given.lib.getFeatureFlag('multivariant')).toBe('variant-1')
+        expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
+        expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
+        expect(given.lib.featureFlags.getFlagVariants()).toEqual({'multivariant': 'variant-1', 'enabled': true})
+    })
+
+    it('does nothing when empty', () => {
+        given('config', () => ({
+            bootstrap: {}
+        }))
+    
+        given.subject()
+        expect(given.lib.get_distinct_id()).not.toBe('abcd')
+        expect(given.lib.get_distinct_id()).not.toEqual(undefined)
+        expect(given.lib.getFeatureFlag('multivariant')).toBe(undefined)
+        expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
+        expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
+        expect(given.lib.featureFlags.getFlagVariants()).toEqual({})
+    })
+
+})
+
 describe('init()', () => {
     given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 

@@ -158,6 +158,7 @@ const defaultConfig = (): PostHogConfig => ({
     _capture_performance: false,
     name: 'posthog',
     callback_fn: 'posthog._jsc',
+    bootstrap: {}
 })
 
 /**
@@ -344,7 +345,33 @@ export class PostHog {
 
         this._gdpr_init()
 
+        if (config.bootstrap?.distinctID !== undefined) {
+            this.register({
+                distinct_id: config.bootstrap.distinctID,
+                $device_id: config.bootstrap.distinctID
+            })
+        }
+
+        console.log('initing', config.bootstrap, this.persistence['props'])
+
+        if (!!config.bootstrap?.featureFlags) {
+            const activeFlags = Object.keys(config.bootstrap.featureFlags)
+                .filter(flag => !!config.bootstrap.featureFlags[flag])
+                .reduce( (res: Record<string, string | boolean>, key) => (res[key] = config.bootstrap.featureFlags[key], res), {} );
+            
+            this.register({
+                $active_feature_flags: Object.keys(activeFlags || {}),
+                $enabled_feature_flags: activeFlags || {},
+            })
+        }
+
+        console.log('initing', config.bootstrap, this.persistence['props'])
+
+        console.log('found distinctID', this.persistence['props']['distinct_id'], this.get_distinct_id(), this.get_property('distinct_id'))
+
+
         if (!this.get_distinct_id()) {
+            console.log('NOT found distinctID', this.get_distinct_id())
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persitence
