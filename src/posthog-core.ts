@@ -158,7 +158,7 @@ const defaultConfig = (): PostHogConfig => ({
     _capture_performance: false,
     name: 'posthog',
     callback_fn: 'posthog._jsc',
-    bootstrap: {}
+    bootstrap: {},
 })
 
 /**
@@ -356,9 +356,14 @@ export class PostHog {
 
         if (this._hasBootstrappedFeatureFlags()) {
             const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
-            .filter(flag => !!config.bootstrap?.featureFlags?.[flag])
-            .reduce( (res: Record<string, string | boolean>, key) => (res[key] = config.bootstrap?.featureFlags?.[key] || false, res), {} );
-            
+                .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
+                .reduce(
+                    (res: Record<string, string | boolean>, key) => (
+                        (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
+                    ),
+                    {}
+                )
+
             this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags })
         }
 
@@ -630,7 +635,10 @@ export class PostHog {
     }
 
     _hasBootstrappedFeatureFlags(): boolean {
-        return (this.config.bootstrap?.featureFlags && Object.keys(this.config.bootstrap?.featureFlags).length > 0) || false
+        return (
+            (this.config.bootstrap?.featureFlags && Object.keys(this.config.bootstrap?.featureFlags).length > 0) ||
+            false
+        )
     }
 
     /**

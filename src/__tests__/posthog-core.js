@@ -609,7 +609,6 @@ describe('__compress_and_send_json_request', () => {
 })
 
 describe('bootstrapping feature flags', () => {
-
     given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 
     given('overrides', () => ({
@@ -625,9 +624,9 @@ describe('bootstrapping feature flags', () => {
         given('config', () => ({
             bootstrap: {
                 distinctID: 'abcd',
-            }
+            },
         }))
-    
+
         given.subject()
         expect(given.lib.get_distinct_id()).toBe('abcd')
         expect(given.lib.get_property('$device_id')).toBe('abcd')
@@ -644,15 +643,15 @@ describe('bootstrapping feature flags', () => {
         )
     })
 
-    it("treats identified distinctIDs appropriately", () => {
+    it('treats identified distinctIDs appropriately', () => {
         given('config', () => ({
             bootstrap: {
                 distinctID: 'abcd',
                 isIdentifiedID: true,
             },
-            get_device_id: (uuid) => 'og-device-id',
+            get_device_id: () => 'og-device-id',
         }))
-    
+
         given.subject()
         expect(given.lib.get_distinct_id()).toBe('abcd')
         expect(given.lib.get_property('$device_id')).toBe('og-device-id')
@@ -664,24 +663,24 @@ describe('bootstrapping feature flags', () => {
     it('sets the right feature flags', () => {
         given('config', () => ({
             bootstrap: {
-                featureFlags: { 'multivariant': 'variant-1', 'enabled': true, 'disabled': false, 'undef': undefined }
-            }
+                featureFlags: { multivariant: 'variant-1', enabled: true, disabled: false, undef: undefined },
+            },
         }))
-    
+
         given.subject()
         expect(given.lib.get_distinct_id()).not.toBe('abcd')
         expect(given.lib.get_distinct_id()).not.toEqual(undefined)
         expect(given.lib.getFeatureFlag('multivariant')).toBe('variant-1')
         expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
         expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
-        expect(given.lib.featureFlags.getFlagVariants()).toEqual({'multivariant': 'variant-1', 'enabled': true})
+        expect(given.lib.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1', enabled: true })
     })
 
     it('does nothing when empty', () => {
         given('config', () => ({
-            bootstrap: {}
+            bootstrap: {},
         }))
-    
+
         given.subject()
         expect(given.lib.get_distinct_id()).not.toBe('abcd')
         expect(given.lib.get_distinct_id()).not.toEqual(undefined)
@@ -696,8 +695,8 @@ describe('bootstrapping feature flags', () => {
 
         given('config', () => ({
             bootstrap: {
-                featureFlags: { 'multivariant': 'variant-1' }
-            }
+                featureFlags: { multivariant: 'variant-1' },
+            },
         }))
 
         given.subject()
@@ -710,8 +709,8 @@ describe('bootstrapping feature flags', () => {
 
         given('config', () => ({
             bootstrap: {
-                featureFlags: {}
-            }
+                featureFlags: {},
+            },
         }))
 
         given.subject()
@@ -724,15 +723,14 @@ describe('bootstrapping feature flags', () => {
 
         given('config', () => ({
             bootstrap: {
-                featureFlags: undefined
-            }
+                featureFlags: undefined,
+            },
         }))
 
         given.subject()
         given.lib.featureFlags.onFeatureFlags(() => (called = true))
         expect(called).toEqual(false)
     })
-
 })
 
 describe('init()', () => {
