@@ -95,6 +95,7 @@ describe('Payload Compression', () => {
                 featureFlags: {
                     receivedFeatureFlags: jest.fn(),
                 },
+                _hasBootstrappedFeatureFlags: jest.fn(),
             }
         })
 
