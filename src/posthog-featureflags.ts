@@ -203,7 +203,6 @@ export class PostHogFeatureFlags {
         parseFeatureFlagDecideResponse(response, this.instance.persistence)
         const flags = this.getFlags()
         const variants = this.getFlagVariants()
-        console.log('handlers: ', this.featureFlagEventHandlers)
         this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
     }
 
@@ -246,7 +245,6 @@ export class PostHogFeatureFlags {
      */
     onFeatureFlags(callback: FeatureFlagsCallback): void {
         this.addFeatureFlagsHandler(callback)
-        console.log('called on Feature Flags', this.instance.decideEndpointWasHit)
         if (this.instance.decideEndpointWasHit) {
             const flags = this.getFlags()
             const flagVariants = this.getFlagVariants()

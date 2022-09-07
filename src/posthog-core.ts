@@ -357,14 +357,7 @@ export class PostHog {
             .filter(flag => !!config.bootstrap?.featureFlags?.[flag])
             .reduce( (res: Record<string, string | boolean>, key) => (res[key] = config.bootstrap?.featureFlags?.[key] || false, res), {} );
             
-            console.log('current decide value: ', this.decideEndpointWasHit)
             this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags })
-            console.log('current decide value after calling received: ', this.decideEndpointWasHit)
-            // this.register({
-            //     $active_feature_flags: Object.keys(activeFlags || {}),
-            //     $enabled_feature_flags: activeFlags || {},
-            // })
-            // this.decideEndpointWasHit = activeFlags && Object.keys(activeFlags).length > 0
         }
 
         if (!this.get_distinct_id()) {
