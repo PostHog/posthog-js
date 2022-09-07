@@ -66,6 +66,7 @@ export interface PostHogConfig {
     _capture_performance: boolean
     bootstrap: {
         distinctID?: string
+        isIdentifiedID?: boolean
         featureFlags?: Record<string, boolean | string>
     }
 }

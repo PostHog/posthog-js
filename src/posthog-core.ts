@@ -346,9 +346,11 @@ export class PostHog {
         this._gdpr_init()
 
         if (config.bootstrap?.distinctID !== undefined) {
+            const uuid = this.get_config('get_device_id')(_UUID())
+            const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
             this.register({
                 distinct_id: config.bootstrap.distinctID,
-                $device_id: config.bootstrap.distinctID
+                $device_id: deviceID,
             })
         }
 

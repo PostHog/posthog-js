@@ -630,6 +630,35 @@ describe('bootstrapping feature flags', () => {
     
         given.subject()
         expect(given.lib.get_distinct_id()).toBe('abcd')
+        expect(given.lib.get_property('$device_id')).toBe('abcd')
+
+        given.lib.identify('efgh')
+
+        expect(given.overrides.capture).toHaveBeenCalledWith(
+            '$identify',
+            {
+                distinct_id: 'efgh',
+                $anon_distinct_id: 'abcd',
+            },
+            { $set: {}, $set_once: {} }
+        )
+    })
+
+    it("treats identified distinctIDs appropriately", () => {
+        given('config', () => ({
+            bootstrap: {
+                distinctID: 'abcd',
+                isIdentifiedID: true,
+            },
+            get_device_id: (uuid) => 'og-device-id',
+        }))
+    
+        given.subject()
+        expect(given.lib.get_distinct_id()).toBe('abcd')
+        expect(given.lib.get_property('$device_id')).toBe('og-device-id')
+
+        given.lib.identify('efgh')
+        expect(given.overrides.capture).not.toHaveBeenCalled()
     })
 
     it('sets the right feature flags', () => {
