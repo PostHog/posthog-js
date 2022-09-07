@@ -662,6 +662,48 @@ describe('bootstrapping feature flags', () => {
         expect(given.lib.featureFlags.getFlagVariants()).toEqual({})
     })
 
+    it('onFeatureFlags should be called immediately if feature flags are bootstrapped', () => {
+        let called = false
+
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: { 'multivariant': 'variant-1' }
+            }
+        }))
+
+        given.subject()
+        given.lib.featureFlags.onFeatureFlags(() => (called = true))
+        expect(called).toEqual(true)
+    })
+
+    it('onFeatureFlags should not be called immediately if feature flags bootstrap is empty', () => {
+        let called = false
+
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: {}
+            }
+        }))
+
+        given.subject()
+        given.lib.featureFlags.onFeatureFlags(() => (called = true))
+        expect(called).toEqual(false)
+    })
+
+    it('onFeatureFlags should not be called immediately if feature flags bootstrap is undefined', () => {
+        let called = false
+
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: undefined
+            }
+        }))
+
+        given.subject()
+        given.lib.featureFlags.onFeatureFlags(() => (called = true))
+        expect(called).toEqual(false)
+    })
+
 })
 
 describe('init()', () => {

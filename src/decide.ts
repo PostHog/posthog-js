@@ -8,7 +8,8 @@ export class Decide {
 
     constructor(instance: PostHog) {
         this.instance = instance
-        this.instance.decideEndpointWasHit = false
+        // don't need to wait for `decide` to return if flags were provided on initialisation
+        this.instance.decideEndpointWasHit = this.instance._hasBootstrappedFeatureFlags()
     }
 
     call(): void {

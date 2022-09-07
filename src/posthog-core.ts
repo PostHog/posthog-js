@@ -352,15 +352,19 @@ export class PostHog {
             })
         }
 
-        if (!!config.bootstrap?.featureFlags) {
-            const activeFlags = Object.keys(config.bootstrap.featureFlags)
-                .filter(flag => !!config.bootstrap.featureFlags[flag])
-                .reduce( (res: Record<string, string | boolean>, key) => (res[key] = config.bootstrap.featureFlags[key], res), {} );
+        if (this._hasBootstrappedFeatureFlags()) {
+            const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
+            .filter(flag => !!config.bootstrap?.featureFlags?.[flag])
+            .reduce( (res: Record<string, string | boolean>, key) => (res[key] = config.bootstrap?.featureFlags?.[key] || false, res), {} );
             
-            this.register({
-                $active_feature_flags: Object.keys(activeFlags || {}),
-                $enabled_feature_flags: activeFlags || {},
-            })
+            console.log('current decide value: ', this.decideEndpointWasHit)
+            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags })
+            console.log('current decide value after calling received: ', this.decideEndpointWasHit)
+            // this.register({
+            //     $active_feature_flags: Object.keys(activeFlags || {}),
+            //     $enabled_feature_flags: activeFlags || {},
+            // })
+            // this.decideEndpointWasHit = activeFlags && Object.keys(activeFlags).length > 0
         }
 
         if (!this.get_distinct_id()) {
@@ -628,6 +632,10 @@ export class PostHog {
         execute(alias_calls, this)
         execute(other_calls, this)
         execute(capturing_calls, this)
+    }
+
+    _hasBootstrappedFeatureFlags(): boolean {
+        return (this.config.bootstrap?.featureFlags && Object.keys(this.config.bootstrap?.featureFlags).length > 0) || false
     }
 
     /**
