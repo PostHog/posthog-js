@@ -1,3 +1,7 @@
+## 1.30.0 - 2022-09-12
+
+- feat(feature-flags): Enable bootstrapping the library (#444)
+
 ## 1.29.3 - 2022-08-29
 
 - fix(pageleave): Improve $pageleave reliability (#439)
