@@ -158,6 +158,7 @@ const defaultConfig = (): PostHogConfig => ({
     _capture_performance: false,
     name: 'posthog',
     callback_fn: 'posthog._jsc',
+    bootstrap: {},
 })
 
 /**
@@ -343,6 +344,28 @@ export class PostHog {
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
 
         this._gdpr_init()
+
+        if (config.bootstrap?.distinctID !== undefined) {
+            const uuid = this.get_config('get_device_id')(_UUID())
+            const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
+            this.register({
+                distinct_id: config.bootstrap.distinctID,
+                $device_id: deviceID,
+            })
+        }
+
+        if (this._hasBootstrappedFeatureFlags()) {
+            const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
+                .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
+                .reduce(
+                    (res: Record<string, string | boolean>, key) => (
+                        (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
+                    ),
+                    {}
+                )
+
+            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags })
+        }
 
         if (!this.get_distinct_id()) {
             // There is no need to set the distinct id
@@ -609,6 +632,13 @@ export class PostHog {
         execute(alias_calls, this)
         execute(other_calls, this)
         execute(capturing_calls, this)
+    }
+
+    _hasBootstrappedFeatureFlags(): boolean {
+        return (
+            (this.config.bootstrap?.featureFlags && Object.keys(this.config.bootstrap?.featureFlags).length > 0) ||
+            false
+        )
     }
 
     /**

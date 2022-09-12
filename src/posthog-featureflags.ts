@@ -3,7 +3,7 @@ import { PostHog } from './posthog-core'
 import { DecideResponse, FeatureFlagsCallback, RequestCallback } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
-export const parseFeatureFlagDecideResponse = (response: DecideResponse, persistence: PostHogPersistence) => {
+export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>, persistence: PostHogPersistence) => {
     const flags = response['featureFlags']
     if (flags) {
         // using the v1 api
@@ -198,7 +198,8 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers.push(handler)
     }
 
-    receivedFeatureFlags(response: DecideResponse): void {
+    receivedFeatureFlags(response: Partial<DecideResponse>): void {
+        this.instance.decideEndpointWasHit = true
         parseFeatureFlagDecideResponse(response, this.instance.persistence)
         const flags = this.getFlags()
         const variants = this.getFlagVariants()

@@ -64,6 +64,11 @@ export interface PostHogConfig {
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     _capture_metrics: boolean
     _capture_performance: boolean
+    bootstrap: {
+        distinctID?: string
+        isIdentifiedID?: boolean
+        featureFlags?: Record<string, boolean | string>
+    }
 }
 
 export interface OptInOutCapturingOptions {

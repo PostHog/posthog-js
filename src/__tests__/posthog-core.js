@@ -608,6 +608,131 @@ describe('__compress_and_send_json_request', () => {
     })
 })
 
+describe('bootstrapping feature flags', () => {
+    given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
+
+    given('overrides', () => ({
+        _send_request: jest.fn(),
+        capture: jest.fn(),
+    }))
+
+    afterEach(() => {
+        given.lib.reset()
+    })
+
+    it('sets the right distinctID', () => {
+        given('config', () => ({
+            bootstrap: {
+                distinctID: 'abcd',
+            },
+        }))
+
+        given.subject()
+        expect(given.lib.get_distinct_id()).toBe('abcd')
+        expect(given.lib.get_property('$device_id')).toBe('abcd')
+
+        given.lib.identify('efgh')
+
+        expect(given.overrides.capture).toHaveBeenCalledWith(
+            '$identify',
+            {
+                distinct_id: 'efgh',
+                $anon_distinct_id: 'abcd',
+            },
+            { $set: {}, $set_once: {} }
+        )
+    })
+
+    it('treats identified distinctIDs appropriately', () => {
+        given('config', () => ({
+            bootstrap: {
+                distinctID: 'abcd',
+                isIdentifiedID: true,
+            },
+            get_device_id: () => 'og-device-id',
+        }))
+
+        given.subject()
+        expect(given.lib.get_distinct_id()).toBe('abcd')
+        expect(given.lib.get_property('$device_id')).toBe('og-device-id')
+
+        given.lib.identify('efgh')
+        expect(given.overrides.capture).not.toHaveBeenCalled()
+    })
+
+    it('sets the right feature flags', () => {
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: { multivariant: 'variant-1', enabled: true, disabled: false, undef: undefined },
+            },
+        }))
+
+        given.subject()
+        expect(given.lib.get_distinct_id()).not.toBe('abcd')
+        expect(given.lib.get_distinct_id()).not.toEqual(undefined)
+        expect(given.lib.getFeatureFlag('multivariant')).toBe('variant-1')
+        expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
+        expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
+        expect(given.lib.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1', enabled: true })
+    })
+
+    it('does nothing when empty', () => {
+        given('config', () => ({
+            bootstrap: {},
+        }))
+
+        given.subject()
+        expect(given.lib.get_distinct_id()).not.toBe('abcd')
+        expect(given.lib.get_distinct_id()).not.toEqual(undefined)
+        expect(given.lib.getFeatureFlag('multivariant')).toBe(undefined)
+        expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
+        expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
+        expect(given.lib.featureFlags.getFlagVariants()).toEqual({})
+    })
+
+    it('onFeatureFlags should be called immediately if feature flags are bootstrapped', () => {
+        let called = false
+
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: { multivariant: 'variant-1' },
+            },
+        }))
+
+        given.subject()
+        given.lib.featureFlags.onFeatureFlags(() => (called = true))
+        expect(called).toEqual(true)
+    })
+
+    it('onFeatureFlags should not be called immediately if feature flags bootstrap is empty', () => {
+        let called = false
+
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: {},
+            },
+        }))
+
+        given.subject()
+        given.lib.featureFlags.onFeatureFlags(() => (called = true))
+        expect(called).toEqual(false)
+    })
+
+    it('onFeatureFlags should not be called immediately if feature flags bootstrap is undefined', () => {
+        let called = false
+
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: undefined,
+            },
+        }))
+
+        given.subject()
+        given.lib.featureFlags.onFeatureFlags(() => (called = true))
+        expect(called).toEqual(false)
+    })
+})
+
 describe('init()', () => {
     given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 

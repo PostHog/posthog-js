@@ -24,6 +24,7 @@ describe('Decide', () => {
         featureFlags: {
             receivedFeatureFlags: jest.fn(),
         },
+        _hasBootstrappedFeatureFlags: jest.fn(),
         getGroups: () => ({ organization: '5' }),
     }))
 
