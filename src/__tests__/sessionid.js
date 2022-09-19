@@ -190,7 +190,7 @@ describe('Session ID manager', () => {
             expect(given.sessionIdManager._getWindowId()).toEqual('newWindowId')
             expect(sessionStore.set).not.toHaveBeenCalled()
         })
-        it('stores and retrieves a window_id if sessionStoage is not supported', () => {
+        it('stores and retrieves a window_id if sessionStorage is not supported', () => {
             sessionStore.is_supported.mockReturnValue(false)
             given.sessionIdManager._setWindowId('newWindowId')
             expect(given.sessionIdManager._getWindowId()).toEqual('newWindowId')
@@ -220,6 +220,25 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
             })
+        })
+    })
+
+    describe('use new window id on duplication but not reload', () => {
+        it('reload - use old window id available during unload', () => {
+            // setup
+            given.sessionIdManager._setWindowId('oldWindowId')
+            // trigger unload event
+            sessionStore.set(given.sessionIdManager.last_window_id_storage_key, given.sessionIdManager._getWindowId())
+
+            // expect
+            expect(given.sessionIdManager._getWindowId()).toEqual('oldWindowId')
+        })
+        it('duplication - use new window id', () => {
+            // setup
+            given.sessionIdManager._setWindowId(null) // no window id in memory on dupe or reload
+
+            // expect
+            expect(given.sessionIdManager._getWindowId()).toEqual(null)
         })
     })
 })

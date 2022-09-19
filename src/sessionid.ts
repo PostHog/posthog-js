@@ -11,6 +11,7 @@ export class SessionIdManager {
     _windowId: string | null | undefined
     _sessionId: string | null | undefined
     window_id_storage_key: string
+    last_window_id_storage_key: string // persists only across tab reload, not tab duplication
     _sessionStartTimestamp: number | null
     _sessionActivityTimestamp: number | null
 
@@ -23,8 +24,10 @@ export class SessionIdManager {
 
         if (config['persistence_name']) {
             this.window_id_storage_key = 'ph_' + config['persistence_name'] + '_window_id'
+            this.last_window_id_storage_key = 'ph_' + config['persistence_name'] + '_last_window_id'
         } else {
             this.window_id_storage_key = 'ph_' + config['token'] + '_window_id'
+            this.last_window_id_storage_key = 'ph_' + config['token'] + '_last_window_id'
         }
     }
 
@@ -45,9 +48,16 @@ export class SessionIdManager {
         if (this._windowId) {
             return this._windowId
         }
-        if (!this.persistence.disabled && sessionStore.is_supported()) {
-            return sessionStore.parse(this.window_id_storage_key)
+
+        // In queue id will be undefined on fresh window opens
+        const inQueueId = sessionStore.parse(this.last_window_id_storage_key)
+        if (!this.persistence.disabled && sessionStore.is_supported() && inQueueId) {
+            sessionStore.remove(this.last_window_id_storage_key)
+            this._windowId = inQueueId
+            return this._windowId ?? null
         }
+
+        // New window id will be generated
         return null
     }
 
@@ -90,6 +100,15 @@ export class SessionIdManager {
     // new ids will be generated.
     resetSessionId(): void {
         this._setSessionId(null, null, null)
+    }
+
+    // Listens to window unloads and exposes old window id only during reload
+    _listenToReloadWindow(): void {
+        window.addEventListener('beforeunload', () => {
+            if (!this.persistence.disabled && sessionStore.is_supported()) {
+                sessionStore.set(this.last_window_id_storage_key, this._getWindowId())
+            }
+        })
     }
 
     /*
@@ -135,6 +154,7 @@ export class SessionIdManager {
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
+        this._listenToReloadWindow()
 
         return {
             sessionId: sessionId,
