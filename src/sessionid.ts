@@ -11,7 +11,7 @@ export class SessionIdManager {
     _windowId: string | null | undefined
     _sessionId: string | null | undefined
     window_id_storage_key: string
-    last_window_id_storage_key: string // persists only across tab reload, not tab duplication
+    last_window_id_storage_key: string
     _sessionStartTimestamp: number | null
     _sessionActivityTimestamp: number | null
 
