@@ -11,7 +11,7 @@ export class SessionIdManager {
     _windowId: string | null | undefined
     _sessionId: string | null | undefined
     window_id_storage_key: string
-    last_window_id_storage_key: string
+    do_not_refresh_window_id_key: string
     _sessionStartTimestamp: number | null
     _sessionActivityTimestamp: number | null
 
@@ -24,10 +24,26 @@ export class SessionIdManager {
 
         if (config['persistence_name']) {
             this.window_id_storage_key = 'ph_' + config['persistence_name'] + '_window_id'
-            this.last_window_id_storage_key = 'ph_' + config['persistence_name'] + '_last_window_id'
+            this.do_not_refresh_window_id_key = 'ph_' + config['persistence_name'] + '_do_not_refresh_window_id'
         } else {
             this.window_id_storage_key = 'ph_' + config['token'] + '_window_id'
-            this.last_window_id_storage_key = 'ph_' + config['token'] + '_last_window_id'
+            this.do_not_refresh_window_id_key = 'ph_' + config['token'] + '_do_not_refresh_window_id'
+        }
+
+        // doNotRefreshWindowId is only true when the DOM has been unloaded
+        // this happens on reloads and doesn't happen on tab duplication, window.open, etc.
+        if (!this.persistence.disabled && sessionStore.is_supported()) {
+            const lastWindowId = sessionStore.parse(this.window_id_storage_key)
+            const doNotRefreshWindowId = sessionStore.parse(this.do_not_refresh_window_id_key)
+            if (lastWindowId && doNotRefreshWindowId) {
+                // Persist window from previous storage state
+                this._windowId = lastWindowId
+            } else {
+                // Wipe any reference to previous window id
+                sessionStore.remove(this.window_id_storage_key)
+            }
+            // Cleanup any traces
+            sessionStore.remove(this.do_not_refresh_window_id_key)
         }
     }
 
@@ -48,15 +64,9 @@ export class SessionIdManager {
         if (this._windowId) {
             return this._windowId
         }
-
-        // In queue id will be undefined on fresh window opens
-        const inQueueId = sessionStore.parse(this.last_window_id_storage_key)
-        if (!this.persistence.disabled && sessionStore.is_supported() && inQueueId) {
-            sessionStore.remove(this.last_window_id_storage_key)
-            this._windowId = inQueueId
-            return this._windowId ?? null
+        if (!this.persistence.disabled && sessionStore.is_supported()) {
+            return sessionStore.parse(this.window_id_storage_key)
         }
-
         // New window id will be generated
         return null
     }
@@ -102,11 +112,16 @@ export class SessionIdManager {
         this._setSessionId(null, null, null)
     }
 
-    // Listens to window unloads and exposes old window id only during reload
+    /*
+     * Listens to window unloads and exposes doNotRefresh key in sessionStorage between unload and on load.
+     * New tabs created after a DOM unloads (reloading the same tab) will have this doNotRefresh flag in their session storage.
+     * New tabs created from scratch (new tab, tab duplication, window.open(), ...) will NOT have this doNotRefresh flag in their session storage.
+     * We conditionally check the doNotRefresh value in the constructor to decide if the window id in the last session storage should be carried over.
+     */
     _listenToReloadWindow(): void {
         window.addEventListener('beforeunload', () => {
             if (!this.persistence.disabled && sessionStore.is_supported()) {
-                sessionStore.set(this.last_window_id_storage_key, this._getWindowId())
+                sessionStore.set(this.do_not_refresh_window_id_key, true)
             }
         })
     }
