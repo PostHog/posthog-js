@@ -28,7 +28,7 @@ export class SessionIdManager {
         this.primary_window_exists_storage_key = 'ph_' + persistenceName + '_primary_window_exists'
 
         // primary_window_exists is set when the DOM has been loaded and is cleared on unload
-        // if it exists here it means there was no unload which suggests this window is opened as a tab
+        // if it exists here it means there was no unload which suggests this window is opened as a tab duplication, window.open, etc.
         if (!this.persistence.disabled && sessionStore.is_supported()) {
             const lastWindowId = sessionStore.parse(this.window_id_storage_key)
 
