@@ -45,6 +45,8 @@ export class SessionIdManager {
             // Cleanup any traces
             sessionStore.remove(this.do_not_refresh_window_id_key)
         }
+
+        this._listenToReloadWindow()
     }
 
     // Note: this tries to store the windowId in sessionStorage. SessionStorage is unique to the current window/tab,
@@ -169,7 +171,6 @@ export class SessionIdManager {
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
-        this._listenToReloadWindow()
 
         return {
             sessionId: sessionId,
