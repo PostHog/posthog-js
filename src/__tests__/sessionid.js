@@ -223,38 +223,26 @@ describe('Session ID manager', () => {
         })
     })
 
-    describe('do_not_refresh_window_id', () => {
-        it('if do not refresh window id is true, use same window id', () => {
+    describe('primary_window_exists_storage_key', () => {
+        it('if primary_window_exists key does not exist, do not cycle window id', () => {
             // setup
             sessionStore.parse.mockImplementation((storeKey) =>
-                storeKey === 'ph_persistance-name_do_not_refresh_window_id' ? true : 'oldWindowId'
+                storeKey === 'ph_persistance-name_primary_window_exists' ? undefined : 'oldWindowId'
             )
             // expect
             expect(given.sessionIdManager._windowId).toEqual('oldWindowId')
-            expect(sessionStore.remove).toHaveBeenCalledTimes(1)
-            expect(sessionStore.remove).toHaveBeenCalledWith('ph_persistance-name_do_not_refresh_window_id')
+            expect(sessionStore.remove).toHaveBeenCalledTimes(0)
+            expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
         })
-        it('if do not refresh window id is undefined, use new window id', () => {
+        it('if primary_window_exists key exists, cycle window id', () => {
             // setup
             sessionStore.parse.mockImplementation((storeKey) =>
-                storeKey === 'ph_persistance-name_do_not_refresh_window_id' ? undefined : 'oldWindowId'
+                storeKey === 'ph_persistance-name__primary_window_exists' ? true : 'oldWindowId'
             )
             // expect
             expect(given.sessionIdManager._windowId).toEqual(undefined)
-            expect(sessionStore.remove).toHaveBeenCalledTimes(2)
-            expect(sessionStore.remove).toHaveBeenNthCalledWith(1, 'ph_persistance-name_window_id')
-            expect(sessionStore.remove).toHaveBeenNthCalledWith(2, 'ph_persistance-name_do_not_refresh_window_id')
-        })
-        it('if do not refresh window id is false, use new window id', () => {
-            // setup
-            sessionStore.parse.mockImplementation((storeKey) =>
-                storeKey === 'ph_persistance-name_do_not_refresh_window_id' ? false : 'oldWindowId'
-            )
-            // expect
-            expect(given.sessionIdManager._windowId).toEqual(undefined)
-            expect(sessionStore.remove).toHaveBeenCalledTimes(2)
-            expect(sessionStore.remove).toHaveBeenNthCalledWith(1, 'ph_persistance-name_window_id')
-            expect(sessionStore.remove).toHaveBeenNthCalledWith(2, 'ph_persistance-name_do_not_refresh_window_id')
+            expect(sessionStore.remove).toHaveBeenCalledWith('ph_persistance-name_window_id')
+            expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
         })
     })
 })
