@@ -15,12 +15,13 @@
  * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
  * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  */
-import { EventProcessor, Hub, Integration } from '@sentry/types'
+import { Event, EventProcessor, Hub, Integration } from '@sentry/types'
 import { Properties } from '../types'
 import { PostHog } from '../posthog-core'
 
 export class SentryIntegration implements Integration {
     name: string
+
     setupOnce: (addGlobalEventProcessor: (callback: EventProcessor) => void, getCurrentHub: () => Hub) => void
 
     constructor(_posthog: PostHog, organization?: string, projectId?: number, prefix?: string) {
@@ -29,7 +30,7 @@ export class SentryIntegration implements Integration {
         // TODO: refactor to a real class. The types
         this.name = 'posthog-js'
         this.setupOnce = function (addGlobalEventProcessor: (callback: EventProcessor) => void) {
-            addGlobalEventProcessor((event) => {
+            addGlobalEventProcessor((event: Event) => {
                 if (event.level !== 'error' || !_posthog.__loaded) return event
                 if (!event.tags) event.tags = {}
                 event.tags['PostHog Person URL'] = _posthog.config.api_host + '/person/' + _posthog.get_distinct_id()
@@ -39,9 +40,13 @@ export class SentryIntegration implements Integration {
                         '/recordings/#sessionRecordingId=' +
                         _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
                 }
+                const exceptions = event.exception?.values || []
                 const data: Properties = {
                     $sentry_event_id: event.event_id,
                     $sentry_exception: event.exception,
+                    $sentry_exception_message: exceptions[0]?.value,
+                    $sentry_exception_type: exceptions[0]?.type,
+                    $sentry_tags: event.tags,
                 }
                 if (organization && projectId)
                     data['$sentry_url'] =
