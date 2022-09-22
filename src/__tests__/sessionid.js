@@ -190,7 +190,7 @@ describe('Session ID manager', () => {
             expect(given.sessionIdManager._getWindowId()).toEqual('newWindowId')
             expect(sessionStore.set).not.toHaveBeenCalled()
         })
-        it('stores and retrieves a window_id if sessionStoage is not supported', () => {
+        it('stores and retrieves a window_id if sessionStorage is not supported', () => {
             sessionStore.is_supported.mockReturnValue(false)
             given.sessionIdManager._setWindowId('newWindowId')
             expect(given.sessionIdManager._getWindowId()).toEqual('newWindowId')
@@ -220,6 +220,29 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
             })
+        })
+    })
+
+    describe('primary_window_exists_storage_key', () => {
+        it('if primary_window_exists key does not exist, do not cycle window id', () => {
+            // setup
+            sessionStore.parse.mockImplementation((storeKey) =>
+                storeKey === 'ph_persistance-name_primary_window_exists' ? undefined : 'oldWindowId'
+            )
+            // expect
+            expect(given.sessionIdManager._windowId).toEqual('oldWindowId')
+            expect(sessionStore.remove).toHaveBeenCalledTimes(0)
+            expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
+        })
+        it('if primary_window_exists key exists, cycle window id', () => {
+            // setup
+            sessionStore.parse.mockImplementation((storeKey) =>
+                storeKey === 'ph_persistance-name__primary_window_exists' ? true : 'oldWindowId'
+            )
+            // expect
+            expect(given.sessionIdManager._windowId).toEqual(undefined)
+            expect(sessionStore.remove).toHaveBeenCalledWith('ph_persistance-name_window_id')
+            expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
         })
     })
 })
