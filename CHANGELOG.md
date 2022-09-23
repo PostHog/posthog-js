@@ -1,3 +1,8 @@
+## 1.31.0 - 2022-09-23
+
+- feat: Improve SentryIntegration, include error message, type and tags at top level (#450)
+- fix(recordings): unique window id on duplication (#446)
+
 ## 1.30.0 - 2022-09-12
 
 - feat(feature-flags): Enable bootstrapping the library (#444)
