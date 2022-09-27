@@ -1,5 +1,8 @@
 import { loadScript } from '../autocapture-utils'
-import { CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE, SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
+import {
+    CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_ENABLED_SERVER_SIDE,
+} from '../posthog-persistence'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'

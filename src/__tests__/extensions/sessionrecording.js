@@ -24,7 +24,10 @@ describe('SessionRecording', () => {
         checkAndGetSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
     }))
     given('posthog', () => ({
-        get_property: (property_key) => property_key===SESSION_RECORDING_ENABLED_SERVER_SIDE?given.$session_recording_enabled_server_side:given.$console_log_enabled_server_side,
+        get_property: (property_key) =>
+            property_key === SESSION_RECORDING_ENABLED_SERVER_SIDE
+                ? given.$session_recording_enabled_server_side
+                : given.$console_log_enabled_server_side,
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
@@ -79,8 +82,8 @@ describe('SessionRecording', () => {
         it('uses client side setting when set to false', () => {
             given('$console_log_enabled_server_side', () => true)
             given('enable_recording_console_log_client_side', () => false)
-            expect(given.subject()).toBe(false)       
-         })
+            expect(given.subject()).toBe(false)
+        })
 
         it('uses client side setting when set to true', () => {
             given('$console_log_enabled_server_side', () => false)
@@ -90,7 +93,6 @@ describe('SessionRecording', () => {
 
         it('uses server side setting if client side setting is not set', () => {
             given('enable_recording_console_log_client_side', () => undefined)
-
 
             given('$console_log_enabled_server_side', () => false)
             expect(given.subject()).toBe(false)
