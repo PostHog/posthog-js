@@ -24,7 +24,7 @@ describe('SessionRecording', () => {
         checkAndGetSessionAndWindowId: jest.fn().mockImplementation(() => given.incomingSessionAndWindowId),
     }))
     given('posthog', () => ({
-        get_property: () => given.$session_recording_enabled_server_side,
+        get_property: (property_key) => property_key===SESSION_RECORDING_ENABLED_SERVER_SIDE?given.$session_recording_enabled_server_side:given.$console_log_enabled_server_side,
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
@@ -36,7 +36,7 @@ describe('SessionRecording', () => {
     given('config', () => ({
         api_host: 'https://test.com',
         disable_session_recording: given.disabled,
-        enable_recording_console_log: given.enable_recording_console_log,
+        enable_recording_console_log: given.enable_recording_console_log_client_side,
         autocapture: false, // Assert that session recording works even if `autocapture = false`
         session_recording: {
             maskAllInputs: false,
@@ -46,6 +46,7 @@ describe('SessionRecording', () => {
         persistence: 'memory',
     }))
     given('$session_recording_enabled_server_side', () => true)
+    given('$console_log_enabled_server_side', () => false)
     given('disabled', () => false)
 
     beforeEach(() => {
@@ -70,6 +71,32 @@ describe('SessionRecording', () => {
             given('disabled', () => true)
             given.subject()
             expect(given.subject()).toBe(false)
+        })
+    })
+
+    describe('isConsoleLogCaptureEnabled', () => {
+        given('subject', () => () => given.sessionRecording.isConsoleLogCaptureEnabled())
+        it('uses client side setting when set to false', () => {
+            given('$console_log_enabled_server_side', () => true)
+            given('enable_recording_console_log_client_side', () => false)
+            expect(given.subject()).toBe(false)       
+         })
+
+        it('uses client side setting when set to true', () => {
+            given('$console_log_enabled_server_side', () => false)
+            given('enable_recording_console_log_client_side', () => true)
+            expect(given.subject()).toBe(true)
+        })
+
+        it('uses server side setting if client side setting is not set', () => {
+            given('enable_recording_console_log_client_side', () => undefined)
+
+
+            given('$console_log_enabled_server_side', () => false)
+            expect(given.subject()).toBe(false)
+
+            given('$console_log_enabled_server_side', () => true)
+            expect(given.subject()).toBe(true)
         })
     })
 
@@ -152,6 +179,7 @@ describe('SessionRecording', () => {
         })
 
         it('calls rrweb.record with the right options', () => {
+            given('$console_log_enabled_server_side', () => false)
             given.sessionRecording._onScriptLoaded()
 
             // maskAllInputs should change from default
@@ -274,7 +302,7 @@ describe('SessionRecording', () => {
 
         describe('console logs', () => {
             it('if not enabled, plugin is not used', () => {
-                given('enable_recording_console_log', () => false)
+                given('enable_recording_console_log_client_side', () => false)
 
                 given.sessionRecording.startRecordingIfEnabled()
 
@@ -282,7 +310,7 @@ describe('SessionRecording', () => {
             })
 
             it('if enabled, plugin is used', () => {
-                given('enable_recording_console_log', () => true)
+                given('enable_recording_console_log_client_side', () => true)
 
                 given.sessionRecording.startRecordingIfEnabled()
 

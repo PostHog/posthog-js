@@ -155,6 +155,7 @@ export interface DecideResponse {
     featureFlags: Record<string, string | boolean>
     sessionRecording?: {
         endpoint?: string
+        consoleLogRecordingEnabled?: boolean
     }
     editorParams: EditorParams
     toolbarVersion: 'toolbar' /** deprecated, moved to editorParams */
