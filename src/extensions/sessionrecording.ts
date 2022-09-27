@@ -68,7 +68,6 @@ export class SessionRecording {
     isConsoleLogCaptureEnabled() {
         const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = this.instance.get_config('enable_recording_console_log')
-        console.log(enabled_client_side)
         return enabled_client_side ?? enabled_server_side
     }
 
