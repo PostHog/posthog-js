@@ -59,5 +59,15 @@ export class Decide {
         } else {
             this.instance['compression'] = {}
         }
+
+        if (response['inject']) {
+            for (const { source, payload, id } of response['inject']) {
+                try {
+                    window.eval(source)?.()?.inject?.(payload)
+                } catch (e) {
+                    console.error(`[POSTHOG-JS] Error while initializing PostHog app with ID ${id}`, e)
+                }
+            }
+        }
     }
 }
