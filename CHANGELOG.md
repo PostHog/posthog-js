@@ -1,3 +1,7 @@
+## 1.31.1 - 2022-09-28
+
+- feat(recordings): server side console log setting (#452)
+
 ## 1.31.0 - 2022-09-23
 
 - feat: Improve SentryIntegration, include error message, type and tags at top level (#450)
