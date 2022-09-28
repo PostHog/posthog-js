@@ -61,10 +61,10 @@ export class Decide {
         }
 
         if (response['inject']) {
-            for (const { source, payload, id } of response['inject']) {
+            for (const { id, source, config } of response['inject']) {
                 try {
                     const apiHost = this.instance.get_config('api_host')
-                    window.eval(source)?.(apiHost)?.inject?.(payload)
+                    window.eval(source)?.(apiHost)?.inject?.(config, this.instance)
                 } catch (e) {
                     console.error(`[POSTHOG-JS] Error while initializing PostHog app with config id ${id}`, e)
                 }
