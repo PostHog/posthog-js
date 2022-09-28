@@ -1,5 +1,8 @@
 import { loadScript } from '../autocapture-utils'
-import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../posthog-persistence'
+import {
+    CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_ENABLED_SERVER_SIDE,
+} from '../posthog-persistence'
 import Config from '../config'
 import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
@@ -65,11 +68,18 @@ export class SessionRecording {
         return enabled_server_side && enabled_client_side
     }
 
+    isConsoleLogCaptureEnabled() {
+        const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_client_side = this.instance.get_config('enable_recording_console_log')
+        return enabled_client_side ?? enabled_server_side
+    }
+
     afterDecideResponse(response: DecideResponse) {
         this.receivedDecide = true
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
+                [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
             })
         }
         if (response.sessionRecording?.endpoint) {
@@ -186,7 +196,7 @@ export class SessionRecording {
                 }
             },
             plugins:
-                (window as any).rrwebConsoleRecord && this.instance.get_config('enable_recording_console_log')
+                (window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled()
                     ? [(window as any).rrwebConsoleRecord.getRecordConsolePlugin()]
                     : [],
             ...sessionRecordingOptions,

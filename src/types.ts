@@ -37,7 +37,7 @@ export interface PostHogConfig {
     disable_session_recording: boolean
     disable_persistence: boolean
     disable_cookie: boolean
-    enable_recording_console_log: boolean
+    enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean
     opt_out_capturing_by_default: boolean
@@ -155,6 +155,7 @@ export interface DecideResponse {
     featureFlags: Record<string, string | boolean>
     sessionRecording?: {
         endpoint?: string
+        consoleLogRecordingEnabled?: boolean
     }
     editorParams: EditorParams
     toolbarVersion: 'toolbar' /** deprecated, moved to editorParams */
