@@ -61,14 +61,20 @@ export class Decide {
             this.instance['compression'] = {}
         }
 
-        if (response['inject'] && this.instance.get_config('opt_in_web_app_injection')) {
-            for (const { id, source, config } of response['inject']) {
-                try {
-                    const apiHost = this.instance.get_config('api_host')
-                    window.eval(source)?.(apiHost)?.inject?.({ config, posthog: this.instance })
-                } catch (e) {
-                    console.error(`[POSTHOG-JS] Error while initializing PostHog app with config id ${id}`, e)
+        if (response['inject']) {
+            if (this.instance.get_config('opt_in_web_app_injection')) {
+                for (const { id, source, config } of response['inject']) {
+                    try {
+                        const apiHost = this.instance.get_config('api_host')
+                        window.eval(source)?.(apiHost)?.inject?.({ config, posthog: this.instance })
+                    } catch (e) {
+                        console.error(`Error while initializing PostHog app with config id ${id}`, e)
+                    }
                 }
+            } else {
+                console.error(
+                    'PostHog app injection was requested, but is disabled. Enable the "opt_in_web_app_injection" config to proceed.'
+                )
             }
         }
     }
