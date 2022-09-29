@@ -96,7 +96,8 @@ describe('Decide', () => {
             expect(console.error).toHaveBeenCalledWith('Failed to fetch feature flags from PostHog.')
         })
 
-        it('runs injected code', () => {
+        it('runs injected code if opted in', () => {
+            given('config', () => ({ api_host: 'https://test.com', opt_in_web_app_injection: true }))
             const source = 'injected source'
             window.injectedSource = null
             window.eval = (source) => {
@@ -106,6 +107,19 @@ describe('Decide', () => {
             given('decideResponse', () => ({ inject: [{ source }] }))
             given.subject()
             expect(window.injectedSource).toBe(source)
+        })
+
+        it('does not run injected code if not opted in', () => {
+            given('config', () => ({ api_host: 'https://test.com', opt_in_web_app_injection: false }))
+            const source = 'injected source'
+            window.injectedSource = null
+            window.eval = (source) => {
+                // can't run window.eval() in jest, so mocking it instead
+                window.injectedSource = source
+            }
+            given('decideResponse', () => ({ inject: [{ source }] }))
+            given.subject()
+            expect(window.injectedSource).toBe(null)
         })
     })
 })

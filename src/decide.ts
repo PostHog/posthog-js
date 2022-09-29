@@ -61,7 +61,7 @@ export class Decide {
             this.instance['compression'] = {}
         }
 
-        if (response['inject']) {
+        if (response['inject'] && this.instance.get_config('opt_in_web_app_injection')) {
             for (const { id, source, config } of response['inject']) {
                 try {
                     const apiHost = this.instance.get_config('api_host')
