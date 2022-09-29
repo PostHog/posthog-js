@@ -95,5 +95,17 @@ describe('Decide', () => {
             expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
             expect(console.error).toHaveBeenCalledWith('Failed to fetch feature flags from PostHog.')
         })
+
+        it('runs injected code', () => {
+            const source = 'injected source'
+            window.injectedSource = null
+            window.eval = (source) => {
+                // can't run window.eval() in jest, so mocking it instead
+                window.injectedSource = source
+            }
+            given('decideResponse', () => ({ inject: [{ source }] }))
+            given.subject()
+            expect(window.injectedSource).toBe(source)
+        })
     })
 })

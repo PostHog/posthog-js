@@ -160,6 +160,7 @@ export interface DecideResponse {
     editorParams: EditorParams
     toolbarVersion: 'toolbar' /** deprecated, moved to editorParams */
     isAuthenticated: boolean
+    inject: { id: number; source: string; config?: Record<string, any> }[]
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
