@@ -44,6 +44,7 @@ export interface PostHogConfig {
     opt_out_persistence_by_default: boolean
     opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
     opt_out_capturing_cookie_prefix: string | null
+    opt_in_web_app_injection: boolean
     respect_dnt: boolean
     property_blacklist: string[]
     xhr_headers: { [header_name: string]: string }
