@@ -1,3 +1,7 @@
+## 1.32.1 - 2022-09-29
+
+- feat(apps): add opt_in_web_app_injection (#454)
+
 ## 1.32.0 - 2022-09-29
 
 - feat(apps): inject javascript from decide (#453)
