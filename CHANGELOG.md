@@ -1,3 +1,7 @@
+## 1.32.0 - 2022-09-29
+
+- feat(apps): inject javascript from decide (#453)
+
 ## 1.31.1 - 2022-09-28
 
 - feat(recordings): server side console log setting (#452)
