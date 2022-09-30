@@ -1,3 +1,7 @@
+## 1.32.2 - 2022-09-30
+
+- feat(apps): load web apps from external scripts, no eval (#456)
+
 ## 1.32.1 - 2022-09-29
 
 - feat(apps): add opt_in_web_app_injection (#454)
