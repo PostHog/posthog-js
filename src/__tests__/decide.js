@@ -98,28 +98,21 @@ describe('Decide', () => {
 
         it('runs injected code if opted in', () => {
             given('config', () => ({ api_host: 'https://test.com', opt_in_web_app_injection: true }))
-            const source = 'injected source'
-            window.injectedSource = null
-            window.eval = (source) => {
-                // can't run window.eval() in jest, so mocking it instead
-                window.injectedSource = source
-            }
-            given('decideResponse', () => ({ inject: [{ source }] }))
+            given('decideResponse', () => ({ inject: [{ id: 1, url: '/web_js/1/tokentoken/' }] }))
             given.subject()
-            expect(window.injectedSource).toBe(source)
+            const element = window.document.body.children[0]
+            expect(element.src).toBe('https://test.com/web_js/1/tokentoken/')
         })
 
         it('does not run injected code if not opted in', () => {
             given('config', () => ({ api_host: 'https://test.com', opt_in_web_app_injection: false }))
-            const source = 'injected source'
-            window.injectedSource = null
-            window.eval = (source) => {
-                // can't run window.eval() in jest, so mocking it instead
-                window.injectedSource = source
-            }
-            given('decideResponse', () => ({ inject: [{ source }] }))
-            given.subject()
-            expect(window.injectedSource).toBe(null)
+            given('decideResponse', () => ({ inject: [{ id: 1, url: '/web_js/1/tokentoken/' }] }))
+            expect(() => {
+                given.subject()
+            }).toThrow(
+                // throwing only in tests, just an error in production
+                'Unexpected console.error: PostHog app injection was requested, but is disabled. Enable the "opt_in_web_app_injection" config to proceed.'
+            )
         })
     })
 })
