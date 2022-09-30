@@ -76,7 +76,7 @@ export class Decide {
                     ;(window as any)[`__$$ph_web_js_${id}`] = this.instance
                     document.body.appendChild(script)
                 }
-            } else {
+            } else if (response['inject'].length > 0) {
                 console.error(
                     'PostHog app injection was requested, but is disabled. Enable the "opt_in_web_app_injection" config to proceed.'
                 )
