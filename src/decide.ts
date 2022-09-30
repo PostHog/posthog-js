@@ -66,7 +66,10 @@ export class Decide {
                 const apiHost = this.instance.get_config('api_host')
                 for (const { id, url } of response['inject']) {
                     const script = document.createElement('script')
-                    script.src = [apiHost, url].join('').split('//').join('/')
+                    script.src = [
+                        apiHost,
+                        apiHost[apiHost.length - 1] === '/' && url[0] === '/' ? url.substring(1) : url,
+                    ].join('')
                     script.onerror = (e) => {
                         console.error(`Error while initializing PostHog app with config id ${id}`, e)
                     }
