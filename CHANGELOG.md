@@ -1,3 +1,7 @@
+## 1.32.3 - 2022-10-11
+
+- feat(apps): rename "inject" to "site apps" (#458)
+
 ## 1.32.2 - 2022-09-30
 
 - feat(apps): load web apps from external scripts, no eval (#456)
