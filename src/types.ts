@@ -44,7 +44,7 @@ export interface PostHogConfig {
     opt_out_persistence_by_default: boolean
     opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
     opt_out_capturing_cookie_prefix: string | null
-    opt_in_web_app_injection: boolean
+    opt_in_site_apps: boolean
     respect_dnt: boolean
     property_blacklist: string[]
     xhr_headers: { [header_name: string]: string }
@@ -161,7 +161,7 @@ export interface DecideResponse {
     editorParams: EditorParams
     toolbarVersion: 'toolbar' /** deprecated, moved to editorParams */
     isAuthenticated: boolean
-    inject: { id: number; url: string }[]
+    siteApps: { id: number; url: string }[]
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
