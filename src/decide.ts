@@ -61,10 +61,10 @@ export class Decide {
             this.instance['compression'] = {}
         }
 
-        if (response['inject']) {
-            if (this.instance.get_config('opt_in_web_app_injection')) {
+        if (response['siteApps']) {
+            if (this.instance.get_config('opt_in_site_apps')) {
                 const apiHost = this.instance.get_config('api_host')
-                for (const { id, url } of response['inject']) {
+                for (const { id, url } of response['siteApps']) {
                     const script = document.createElement('script')
                     script.src = [
                         apiHost,
@@ -76,10 +76,8 @@ export class Decide {
                     ;(window as any)[`__$$ph_web_js_${id}`] = this.instance
                     document.body.appendChild(script)
                 }
-            } else if (response['inject'].length > 0) {
-                console.error(
-                    'PostHog app injection was requested, but is disabled. Enable the "opt_in_web_app_injection" config to proceed.'
-                )
+            } else if (response['siteApps'].length > 0) {
+                console.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
             }
         }
     }

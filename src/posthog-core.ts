@@ -122,7 +122,7 @@ const defaultConfig = (): PostHogConfig => ({
     opt_out_persistence_by_default: false,
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
-    opt_in_web_app_injection: false,
+    opt_in_site_apps: false,
     property_blacklist: [],
     respect_dnt: false,
     sanitize_properties: null,

@@ -96,22 +96,22 @@ describe('Decide', () => {
             expect(console.error).toHaveBeenCalledWith('Failed to fetch feature flags from PostHog.')
         })
 
-        it('runs injected code if opted in', () => {
-            given('config', () => ({ api_host: 'https://test.com', opt_in_web_app_injection: true }))
-            given('decideResponse', () => ({ inject: [{ id: 1, url: '/web_js/1/tokentoken/' }] }))
+        it('runs site apps if opted in', () => {
+            given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: true }))
+            given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             given.subject()
             const element = window.document.body.children[0]
-            expect(element.src).toBe('https://test.com/web_js/1/tokentoken/')
+            expect(element.src).toBe('https://test.com/site_app/1/tokentoken/hash/')
         })
 
-        it('does not run injected code if not opted in', () => {
-            given('config', () => ({ api_host: 'https://test.com', opt_in_web_app_injection: false }))
-            given('decideResponse', () => ({ inject: [{ id: 1, url: '/web_js/1/tokentoken/' }] }))
+        it('does not run site apps code if not opted in', () => {
+            given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: false }))
+            given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             expect(() => {
                 given.subject()
             }).toThrow(
                 // throwing only in tests, just an error in production
-                'Unexpected console.error: PostHog app injection was requested, but is disabled. Enable the "opt_in_web_app_injection" config to proceed.'
+                'Unexpected console.error: PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
         })
     })
