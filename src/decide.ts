@@ -73,7 +73,7 @@ export class Decide {
                     script.onerror = (e) => {
                         console.error(`Error while initializing PostHog app with config id ${id}`, e)
                     }
-                    ;(window as any)[`__$$ph_web_js_${id}`] = this.instance
+                    ;(window as any)[`__$$ph_site_app_${id}`] = this.instance
                     document.body.appendChild(script)
                 }
             } else if (response['siteApps'].length > 0) {
