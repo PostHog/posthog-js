@@ -1,3 +1,7 @@
+## 1.32.4 - 2022-10-11
+
+- fix(apps): grab the correct global var (#459)
+
 ## 1.32.3 - 2022-10-11
 
 - feat(apps): rename "inject" to "site apps" (#458)
