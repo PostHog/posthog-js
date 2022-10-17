@@ -810,7 +810,7 @@ export const _info = {
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(a)) {
             return 'BlackBerry'
         } else if (/Mac/i.test(a)) {
-            return 'Mac OS X'
+            return 'Mac OS'
         } else if (/Linux/.test(a)) {
             return 'Linux'
         } else if (/CrOS/.test(a)) {
