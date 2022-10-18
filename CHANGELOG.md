@@ -1,3 +1,7 @@
+## 1.33.0 - 2022-10-18
+
+- feat(capture): Track `navigator.language` as `$language` (#460)
+
 ## 1.32.4 - 2022-10-11
 
 - fix(apps): grab the correct global var (#459)
