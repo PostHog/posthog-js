@@ -64,7 +64,7 @@
         "given2": "^2.1.7",
         "husky": "^8.0.1",
         "jest": "^27.5.1",
-        "jsdom": "16.2.2",
+        "jsdom": "16.5.0",
         "jsdom-global": "3.0.2",
         "lint-staged": "^10.2.11",
         "localStorage": "1.0.4",
