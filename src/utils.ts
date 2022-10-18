@@ -796,6 +796,13 @@ export const _info = {
         return parseFloat(matches[matches.length - 2])
     },
 
+    browserLanguage: function (): string {
+        return (
+            navigator.language || // Any modern browser
+            (navigator as Record<string, any>).userLanguage // IE11
+        )
+    },
+
     os: function (): string {
         const a = userAgent
         if (/Windows/i.test(a)) {
@@ -872,6 +879,7 @@ export const _info = {
                 $host: window.location.host,
                 $pathname: window.location.pathname,
                 $browser_version: _info.browserVersion(userAgent, navigator.vendor, (window as any).opera),
+                $browser_language: _info.browserLanguage(),
                 $screen_height: window.screen.height,
                 $screen_width: window.screen.width,
                 $viewport_height: window.innerHeight,
