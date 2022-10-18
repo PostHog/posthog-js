@@ -872,7 +872,7 @@ export const _info = {
                 $host: window.location.host,
                 $pathname: window.location.pathname,
                 $browser_version: _info.browserVersion(userAgent, navigator.vendor, (window as any).opera),
-                $language: navigator.language,
+                $locale: navigator.language,
                 $screen_height: window.screen.height,
                 $screen_width: window.screen.width,
                 $viewport_height: window.innerHeight,
