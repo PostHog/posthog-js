@@ -90,10 +90,6 @@ describe('Toolbar', () => {
 
             given.subject()
             expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, source: 'url' })
-            expect(given.localStorage.setItem).toHaveBeenCalledWith(
-                '_postHogToolbarParams',
-                JSON.stringify(given.hashState)
-            )
         })
 
         it('should initialize the toolbar when there are editor params in the session', () => {
@@ -101,10 +97,6 @@ describe('Toolbar', () => {
 
             given.subject()
             expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, source: 'url' })
-            expect(given.localStorage.setItem).toHaveBeenCalledWith(
-                '_postHogToolbarParams',
-                JSON.stringify(given.hashState)
-            )
         })
 
         it('should NOT initialize the toolbar when the activation query param does not exist', () => {
@@ -163,6 +155,11 @@ describe('Toolbar', () => {
             apiURL: 'http://localhost:8000',
             jsURL: 'http://localhost:8000',
         }))
+
+        it('should persist for next time', () => {
+            expect(given.subject()).toBe(true)
+            expect(window.localStorage.getItem('_postHogToolbarParams')).toEqual(JSON.stringify(given.toolbarParams))
+        })
 
         it('should load if not previously loaded', () => {
             expect(given.subject()).toBe(true)

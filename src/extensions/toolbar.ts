@@ -61,9 +61,6 @@ export class Toolbar {
                 toolbarParams.source = 'url'
 
                 if (toolbarParams && Object.keys(toolbarParams).length > 0) {
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    const { source: _discard, ...rest } = toolbarParams
-                    localStorage.setItem('_postHogToolbarParams', JSON.stringify(rest))
                     if (state['desiredHash']) {
                         // hash that was in the url before the redirect
                         location.hash = state['desiredHash']
@@ -104,11 +101,16 @@ export class Toolbar {
         }
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         ;(window as any)['_postHogToolbarLoaded'] = true
+
+        // eslint-disable @typescript-eslint/no-unused-vars
+        const { source: _discard, ...paramsToPersist } = params || {}
+        window.localStorage.setItem('_postHogToolbarParams', JSON.stringify(paramsToPersist))
+
         const host = params?.['jsURL'] || params?.['apiURL'] || this.instance.get_config('api_host')
-        const toolbarScript = 'toolbar.js'
-        const toolbarUrl = `${host}${host.endsWith('/') ? '' : '/'}static/${toolbarScript}?_ts=${new Date().getTime()}`
+        const toolbarUrl = `${host}${host.endsWith('/') ? '' : '/'}static/toolbar.js?_ts=${new Date().getTime()}`
         const disableToolbarMetrics =
             this.instance.get_config('api_host') !== 'https://app.posthog.com' &&
+            this.instance.get_config('api_host') !== 'https://eu.posthog.com' &&
             this.instance.get_config('advanced_disable_toolbar_metrics')
         const toolbarParams = {
             apiURL: host, // defaults to api_host from the instance config if nothing else set
