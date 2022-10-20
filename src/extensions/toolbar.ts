@@ -53,14 +53,17 @@ export class Toolbar {
             const stateHash = _getHashParam(location.hash, '__posthog') || _getHashParam(location.hash, 'state')
             const state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
             const parseFromUrl = state && state['action'] === 'ph_authorize'
-            let toolbarParams
+            let toolbarParams: ToolbarParams
 
             if (parseFromUrl) {
                 // happens if they are initializing the toolbar using an old snippet
                 toolbarParams = state
+                toolbarParams.source = 'url'
 
                 if (toolbarParams && Object.keys(toolbarParams).length > 0) {
-                    localStorage.setItem('_postHogToolbarParams', JSON.stringify(toolbarParams))
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { source: _discard, ...rest } = toolbarParams
+                    localStorage.setItem('_postHogToolbarParams', JSON.stringify(rest))
                     if (state['desiredHash']) {
                         // hash that was in the url before the redirect
                         location.hash = state['desiredHash']
@@ -73,6 +76,7 @@ export class Toolbar {
             } else {
                 // get credentials from localStorage from a previous initialzation
                 toolbarParams = JSON.parse(localStorage.getItem('_postHogToolbarParams') || '{}')
+                toolbarParams.source = 'localstorage'
 
                 // delete "add-action" or other intent from toolbarParams, otherwise we'll have the same intent
                 // every time we open the page (e.g. you just visiting your own site an hour later)

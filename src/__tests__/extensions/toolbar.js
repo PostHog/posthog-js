@@ -89,7 +89,7 @@ describe('Toolbar', () => {
             }))
 
             given.subject()
-            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith(given.toolbarParams)
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, source: 'url' })
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogToolbarParams',
                 JSON.stringify(given.hashState)
@@ -100,7 +100,7 @@ describe('Toolbar', () => {
             given('storedEditorParams', () => JSON.stringify(toolbarParams))
 
             given.subject()
-            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith(given.toolbarParams)
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, source: 'url' })
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogToolbarParams',
                 JSON.stringify(given.hashState)
@@ -133,7 +133,7 @@ describe('Toolbar', () => {
             }))
 
             given.subject()
-            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith(given.toolbarParams)
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, source: 'url' })
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
                 '_postHogToolbarParams',
                 JSON.stringify(given.toolbarParams)
@@ -145,7 +145,11 @@ describe('Toolbar', () => {
 
             given.toolbar.maybeLoadToolbar(given.location, given.localStorage, given.history)
 
-            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, apiURL: 'blabla' })
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({
+                ...given.toolbarParams,
+                apiURL: 'blabla',
+                source: 'url',
+            })
         })
     })
 

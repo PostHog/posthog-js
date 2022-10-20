@@ -211,11 +211,25 @@ export interface PersistentStore {
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
+export type ToolbarUserIntent = 'add-action' | 'edit-action'
+export type ToolbarSource = 'url' | 'localstorage'
+export type ToolbarVersion = 'toolbar'
+
+/* sync with posthog */
 export interface ToolbarParams {
-    jsURL?: string
     apiURL?: string
-    toolbarVersion?: 'toolbar'
-    // other fields that come from the API are just passed on
+    jsURL?: string
+    token?: string /** public posthog-js token */
+    temporaryToken?: string /** private temporary user token */
+    actionId?: number
+    userIntent?: ToolbarUserIntent
+    source?: ToolbarSource
+    toolbarVersion?: ToolbarVersion
+    instrument?: boolean
+    distinctId?: string
+    userEmail?: string
+    dataAttributes?: string[]
+    featureFlags?: Record<string, string | boolean>
 }
 
 export interface PostData {
