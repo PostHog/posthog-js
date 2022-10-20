@@ -126,10 +126,6 @@ describe('Toolbar', () => {
 
             given.subject()
             expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, source: 'url' })
-            expect(given.localStorage.setItem).toHaveBeenCalledWith(
-                '_postHogToolbarParams',
-                JSON.stringify(given.toolbarParams)
-            )
         })
 
         it('should use the apiURL in the hash if available', () => {

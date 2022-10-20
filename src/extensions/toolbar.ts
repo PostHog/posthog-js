@@ -102,8 +102,7 @@ export class Toolbar {
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         ;(window as any)['_postHogToolbarLoaded'] = true
 
-        // eslint-disable @typescript-eslint/no-unused-vars
-        const { source: _discard, ...paramsToPersist } = params || {}
+        const { source: _discard, ...paramsToPersist } = params || {} // eslint-disable-line
         window.localStorage.setItem('_postHogToolbarParams', JSON.stringify(paramsToPersist))
 
         const host = params?.['jsURL'] || params?.['apiURL'] || this.instance.get_config('api_host')
