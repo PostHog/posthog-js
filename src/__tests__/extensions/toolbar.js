@@ -146,6 +146,7 @@ describe('Toolbar', () => {
 
         given('toolbarParams', () => ({
             accessToken: 'accessToken',
+            token: 'public_token',
             expiresAt: 'expiresAt',
             apiKey: 'apiKey',
             apiURL: 'http://localhost:8000',
@@ -154,7 +155,7 @@ describe('Toolbar', () => {
 
         it('should persist for next time', () => {
             expect(given.subject()).toBe(true)
-            expect(window.localStorage.getItem('_postHogToolbarParams')).toEqual(JSON.stringify(given.toolbarParams))
+            expect(JSON.parse(window.localStorage.getItem('_postHogToolbarParams'))).toEqual(given.toolbarParams)
         })
 
         it('should load if not previously loaded', () => {
@@ -178,7 +179,12 @@ describe('Toolbar', () => {
         it('should load if not previously loaded', () => {
             expect(given.subject()).toBe(true)
             expect(window.ph_load_toolbar).toHaveBeenCalledWith(
-                { ...given.toolbarParams, jsURL: 'http://api.example.com', apiURL: 'http://api.example.com' },
+                {
+                    ...given.toolbarParams,
+                    jsURL: 'http://api.example.com',
+                    apiURL: 'http://api.example.com',
+                    token: 'test_token',
+                },
                 given.lib
             )
         })

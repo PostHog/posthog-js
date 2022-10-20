@@ -102,21 +102,24 @@ export class Toolbar {
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         ;(window as any)['_postHogToolbarLoaded'] = true
 
-        const { source: _discard, ...paramsToPersist } = params || {} // eslint-disable-line
-        window.localStorage.setItem('_postHogToolbarParams', JSON.stringify(paramsToPersist))
-
         const host = params?.['jsURL'] || params?.['apiURL'] || this.instance.get_config('api_host')
         const toolbarUrl = `${host}${host.endsWith('/') ? '' : '/'}static/toolbar.js?_ts=${new Date().getTime()}`
         const disableToolbarMetrics =
             this.instance.get_config('api_host') !== 'https://app.posthog.com' &&
             this.instance.get_config('api_host') !== 'https://eu.posthog.com' &&
             this.instance.get_config('advanced_disable_toolbar_metrics')
+
         const toolbarParams = {
             apiURL: host, // defaults to api_host from the instance config if nothing else set
             jsURL: host, // defaults to api_host from the instance config if nothing else set
+            token: this.instance.get_config('token'),
             ...params,
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
+
+        const { source: _discard, ...paramsToPersist } = toolbarParams // eslint-disable-line
+        window.localStorage.setItem('_postHogToolbarParams', JSON.stringify(paramsToPersist))
+
         loadScript(toolbarUrl, () => {
             ;((window as any)['ph_load_toolbar'] || (window as any)['ph_load_editor'])(toolbarParams, this.instance)
         })
