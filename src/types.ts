@@ -158,8 +158,9 @@ export interface DecideResponse {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
     }
-    editorParams: EditorParams
-    toolbarVersion: 'toolbar' /** deprecated, moved to editorParams */
+    toolbarParams: ToolbarParams
+    editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
+    toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
 }
@@ -210,10 +211,11 @@ export interface PersistentStore {
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
-export interface EditorParams {
+export interface ToolbarParams {
     jsURL?: string
     apiURL?: string
     toolbarVersion?: 'toolbar'
+    // other fields that come from the API are just passed on
 }
 
 export interface PostData {

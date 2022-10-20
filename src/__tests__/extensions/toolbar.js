@@ -12,18 +12,18 @@ describe('Toolbar', () => {
     }))
 
     given('config', () => ({
-        api_host: 'example.com',
+        api_host: 'http://api.example.com',
         token: 'test_token',
     }))
 
     beforeEach(() => {
         loadScript.mockImplementation((path, callback) => callback())
-        window.ph_load_editor = jest.fn()
+        window.ph_load_toolbar = jest.fn()
         delete window['_postHogToolbarLoaded']
     })
 
-    describe('maybeLoadEditor', () => {
-        given('subject', () => () => given.toolbar.maybeLoadEditor(given.location, given.localStorage, given.history))
+    describe('maybeLoadToolbar', () => {
+        given('subject', () => () => given.toolbar.maybeLoadToolbar(given.location, given.localStorage, given.history))
 
         given('location', () => ({
             hash: `#${given.hash}`,
@@ -63,7 +63,7 @@ describe('Toolbar', () => {
             expires_in: 3600,
         }))
 
-        given('editorParams', () => ({
+        given('toolbarParams', () => ({
             action: 'ph_authorize',
             desiredHash: '#myhash',
             projectId: 3,
@@ -76,52 +76,42 @@ describe('Toolbar', () => {
             },
             userId: 12345,
             apiURL: given.config.api_host,
-            ...given.editorParamsOverrides,
+            ...given.toolbarParamsOverrides,
         }))
 
         beforeEach(() => {
-            jest.spyOn(given.toolbar, '_loadEditor').mockImplementation(() => {})
+            jest.spyOn(given.toolbar, 'loadToolbar').mockImplementation(() => {})
         })
 
-        it('should initialize the visual editor when the hash state contains action "mpeditor"', () => {
-            given.subject()
-
-            expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
-            expect(given.localStorage.setItem).toHaveBeenCalledWith(
-                '_postHogEditorParams',
-                JSON.stringify(given.hashState)
-            )
-        })
-
-        it('should initialize the visual editor when the hash state contains action "ph_authorize"', () => {
-            given('editorParamsOverrides', () => ({
+        it('should initialize the toolbar when the hash state contains action "ph_authorize"', () => {
+            given('toolbarParamsOverrides', () => ({
                 action: 'ph_authorize',
             }))
 
             given.subject()
-            expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith(given.toolbarParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
-                '_postHogEditorParams',
+                '_postHogToolbarParams',
                 JSON.stringify(given.hashState)
             )
         })
 
-        it('should initialize the visual editor when there are editor params in the session', () => {
-            given('storedEditorParams', () => JSON.stringify(editorParams))
+        it('should initialize the toolbar when there are editor params in the session', () => {
+            given('storedEditorParams', () => JSON.stringify(toolbarParams))
 
             given.subject()
-            expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith(given.toolbarParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
-                '_postHogEditorParams',
+                '_postHogToolbarParams',
                 JSON.stringify(given.hashState)
             )
         })
 
-        it('should NOT initialize the visual editor when the activation query param does not exist', () => {
+        it('should NOT initialize the toolbar when the activation query param does not exist', () => {
             given('hash', () => '')
 
             expect(given.subject()).toEqual(false)
-            expect(given.toolbar._loadEditor).not.toHaveBeenCalled()
+            expect(given.toolbar.loadToolbar).not.toHaveBeenCalled()
         })
 
         it('should return false when parsing invalid JSON from fragment state', () => {
@@ -132,46 +122,68 @@ describe('Toolbar', () => {
             }))
 
             expect(given.subject()).toEqual(false)
-            expect(given.toolbar._loadEditor).not.toHaveBeenCalled()
+            expect(given.toolbar.loadToolbar).not.toHaveBeenCalled()
         })
 
-        it('should work if calling editor params `__posthog`', () => {
+        it('should work if calling toolbar params `__posthog`', () => {
             given('hashParams', () => ({
                 access_token: given.accessToken,
-                __posthog: encodeURIComponent(JSON.stringify(given.editorParams)),
+                __posthog: encodeURIComponent(JSON.stringify(given.toolbarParams)),
                 expires_in: 3600,
             }))
 
             given.subject()
-            expect(given.toolbar._loadEditor).toHaveBeenCalledWith(given.editorParams)
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith(given.toolbarParams)
             expect(given.localStorage.setItem).toHaveBeenCalledWith(
-                '_postHogEditorParams',
-                JSON.stringify(given.editorParams)
+                '_postHogToolbarParams',
+                JSON.stringify(given.toolbarParams)
             )
         })
 
         it('should use the apiURL in the hash if available', () => {
             given.hashState.apiURL = 'blabla'
 
-            given.toolbar.maybeLoadEditor(given.location, given.localStorage, given.history)
+            given.toolbar.maybeLoadToolbar(given.location, given.localStorage, given.history)
 
-            expect(given.toolbar._loadEditor).toHaveBeenCalledWith({ ...given.editorParams, apiURL: 'blabla' })
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, apiURL: 'blabla' })
         })
     })
 
-    describe('load and close editor', () => {
-        given('subject', () => () => given.toolbar._loadEditor(given.editorParams))
+    describe('load and close toolbar', () => {
+        given('subject', () => () => given.toolbar.loadToolbar(given.toolbarParams))
 
-        given('editorParams', () => ({
+        given('toolbarParams', () => ({
             accessToken: 'accessToken',
             expiresAt: 'expiresAt',
             apiKey: 'apiKey',
             apiURL: 'http://localhost:8000',
+            jsURL: 'http://localhost:8000',
         }))
 
         it('should load if not previously loaded', () => {
             expect(given.subject()).toBe(true)
-            expect(window.ph_load_editor).toHaveBeenCalledWith(given.editorParams, given.lib)
+            expect(window.ph_load_toolbar).toHaveBeenCalledWith(given.toolbarParams, given.lib)
+        })
+
+        it('should NOT load if previously loaded', () => {
+            expect(given.subject()).toBe(true)
+            expect(given.subject()).toBe(false)
+        })
+    })
+
+    describe('load and close toolbar with minimal params', () => {
+        given('subject', () => () => given.toolbar.loadToolbar(given.toolbarParams))
+
+        given('toolbarParams', () => ({
+            accessToken: 'accessToken',
+        }))
+
+        it('should load if not previously loaded', () => {
+            expect(given.subject()).toBe(true)
+            expect(window.ph_load_toolbar).toHaveBeenCalledWith(
+                { ...given.toolbarParams, jsURL: 'http://api.example.com', apiURL: 'http://api.example.com' },
+                given.lib
+            )
         })
 
         it('should NOT load if previously loaded', () => {
