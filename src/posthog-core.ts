@@ -1339,7 +1339,7 @@ export class PostHog {
     }
 
     /**
-     * returns a boolean indicating whether session recording
+     * returns a boolean indicating whether the toolbar loaded
      * @param toolbarParams
      */
 
