@@ -2,6 +2,7 @@ import { loadScript } from '../autocapture-utils'
 import { _getHashParam, _register_event } from '../utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, ToolbarParams } from '../types'
+import { POSTHOG_MANAGED_HOSTS } from './cloud'
 
 export class Toolbar {
     instance: PostHog
@@ -105,8 +106,7 @@ export class Toolbar {
         const host = params?.['jsURL'] || params?.['apiURL'] || this.instance.get_config('api_host')
         const toolbarUrl = `${host}${host.endsWith('/') ? '' : '/'}static/toolbar.js?_ts=${new Date().getTime()}`
         const disableToolbarMetrics =
-            this.instance.get_config('api_host') !== 'https://app.posthog.com' &&
-            this.instance.get_config('api_host') !== 'https://eu.posthog.com' &&
+            !POSTHOG_MANAGED_HOSTS.includes(this.instance.get_config('api_host')) &&
             this.instance.get_config('advanced_disable_toolbar_metrics')
 
         const toolbarParams = {
