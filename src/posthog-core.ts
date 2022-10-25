@@ -38,6 +38,7 @@ import {
     CaptureOptions,
     CaptureResult,
     Compression,
+    ToolbarParams,
     GDPROptions,
     isFeatureEnabledOptions,
     JSC,
@@ -189,7 +190,7 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
     }
 
     instance._init(token, config, name)
-    instance.toolbar.maybeLoadEditor()
+    instance.toolbar.maybeLoadToolbar()
 
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
@@ -1335,6 +1336,15 @@ export class PostHog {
      */
     sessionRecordingStarted(): boolean {
         return !!this.sessionRecording?.started()
+    }
+
+    /**
+     * returns a boolean indicating whether the toolbar loaded
+     * @param toolbarParams
+     */
+
+    loadToolbar(params: ToolbarParams): boolean {
+        return this.toolbar.loadToolbar(params)
     }
 
     /**

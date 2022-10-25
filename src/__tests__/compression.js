@@ -86,7 +86,7 @@ describe('Payload Compression', () => {
                 getGroups: () => ({}),
 
                 toolbar: {
-                    maybeLoadEditor: jest.fn(),
+                    maybeLoadToolbar: jest.fn(),
                     afterDecideResponse: jest.fn(),
                 },
                 sessionRecording: {

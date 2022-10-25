@@ -419,7 +419,7 @@ describe('Autocapture system', () => {
                     return 'distinctid'
                 },
                 toolbar: {
-                    maybeLoadEditor: jest.fn(),
+                    maybeLoadToolbar: jest.fn(),
                 },
             }
             autocapture.init(lib)
@@ -472,7 +472,7 @@ describe('Autocapture system', () => {
                     return 'distinctid'
                 },
                 toolbar: {
-                    maybeLoadEditor: jest.fn(),
+                    maybeLoadToolbar: jest.fn(),
                 },
             }
             autocapture.init(lib)

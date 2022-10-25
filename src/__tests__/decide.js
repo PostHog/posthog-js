@@ -15,7 +15,7 @@ describe('Decide', () => {
             .fn()
             .mockImplementation((url, params, options, callback) => callback({ config: given.decideResponse })),
         toolbar: {
-            maybeLoadEditor: jest.fn(),
+            maybeLoadToolbar: jest.fn(),
             afterDecideResponse: jest.fn(),
         },
         sessionRecording: {

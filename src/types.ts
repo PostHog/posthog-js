@@ -158,8 +158,9 @@ export interface DecideResponse {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
     }
-    editorParams: EditorParams
-    toolbarVersion: 'toolbar' /** deprecated, moved to editorParams */
+    toolbarParams: ToolbarParams
+    editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
+    toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
 }
@@ -210,10 +211,25 @@ export interface PersistentStore {
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
-export interface EditorParams {
-    jsURL?: string
+export type ToolbarUserIntent = 'add-action' | 'edit-action'
+export type ToolbarSource = 'url' | 'localstorage'
+export type ToolbarVersion = 'toolbar'
+
+/* sync with posthog */
+export interface ToolbarParams {
     apiURL?: string
-    toolbarVersion?: 'toolbar'
+    jsURL?: string
+    token?: string /** public posthog-js token */
+    temporaryToken?: string /** private temporary user token */
+    actionId?: number
+    userIntent?: ToolbarUserIntent
+    source?: ToolbarSource
+    toolbarVersion?: ToolbarVersion
+    instrument?: boolean
+    distinctId?: string
+    userEmail?: string
+    dataAttributes?: string[]
+    featureFlags?: Record<string, string | boolean>
 }
 
 export interface PostData {
