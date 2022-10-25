@@ -1,3 +1,21 @@
+## 1.34.0 - 2022-10-25
+
+- feat(toolbar): posthog.loadToolbar({ temporaryToken: 'key' }) (#464)
+- chore(deps): Bump node-fetch from 2.6.1 to 2.6.7 (#361)
+- chore(deps): bump glob-parent from 5.1.1 to 5.1.2 (#462)
+- chore(deps): Bump browserslist from 4.16.1 to 4.21.4 (#463)
+- chore(deps): Bump moment from 2.29.1 to 2.29.4 (#422)
+- chore(deps): Bump tmpl from 1.0.4 to 1.0.5 (#329)
+- chore(deps): Bump jsdom from 16.4.0 to 16.7.0 in /react (#415)
+- chore(deps): Bump jsdom from 16.2.2 to 16.5.0 (#416)
+- chore(deps): bump nanoid from 3.1.20 to 3.3.4 (#442)
+- chore(deps): bump ansi-regex from 5.0.0 to 5.0.1 (#436)
+- chore(deps): Bump async from 3.2.0 to 3.2.3 (#409)
+- chore(deps): Bump minimist from 1.2.5 to 1.2.6 (#380)
+- chore(deps): Bump minimist from 1.2.5 to 1.2.6 in /react (#379)
+- chore(deps): Bump lodash from 4.17.19 to 4.17.21 (#353)
+- Bump path-parse from 1.0.6 to 1.0.7 (#331)
+
 ## 1.33.0 - 2022-10-18
 
 - feat(capture): Track `navigator.language` as `$language` (#460)
