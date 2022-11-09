@@ -51,14 +51,13 @@ export class Decide {
 
         this.instance.featureFlags.receivedFeatureFlags(response)
 
-        if (response['supportedCompression']) {
+        this.instance['compression'] = {}
+        if (response['supportedCompression'] && !this.instance.get_config('disable_compression')) {
             const compression: Partial<Record<Compression, boolean>> = {}
             for (const method of response['supportedCompression']) {
                 compression[method] = true
             }
             this.instance['compression'] = compression
-        } else {
-            this.instance['compression'] = {}
         }
 
         if (response['siteApps']) {
