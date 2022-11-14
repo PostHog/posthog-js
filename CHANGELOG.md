@@ -1,3 +1,7 @@
+## 1.34.1 - 2022-11-14
+
+- feat: allow disable compression in config (#467)
+
 ## 1.34.0 - 2022-10-25
 
 - feat(toolbar): posthog.loadToolbar({ temporaryToken: 'key' }) (#464)
