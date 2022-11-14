@@ -161,6 +161,7 @@ const defaultConfig = (): PostHogConfig => ({
     name: 'posthog',
     callback_fn: 'posthog._jsc',
     bootstrap: {},
+    disable_compression: false,
 })
 
 /**

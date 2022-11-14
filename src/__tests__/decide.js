@@ -86,6 +86,22 @@ describe('Decide', () => {
             expect(given.posthog.compression['lz64']).toBe(true)
         })
 
+        it('enables compression from decide response when only one received', () => {
+            given('decideResponse', () => ({ supportedCompression: ['lz64'] }))
+            given.subject()
+
+            expect(given.posthog.compression).not.toHaveProperty('gzip')
+            expect(given.posthog.compression['lz64']).toBe(true)
+        })
+
+        it('does not enable compression from decide response if compression is disabled', () => {
+            given('config', () => ({ disable_compression: true }))
+            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+            given.subject()
+
+            expect(given.posthog.compression).toEqual({})
+        })
+
         it('Make sure receivedFeatureFlags is not called if the decide response fails', () => {
             given('decideResponse', () => ({ status: 0 }))
             console.error = jest.fn()
