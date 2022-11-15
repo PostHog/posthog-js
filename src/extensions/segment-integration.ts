@@ -53,7 +53,6 @@ export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         name: 'PostHog JS',
         type: 'enrichment',
         version: '1.0.0',
-
         isLoaded: () => true,
         load: () => Promise.resolve(),
         track: (ctx) => enrichEvent(ctx, ctx.event.event),

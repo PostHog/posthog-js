@@ -351,6 +351,14 @@ export class PostHog {
 
         this._gdpr_init()
 
+        if (config.segment) {
+            config.bootstrap = config.bootstrap || {}
+            config.bootstrap.distinctID = config.segment.user().id() || config.segment.user().anonymousId() || undefined
+            config.bootstrap.isIdentifiedID = !!config.segment.user().id()
+
+            config.segment.register(this.segmentIntegration())
+        }
+
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.get_config('get_device_id')(_UUID())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
