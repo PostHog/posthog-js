@@ -1,5 +1,5 @@
 /**
- * Integrate Sentry with PostHog. This will add a direct link to the person in Sentry, and an $exception event in PostHog
+ * Extend Segment with extra PostHog JS functionality. Required for things like Recordings and feature flags to work correctly.
  *
  * ### Usage
  *
