@@ -23,6 +23,7 @@ interface SegmentPluginContext {
     event: {
         event: string
         userId?: string
+        anonymousId?: string
         properties: any
     }
 }
@@ -45,7 +46,11 @@ interface SegmentPlugin {
 
 export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     const enrichEvent = (ctx: SegmentPluginContext, eventName: string) => {
-        if (ctx.event.userId) {
+        if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
+            // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
+            posthog.reset()
+        }
+        if (ctx.event.userId && ctx.event.userId !== posthog.get_distinct_id()) {
             posthog.register({
                 distinct_id: ctx.event.userId,
             })
