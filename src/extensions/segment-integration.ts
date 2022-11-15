@@ -21,6 +21,7 @@ import { PostHog } from '../posthog-core'
 interface SegmentPluginContext {
     event: {
         event: string
+        userId?: string
         properties: any
     }
 }
@@ -43,6 +44,12 @@ interface SegmentPlugin {
 
 export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     const enrichEvent = (ctx: SegmentPluginContext, eventName: string) => {
+        if (ctx.event.userId) {
+            posthog.register({
+                distinct_id: ctx.event.userId,
+            })
+        }
+
         const additionalProperties = posthog._calculate_event_properties(eventName, ctx.event.properties)
         console.log('Enriching', eventName, ctx.event.properties, additionalProperties)
         ctx.event.properties = Object.assign({}, additionalProperties, ctx.event.properties)

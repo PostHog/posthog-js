@@ -43,6 +43,13 @@
         Trigger pageview
     </button>
 
+    <button data-cy-custom-event-button onclick="analytics.identify(`user-${Math.round(Math.random() * 100000)}`)">
+        Identify
+    </button>
+    <button data-cy-custom-event-button onclick="analytics.reset()">
+        Reset
+    </button>
+
     <br />
 
     <button data-cy-feature-flag-button onclick="console.log(posthog.isFeatureEnabled('some-feature'))">
@@ -66,6 +73,9 @@
 
     <div>
 
+        <div>DistinctID:
+            <span id="current-distinct-id"></span>
+        </div>
         <div>SessionID:
             <span id="current-session-id"></span>
         </div>
@@ -80,10 +90,11 @@
 
     <script>
 
-        setTimeout(() => {
+        setInterval(() => {
+            document.getElementById("current-distinct-id").innerHTML = posthog.get_distinct_id()
             document.getElementById("current-session-id").innerHTML = posthog.sessionRecording.sessionId
             document.getElementById("current-window-id").innerHTML = posthog.sessionRecording.windowId
-        }, 2000)
+        }, 1000)
     </script>
 </body>
 
