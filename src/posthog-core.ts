@@ -51,6 +51,7 @@ import {
     XHROptions,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
+import { createSegmentIntegration } from './extensions/segment-integration'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -256,12 +257,14 @@ export class PostHog {
     decideEndpointWasHit: boolean
 
     SentryIntegration: typeof SentryIntegration
+    segmentIntegration: () => any
 
     constructor() {
         this.config = defaultConfig()
         this.compression = {}
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
+        this.segmentIntegration = () => createSegmentIntegration(this)
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
@@ -714,8 +717,6 @@ export class PostHog {
             return
         }
 
-        const start_timestamp = this.persistence.remove_event_timer(event_name)
-
         // update persistence
         this.persistence.update_search_keyword(document.referrer)
 
@@ -728,7 +729,7 @@ export class PostHog {
 
         let data: CaptureResult = {
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}, start_timestamp),
+            properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
         if (event_name === '$identify' && options.$set) {
@@ -774,8 +775,9 @@ export class PostHog {
         _each(this.__captureHooks, (callback) => callback(eventName))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties, start_timestamp: number): Properties {
+    _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
         // set defaults
+        const start_timestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
         properties['token'] = this.get_config('token')
 
