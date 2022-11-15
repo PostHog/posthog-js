@@ -72,6 +72,7 @@ export interface PostHogConfig {
         isIdentifiedID?: boolean
         featureFlags?: Record<string, boolean | string>
     }
+    segment?: any
 }
 
 export interface OptInOutCapturingOptions {

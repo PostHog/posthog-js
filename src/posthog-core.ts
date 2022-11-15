@@ -51,6 +51,7 @@ import {
     XHROptions,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
+import { createSegmentIntegration } from './extensions/segment-integration'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -256,12 +257,14 @@ export class PostHog {
     decideEndpointWasHit: boolean
 
     SentryIntegration: typeof SentryIntegration
+    segmentIntegration: () => any
 
     constructor() {
         this.config = defaultConfig()
         this.compression = {}
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
+        this.segmentIntegration = () => createSegmentIntegration(this)
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
@@ -347,6 +350,20 @@ export class PostHog {
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
 
         this._gdpr_init()
+
+        if (config.segment) {
+            // Use segments anonymousId instead
+            this.config.get_device_id = () => config.segment.user().anonymousId()
+
+            // If a segment user ID exists, set it as the distinct_id
+            if (config.segment.user().id()) {
+                this.register({
+                    distinct_id: config.segment.user().id(),
+                })
+            }
+
+            config.segment.register(this.segmentIntegration())
+        }
 
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.get_config('get_device_id')(_UUID())
@@ -714,8 +731,6 @@ export class PostHog {
             return
         }
 
-        const start_timestamp = this.persistence.remove_event_timer(event_name)
-
         // update persistence
         this.persistence.update_search_keyword(document.referrer)
 
@@ -728,7 +743,7 @@ export class PostHog {
 
         let data: CaptureResult = {
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}, start_timestamp),
+            properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
         if (event_name === '$identify' && options.$set) {
@@ -774,8 +789,9 @@ export class PostHog {
         _each(this.__captureHooks, (callback) => callback(eventName))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties, start_timestamp: number): Properties {
+    _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
         // set defaults
+        const start_timestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
         properties['token'] = this.get_config('token')
 

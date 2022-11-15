@@ -1,0 +1,103 @@
+<html>
+<head>
+    <script src="/static/array.js"></script>
+
+    <script>
+        !function () {
+            var analytics = window.analytics = window.analytics || []; if (!analytics.initialize) if (analytics.invoked) window.console && console.error && console.error("Segment snippet included twice."); else {
+                analytics.invoked = !0; analytics.methods = ["trackSubmit", "trackClick", "trackLink", "trackForm", "pageview", "identify", "reset", "group", "track", "ready", "alias", "debug", "page", "once", "off", "on", "addSourceMiddleware", "addIntegrationMiddleware", "setAnonymousId", "addDestinationMiddleware"]; analytics.factory = function (e) { return function () { var t = Array.prototype.slice.call(arguments); t.unshift(e); analytics.push(t); return analytics } }; for (var e = 0; e < analytics.methods.length; e++) { var key = analytics.methods[e]; analytics[key] = analytics.factory(key) } analytics.load = function (key, e) { var t = document.createElement("script"); t.type = "text/javascript"; t.async = !0; t.src = "https://cdn.segment.com/analytics.js/v1/" + key + "/analytics.min.js"; var n = document.getElementsByTagName("script")[0]; n.parentNode.insertBefore(t, n); analytics._loadOptions = e }; analytics._writeKey = "GOEDfA21zZTtR7clsBuDvmBKAtAdZ6Np";; analytics.SNIPPET_VERSION = "4.15.3";
+                analytics.load("GOEDfA21zZTtR7clsBuDvmBKAtAdZ6Np");
+
+                analytics.ready(() => {
+                    posthog.init('phc_mxO23D02CR3QU7V1u95ae3YEGNAFGuvyUlRpVNwX89B', {
+                        capture_pageview: false,
+                        autocapture: false,
+                        segment: window.analytics,
+                    });
+                    window.analytics.page();
+                })
+            }
+        }();
+    </script>
+
+
+</head>
+
+
+<body>
+    <h2>This page loads PostHog via Segment</h2>
+
+    <button data-cy-button>Some button</button>
+
+    <br />
+
+    <input data-cy-input placeholder="Input" />
+
+    <br />
+
+    <button data-cy-custom-event-button onclick="analytics.track('custom-event', { foo: 2 })">
+        Send custom event
+    </button>
+
+    <button data-cy-custom-event-button onclick="analytics.page()">
+        Trigger pageview
+    </button>
+
+    <button data-cy-custom-event-button onclick="analytics.identify(`user-${Math.round(Math.random() * 100000)}`)">
+        Identify
+    </button>
+    <button data-cy-custom-event-button onclick="analytics.reset();">
+        Reset
+    </button>
+
+    <br />
+
+    <button data-cy-feature-flag-button onclick="console.log(posthog.isFeatureEnabled('some-feature'))">
+        Test a feature flag
+    </button>
+
+    <br />
+
+    <div data-cy-captures>
+    </div>
+
+
+    <a data-cy-link-mask-text>
+        Sensitive text!
+    </a>
+
+    <!-- TODO: Remove the ="true" once we have fixed the bug with autocapture to ensure E2E that it works -->
+    <button data-cy-button-sensitive-attributes="true" class='sensitive' id='sensitive' data-sensitive='sensitive'>
+        Sensitive attributes!
+    </button>
+
+    <div>
+
+        <div>DistinctID:
+            <span id="current-distinct-id"></span>
+        </div>
+        <div>SessionID:
+            <span id="current-session-id"></span>
+        </div>
+        <div>WindowID:
+            <span id="current-window-id"></span>
+        </div>
+
+        <button data-cy-custom-event-button onclick="window.open(window.location)">
+            Open new window
+        </button>
+    </div>
+
+    <script>
+
+        setInterval(() => {
+            document.getElementById("current-distinct-id").innerHTML = posthog.get_distinct_id()
+            document.getElementById("current-session-id").innerHTML = posthog.sessionRecording.sessionId
+            document.getElementById("current-window-id").innerHTML = posthog.sessionRecording.windowId
+        }, 1000)
+    </script>
+</body>
+
+</html>
+
+</body>

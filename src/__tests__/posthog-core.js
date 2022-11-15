@@ -441,6 +441,7 @@ describe('_calculate_event_properties()', () => {
         get_config: (key) => given.config[key],
         persistence: {
             properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+            remove_event_timer: jest.fn(),
         },
         sessionManager: {
             checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
