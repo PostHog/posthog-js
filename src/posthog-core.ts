@@ -355,7 +355,6 @@ export class PostHog {
             config.bootstrap = config.bootstrap || {}
             config.bootstrap.distinctID = config.segment.user().id() || config.segment.user().anonymousId() || undefined
             config.bootstrap.isIdentifiedID = !!config.segment.user().id()
-
             config.segment.register(this.segmentIntegration())
         }
 

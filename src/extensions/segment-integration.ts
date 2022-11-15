@@ -52,7 +52,6 @@ export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         }
 
         const additionalProperties = posthog._calculate_event_properties(eventName, ctx.event.properties)
-        console.log('Enriching', eventName, ctx.event.properties, additionalProperties)
         ctx.event.properties = Object.assign({}, additionalProperties, ctx.event.properties)
         return ctx
     }
