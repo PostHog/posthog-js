@@ -1,3 +1,7 @@
+## 1.35.0 - 2022-11-15
+
+- feat: Proper Segment plugin to enable Recordings and more (#471)
+
 ## 1.34.1 - 2022-11-14
 
 - feat: allow disable compression in config (#467)
