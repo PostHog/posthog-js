@@ -33,10 +33,11 @@ export class SentryIntegration implements Integration {
             addGlobalEventProcessor((event: Event) => {
                 if (event.level !== 'error' || !_posthog.__loaded) return event
                 if (!event.tags) event.tags = {}
-                event.tags['PostHog Person URL'] = _posthog.config.api_host + '/person/' + _posthog.get_distinct_id()
+                const host = _posthog.config.ui_host || _posthog.config.api_host
+                event.tags['PostHog Person URL'] = host + '/person/' + _posthog.get_distinct_id()
                 if (_posthog.sessionRecordingStarted()) {
                     event.tags['PostHog Recording URL'] =
-                        _posthog.config.api_host +
+                    host +
                         '/recordings/#sessionRecordingId=' +
                         _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
                 }
