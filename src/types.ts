@@ -17,6 +17,7 @@ export interface PostHogConfig {
     api_host: string
     api_method: string
     api_transport: string
+    ui_host: string | null
     token: string
     autocapture: boolean
     rageclick: boolean
