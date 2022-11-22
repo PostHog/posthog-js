@@ -37,7 +37,7 @@ export class SentryIntegration implements Integration {
                 event.tags['PostHog Person URL'] = host + '/person/' + _posthog.get_distinct_id()
                 if (_posthog.sessionRecordingStarted()) {
                     event.tags['PostHog Recording URL'] =
-                    host +
+                        host +
                         '/recordings/#sessionRecordingId=' +
                         _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
                 }
