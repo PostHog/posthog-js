@@ -1,3 +1,8 @@
+## 1.36.0 - 2022-11-22
+
+- feat(sentry-integration): Add `ui_host` option for reverse-proxying (#475)
+- chore(deps): Bump minimatch from 3.0.4 to 3.1.2 in /react (#468)
+
 ## 1.35.0 - 2022-11-15
 
 - feat: Proper Segment plugin to enable Recordings and more (#471)
