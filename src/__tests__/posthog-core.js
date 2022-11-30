@@ -980,7 +980,7 @@ describe('group()', () => {
                 instance: 'app.posthog.com',
             })
 
-            given.lib.resetGroup()
+            given.lib.resetGroups()
 
             expect(given.lib.persistence.props['$groups']).toEqual({})
 
