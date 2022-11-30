@@ -303,9 +303,6 @@ export const _strip_empty_properties = function (p: Properties): Properties {
     return ret
 }
 
-const COPY_IN_PROGRESS_ATTRIBUTE =
-    typeof Symbol !== 'undefined' ? Symbol('__deepCircularCopyInProgress__') : '__deepCircularCopyInProgress__'
-
 /**
  * Deep copies an object.
  * It handles cycles by replacing all references to them with `undefined`
@@ -313,35 +310,37 @@ const COPY_IN_PROGRESS_ATTRIBUTE =
  *
  * @param value
  * @param customizer
- * @param [key] if provided this is the object key associated with the value to be copied. It allows the customizer function to have context when it runs
  * @returns {{}|undefined|*}
  */
 function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
     value: T,
-    customizer?: <K extends keyof T = keyof T>(value: T[K], key?: K) => T[K],
-    key?: string
+    customizer?: <K extends keyof T = keyof T>(value: T[K], key?: K) => T[K]
 ): T | undefined {
-    if (value !== Object(value)) return customizer ? customizer(value as any, key) : value // primitive value
+    const COPY_IN_PROGRESS_SET = new Set()
 
-    if (value[COPY_IN_PROGRESS_ATTRIBUTE as any]) return undefined
-    ;(value as any)[COPY_IN_PROGRESS_ATTRIBUTE] = true
-    let result: T
+    function internalDeepCircularCopy(value: T, key?: string): T | undefined {
+        if (value !== Object(value)) return customizer ? customizer(value as any, key) : value // primitive value
 
-    if (_isArray(value)) {
-        result = [] as any as T
-        _eachArray(value, (it) => {
-            result.push(deepCircularCopy(it, customizer))
-        })
-    } else {
-        result = {} as T
-        _each(value, (val, key) => {
-            if (key !== COPY_IN_PROGRESS_ATTRIBUTE) {
-                ;(result as any)[key] = deepCircularCopy(val, customizer, key)
-            }
-        })
+        if (COPY_IN_PROGRESS_SET.has(value)) return undefined
+        COPY_IN_PROGRESS_SET.add(value)
+        let result: T
+
+        if (_isArray(value)) {
+            result = [] as any as T
+            _eachArray(value, (it) => {
+                result.push(internalDeepCircularCopy(it))
+            })
+        } else {
+            result = {} as T
+            _each(value, (val, key) => {
+                if (!COPY_IN_PROGRESS_SET.has(val)) {
+                    ;(result as any)[key] = internalDeepCircularCopy(val, key)
+                }
+            })
+        }
+        return result
     }
-    delete value[COPY_IN_PROGRESS_ATTRIBUTE as any]
-    return result
+    return internalDeepCircularCopy(value)
 }
 
 const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
@@ -906,6 +905,3 @@ export const _info = {
 }
 
 export { win as window, userAgent, logger, document }
-
-// Exports For Test ONLY
-export { COPY_IN_PROGRESS_ATTRIBUTE }
