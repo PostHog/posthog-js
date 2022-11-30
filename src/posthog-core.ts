@@ -1087,7 +1087,7 @@ export class PostHog {
     /**
      * Resets only the group properties of the user currently logged in.
      */
-    resetGroup(): void {
+    resetGroups(): void {
         this.register({ $groups: {} })
 
         // If groups changed, reload feature flags.
