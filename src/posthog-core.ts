@@ -1085,10 +1085,7 @@ export class PostHog {
     }
 
     /**
-     * Alpha feature: don't use unless you know what you're doing!
-     *
      * Resets only the group properties of the user currently logged in.
-     *
      */
     resetGroup(): void {
         this.register({ $groups: {} })
