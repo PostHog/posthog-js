@@ -969,6 +969,24 @@ describe('group()', () => {
             expect(given.overrides.register).not.toHaveBeenCalled()
         })
     })
+
+    describe('reset group', () => {
+        it('groups property is empty and reloads feature flags', () => {
+            given.lib.group('organization', 'org::5')
+            given.lib.group('instance', 'app.posthog.com')
+
+            expect(given.lib.persistence.props['$groups']).toEqual({
+                organization: 'org::5',
+                instance: 'app.posthog.com',
+            })
+
+            given.lib.resetGroups()
+
+            expect(given.lib.persistence.props['$groups']).toEqual({})
+
+            expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(3)
+        })
+    })
 })
 
 describe('_loaded()', () => {

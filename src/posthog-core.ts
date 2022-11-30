@@ -1085,6 +1085,16 @@ export class PostHog {
     }
 
     /**
+     * Resets only the group properties of the user currently logged in.
+     */
+    resetGroups(): void {
+        this.register({ $groups: {} })
+
+        // If groups changed, reload feature flags.
+        this.reloadFeatureFlags()
+    }
+
+    /**
      * Clears super properties and generates a new random distinct_id for this instance.
      * Useful for clearing data when a user logs out.
      */
