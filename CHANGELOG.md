@@ -1,3 +1,9 @@
+## 1.36.1 - 2022-12-01
+
+- update sentry types (#479)
+- fix: support copying non-extensible objects (#478)
+- feat(groups): allow resetting only user's groups (#476)
+
 ## 1.36.0 - 2022-11-22
 
 - feat(sentry-integration): Add `ui_host` option for reverse-proxying (#475)
