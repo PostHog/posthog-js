@@ -5,7 +5,7 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, _info, COPY_IN_PROGRESS_ATTRIBUTE } from '../utils'
+import { _copyAndTruncateStrings, _info } from '../utils'
 
 describe(`utils.js`, () => {
     it('should have $host and $pathname in properties', () => {
@@ -54,23 +54,13 @@ describe('_.copyAndTruncateStrings', () => {
 
     it('handles recursive objects', () => {
         given('target', () => {
-            const object = { key: 'vaaaaalue', values: ['fooobar'], __deepCircularCopyInProgress__: 1 }
+            const object = { key: 'vaaaaalue', values: ['fooobar'] }
             object.values.push(object)
             object.ref = object
             return object
         })
 
-        expect(given.subject).toEqual({ key: 'vaaaa', values: ['fooob', undefined], __deepCircularCopyInProgress__: 1 })
-    })
-
-    it('should check copy-in-progress correctly', () => {
-        given('target', () => {
-            const base = Object.create({ [COPY_IN_PROGRESS_ATTRIBUTE]: undefined })
-            const object = Object.create(base)
-            return object
-        })
-
-        expect(given.subject).toEqual({})
+        expect(given.subject).toEqual({ key: 'vaaaa', values: ['fooob', undefined] })
     })
 
     it('does not truncate the apm raw performance property', () => {
@@ -80,6 +70,13 @@ describe('_.copyAndTruncateStrings', () => {
         given('target', () => original)
 
         expect(given.subject).toEqual(original)
+    })
+
+    it('handles frozen objects', () => {
+        const original = Object.freeze({ key: 'vaaaaalue' })
+        given('target', () => original)
+
+        expect(given.subject).toEqual({ key: 'vaaaa' })
     })
 })
 
