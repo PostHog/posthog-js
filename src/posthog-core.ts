@@ -100,7 +100,7 @@ const defaultConfig = (): PostHogConfig => ({
     ui_host: null,
     token: '',
     autocapture: true,
-    rageclick: false,
+    rageclick: true,
     cross_subdomain_cookie: document?.location?.hostname?.indexOf('herokuapp.com') === -1,
     persistence: 'cookie',
     persistence_name: '',
@@ -1199,8 +1199,8 @@ export class PostHog {
      *       // Automatically capture clicks, form submissions and change events
      *       autocapture: true
      *
-     *       // Capture rage clicks (beta) - useful for session recording
-     *       rageclick: false
+     *       // Capture rage clicks
+     *       rageclick: true
      *
      *       // transport for sending requests ('XHR' or 'sendBeacon')
      *       // NB: sendBeacon should only be used for scenarios such as
