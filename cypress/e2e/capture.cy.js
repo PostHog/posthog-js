@@ -9,7 +9,6 @@ describe('Event capture', () => {
     given('options', () => ({}))
     given('sessionRecording', () => false)
     given('supportedCompression', () => ['gzip', 'lz64'])
-    given('url', () => './playground/cypress')
 
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     const start = ({ waitForDecide = true } = {}) => {
@@ -28,7 +27,7 @@ describe('Event capture', () => {
             },
         }).as('decide')
 
-        cy.visit(given.url, {
+        cy.visit('./playground/cypress', {
             onBeforeLoad(win) {
                 cy.stub(win.console, 'error').as('consoleError')
             },
