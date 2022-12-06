@@ -17,7 +17,7 @@ export type UsefulElements = 'a' | 'button' | 'form' | 'input' | 'select' | 'tex
 export type AutocaptureEvents = 'click' | 'change' | 'submit'
 
 export interface AutocaptureConfig {
-    url_allowlist?: RegExp[]
+    url_allowlist?: string[] | RegExp[]
     event_allowlist?: AutocaptureEvents[]
     element_allowlist?: UsefulElements[]
     css_selector_allowlist?: string[]
