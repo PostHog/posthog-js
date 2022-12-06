@@ -126,7 +126,6 @@ export function shouldCaptureDomEvent(
     }
 
     if (autocaptureConfig?.element_allowlist) {
-        console.log('debug', el, event, autocaptureConfig)
         const allowlist = autocaptureConfig.element_allowlist
         if (allowlist && !allowlist.some((elementType) => el.tagName.toLowerCase() === elementType)) {
             return false
