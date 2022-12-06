@@ -1012,12 +1012,12 @@ describe('Autocapture system', () => {
                 type: 'click',
             }
             const autocapture_config = {
-                elements_allowlist: ['button'],
+                element_allowlist: ['button'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
 
             const autocapture_config_change = {
-                elements_allowlist: ['a'],
+                element_allowlist: ['a'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })
@@ -1034,12 +1034,12 @@ describe('Autocapture system', () => {
                 type: 'click',
             }
             const autocapture_config = {
-                css_allowlist: ['[data-track=yes]'],
+                css_selector_allowlist: ['[data-track="yes"]'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
 
             const autocapture_config_change = {
-                elements_allowlist: ['[data-track=no]'],
+                css_selector_allowlist: ['[data-track="no"]'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })
