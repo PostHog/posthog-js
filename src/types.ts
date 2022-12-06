@@ -13,13 +13,21 @@ export interface CaptureResult {
 }
 export type CaptureCallback = (response: any, data: any) => void
 
+export type UsefulElements = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
+export type AutocaptureEvents = 'click' | 'change' | 'submit'
+
+export interface AutocaptureConfig {
+    url_allowlist?: RegExp[]
+    event_allowlist?: AutocaptureEvents[]
+}
+
 export interface PostHogConfig {
     api_host: string
     api_method: string
     api_transport: string
     ui_host: string | null
     token: string
-    autocapture: boolean
+    autocapture: boolean | AutocaptureConfig
     rageclick: boolean
     cross_subdomain_cookie: boolean
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie'

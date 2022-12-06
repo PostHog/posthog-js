@@ -3,6 +3,7 @@
  * @param {Element} el - element to get the className of
  * @returns {string} the element's class
  */
+import { AutocaptureConfig } from 'types'
 import { _each, _includes, _isUndefined, _trim } from './utils'
 
 export function getClassName(el: Element): string {
@@ -97,11 +98,31 @@ export const usefulElements = ['a', 'button', 'form', 'input', 'select', 'textar
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
+ * @param {Object} autocaptureConfig - autocapture config
  * @returns {boolean} whether the event should be captured
  */
-export function shouldCaptureDomEvent(el: Element, event: Event): boolean {
+export function shouldCaptureDomEvent(
+    el: Element,
+    event: Event,
+    autocaptureConfig: AutocaptureConfig | undefined = undefined
+): boolean {
     if (!el || isTag(el, 'html') || !isElementNode(el)) {
         return false
+    }
+
+    if (autocaptureConfig?.url_allowlist) {
+        const url = window.location.href
+        const allowlist = autocaptureConfig.url_allowlist
+        if (allowlist && !allowlist.some((regex) => url.match(regex))) {
+            return false
+        }
+    }
+
+    if (autocaptureConfig?.event_allowlist) {
+        const allowlist = autocaptureConfig.event_allowlist
+        if (allowlist && !allowlist.some((eventType) => event.type === eventType)) {
+            return false
+        }
     }
 
     let parentIsUsefulElement = false

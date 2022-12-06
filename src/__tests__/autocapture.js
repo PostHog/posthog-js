@@ -1,6 +1,7 @@
 import sinon from 'sinon'
 
 import { autocapture } from '../autocapture'
+import { shouldCaptureDomEvent } from '../autocapture-utils'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
@@ -951,6 +952,53 @@ describe('Autocapture system', () => {
             given('config', () => ({ api_host: 'https://test.com', token: 'anotherproject', autocapture: true }))
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
+        })
+    })
+
+    describe('shouldCaptureDomEvent autocapture config', () => {
+        it('should only autocapture capture urls which match the url regex allowlist', () => {
+            var main_el = document.createElement('some-element')
+            var button = document.createElement('a')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = {
+                target: main_el,
+                composedPath: () => [button, main_el],
+                type: 'click',
+            }
+            const autocapture_config = {
+                url_allowlist: ['https://posthog.com/test/*'],
+            }
+
+            delete window.location
+            window.location = new URL('https://posthog.com/test/captured')
+
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+
+            delete window.location
+            window.location = new URL('https://posthog.com/docs/not-captured')
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+        })
+
+        it('should only autocapture capture event types which match the allowlist', () => {
+            var main_el = document.createElement('some-element')
+            var button = document.createElement('a')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = {
+                target: main_el,
+                composedPath: () => [button, main_el],
+                type: 'click',
+            }
+            const autocapture_config = {
+                event_allowlist: ['click'],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+
+            const autocapture_config_change = {
+                event_allowlist: ['change'],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })
     })
 })
