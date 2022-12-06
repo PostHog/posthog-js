@@ -125,9 +125,17 @@ export function shouldCaptureDomEvent(
         }
     }
 
-    if (autocaptureConfig?.elements_allowlist) {
-        const allowlist = autocaptureConfig.elements_allowlist
+    if (autocaptureConfig?.element_allowlist) {
+        console.log('debug', el, event, autocaptureConfig)
+        const allowlist = autocaptureConfig.element_allowlist
         if (allowlist && !allowlist.some((elementType) => el.tagName.toLowerCase() === elementType)) {
+            return false
+        }
+    }
+
+    if (autocaptureConfig?.css_selector_allowlist) {
+        const allowlist = autocaptureConfig.css_selector_allowlist
+        if (allowlist && !allowlist.some((selector) => el.matches(selector))) {
             return false
         }
     }

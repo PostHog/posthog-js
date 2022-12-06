@@ -1021,5 +1021,27 @@ describe('Autocapture system', () => {
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })
+
+        it('only capture elements which match the css allowlist', () => {
+            var main_el = document.createElement('some-element')
+            var button = document.createElement('button')
+            button.setAttribute('data-track', 'yes')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = {
+                target: main_el,
+                composedPath: () => [button, main_el],
+                type: 'click',
+            }
+            const autocapture_config = {
+                css_allowlist: ['[data-track=yes]'],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+
+            const autocapture_config_change = {
+                elements_allowlist: ['[data-track=no]'],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
+        })
     })
 })

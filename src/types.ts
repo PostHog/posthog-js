@@ -19,7 +19,8 @@ export type AutocaptureEvents = 'click' | 'change' | 'submit'
 export interface AutocaptureConfig {
     url_allowlist?: RegExp[]
     event_allowlist?: AutocaptureEvents[]
-    elements_allowlist?: UsefulElements[]
+    element_allowlist?: UsefulElements[]
+    css_selector_allowlist?: string[]
 }
 
 export interface PostHogConfig {
