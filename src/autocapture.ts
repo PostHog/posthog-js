@@ -238,6 +238,11 @@ const autocapture = {
             this.config = instance.__autocapture
         }
 
+        // precompile the regex
+        if (this.config?.url_allowlist) {
+            this.config.url_allowlist = this.config.url_allowlist.map((url) => new RegExp(url))
+        }
+
         this.rageclicks = new RageClick(instance)
     },
 
