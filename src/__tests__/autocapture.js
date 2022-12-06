@@ -956,7 +956,7 @@ describe('Autocapture system', () => {
     })
 
     describe('shouldCaptureDomEvent autocapture config', () => {
-        it('should only autocapture capture urls which match the url regex allowlist', () => {
+        it('only capture urls which match the url regex allowlist', () => {
             var main_el = document.createElement('some-element')
             var button = document.createElement('a')
             button.innerHTML = 'bla'
@@ -980,9 +980,9 @@ describe('Autocapture system', () => {
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
-        it('should only autocapture capture event types which match the allowlist', () => {
+        it('only capture event types which match the allowlist', () => {
             var main_el = document.createElement('some-element')
-            var button = document.createElement('a')
+            var button = document.createElement('button')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
             const e = {
@@ -997,6 +997,27 @@ describe('Autocapture system', () => {
 
             const autocapture_config_change = {
                 event_allowlist: ['change'],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
+        })
+
+        it('only capture elements which match the allowlist', () => {
+            var main_el = document.createElement('some-element')
+            var button = document.createElement('button')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = {
+                target: main_el,
+                composedPath: () => [button, main_el],
+                type: 'click',
+            }
+            const autocapture_config = {
+                elements_allowlist: ['button'],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+
+            const autocapture_config_change = {
+                elements_allowlist: ['a'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })

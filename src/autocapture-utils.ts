@@ -125,6 +125,13 @@ export function shouldCaptureDomEvent(
         }
     }
 
+    if (autocaptureConfig?.elements_allowlist) {
+        const allowlist = autocaptureConfig.elements_allowlist
+        if (allowlist && !allowlist.some((elementType) => el.tagName.toLowerCase() === elementType)) {
+            return false
+        }
+    }
+
     let parentIsUsefulElement = false
     const targetElementList: Element[] = [el] // TODO: remove this var, it's never queried
     let parentNode: Element | boolean = true
