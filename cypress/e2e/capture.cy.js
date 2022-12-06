@@ -9,6 +9,7 @@ describe('Event capture', () => {
     given('options', () => ({}))
     given('sessionRecording', () => false)
     given('supportedCompression', () => ['gzip', 'lz64'])
+    given('url', () => './playground/cypress')
 
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     const start = ({ waitForDecide = true } = {}) => {
@@ -16,7 +17,9 @@ describe('Event capture', () => {
             method: 'POST',
             url: '**/decide/*',
             response: {
-                config: { enable_collect_everything: true },
+                config: {
+                    enable_collect_everything: true,
+                },
                 editorParams: {},
                 featureFlags: ['session-recording-player'],
                 isAuthenticated: false,
@@ -25,7 +28,7 @@ describe('Event capture', () => {
             },
         }).as('decide')
 
-        cy.visit('./playground/cypress', {
+        cy.visit(given.url, {
             onBeforeLoad(win) {
                 cy.stub(win.console, 'error').as('consoleError')
             },
@@ -51,6 +54,66 @@ describe('Event capture', () => {
         cy.phCaptures().should('include', '$pageleave')
         cy.phCaptures().should('include', '$autocapture')
         cy.phCaptures().should('include', 'custom-event')
+    })
+
+    describe('autocapture config', () => {
+        it('dont capture click when configured not to', () => {
+            given('options', () => ({
+                autocapture: {
+                    event_allowlist: ['change'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('capture clicks when configured to', () => {
+            given('options', () => ({
+                autocapture: {
+                    event_allowlist: ['click'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 3)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', '$autocapture')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('collect on url', () => {
+            given('options', () => ({
+                autocapture: {
+                    url_allowlist: ['.*playground/cypress'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 3)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', '$autocapture')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('dont collect on url', () => {
+            given('options', () => ({
+                autocapture: {
+                    url_allowlist: ['.*dontcollect'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', 'custom-event')
+        })
     })
 
     it('captures $feature_flag_called', () => {
