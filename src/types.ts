@@ -16,10 +16,32 @@ export type CaptureCallback = (response: any, data: any) => void
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
 export type DomAutocaptureEvents = 'click' | 'change' | 'submit'
 
+/**
+ * If an array is passed for an allowlist, autocapture events will only be sent for elements matching
+ * at least one of the elements in the array. Multiple allowlists can be used
+ */
 export interface AutocaptureConfig {
+    /**
+     * List of URLs to allow autocapture on, can be strings to match
+     * or regexes e.g. ['https://example.com', 'test.com/.*']
+     */
     url_allowlist?: (string | RegExp)[]
+
+    /**
+     * List of DOM events to allow autocapture on  e.g. ['click', 'change', 'submit']
+     */
     dom_event_allowlist?: DomAutocaptureEvents[]
+
+    /**
+     * List of DOM elements to allow autocapture on
+     * e.g. ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+     */
     element_allowlist?: AutocaptureCompatibleElement[]
+
+    /**
+     * List of CSS selectors to allow autocapture on
+     * e.g. ['[ph-capture]']
+     */
     css_selector_allowlist?: string[]
 }
 
