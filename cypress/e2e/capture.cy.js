@@ -59,7 +59,7 @@ describe('Event capture', () => {
         it('dont capture click when configured not to', () => {
             given('options', () => ({
                 autocapture: {
-                    event_allowlist: ['change'],
+                    dom_event_allowlist: ['change'],
                 },
             }))
             start()
@@ -73,7 +73,7 @@ describe('Event capture', () => {
         it('capture clicks when configured to', () => {
             given('options', () => ({
                 autocapture: {
-                    event_allowlist: ['click'],
+                    dom_event_allowlist: ['click'],
                 },
             }))
             start()

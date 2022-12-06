@@ -92,7 +92,7 @@ export function isDocumentFragment(el: Element | ParentNode | undefined | null):
     return !!el && el.nodeType === 11 // Node.DOCUMENT_FRAGMENT_NODE - use integer constant for browser portability
 }
 
-export const usefulElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+export const autocaptureCompatibleElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
 /*
  * Check whether a DOM event should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
@@ -118,8 +118,8 @@ export function shouldCaptureDomEvent(
         }
     }
 
-    if (autocaptureConfig?.event_allowlist) {
-        const allowlist = autocaptureConfig.event_allowlist
+    if (autocaptureConfig?.dom_event_allowlist) {
+        const allowlist = autocaptureConfig.dom_event_allowlist
         if (allowlist && !allowlist.some((eventType) => event.type === eventType)) {
             return false
         }
@@ -152,7 +152,7 @@ export function shouldCaptureDomEvent(
         }
         parentNode = (curEl.parentNode as Element) || false
         if (!parentNode) break
-        if (usefulElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
+        if (autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
         } else {
             const compStyles = window.getComputedStyle(parentNode)
@@ -185,7 +185,7 @@ export function shouldCaptureDomEvent(
             if (parentIsUsefulElement) return event.type === 'click'
             return (
                 event.type === 'click' &&
-                (usefulElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true')
+                (autocaptureCompatibleElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true')
             )
     }
 }

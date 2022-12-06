@@ -13,13 +13,13 @@ export interface CaptureResult {
 }
 export type CaptureCallback = (response: any, data: any) => void
 
-export type UsefulElements = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
-export type AutocaptureEvents = 'click' | 'change' | 'submit'
+export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
+export type DomAutocaptureEvents = 'click' | 'change' | 'submit'
 
 export interface AutocaptureConfig {
-    url_allowlist?: string[] | RegExp[]
-    event_allowlist?: AutocaptureEvents[]
-    element_allowlist?: UsefulElements[]
+    url_allowlist?: (string | RegExp)[]
+    dom_event_allowlist?: DomAutocaptureEvents[]
+    element_allowlist?: AutocaptureCompatibleElement[]
     css_selector_allowlist?: string[]
 }
 

@@ -991,12 +991,12 @@ describe('Autocapture system', () => {
                 type: 'click',
             }
             const autocapture_config = {
-                event_allowlist: ['click'],
+                dom_event_allowlist: ['click'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
 
             const autocapture_config_change = {
-                event_allowlist: ['change'],
+                dom_event_allowlist: ['change'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })

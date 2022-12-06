@@ -19,7 +19,7 @@ import {
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureValue,
-    usefulElements,
+    autocaptureCompatibleElements,
     isAngularStyleAttr,
     isDocumentFragment,
 } from './autocapture-utils'
@@ -47,7 +47,7 @@ const autocapture = {
         const props: Properties = {
             tag_name: tag_name,
         }
-        if (usefulElements.indexOf(tag_name) > -1 && !maskText) {
+        if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
             props['$el_text'] = getSafeText(elem)
         }
 
