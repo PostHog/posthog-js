@@ -2,6 +2,7 @@ import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'
+import { eventWithTime } from 'rrweb/typings/types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -103,6 +104,8 @@ export interface SessionRecordingOptions {
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
+    /** ADVANCED: Allows users to pre-process rrweb events for custom redactions or modifications */
+    processRecordingSnapshot?: (snapshot: eventWithTime) => eventWithTime
 }
 
 export enum Compression {

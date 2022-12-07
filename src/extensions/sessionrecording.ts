@@ -180,6 +180,11 @@ export class SessionRecording {
 
                 this._updateWindowAndSessionIds(event)
 
+                // Allow users to inject custom processing of the recording event, for example masking or modifiying URLs
+                if (userSessionRecordingOptions.processRecordingSnapshot) {
+                    event = userSessionRecordingOptions.processRecordingSnapshot(event)
+                }
+
                 const properties = {
                     $snapshot_data: event,
                     $session_id: this.sessionId,
