@@ -3,6 +3,7 @@
  * @param {Element} el - element to get the className of
  * @returns {string} the element's class
  */
+import { AutocaptureConfig } from 'types'
 import { _each, _includes, _isUndefined, _trim } from './utils'
 
 export function getClassName(el: Element): string {
@@ -91,17 +92,51 @@ export function isDocumentFragment(el: Element | ParentNode | undefined | null):
     return !!el && el.nodeType === 11 // Node.DOCUMENT_FRAGMENT_NODE - use integer constant for browser portability
 }
 
-export const usefulElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+export const autocaptureCompatibleElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
 /*
  * Check whether a DOM event should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
+ * @param {Object} autocaptureConfig - autocapture config
  * @returns {boolean} whether the event should be captured
  */
-export function shouldCaptureDomEvent(el: Element, event: Event): boolean {
+export function shouldCaptureDomEvent(
+    el: Element,
+    event: Event,
+    autocaptureConfig: AutocaptureConfig | undefined = undefined
+): boolean {
     if (!el || isTag(el, 'html') || !isElementNode(el)) {
         return false
+    }
+
+    if (autocaptureConfig?.url_allowlist) {
+        const url = window.location.href
+        const allowlist = autocaptureConfig.url_allowlist
+        if (allowlist && !allowlist.some((regex) => url.match(regex))) {
+            return false
+        }
+    }
+
+    if (autocaptureConfig?.dom_event_allowlist) {
+        const allowlist = autocaptureConfig.dom_event_allowlist
+        if (allowlist && !allowlist.some((eventType) => event.type === eventType)) {
+            return false
+        }
+    }
+
+    if (autocaptureConfig?.element_allowlist) {
+        const allowlist = autocaptureConfig.element_allowlist
+        if (allowlist && !allowlist.some((elementType) => el.tagName.toLowerCase() === elementType)) {
+            return false
+        }
+    }
+
+    if (autocaptureConfig?.css_selector_allowlist) {
+        const allowlist = autocaptureConfig.css_selector_allowlist
+        if (allowlist && !allowlist.some((selector) => el.matches(selector))) {
+            return false
+        }
     }
 
     let parentIsUsefulElement = false
@@ -117,7 +152,7 @@ export function shouldCaptureDomEvent(el: Element, event: Event): boolean {
         }
         parentNode = (curEl.parentNode as Element) || false
         if (!parentNode) break
-        if (usefulElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
+        if (autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
         } else {
             const compStyles = window.getComputedStyle(parentNode)
@@ -150,7 +185,7 @@ export function shouldCaptureDomEvent(el: Element, event: Event): boolean {
             if (parentIsUsefulElement) return event.type === 'click'
             return (
                 event.type === 'click' &&
-                (usefulElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true')
+                (autocaptureCompatibleElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true')
             )
     }
 }

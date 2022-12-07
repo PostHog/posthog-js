@@ -49,6 +49,7 @@ import {
     RequestCallback,
     SnippetArrayItem,
     XHROptions,
+    AutocaptureConfig,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -198,15 +199,16 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance.__autocapture_enabled = instance.get_config('autocapture')
+    instance.__autocapture = instance.get_config('autocapture')
     if (instance.get_config('autocapture')) {
+        instance.__autocapture = instance.get_config('autocapture')
         const num_buckets = 100
         const num_enabled_buckets = 100
         if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
-            instance.__autocapture_enabled = false
+            instance.__autocapture = false
             logger.log('Not in active bucket: disabling Automatic Event Collection.')
         } else if (!autocapture.isBrowserSupported()) {
-            instance.__autocapture_enabled = false
+            instance.__autocapture = false
             logger.log('Disabling Automatic Event Collection because this browser is not supported')
         } else {
             autocapture.init(instance)
@@ -254,7 +256,7 @@ export class PostHog {
     _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
-    __autocapture_enabled: boolean | undefined
+    __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
 
     SentryIntegration: typeof SentryIntegration
@@ -269,7 +271,7 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
-        this.__autocapture_enabled = undefined
+        this.__autocapture = undefined
         this._jsc = function () {} as JSC
         this.people = new PostHogPeople(this)
         this.featureFlags = new PostHogFeatureFlags(this)

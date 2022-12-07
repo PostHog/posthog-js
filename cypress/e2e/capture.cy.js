@@ -16,7 +16,9 @@ describe('Event capture', () => {
             method: 'POST',
             url: '**/decide/*',
             response: {
-                config: { enable_collect_everything: true },
+                config: {
+                    enable_collect_everything: true,
+                },
                 editorParams: {},
                 featureFlags: ['session-recording-player'],
                 isAuthenticated: false,
@@ -51,6 +53,124 @@ describe('Event capture', () => {
         cy.phCaptures().should('include', '$pageleave')
         cy.phCaptures().should('include', '$autocapture')
         cy.phCaptures().should('include', 'custom-event')
+    })
+
+    describe('autocapture config', () => {
+        it('dont capture click when configured not to', () => {
+            given('options', () => ({
+                autocapture: {
+                    dom_event_allowlist: ['change'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('capture clicks when configured to', () => {
+            given('options', () => ({
+                autocapture: {
+                    dom_event_allowlist: ['click'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 3)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', '$autocapture')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('collect on url', () => {
+            given('options', () => ({
+                autocapture: {
+                    url_allowlist: ['.*playground/cypress'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 3)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', '$autocapture')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('dont collect on url', () => {
+            given('options', () => ({
+                autocapture: {
+                    url_allowlist: ['.*dontcollect'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('collect button elements', () => {
+            given('options', () => ({
+                autocapture: {
+                    element_allowlist: ['button'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 3)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', '$autocapture')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('dont collect on button elements', () => {
+            given('options', () => ({
+                autocapture: {
+                    element_allowlist: ['a'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('collect with data attribute', () => {
+            given('options', () => ({
+                autocapture: {
+                    css_attribute_allowlist: ['[data-cy-custom-event-button]'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 3)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', '$autocapture')
+            cy.phCaptures().should('include', 'custom-event')
+        })
+
+        it('dont collect with data attribute', () => {
+            given('options', () => ({
+                autocapture: {
+                    css_selector_allowlist: ['[nope]'],
+                },
+            }))
+            start()
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.phCaptures().should('have.length', 2)
+            cy.phCaptures().should('include', '$pageview')
+            cy.phCaptures().should('include', 'custom-event')
+        })
     })
 
     it('captures $feature_flag_called', () => {

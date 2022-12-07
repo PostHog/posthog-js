@@ -797,7 +797,7 @@ describe('init()', () => {
         jest.spyOn(given.lib.persistence, 'register').mockImplementation()
 
         // Autocapture
-        expect(given.lib.__autocapture_enabled).toEqual(undefined)
+        expect(given.lib.__autocapture).toEqual(undefined)
         expect(autocapture.init).not.toHaveBeenCalled()
         expect(autocapture.afterDecideResponse).not.toHaveBeenCalled()
 

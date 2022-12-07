@@ -19,12 +19,12 @@ import {
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureValue,
-    usefulElements,
+    autocaptureCompatibleElements,
     isAngularStyleAttr,
     isDocumentFragment,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
-import { AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
+import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 
 const autocapture = {
@@ -47,7 +47,7 @@ const autocapture = {
         const props: Properties = {
             tag_name: tag_name,
         }
-        if (usefulElements.indexOf(tag_name) > -1 && !maskText) {
+        if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
             props['$el_text'] = getSafeText(elem)
         }
 
@@ -147,7 +147,7 @@ const autocapture = {
             this.rageclicks?.click(e.clientX, e.clientY, new Date().getTime())
         }
 
-        if (target && shouldCaptureDomEvent(target, e)) {
+        if (target && shouldCaptureDomEvent(target, e, this.config)) {
             const targetElementList = [target]
             let curEl = target
             while (curEl.parentNode && !isTag(curEl, 'body')) {
@@ -231,8 +231,18 @@ const autocapture = {
 
     _customProperties: [] as AutoCaptureCustomProperty[],
     rageclicks: null as RageClick | null,
+    config: undefined as AutocaptureConfig | undefined,
 
     init: function (instance: PostHog): void {
+        if (typeof instance.__autocapture !== 'boolean') {
+            this.config = instance.__autocapture
+        }
+
+        // precompile the regex
+        if (this.config?.url_allowlist) {
+            this.config.url_allowlist = this.config.url_allowlist.map((url) => new RegExp(url))
+        }
+
         this.rageclicks = new RageClick(instance)
     },
 
@@ -257,7 +267,7 @@ const autocapture = {
             }
             this._addDomEventHandlers(instance)
         } else {
-            instance['__autocapture_enabled'] = false
+            instance['__autocapture'] = false
         }
     },
 
