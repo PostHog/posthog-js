@@ -1,3 +1,12 @@
+## 1.37.0 - 2022-12-07
+
+- feat: event_allowlist and url_allowlist for autocapture (#481)
+- chore(deps): Bump qs from 6.5.2 to 6.5.3 (#484)
+- chore(deps): Bump decode-uri-component from 0.2.0 to 0.2.2 (#485)
+- chore(deps): Bump decode-uri-component from 0.2.0 to 0.2.2 in /react (#483)
+- chore(deps): Bump minimatch from 3.0.4 to 3.1.2 (#469)
+- feat(rageclicks): turn on rageclicks by default (#480)
+
 ## 1.36.1 - 2022-12-01
 
 - update sentry types (#479)
