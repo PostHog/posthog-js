@@ -1,6 +1,3 @@
-import { SessionIdManager } from '../sessionid'
-import { SESSION_ID } from '../posthog-persistence'
-import { sessionStore } from '../storage'
 import { _UUID } from '../utils'
 import { PageViewIdManager } from '../page-view-id'
 

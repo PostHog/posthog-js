@@ -829,7 +829,7 @@ export class PostHog {
             if (event_name === '$pageview') {
                 this.pageViewIdManager.resetPageViewId()
             }
-            properties = _extend(properties, {'$pageview_id': this.pageViewIdManager.getPageViewId()})
+            properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
         }
 
         if (event_name === '$pageview' && this.get_config('_capture_performance')) {

@@ -1,7 +1,4 @@
-import { PostHogPersistence, SESSION_ID } from './posthog-persistence'
-import { sessionStore } from './storage'
 import { _UUID } from './utils'
-import { PostHogConfig } from './types'
 
 export class PageViewIdManager {
     _pageViewId: string | null
@@ -10,9 +7,7 @@ export class PageViewIdManager {
         this._pageViewId = null
     }
 
-    _setPageViewId(
-        pageViewId: string | null,
-    ): void {
+    _setPageViewId(pageViewId: string | null): void {
         this._pageViewId = pageViewId
     }
 
