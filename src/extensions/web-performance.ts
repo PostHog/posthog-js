@@ -137,6 +137,8 @@ export class WebPerformanceObserver {
 
         const eventJson = event.toJSON()
         type AllowedKeys = number | '$origin_timestamp'
+        // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
+        // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
         const properties: { [key in AllowedKeys]: any } = { $origin_timestamp: new Date(Date.now() - performance.now()).toISOString() }
         properties[PERFORMANCE_EVENTS_MAPPING['timeOrigin']] = Date.now() - performance.now()
         for (const key in PERFORMANCE_EVENTS_MAPPING) {
