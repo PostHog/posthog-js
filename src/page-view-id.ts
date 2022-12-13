@@ -1,24 +1,19 @@
 import { _UUID } from './utils'
 
 export class PageViewIdManager {
-    _pageViewId: string | null
+    _pageViewId: string = _UUID()
+    _seenFirstPageView = false
 
-    constructor() {
-        this._pageViewId = null
-    }
-
-    _setPageViewId(pageViewId: string | null): void {
-        this._pageViewId = pageViewId
-    }
-
-    resetPageViewId(): void {
-        this._setPageViewId(_UUID())
+    onPageview(): void {
+        // As the first $pageview event may come after a different event,
+        // we only reset the ID _after_ the second $pageview event.
+        if (this._seenFirstPageView) {
+            this._pageViewId = _UUID()
+        }
+        this._seenFirstPageView = true
     }
 
     getPageViewId(): string {
-        if (this._pageViewId === null) {
-            this.resetPageViewId()
-        }
-        return <string>this._pageViewId
+        return this._pageViewId
     }
 }

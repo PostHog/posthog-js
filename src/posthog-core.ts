@@ -825,9 +825,9 @@ export class PostHog {
         // update properties with pageview info and super-properties
         properties = _extend({}, _info.properties(), this.persistence.properties(), properties)
 
-        if (this.pageViewIdManager && this.get_config('_capture_performance')) {
+        if (this.get_config('_capture_performance')) {
             if (event_name === '$pageview') {
-                this.pageViewIdManager.resetPageViewId()
+                this.pageViewIdManager.onPageview()
             }
             properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
         }

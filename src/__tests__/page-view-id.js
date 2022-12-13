@@ -11,14 +11,16 @@ describe('PageView ID manager', () => {
     })
 
     it('generates a page view id and resets page view id', () => {
-        expect(given.pageViewIdManager._pageViewId).toEqual(null)
-        // call without reset generates
         expect(given.pageViewIdManager.getPageViewId()).toEqual('firstUUID')
 
-        given.pageViewIdManager.resetPageViewId()
+        // First pageview should NOT rotate the UUID
+        given.pageViewIdManager.onPageview()
+        expect(given.pageViewIdManager.getPageViewId()).toEqual('firstUUID')
+
+        given.pageViewIdManager.onPageview()
         expect(given.pageViewIdManager.getPageViewId()).toEqual('secondUUID')
 
-        given.pageViewIdManager.resetPageViewId()
+        given.pageViewIdManager.onPageview()
         expect(given.pageViewIdManager.getPageViewId()).toEqual('subsequentUUIDs')
     })
 })
