@@ -136,7 +136,9 @@ export class WebPerformanceObserver {
         }
 
         const eventJson = event.toJSON()
-        const properties: { [key: number]: any } = {}
+        type AllowedKeys = number | '$origin_timestamp'
+        const properties: { [key in AllowedKeys]: any } = { $origin_timestamp: new Date(Date.now() - performance.now()).toISOString() }
+        properties[PERFORMANCE_EVENTS_MAPPING['timeOrigin']] = Date.now() - performance.now()
         for (const key in PERFORMANCE_EVENTS_MAPPING) {
             if (eventJson[key] !== undefined) {
                 properties[PERFORMANCE_EVENTS_MAPPING[key]] = eventJson[key]
