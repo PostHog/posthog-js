@@ -4,58 +4,68 @@ const BASE_ENDPOINT = '/p/'
 
 const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     // BASE_PERFORMANCE_EVENT_COLUMNS
-    entry_type: 0,
-    time_origin: 1,
+    entryType: 0,
+    timeOrigin: 1,
     name: 2,
 
     // RESOURCE_EVENT_COLUMNS
-    start_time: 3,
-    redirect_start: 4,
-    redirect_end: 5,
-    worker_start: 6,
-    fetch_start: 7,
-    domain_lookup_start: 8,
-    domain_lookup_end: 9,
-    connect_start: 10,
-    secure_connection_start: 11,
-    connect_end: 12,
-    request_start: 13,
-    response_start: 14,
-    response_end: 15,
-    decoded_body_size: 16,
-    encoded_body_size: 17,
-    initiator_type: 18,
-    next_hop_protocol: 19,
-    render_blocking_status: 20,
-    response_status: 21,
-    transfer_size: 22,
+    startTime: 3,
+    redirectStart: 4,
+    redirectEnd: 5,
+    workerStart: 6,
+    fetchStart: 7,
+    domainLookupStart: 8,
+    domainLookupEnd: 9,
+    connectStart: 10,
+    secureConnectionStart: 11,
+    connectEnd: 12,
+    requestStart: 13,
+    responseStart: 14,
+    responseEnd: 15,
+    decodedBodySize: 16,
+    encodedBodySize: 17,
+    initiatorType: 18,
+    nextHopProtocol: 19,
+    renderBlockingStatus: 20,
+    responseStatus: 21,
+    transferSize: 22,
 
     // LARGEST_CONTENTFUL_PAINT_EVENT_COLUMNS
-    largest_contentful_paint_element: 23,
-    largest_contentful_paint_render_time: 24,
-    largest_contentful_paint_load_time: 25,
-    largest_contentful_paint_size: 26,
-    largest_contentful_paint_id: 27,
-    largest_contentful_paint_url: 28,
+    paintElement: 23,
+    paintRenderTime: 24,
+    paintLoadTime: 25,
+    paintSize: 26,
+    paintId: 27,
+    paintUrl: 28,
 
     // EVENT_TIMING_EVENT_COLUMNS
-    event_timing_processing_start: 29,
-    event_timing_processing_end: 30,
+    eventTimingProcessingStart: 29,
+    eventTimingProcessingEnd: 30,
 
     // MARK_AND_MEASURE_EVENT_COLUMNS
     detail: 31,
 
     // NAVIGATION_EVENT_COLUMNS
-    dom_complete: 32,
-    dom_content_loaded_event: 33,
-    dom_interactive: 34,
-    load_event_end: 35,
-    load_event_start: 36,
-    redirect_count: 37,
-    navigation_type: 38,
-    unload_event_end: 39,
-    unload_event_start: 40,
+    domComplete: 32,
+    domContentLoadedEvent: 33,
+    domInteractive: 34,
+    loadEventEnd: 35,
+    loadEventStart: 36,
+    redirectCount: 37,
+    navigationType: 38,
+    unloadEventEnd: 39,
+    unloadEventStart: 40,
 }
+
+const ENTRY_TYPES_TO_OBSERVE = [
+    // 'event', // This is too noisy as it covers all browser events
+    'first-input',
+    // 'mark', // Mark is used too liberally. We would need to filter for specific marks
+    // 'measure', // Measure is used too liberally. We would need to filter for specific measures
+    'navigation',
+    'paint',
+    'resource',
+]
 
 export class WebPerformanceObserver {
     instance: PostHog
@@ -88,7 +98,8 @@ export class WebPerformanceObserver {
                 })
             })
 
-            this.observer.observe({ entryTypes: [...PerformanceObserver.supportedEntryTypes] })
+            const entryTypes = PerformanceObserver.supportedEntryTypes.filter((x) => ENTRY_TYPES_TO_OBSERVE.includes(x))
+            this.observer.observe({ entryTypes })
         } catch (e) {
             console.error('PostHog failed to start performance observer', e)
             this.stopObserving()
@@ -111,6 +122,12 @@ export class WebPerformanceObserver {
     }
 
     _capturePerformanceEvent(event: PerformanceEntry) {
+        // NOTE: We don't want to capture our own request events.
+        // TODO: We need to at least have a way of enabling this for ourselves...
+        if (event.name.startsWith(this.instance.get_config('api_host'))) {
+            return
+        }
+
         const eventJson = event.toJSON()
         const properties: { [key: number]: any } = {}
         for (const key in PERFORMANCE_EVENTS_MAPPING) {
