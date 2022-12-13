@@ -1,12 +1,9 @@
 import { _UUID } from './utils'
 
 export class PageViewIdManager {
-    _pageViewId: string
-    _seenFirstPageView = false
+    _pageViewId: string | undefined
 
-    constructor() {
-        this._pageViewId = _UUID()
-    }
+    _seenFirstPageView = false
 
     onPageview(): void {
         // As the first $pageview event may come after a different event,
@@ -18,6 +15,10 @@ export class PageViewIdManager {
     }
 
     getPageViewId(): string {
+        if (!this._pageViewId) {
+            this._pageViewId = _UUID()
+        }
+
         return this._pageViewId
     }
 }
