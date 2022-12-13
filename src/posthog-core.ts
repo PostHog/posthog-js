@@ -54,6 +54,7 @@ import {
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
+import { PageViewIdManager } from './page-view-id'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -245,6 +246,7 @@ export class PostHog {
 
     persistence: PostHogPersistence
     sessionManager: SessionIdManager
+    pageViewIdManager: PageViewIdManager
     people: PostHogPeople
     featureFlags: PostHogFeatureFlags
     feature_flags: PostHogFeatureFlags
@@ -282,6 +284,7 @@ export class PostHog {
         this.featureFlags = new PostHogFeatureFlags(this)
         this.feature_flags = this.featureFlags
         this.toolbar = new Toolbar(this)
+        this.pageViewIdManager = new PageViewIdManager()
 
         // these are created in _init() after we have the config
         this._captureMetrics = undefined as any
@@ -826,6 +829,13 @@ export class PostHog {
 
         // update properties with pageview info and super-properties
         properties = _extend({}, _info.properties(), this.persistence.properties(), properties)
+
+        if (this.get_config('_capture_performance')) {
+            if (event_name === '$pageview') {
+                this.pageViewIdManager.onPageview()
+            }
+            properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
+        }
 
         if (event_name === '$pageview' && this.get_config('_capture_performance')) {
             properties = _extend(properties, getPerformanceData())

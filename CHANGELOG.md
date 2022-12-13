@@ -1,3 +1,7 @@
+## 1.38.0 - 2022-12-13
+
+- feat: page view ids (#487)
+
 ## 1.37.0 - 2022-12-07
 
 - feat: event_allowlist and url_allowlist for autocapture (#481)
