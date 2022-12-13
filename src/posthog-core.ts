@@ -23,6 +23,7 @@ import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
+import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -199,6 +200,9 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
+    instance.webPerformance = new WebPerformanceObserver(instance)
+    instance.webPerformance.startObservingIfEnabled()
+
     instance.__autocapture = instance.get_config('autocapture')
     if (instance.get_config('autocapture')) {
         instance.__autocapture = instance.get_config('autocapture')
@@ -246,6 +250,7 @@ export class PostHog {
     feature_flags: PostHogFeatureFlags
     toolbar: Toolbar
     sessionRecording: SessionRecording | undefined
+    webPerformance: WebPerformanceObserver | undefined
 
     _captureMetrics: CaptureMetrics
     _requestQueue: RequestQueue
