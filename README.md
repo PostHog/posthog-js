@@ -30,6 +30,7 @@ Testing on IE11 requires a bit more setup.
 ## Developing together with another repo
 
 ### Using Yarn link
+
 Use [`yarn link`](https://classic.yarnpkg.com/en/docs/cli/link/). Run `yarn link` in `posthog-js`, and then `yarn link posthog-js` in `posthog`. Once you're done, remember to `yarn unlink posthog-js` in `posthog`, and `yarn unlink` in `posthog-js`.
 
 An alternative is to update dependency in package.json to e.g. `"posthog-js": "link:../posthog-js"`, `yarn` and run `yarn build && yarn build-module`
@@ -49,28 +50,23 @@ Further, it's a good idea to modify `start-http` script to add development mode:
 
 Run `npm install -g yalc`
 
-* In the posthog-js repo
-    * Run `yalc publish`
-* In the posthog repo
-    * Run `yalc add posthog-js`
-    * Run `yarn`
-    * Run `yarn copy-scripts`
+-   In the posthog-js repo
+    -   Run `yalc publish`
+-   In the posthog repo
+    -   Run `yalc add posthog-js && pnpm i && pnpm-copy-scripts`
 
 #### When making changes
 
-* In the posthog-js repo
-    * Run `yalc publish`
-* In the posthog repo
-    * Run `yalc update`
-    * Run `yarn`
-    * Run `yarn copy-scripts`
+-   In the posthog-js repo
+    -   Run `yalc publish`
+-   In the posthog repo
+    -   Run `yalc update && pnpm i && pnpm copy-scripts`
 
 #### To remove the local package
 
-* In the posthog repo
-    * run `yalc remove posthog-js`
-    * run `yarn install`
-
+-   In the posthog repo
+    -   run `yalc remove posthog-js`
+    -   run `yarn install`
 
 ## Releasing a new version
 

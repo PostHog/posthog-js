@@ -56,7 +56,7 @@
 
     <script>
 
-        posthog.init('mykey', { api_host: location.origin })
+        posthog.init('mykey', { api_host: location.origin, _capture_performance: true })
 
         setTimeout(() => {
             document.getElementById("current-session-id").innerHTML = posthog.sessionRecording.sessionId

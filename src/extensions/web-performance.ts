@@ -55,9 +55,6 @@ const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     navigation_type: 38,
     unload_event_end: 39,
     unload_event_start: 40,
-
-    // Other
-    current_url: 41,
 }
 
 export class WebPerformanceObserver {
@@ -84,13 +81,18 @@ export class WebPerformanceObserver {
         if (this.observer) {
             return
         }
-        this.observer = new PerformanceObserver((list) => {
-            list.getEntries().forEach((entry) => {
-                this._capturePerformanceEvent(entry)
+        try {
+            this.observer = new PerformanceObserver((list) => {
+                list.getEntries().forEach((entry) => {
+                    this._capturePerformanceEvent(entry)
+                })
             })
-        })
 
-        this.observer.observe({ buffered: true, entryTypes: [...PerformanceObserver.supportedEntryTypes] })
+            this.observer.observe({ entryTypes: [...PerformanceObserver.supportedEntryTypes] })
+        } catch (e) {
+            console.error('PostHog failed to start performance observer', e)
+            this.stopObserving()
+        }
     }
 
     stopObserving() {
@@ -98,6 +100,10 @@ export class WebPerformanceObserver {
             this.observer.disconnect()
             this.observer = undefined
         }
+    }
+
+    isObserving() {
+        return !!this.observer
     }
 
     isEnabled() {
