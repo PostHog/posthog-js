@@ -31,30 +31,31 @@ const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     transferSize: 22,
 
     // LARGEST_CONTENTFUL_PAINT_EVENT_COLUMNS
-    paintElement: 23,
-    paintRenderTime: 24,
-    paintLoadTime: 25,
-    paintSize: 26,
-    paintId: 27,
-    paintUrl: 28,
-
-    // EVENT_TIMING_EVENT_COLUMNS
-    eventTimingProcessingStart: 29,
-    eventTimingProcessingEnd: 30,
-
-    // MARK_AND_MEASURE_EVENT_COLUMNS
-    detail: 31,
+    element: 23,
+    renderTime: 24,
+    loadTime: 25,
+    size: 26,
+    id: 27,
+    url: 28,
 
     // NAVIGATION_EVENT_COLUMNS
-    domComplete: 32,
-    domContentLoadedEvent: 33,
-    domInteractive: 34,
-    loadEventEnd: 35,
-    loadEventStart: 36,
-    redirectCount: 37,
-    navigationType: 38,
-    unloadEventEnd: 39,
-    unloadEventStart: 40,
+    domComplete: 29,
+    domContentLoadedEvent: 30,
+    domInteractive: 31,
+    loadEventEnd: 32,
+    loadEventStart: 33,
+    redirectCount: 34,
+    navigationType: 35,
+    unloadEventEnd: 36,
+    unloadEventStart: 37,
+
+    // NOTE: CURRENTLY UNSUPPORTED
+    // EVENT_TIMING_EVENT_COLUMNS
+    // processingStart: null,
+    // processingEnd: null,
+
+    // MARK_AND_MEASURE_EVENT_COLUMNS
+    // detail: null,
 }
 
 const ENTRY_TYPES_TO_OBSERVE = [
@@ -66,6 +67,8 @@ const ENTRY_TYPES_TO_OBSERVE = [
     'paint',
     'resource',
 ]
+
+const POSTHOG_PATHS_TO_IGNORE = [BASE_ENDPOINT, '/s/', '/e/']
 
 export class WebPerformanceObserver {
     instance: PostHog
@@ -123,9 +126,13 @@ export class WebPerformanceObserver {
 
     _capturePerformanceEvent(event: PerformanceEntry) {
         // NOTE: We don't want to capture our own request events.
-        // TODO: We need to at least have a way of enabling this for ourselves...
+
         if (event.name.startsWith(this.instance.get_config('api_host'))) {
-            return
+            const path = event.name.replace(this.instance.get_config('api_host'), '')
+
+            if (POSTHOG_PATHS_TO_IGNORE.find((x) => path.startsWith(x))) {
+                return
+            }
         }
 
         const eventJson = event.toJSON()
