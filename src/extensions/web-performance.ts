@@ -136,7 +136,7 @@ export class WebPerformanceObserver {
         }
 
         const eventJson = event.toJSON()
-        const properties: { [key: number]: any } = {  }
+        const properties: { [key: number]: any } = {}
         // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
         // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
         properties[PERFORMANCE_EVENTS_MAPPING['timeOrigin']] = Math.floor(Date.now() - performance.now())
