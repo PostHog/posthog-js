@@ -49,6 +49,9 @@ const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     unloadEventEnd: 36,
     unloadEventStart: 37,
 
+    // Added after v1
+    duration: 39,
+
     // NOTE: CURRENTLY UNSUPPORTED
     // EVENT_TIMING_EVENT_COLUMNS
     // processingStart: null,
