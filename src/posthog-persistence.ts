@@ -122,6 +122,9 @@ export class PostHogPersistence {
     }
 
     save(): void {
+        // NOTE: Saving frequently causes issues with Recordings and CMP tools which
+        // observe cookie changes, and modify their UI, often causing infinite loops.
+        // As such callers of this should ideally check that the data has changed beforehand
         if (this.disabled) {
             return
         }
@@ -155,15 +158,19 @@ export class PostHogPersistence {
             }
             this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
 
+            let hasChanges = false
+
             _each(props, (val, prop) => {
                 if (!this.props.hasOwnProperty(prop) || this.props[prop] === default_value) {
                     this.props[prop] = val
+                    hasChanges = true
                 }
             })
 
-            this.save()
-
-            return true
+            if (hasChanges) {
+                this.save()
+                return true
+            }
         }
         return false
     }
@@ -177,11 +184,13 @@ export class PostHogPersistence {
         if (_isObject(props)) {
             this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
 
-            _extend(this.props, props)
+            const hasChanges = Object.keys(props).find((key) => this.props[key] !== props[key])
 
-            this.save()
-
-            return true
+            if (hasChanges) {
+                _extend(this.props, props)
+                this.save()
+                return true
+            }
         }
         return false
     }
