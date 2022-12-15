@@ -152,7 +152,9 @@ export class WebPerformanceObserver {
         // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
         const timeOrigin = Math.floor(Date.now() - performance.now())
         properties[PERFORMANCE_EVENTS_MAPPING['timeOrigin']] = timeOrigin
-        properties[PERFORMANCE_EVENTS_MAPPING['timestamp']] = timeOrigin + event.startTime
+        // clickhouse can't ingest timestamps that are floats
+        // (in this case representing fractions of a millisecond we don't care about anyway)
+        properties[PERFORMANCE_EVENTS_MAPPING['timestamp']] = Math.floor(timeOrigin + event.startTime)
         for (const key in PERFORMANCE_EVENTS_MAPPING) {
             if (eventJson[key] !== undefined) {
                 properties[PERFORMANCE_EVENTS_MAPPING[key]] = eventJson[key]
