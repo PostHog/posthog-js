@@ -121,10 +121,12 @@ export class PostHogPersistence {
         }
     }
 
+    /**
+     * NOTE: Saving frequently causes issues with Recordings and Consent Management Platform (CMP) tools which
+     * observe cookie changes, and modify their UI, often causing infinite loops.
+     * As such callers of this should ideally check that the data has changed beforehand
+     */
     save(): void {
-        // NOTE: Saving frequently causes issues with Recordings and CMP tools which
-        // observe cookie changes, and modify their UI, often causing infinite loops.
-        // As such callers of this should ideally check that the data has changed beforehand
         if (this.disabled) {
             return
         }
