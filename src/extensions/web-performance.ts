@@ -1,4 +1,5 @@
 import { PostHog } from '../posthog-core'
+import { DecideResponse } from '../types'
 
 const BASE_ENDPOINT = '/p/'
 
@@ -123,8 +124,14 @@ export class WebPerformanceObserver {
         return !!this.observer
     }
 
-    isEnabled() {
-        return !!this.instance.get_config('_capture_performance')
+    private isEnabled() {
+        return this.instance.get_config('_capture_performance')
+    }
+
+    afterDecideResponse(response: DecideResponse) {
+        if (response.sessionRecording?.capturePerformance) {
+            this.startObserving()
+        }
     }
 
     _capturePerformanceEvent(event: PerformanceEntry) {

@@ -193,6 +193,8 @@ export interface DecideResponse {
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
+        capturePerformance?: boolean
+
     }
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
