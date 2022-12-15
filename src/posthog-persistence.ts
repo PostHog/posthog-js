@@ -121,6 +121,11 @@ export class PostHogPersistence {
         }
     }
 
+    /**
+     * NOTE: Saving frequently causes issues with Recordings and Consent Management Platform (CMP) tools which
+     * observe cookie changes, and modify their UI, often causing infinite loops.
+     * As such callers of this should ideally check that the data has changed beforehand
+     */
     save(): void {
         if (this.disabled) {
             return
@@ -155,15 +160,19 @@ export class PostHogPersistence {
             }
             this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
 
+            let hasChanges = false
+
             _each(props, (val, prop) => {
                 if (!this.props.hasOwnProperty(prop) || this.props[prop] === default_value) {
                     this.props[prop] = val
+                    hasChanges = true
                 }
             })
 
-            this.save()
-
-            return true
+            if (hasChanges) {
+                this.save()
+                return true
+            }
         }
         return false
     }
@@ -177,11 +186,19 @@ export class PostHogPersistence {
         if (_isObject(props)) {
             this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
 
-            _extend(this.props, props)
+            let hasChanges = false
 
-            this.save()
+            _each(props, (val, prop) => {
+                if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
+                    this.props[prop] = val
+                    hasChanges = true
+                }
+            })
 
-            return true
+            if (hasChanges) {
+                this.save()
+                return true
+            }
         }
         return false
     }

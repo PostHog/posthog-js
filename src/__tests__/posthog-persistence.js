@@ -65,6 +65,25 @@ describe('persistence', () => {
         lib2.clear()
     })
 
+    it(`should only call save if props changes`, () => {
+        let lib = new PostHogPersistence({ name: 'test', persistence: 'localStorage+cookie' })
+        lib.register({ distinct_id: 'hi', test_prop: 'test_val' })
+        lib.save = jest.fn()
+
+        lib.register({ distinct_id: 'hi', test_prop: 'test_val' })
+        lib.register({})
+        lib.register({ distinct_id: 'hi' })
+        expect(lib.save).toHaveBeenCalledTimes(0)
+
+        lib.register({ distinct_id: 'hi2' })
+        expect(lib.save).toHaveBeenCalledTimes(1)
+        lib.save.mockClear()
+
+        lib.register({ new_key: '1234' })
+        expect(lib.save).toHaveBeenCalledTimes(1)
+        lib.save.mockClear()
+    })
+
     forPersistenceTypes(function (persistenceType) {
         it(`should register once`, () => {
             let lib = new PostHogPersistence({ name: 'test', persistence: persistenceType })
