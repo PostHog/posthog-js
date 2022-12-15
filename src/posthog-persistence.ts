@@ -186,10 +186,16 @@ export class PostHogPersistence {
         if (_isObject(props)) {
             this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
 
-            const hasChanges = Object.keys(props).find((key) => this.props[key] !== props[key])
+            let hasChanges = true
+
+            _each(props, (val, prop) => {
+                if (!this.props.hasOwnProperty(prop) && this.props[prop] !== val) {
+                    this.props[prop] = val
+                    hasChanges = true
+                }
+            })
 
             if (hasChanges) {
-                _extend(this.props, props)
                 this.save()
                 return true
             }
