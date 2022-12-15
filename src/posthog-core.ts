@@ -709,6 +709,7 @@ export class PostHog {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded) {
+            console.warn('called posthog.capture before posthog was initialized. Did not capture')
             return
         }
 
@@ -1111,6 +1112,10 @@ export class PostHog {
      * Useful for clearing data when a user logs out.
      */
     reset(reset_device_id?: boolean): void {
+        if (!this.__loaded) {
+            console.warn('called posthog.reset before posthog was initialized. Did not reset.')
+            return
+        }
         const device_id = this.get_property('$device_id')
         this.persistence.clear()
         this.sessionManager.resetSessionId()
