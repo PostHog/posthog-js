@@ -107,7 +107,10 @@ export class WebPerformanceObserver {
             })
 
             const entryTypes = PerformanceObserver.supportedEntryTypes.filter((x) => ENTRY_TYPES_TO_OBSERVE.includes(x))
-            this.observer.observe({ entryTypes })
+
+            entryTypes.forEach((entryType) => {
+                this.observer?.observe({ type: entryType, buffered: true })
+            })
         } catch (e) {
             console.error('PostHog failed to start performance observer', e)
             this.stopObserving()
