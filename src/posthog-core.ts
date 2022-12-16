@@ -829,7 +829,13 @@ export class PostHog {
         // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
-        properties = _extend({}, _info.properties(), this.persistence.properties(), this.sessionPersistence.properties(), properties)
+        properties = _extend(
+            {},
+            _info.properties(),
+            this.persistence.properties(),
+            this.sessionPersistence.properties(),
+            properties
+        )
 
         if (this.get_config('_capture_performance')) {
             if (event_name === '$pageview') {

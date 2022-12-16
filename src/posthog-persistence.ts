@@ -74,7 +74,12 @@ export class PostHogPersistence {
         }
 
         let storage_type = config['persistence'].toLowerCase()
-        if (storage_type !== 'cookie' && storage_type.indexOf('localstorage') === -1 && storage_type !== 'memory'&& storage_type !== 'session') {
+        if (
+            storage_type !== 'cookie' &&
+            storage_type.indexOf('localstorage') === -1 &&
+            storage_type !== 'memory' &&
+            storage_type !== 'session'
+        ) {
             logger.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
             storage_type = config['persistence'] = 'cookie'
         }
