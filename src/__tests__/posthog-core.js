@@ -1101,6 +1101,7 @@ describe('reset()', () => {
 
     given('overrides', () => ({
         persistence: new PostHogPersistence(given.config),
+        sessionPersistence: new PostHogPersistence({ ...given.config, persistence: "session" }),
     }))
 
     beforeEach(() => {
@@ -1109,9 +1110,12 @@ describe('reset()', () => {
 
     it('clears persistence', () => {
         given.lib.persistence.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
+        given.lib.sessionPersistence.register({ $more_flags: { flag: 'variant', other: true } })
         expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
+        expect(given.lib.sessionPersistence.props['$more_flags']).toEqual({ flag: 'variant', other: true })
         given.subject()
         expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual(undefined)
+        expect(given.lib.sessionPersistence.props['$more_flags']).toEqual(undefined)
     })
 
     it('resets the session_id and window_id', () => {
