@@ -34,7 +34,6 @@ import { compressData, decideCompression } from './compression'
 import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
-import { getPerformanceData } from './apm'
 import {
     CaptureOptions,
     CaptureResult,
@@ -812,33 +811,38 @@ export class PostHog {
             return properties
         }
 
-        // set $duration if time_event was previously called for this event
-        if (typeof start_timestamp !== 'undefined') {
-            const duration_in_ms = new Date().getTime() - start_timestamp
-            properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
-        }
+        const infoProperties = _info.properties()
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
         }
+
+        if (event_name === '$performance_data') {
+            // Early exit for $performance_data as we only need session and $current_url
+            properties['$current_url'] = infoProperties.$current_url
+            return properties
+        }
+
+        // set $duration if time_event was previously called for this event
+        if (typeof start_timestamp !== 'undefined') {
+            const duration_in_ms = new Date().getTime() - start_timestamp
+            properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+        }
+
         // note: extend writes to the first object, so lets make sure we
         // don't write to the persistence properties object and info
         // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
-        properties = _extend({}, _info.properties(), this.persistence.properties(), properties)
+        properties = _extend({}, infoProperties, this.persistence.properties(), properties)
 
         if (this.get_config('_capture_performance')) {
             if (event_name === '$pageview') {
                 this.pageViewIdManager.onPageview()
             }
             properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
-        }
-
-        if (event_name === '$pageview' && this.get_config('_capture_performance')) {
-            properties = _extend(properties, getPerformanceData())
         }
 
         const property_blacklist = this.get_config('property_blacklist')

@@ -278,8 +278,8 @@ describe('capture()', () => {
         expect(event.properties.key.length).toBe(50000)
     })
 
-    describe('capturing window performance', () => {
-        given('eventName', () => '$pageview')
+    describe('capture limited properties for $performance_data', () => {
+        given('eventName', () => '$performance_data')
 
         given('config', () => ({
             property_blacklist: [],
@@ -287,142 +287,12 @@ describe('capture()', () => {
             _onCapture: jest.fn(),
         }))
 
-        given('performanceEntries', () => ({
-            navigation: [{ duration: 1234 }],
-            paint: [{ a: 'b' }],
-            resource: [{ c: 'd' }],
-        }))
-
-        // e.g. IE does not implement performance paint timing
-        // https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
-        // even though it implements getEntriesByType
-        given('paintTimingsImplementedByBrowser', () => true)
-
-        given('clearResourceTimings', () => jest.fn())
-
-        given('getEntriesByType', () =>
-            jest.fn().mockImplementation((type) => {
-                if (!given.paintTimingsImplementedByBrowser && type === 'paint') {
-                    throw new Error('IE does not implement this')
-                } else {
-                    return given.performanceEntries[type]
-                }
+        it('captures $perfomance_datsa with only certain properties', () => {
+            const captured_event = given.subject()
+            expect(captured_event.properties).toEqual({
+                $current_url: 'http://localhost/',
+                token: undefined,
             })
-        )
-
-        beforeEach(() => {
-            /*
-                window.performance is not a complete implementation in jsdom
-                see github issue https://github.com/jsdom/jsdom/issues/3309
-                while it is not completely implemented we can follow the Jest instructions
-                here: https://jestjs.io/docs/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom
-             */
-
-            Object.defineProperty(window, 'performance', {
-                writable: true,
-                value: {
-                    getEntriesByType: given.getEntriesByType,
-                    clearResourceTimings: given.clearResourceTimings,
-                },
-            })
-        })
-
-        it('does not capture performance when disabled', () => {
-            given('config', () => ({
-                property_blacklist: [],
-                _capture_performance: false,
-                _onCapture: jest.fn(),
-            }))
-
-            given.subject()
-
-            expect(given.getEntriesByType).not.toHaveBeenCalled()
-            expect(given.clearResourceTimings).not.toHaveBeenCalled()
-        })
-
-        it('captures pageview with performance when enabled', () => {
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                '{"navigation":[["duration"],[[1234]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
-            )
-
-            expect(captured_event.properties).toHaveProperty('$performance_page_loaded', 1234)
-
-            expect(given.getEntriesByType).toHaveBeenCalledTimes(3)
-            expect(given.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
-            expect(given.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
-            expect(given.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
-            expect(given.clearResourceTimings).toHaveBeenCalled()
-        })
-
-        it('captures pageview with performance even if duration is not available', () => {
-            given('performanceEntries', () => ({
-                navigation: [{}],
-                paint: [{ a: 'b' }],
-                resource: [{ c: 'd' }],
-            }))
-
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                '{"navigation":[[],[[]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
-            )
-
-            expect(captured_event.properties).not.toHaveProperty('$performance_page_loaded')
-        })
-
-        it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
-            delete window.performance
-
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                JSON.stringify({
-                    navigation: [],
-                    paint: [],
-                    resource: [],
-                })
-            )
-        })
-
-        it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
-            delete window.performance.getEntriesByType
-
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                JSON.stringify({
-                    navigation: [],
-                    paint: [],
-                    resource: [],
-                })
-            )
-        })
-
-        it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
-            given('paintTimingsImplementedByBrowser', () => false)
-
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                '{"navigation":[["duration"],[[1234]]],"paint":[],"resource":[["c"],[["d"]]]}'
-            )
-        })
-
-        it('supports timestamp override', () => {
-            const date = new Date(1234)
-            given('options', () => ({
-                timestamp: date,
-            }))
-
-            const captured_event = given.subject()
-            expect(captured_event.timestamp).toBe(date)
         })
     })
 })
