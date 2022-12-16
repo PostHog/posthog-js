@@ -277,24 +277,6 @@ describe('capture()', () => {
         const event = given.subject()
         expect(event.properties.key.length).toBe(50000)
     })
-
-    describe('capture limited properties for $performance_data', () => {
-        given('eventName', () => '$performance_data')
-
-        given('config', () => ({
-            property_blacklist: [],
-            _capture_performance: true,
-            _onCapture: jest.fn(),
-        }))
-
-        it('captures $perfomance_datsa with only certain properties', () => {
-            const captured_event = given.subject()
-            expect(captured_event.properties).toEqual({
-                $current_url: 'http://localhost/',
-                token: undefined,
-            })
-        })
-    })
 })
 
 describe('_calculate_event_properties()', () => {
@@ -364,6 +346,18 @@ describe('_calculate_event_properties()', () => {
             distinct_id: 'abc',
         })
         expect(given.overrides.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+    })
+
+    it('only adds a few propertes if event is $performance_event', () => {
+        given('event_name', () => '$performance_event')
+        expect(given.subject).toEqual({
+            distinct_id: 'abc',
+            event: 'prop', // from actual mock event properties
+            $current_url: undefined,
+            $session_id: 'sessionId',
+            $window_id: 'windowId',
+            token: 'testtoken',
+        })
     })
 
     it('calls sanitize_properties', () => {

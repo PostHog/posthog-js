@@ -819,8 +819,10 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (event_name === '$performance_data') {
-            // Early exit for $performance_data as we only need session and $current_url
+        if (event_name === '$performance_event') {
+            const persistenceProps = this.persistence.properties()
+            // Early exit for $performance_event as we only need session and $current_url
+            properties['distinct_id'] = persistenceProps.distinct_id
             properties['$current_url'] = infoProperties.$current_url
             return properties
         }
