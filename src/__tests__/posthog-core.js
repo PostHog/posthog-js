@@ -203,6 +203,12 @@ describe('capture()', () => {
             update_campaign_params: jest.fn(),
             properties: jest.fn(),
         },
+        sessionPersistence: {
+            remove_event_timer: jest.fn(),
+            update_search_keyword: jest.fn(),
+            update_campaign_params: jest.fn(),
+            properties: jest.fn(),
+        },
         compression: {},
         _captureMetrics: new CaptureMetrics(),
         __captureHooks: [],
@@ -440,6 +446,10 @@ describe('_calculate_event_properties()', () => {
     given('overrides', () => ({
         get_config: (key) => given.config[key],
         persistence: {
+            properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+            remove_event_timer: jest.fn(),
+        },
+        sessionPersistence: {
             properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
             remove_event_timer: jest.fn(),
         },
@@ -926,6 +936,7 @@ describe('group()', () => {
             __loaded: true,
             config: given.config,
             persistence: new PostHogPersistence(given.config),
+            sessionPersistence: new PostHogPersistence(given.config),
             _requestQueue: {
                 enqueue: given.captureQueue,
             },

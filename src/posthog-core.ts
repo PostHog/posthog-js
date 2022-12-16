@@ -241,6 +241,7 @@ export class PostHog {
     config: PostHogConfig
 
     persistence: PostHogPersistence
+    sessionPersistence: PostHogPersistence
     sessionManager: SessionIdManager
     pageViewIdManager: PageViewIdManager
     people: PostHogPeople
@@ -286,6 +287,7 @@ export class PostHog {
         this._requestQueue = undefined as any
         this._retryQueue = undefined as any
         this.persistence = undefined as any
+        this.sessionPersistence = undefined as any
         this.sessionManager = undefined as any
     }
 
@@ -354,6 +356,10 @@ export class PostHog {
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionPersistence =
+            this.config.persistence === 'session'
+                ? this.persistence
+                : new PostHogPersistence({ ...this.config, persistence: 'session' })
 
         this._gdpr_init()
 
@@ -738,13 +744,13 @@ export class PostHog {
         }
 
         // update persistence
-        this.persistence.update_search_keyword(document.referrer)
+        this.sessionPersistence.update_search_keyword(document.referrer)
 
         if (this.get_config('store_google')) {
-            this.persistence.update_campaign_params()
+            this.sessionPersistence.update_campaign_params()
         }
         if (this.get_config('save_referrer')) {
-            this.persistence.update_referrer_info(document.referrer)
+            this.sessionPersistence.update_referrer_info(document.referrer)
         }
 
         let data: CaptureResult = {
@@ -802,7 +808,7 @@ export class PostHog {
         properties['token'] = this.get_config('token')
 
         if (event_name === '$snapshot') {
-            const persistenceProps = this.persistence.properties()
+            const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
             properties['distinct_id'] = persistenceProps.distinct_id
             return properties
         }
@@ -823,7 +829,7 @@ export class PostHog {
         // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
-        properties = _extend({}, _info.properties(), this.persistence.properties(), properties)
+        properties = _extend({}, _info.properties(), this.persistence.properties(), this.sessionPersistence.properties(), properties)
 
         if (this.get_config('_capture_performance')) {
             if (event_name === '$pageview') {
@@ -876,6 +882,30 @@ export class PostHog {
     }
 
     /**
+     * Register a set of session super properties, which are included with all
+     * events. This will overwrite previous super property values.
+     *
+     * Unlike regular super properties, which last in LocalStorage for a long time,
+     * session super properties get cleared after a session ends.
+     *
+     * ### Usage:
+     *
+     *     // register 'Gender' as a super property
+     *     posthog.registerSession({'Gender': 'Female'});
+     *
+     *     // register several session super properties when a user signs up
+     *     posthog.registerSession({
+     *         'Email': 'jdoe@example.com',
+     *         'Account Type': 'Free'
+     *     });
+     *
+     * @param {Object} properties An associative array of properties to store about the user
+     */
+    registerSession(properties: Properties): void {
+        this.sessionPersistence.register(properties)
+    }
+
+    /**
      * Register a set of super properties only once. This will not
      * overwrite previous super property values, unlike register().
      *
@@ -900,12 +930,47 @@ export class PostHog {
     }
 
     /**
+     * Register a set of session super properties only once. This will not
+     * overwrite previous session super property values, unlike registerSession().
+     *
+     * Unlike regular super properties, which last in LocalStorage for a long time,
+     * session super properties get cleared after a session ends.
+     *
+     * ### Usage:
+     *
+     *     // register a session super property for the first time only
+     *     posthog.registerSessionOnce({
+     *         'First Login Date': new Date().toISOString()
+     *     });
+     *
+     * ### Notes:
+     *
+     * If default_value is specified, current session super properties
+     * with that value will be overwritten.
+     *
+     * @param {Object} properties An associative array of session super properties to store about the user
+     * @param {*} [default_value] Value to override if already set in session super properties (ex: 'False') Default: 'None'
+     */
+    registerSessionOnce(properties: Properties, default_value?: Property): void {
+        this.sessionPersistence.register_once(properties, default_value)
+    }
+
+    /**
      * Delete a super property stored with the current user.
      *
      * @param {String} property The name of the super property to remove
      */
     unregister(property: string): void {
         this.persistence.unregister(property)
+    }
+
+    /**
+     * Delete a session super property stored with the current user.
+     *
+     * @param {String} property The name of the session super property to remove
+     */
+    unregisterSession(property: string): void {
+        this.sessionPersistence.unregister(property)
     }
 
     _register_single(prop: string, value: Property) {
@@ -1113,6 +1178,7 @@ export class PostHog {
     reset(reset_device_id?: boolean): void {
         const device_id = this.get_property('$device_id')
         this.persistence.clear()
+        this.sessionPersistence.clear()
         this.sessionManager.resetSessionId()
         const uuid = this.get_config('get_device_id')(_UUID())
         this.register_once(
@@ -1339,7 +1405,9 @@ export class PostHog {
             if (this.persistence) {
                 this.persistence.update_config(this.config)
             }
-
+            if (this.sessionPersistence) {
+                this.sessionPersistence.update_config(this.config)
+            }
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true
             }
@@ -1421,6 +1489,28 @@ export class PostHog {
         return this.persistence['props'][property_name]
     }
 
+    /**
+     * Returns the value of the session super property named property_name. If no such
+     * property is set, getSessionProperty() will return the undefined value.
+     *
+     * ### Notes:
+     *
+     * getSessionProperty() can only be called after the PostHog library has finished loading.
+     * init() has a loaded function available to handle this automatically. For example:
+     *
+     *     // grab value for 'user_id' after the posthog library has loaded
+     *     posthog.init('YOUR PROJECT TOKEN', {
+     *         loaded: function(posthog) {
+     *             user_id = posthog.getSessionProperty('user_id');
+     *         }
+     *     });
+     *
+     * @param {String} property_name The name of the session super property you want to retrieve
+     */
+    getSessionProperty(property_name: string): Property | undefined {
+        return this.sessionPersistence['props'][property_name]
+    }
+
     toString(): string {
         let name = this.get_config('name') ?? PRIMARY_INSTANCE_NAME
         if (name !== PRIMARY_INSTANCE_NAME) {
@@ -1483,6 +1573,9 @@ export class PostHog {
 
         if (!this.get_config('disable_persistence') && this.persistence.disabled !== disabled) {
             this.persistence.set_disabled(disabled)
+        }
+        if (!this.get_config('disable_persistence') && this.sessionPersistence.disabled !== disabled) {
+            this.sessionPersistence.set_disabled(disabled)
         }
     }
 

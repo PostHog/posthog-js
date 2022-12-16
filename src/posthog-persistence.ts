@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 
 import { _each, _extend, _include, _info, _isObject, _isUndefined, _strip_empty_properties, logger } from './utils'
-import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
+import { cookieStore, localStore, localPlusCookieStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 
 /*
@@ -74,7 +74,7 @@ export class PostHogPersistence {
         }
 
         let storage_type = config['persistence'].toLowerCase()
-        if (storage_type !== 'cookie' && storage_type.indexOf('localstorage') === -1 && storage_type !== 'memory') {
+        if (storage_type !== 'cookie' && storage_type.indexOf('localstorage') === -1 && storage_type !== 'memory'&& storage_type !== 'session') {
             logger.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
             storage_type = config['persistence'] = 'cookie'
         }
@@ -84,6 +84,8 @@ export class PostHogPersistence {
             this.storage = localPlusCookieStore
         } else if (storage_type === 'memory') {
             this.storage = memoryStore
+        } else if (storage_type === 'session') {
+            this.storage = sessionStore
         } else {
             this.storage = cookieStore
         }

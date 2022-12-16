@@ -54,7 +54,7 @@ export interface PostHogConfig {
     autocapture: boolean | AutocaptureConfig
     rageclick: boolean
     cross_subdomain_cookie: boolean
-    persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie'
+    persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'session'
     persistence_name: string
     cookie_name: string
     loaded: (posthog_instance: PostHog) => void
