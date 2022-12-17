@@ -541,10 +541,12 @@ describe('_handle_unload()', () => {
 
     given('config', () => ({
         capture_pageview: given.capturePageviews,
+        capture_pageleave: given.capturePageleave,
         request_batching: given.batching,
     }))
 
     given('capturePageviews', () => true)
+    given('capturePageleave', () => true)
     given('batching', () => true)
 
     it('captures $pageleave', () => {
