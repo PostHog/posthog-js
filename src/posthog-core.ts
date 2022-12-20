@@ -867,7 +867,8 @@ export class PostHog {
 
     /**
      * Register a set of super properties, which are included with all
-     * events. This will overwrite previous super property values.
+     * events. This will overwrite previous super property values, except
+     * for session properties (see `registerSession(properties)`).
      *
      * ### Usage:
      *
@@ -880,6 +881,9 @@ export class PostHog {
      *         'Account Type': 'Free'
      *     });
      *
+     *     // Display the properties
+     *     console.log(posthog.persistence.properties())
+     *
      * @param {Object} properties An associative array of properties to store about the user
      * @param {Number} [days] How many days since the user's last visit to store the super properties
      */
@@ -888,31 +892,7 @@ export class PostHog {
     }
 
     /**
-     * Register a set of session super properties, which are included with all
-     * events. This will overwrite previous super property values.
-     *
-     * Unlike regular super properties, which last in LocalStorage for a long time,
-     * session super properties get cleared after a session ends.
-     *
-     * ### Usage:
-     *
-     *     // register 'Gender' as a super property
-     *     posthog.registerSession({'Gender': 'Female'});
-     *
-     *     // register several session super properties when a user signs up
-     *     posthog.registerSession({
-     *         'Email': 'jdoe@example.com',
-     *         'Account Type': 'Free'
-     *     });
-     *
-     * @param {Object} properties An associative array of properties to store about the user
-     */
-    registerSession(properties: Properties): void {
-        this.sessionPersistence.register(properties)
-    }
-
-    /**
-     * Register a set of super properties only once. This will not
+     * Register a set of super properties only once. These will not
      * overwrite previous super property values, unlike register().
      *
      * ### Usage:
@@ -921,6 +901,9 @@ export class PostHog {
      *     posthog.register_once({
      *         'First Login Date': new Date().toISOString()
      *     });
+     *
+     *     // Display the properties
+     *     console.log(posthog.persistence.properties())
      *
      * ### Notes:
      *
@@ -936,29 +919,30 @@ export class PostHog {
     }
 
     /**
-     * Register a set of session super properties only once. This will not
-     * overwrite previous session super property values, unlike registerSession().
+     * Register a set of super properties, which are included with all events, but only
+     * for THIS SESSION. These will overwrite all other super property values.
      *
      * Unlike regular super properties, which last in LocalStorage for a long time,
      * session super properties get cleared after a session ends.
      *
      * ### Usage:
      *
-     *     // register a session super property for the first time only
-     *     posthog.registerSessionOnce({
-     *         'First Login Date': new Date().toISOString()
+     *     // register on all events this session
+     *     posthog.registerSession({'referer': customGetReferer()});
+     *
+     *     // register several session super properties when a user signs up
+     *     posthog.registerSession({
+     *         'selectedPlan': 'pro',
+     *         'completedSteps': 4,
      *     });
      *
-     * ### Notes:
+     *     // Display the properties
+     *     console.log(posthog.sessionPersistence.properties())
      *
-     * If default_value is specified, current session super properties
-     * with that value will be overwritten.
-     *
-     * @param {Object} properties An associative array of session super properties to store about the user
-     * @param {*} [default_value] Value to override if already set in session super properties (ex: 'False') Default: 'None'
+     * @param {Object} properties An associative array of properties to store about the user
      */
-    registerSessionOnce(properties: Properties, default_value?: Property): void {
-        this.sessionPersistence.register_once(properties, default_value)
+    registerSession(properties: Properties): void {
+        this.sessionPersistence.register(properties)
     }
 
     /**
