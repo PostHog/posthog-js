@@ -7,13 +7,6 @@ import { PersistentStore, PostHogConfig, Properties } from './types'
 /*
  * Constants
  */
-export const SET_QUEUE_KEY = '__mps'
-export const SET_ONCE_QUEUE_KEY = '__mpso'
-export const UNSET_QUEUE_KEY = '__mpus'
-export const ADD_QUEUE_KEY = '__mpa'
-export const APPEND_QUEUE_KEY = '__mpap'
-export const REMOVE_QUEUE_KEY = '__mpr'
-export const UNION_QUEUE_KEY = '__mpu'
 // This key is deprecated, but we want to check for it to see whether aliasing is allowed.
 export const PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id'
 export const ALIAS_ID_KEY = '__alias'
@@ -24,13 +17,6 @@ export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording
 export const SESSION_ID = '$sesid'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const RESERVED_PROPERTIES = [
-    SET_QUEUE_KEY,
-    SET_ONCE_QUEUE_KEY,
-    UNSET_QUEUE_KEY,
-    ADD_QUEUE_KEY,
-    APPEND_QUEUE_KEY,
-    REMOVE_QUEUE_KEY,
-    UNION_QUEUE_KEY,
     PEOPLE_DISTINCT_ID_KEY,
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,
