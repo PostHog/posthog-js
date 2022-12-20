@@ -1119,8 +1119,8 @@ describe('reset()', () => {
     })
 
     it('clears persistence', () => {
-        given.lib.persistence.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
-        given.lib.sessionPersistence.register({ $more_flags: { flag: 'variant', other: true } })
+        given.lib.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
+        given.lib.registerSession({ $more_flags: { flag: 'variant', other: true } })
         expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
         expect(given.lib.sessionPersistence.props['$more_flags']).toEqual({ flag: 'variant', other: true })
         given.subject()
