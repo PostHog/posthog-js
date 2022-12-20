@@ -199,14 +199,12 @@ describe('capture()', () => {
         config: given.config,
         persistence: {
             remove_event_timer: jest.fn(),
-            update_search_keyword: jest.fn(),
-            update_campaign_params: jest.fn(),
             properties: jest.fn(),
         },
         sessionPersistence: {
-            remove_event_timer: jest.fn(),
             update_search_keyword: jest.fn(),
             update_campaign_params: jest.fn(),
+            update_referrer_info: jest.fn(),
             properties: jest.fn(),
         },
         compression: {},
@@ -232,6 +230,19 @@ describe('capture()', () => {
         given.subject()
 
         expect(hook).toHaveBeenCalledWith('$event')
+    })
+
+    it('calls update_campaign_params on sessionPersistence', () => {
+        given('config', () => ({
+            property_blacklist: [],
+            _onCapture: jest.fn(),
+            store_google: true,
+            save_referrer: true,
+        }))
+
+        given.subject()
+
+        expect(given.lib.sessionPersistence.update_campaign_params).toHaveBeenCalled()
     })
 
     it('errors with undefined event name', () => {
@@ -451,7 +462,6 @@ describe('_calculate_event_properties()', () => {
         },
         sessionPersistence: {
             properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
-            remove_event_timer: jest.fn(),
         },
         sessionManager: {
             checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({

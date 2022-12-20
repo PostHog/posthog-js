@@ -169,14 +169,14 @@ const defaultConfig = (): PostHogConfig => ({
 })
 
 /**
- * create_mplib(token:string, config:object, name:string)
+ * create_phlib(token:string, config:object, name:string)
  *
  * This function is used by the init method of PostHogLib objects
  * as well as the main initializer at the end of the JSLib (that
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_mplib = function (token: string, config?: Partial<PostHogConfig>, name?: string): PostHog {
+const create_phlib = function (token: string, config?: Partial<PostHogConfig>, name?: string): PostHog {
     let instance: PostHog
     const target =
         name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : name ? posthog_master[name] : undefined
@@ -319,7 +319,7 @@ export class PostHog {
             return
         }
 
-        const instance: PostHog = create_mplib(token, config, name)
+        const instance: PostHog = create_phlib(token, config, name)
         posthog_master[name] = instance
         instance._loaded()
 
@@ -1784,7 +1784,7 @@ const override_ph_init_func = function () {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_mplib(token || '', config || {}, name)
+                posthog_master[name] = instances[name] = create_phlib(token || '', config || {}, name)
                 posthog_master[name]._loaded()
             }
             return posthog_master[name]
@@ -1796,7 +1796,7 @@ const override_ph_init_func = function () {
                 instance = instances[PRIMARY_INSTANCE_NAME]
             } else if (token) {
                 // intialize the main posthog lib
-                instance = create_mplib(token, config || {}, PRIMARY_INSTANCE_NAME)
+                instance = create_phlib(token, config || {}, PRIMARY_INSTANCE_NAME)
                 instance._loaded()
                 instances[PRIMARY_INSTANCE_NAME] = instance
             }
@@ -1859,7 +1859,7 @@ export function init_from_snippet(): void {
     // Load instances of the PostHog Library
     _each(posthog_master['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
         if (item && _isArray(item)) {
-            instances[item[2]] = create_mplib(...item)
+            instances[item[2]] = create_phlib(...item)
         }
     })
 
