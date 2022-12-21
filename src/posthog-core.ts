@@ -161,7 +161,7 @@ const defaultConfig = (): PostHogConfig => ({
     // Used for internal testing
     _onCapture: __NOOP,
     _capture_metrics: false,
-    _capture_performance: false,
+    capture_performance: false,
     name: 'posthog',
     callback_fn: 'posthog._jsc',
     bootstrap: {},
@@ -840,7 +840,7 @@ export class PostHog {
         // update properties with pageview info and super-properties
         properties = _extend({}, infoProperties, this.persistence.properties(), properties)
 
-        if (this.get_config('_capture_performance')) {
+        if (this.get_config('capture_performance')) {
             if (event_name === '$pageview') {
                 this.pageViewIdManager.onPageview()
             }

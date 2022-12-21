@@ -129,7 +129,7 @@ export class WebPerformanceObserver {
     }
 
     private isEnabled() {
-        return this.instance.get_config('_capture_performance')
+        return this.instance.get_config('capture_performance')
     }
 
     afterDecideResponse(response: DecideResponse) {
