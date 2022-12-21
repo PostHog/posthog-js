@@ -64,6 +64,7 @@ export interface PostHogConfig {
     verbose: boolean
     img: boolean
     capture_pageview: boolean
+    capture_pageleave: boolean
     debug: boolean
     cookie_expiration: number
     upgrade: boolean

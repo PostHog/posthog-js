@@ -114,6 +114,7 @@ const defaultConfig = (): PostHogConfig => ({
     verbose: false,
     img: false,
     capture_pageview: true,
+    capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
     debug: false,
     cookie_expiration: 365,
     upgrade: false,
@@ -504,13 +505,13 @@ export class PostHog {
 
     _handle_unload(): void {
         if (!this.get_config('request_batching')) {
-            if (this.get_config('capture_pageview')) {
+            if (this.get_config('capture_pageview') && this.get_config('capture_pageleave')) {
                 this.capture('$pageleave', null, { transport: 'sendBeacon' })
             }
             return
         }
 
-        if (this.get_config('capture_pageview')) {
+        if (this.get_config('capture_pageview') && this.get_config('capture_pageleave')) {
             this.capture('$pageleave')
         }
         if (this.get_config('_capture_metrics')) {

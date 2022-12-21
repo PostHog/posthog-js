@@ -1,3 +1,7 @@
+## 1.38.1 - 2022-12-15
+
+- fix: Reduce cookie modifications to stop infinite loops with CMP tools (#489)
+
 ## 1.38.0 - 2022-12-13
 
 - feat: page view ids (#487)

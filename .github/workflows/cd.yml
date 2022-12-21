@@ -76,13 +76,13 @@ jobs:
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
             - name: Install new posthog-js version in main repo
-              id: yarn-upgrade
+              id: pnpm-upgrade
               run: |
                   OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
                   echo "::set-output name=outgoing-version::$OUTGOING_VERSION"
                   for i in $(seq 1 $RETRY_TIMES); do
                       # Retry loop because of npm being _eventually_ consistent
-                      if yarn upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then
+                      if pnpm upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then
                           break
                       else
                           [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
@@ -107,7 +107,7 @@ jobs:
 
                       posthog-js version ${{ env.COMMITTED_VERSION }} has been released. This updates PostHog to use it.
 
-                      https://github.com/PostHog/posthog-js/compare/v${{ steps.yarn-upgrade.outputs.outgoing-version }}...v${{ env.COMMITTED_VERSION }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/posthog-js?activeTab=version)
+                      https://github.com/PostHog/posthog-js/compare/v${{ steps.pnpm-upgrade.outputs.outgoing-version }}...v${{ env.COMMITTED_VERSION }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/posthog-js?activeTab=version)
 
             - name: Output pull request result
               run: |
