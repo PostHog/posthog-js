@@ -1,8 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
 
-const BASE_ENDPOINT = '/p/'
-
 const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     // BASE_PERFORMANCE_EVENT_COLUMNS
     entryType: 0,
@@ -73,17 +71,17 @@ const ENTRY_TYPES_TO_OBSERVE = [
     'resource',
 ]
 
-const POSTHOG_PATHS_TO_IGNORE = [BASE_ENDPOINT, '/s/', '/e/']
+const PERFORMANCE_INGESTION_ENDPOINT = '/e/'
+// Don't monitor posthog paths because then events cause performance events which are events and the snake eats its tail 😱
+const POSTHOG_PATHS_TO_IGNORE = ['/s/', PERFORMANCE_INGESTION_ENDPOINT]
 
 export class WebPerformanceObserver {
     instance: PostHog
-    endpoint: string
     remoteEnabled: boolean | undefined
     observer: PerformanceObserver | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
-        this.endpoint = BASE_ENDPOINT
     }
 
     startObservingIfEnabled() {
@@ -168,7 +166,7 @@ export class WebPerformanceObserver {
         this.instance.capture('$performance_event', properties, {
             transport: 'XHR',
             method: 'POST',
-            endpoint: this.endpoint,
+            endpoint: PERFORMANCE_INGESTION_ENDPOINT,
             _noTruncate: true,
             _batchKey: 'performanceEvent',
         })

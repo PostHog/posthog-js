@@ -820,6 +820,13 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
+        if (this.get_config('capture_performance')) {
+            if (event_name === '$pageview') {
+                this.pageViewIdManager.onPageview()
+            }
+            properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
+        }
+
         if (event_name === '$performance_event') {
             const persistenceProps = this.persistence.properties()
             // Early exit for $performance_event as we only need session and $current_url
@@ -840,13 +847,6 @@ export class PostHog {
 
         // update properties with pageview info and super-properties
         properties = _extend({}, infoProperties, this.persistence.properties(), properties)
-
-        if (this.get_config('capture_performance')) {
-            if (event_name === '$pageview') {
-                this.pageViewIdManager.onPageview()
-            }
-            properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
-        }
 
         const property_blacklist = this.get_config('property_blacklist')
         if (_isArray(property_blacklist)) {

@@ -2,7 +2,7 @@
 
 import { getLZStringEncodedPayload } from '../support/compression'
 
-describe('Session recording', () => {
+describe('Web Performance', () => {
     given('options', () => ({}))
 
     beforeEach(() => {
@@ -22,12 +22,12 @@ describe('Session recording', () => {
         cy.visit('./playground/cypress')
         cy.posthogInit(given.options)
         cy.wait('@decide')
-        cy.wait('@performance')
+        cy.wait('@capture')
     })
 
     it('captures some performance events', () => {
         cy.wait(500)
-        cy.get('@performance').should(async ({ requestBody }) => {
+        cy.get('@capture').should(async ({ requestBody }) => {
             const perfEvents = await getLZStringEncodedPayload({ body: requestBody })
 
             expect(perfEvents.length).to.be.greaterThan(0)
