@@ -191,10 +191,10 @@ export interface DecideResponse {
     }
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
+    capturePerformance?: boolean
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
-        capturePerformance?: boolean
     }
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */

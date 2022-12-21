@@ -78,13 +78,12 @@ const POSTHOG_PATHS_TO_IGNORE = [BASE_ENDPOINT, '/s/', '/e/']
 export class WebPerformanceObserver {
     instance: PostHog
     endpoint: string
-    receivedDecide: boolean
+    remoteEnabled: boolean | undefined
     observer: PerformanceObserver | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
         this.endpoint = BASE_ENDPOINT
-        this.receivedDecide = false
     }
 
     startObservingIfEnabled() {
@@ -128,12 +127,13 @@ export class WebPerformanceObserver {
         return !!this.observer
     }
 
-    private isEnabled() {
-        return this.instance.get_config('capture_performance')
+    isEnabled() {
+        return this.instance.get_config('capture_performance') ?? this.remoteEnabled ?? false
     }
 
     afterDecideResponse(response: DecideResponse) {
-        if (response.sessionRecording?.capturePerformance) {
+        this.remoteEnabled = response.capturePerformance
+        if (this.isEnabled()) {
             this.startObserving()
         }
     }

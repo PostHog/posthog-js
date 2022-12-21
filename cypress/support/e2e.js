@@ -26,6 +26,7 @@ beforeEach(() => {
     cy.route('POST', '**/decide/*').as('decide')
     cy.route('POST', '**/e/*').as('capture')
     cy.route('POST', '**/ses/*').as('session-recording')
+    cy.route('POST', '**/p/*').as('performance')
 
     cy.readFile('dist/array.js').then((body) => {
         cy.intercept('**/static/array.js', { body })
