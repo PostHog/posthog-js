@@ -98,7 +98,7 @@ export interface PostHogConfig {
     callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     _capture_metrics: boolean
-    capture_performance: boolean
+    capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
     bootstrap: {

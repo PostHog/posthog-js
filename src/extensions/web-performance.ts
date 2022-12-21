@@ -132,7 +132,7 @@ export class WebPerformanceObserver {
     }
 
     afterDecideResponse(response: DecideResponse) {
-        this.remoteEnabled = response.capturePerformance
+        this.remoteEnabled = response.capturePerformance || false
         if (this.isEnabled()) {
             this.startObserving()
         }

@@ -162,7 +162,7 @@ const defaultConfig = (): PostHogConfig => ({
     // Used for internal testing
     _onCapture: __NOOP,
     _capture_metrics: false,
-    capture_performance: false,
+    capture_performance: undefined,
     name: 'posthog',
     callback_fn: 'posthog._jsc',
     bootstrap: {},
