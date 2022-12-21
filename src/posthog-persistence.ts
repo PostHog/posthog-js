@@ -21,7 +21,6 @@ export const CAMPAIGN_IDS_KEY = '__cmpns'
 export const EVENT_TIMERS_KEY = '__timers'
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
-export const PERFORMANCE_RECORDING_ENABLED_SERVER_SIDE = '$performance_recording_enabled_server_side'
 export const SESSION_ID = '$sesid'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const RESERVED_PROPERTIES = [
