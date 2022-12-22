@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-import { getLZStringEncodedPayload } from '../support/compression'
+import { getLZStringEncodedPayload, getBase64EncodedPayload } from '../support/compression'
 
 describe('Web Performance', () => {
     given('options', () => ({}))
@@ -26,28 +26,27 @@ describe('Web Performance', () => {
     })
 
     it('captures some performance events', () => {
-        cy.wait(500)
-        cy.get('@capture').should(async ({ requestBody }) => {
-            const perfEvents = await getLZStringEncodedPayload({ body: requestBody })
+        cy.wait(100)
 
-            expect(perfEvents.length).to.be.greaterThan(0)
+        cy.phCaptures({ full: true }).then((events) => {
+            const performanceEvents = events.filter((e) => e.event === '$performance_event')
 
-            const navigationEvent = perfEvents.find((e) => e.properties[0] === 'navigation')
+            expect(performanceEvents.length).to.be.greaterThan(0)
 
-            expect(navigationEvent).to.exist
-            expect(navigationEvent.event).to.equal('$performance_event')
+            expect(performanceEvents.filter((pe) => pe.properties[0] === 'navigation').length).to.eq(1)
 
-            // We can't check every property type as they are a bit flakey, so we just check the guaranteed ones
-            expect(Object.keys(navigationEvent.properties)).to.include.members([
-                '0',
-                '1',
-                '2',
-                'token',
-                '$session_id',
-                '$window_id',
-                'distinct_id',
-                '$current_url',
-            ])
+            performanceEvents.forEach((perfEvent) => {
+                expect(Object.keys(perfEvent.properties)).to.include.members([
+                    '0',
+                    '1',
+                    '2',
+                    'token',
+                    '$session_id',
+                    '$window_id',
+                    'distinct_id',
+                    '$current_url',
+                ])
+            })
         })
     })
 })
