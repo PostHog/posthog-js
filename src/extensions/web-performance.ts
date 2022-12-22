@@ -162,7 +162,7 @@ export class WebPerformanceObserver {
             }
         }
 
-        // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
+        // :TRICKY: Make sure we batch these requests, and don't truncate the strings.
         this.instance.capture('$performance_event', properties, {
             transport: 'XHR',
             method: 'POST',
