@@ -1,3 +1,9 @@
+## 1.39.0 - 2022-12-23
+
+- feat: Adds performance capture (#488)
+- fix(options): Add capture_pageleave option (#491)
+- fix(cd): use pnpm to install posthog-js version in main repo (#495)
+
 ## 1.38.1 - 2022-12-15
 
 - fix: Reduce cookie modifications to stop infinite loops with CMP tools (#489)
