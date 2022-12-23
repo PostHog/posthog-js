@@ -23,6 +23,7 @@ import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
+import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -33,7 +34,6 @@ import { compressData, decideCompression } from './compression'
 import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
-import { getPerformanceData } from './apm'
 import {
     CaptureOptions,
     CaptureResult,
@@ -162,7 +162,7 @@ const defaultConfig = (): PostHogConfig => ({
     // Used for internal testing
     _onCapture: __NOOP,
     _capture_metrics: false,
-    _capture_performance: false,
+    capture_performance: undefined,
     name: 'posthog',
     callback_fn: 'posthog._jsc',
     bootstrap: {},
@@ -200,6 +200,9 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
 
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
+
+    instance.webPerformance = new WebPerformanceObserver(instance)
+    instance.webPerformance.startObservingIfEnabled()
 
     instance.__autocapture = instance.get_config('autocapture')
     if (instance.get_config('autocapture')) {
@@ -249,6 +252,7 @@ export class PostHog {
     feature_flags: PostHogFeatureFlags
     toolbar: Toolbar
     sessionRecording: SessionRecording | undefined
+    webPerformance: WebPerformanceObserver | undefined
 
     _captureMetrics: CaptureMetrics
     _requestQueue: RequestQueue
@@ -808,34 +812,41 @@ export class PostHog {
             return properties
         }
 
-        // set $duration if time_event was previously called for this event
-        if (typeof start_timestamp !== 'undefined') {
-            const duration_in_ms = new Date().getTime() - start_timestamp
-            properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
-        }
+        const infoProperties = _info.properties()
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
         }
-        // note: extend writes to the first object, so lets make sure we
-        // don't write to the persistence properties object and info
-        // properties object by passing in a new object
 
-        // update properties with pageview info and super-properties
-        properties = _extend({}, _info.properties(), this.persistence.properties(), properties)
-
-        if (this.get_config('_capture_performance')) {
+        if (this.get_config('capture_performance')) {
             if (event_name === '$pageview') {
                 this.pageViewIdManager.onPageview()
             }
             properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
         }
 
-        if (event_name === '$pageview' && this.get_config('_capture_performance')) {
-            properties = _extend(properties, getPerformanceData())
+        if (event_name === '$performance_event') {
+            const persistenceProps = this.persistence.properties()
+            // Early exit for $performance_event as we only need session and $current_url
+            properties['distinct_id'] = persistenceProps.distinct_id
+            properties['$current_url'] = infoProperties.$current_url
+            return properties
         }
+
+        // set $duration if time_event was previously called for this event
+        if (typeof start_timestamp !== 'undefined') {
+            const duration_in_ms = new Date().getTime() - start_timestamp
+            properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+        }
+
+        // note: extend writes to the first object, so lets make sure we
+        // don't write to the persistence properties object and info
+        // properties object by passing in a new object
+
+        // update properties with pageview info and super-properties
+        properties = _extend({}, infoProperties, this.persistence.properties(), properties)
 
         const property_blacklist = this.get_config('property_blacklist')
         if (_isArray(property_blacklist)) {

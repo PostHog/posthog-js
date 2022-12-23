@@ -98,7 +98,7 @@ export interface PostHogConfig {
     callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     _capture_metrics: boolean
-    _capture_performance: boolean
+    capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
     bootstrap: {
@@ -191,6 +191,7 @@ export interface DecideResponse {
     }
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
+    capturePerformance?: boolean
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
