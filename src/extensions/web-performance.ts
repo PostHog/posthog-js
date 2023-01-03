@@ -162,7 +162,30 @@ export class WebPerformanceObserver {
             }
         }
 
-        // :TRICKY: Make sure we batch these requests, and don't truncate the strings.
+        this.capturePerformanceEvent(properties)
+
+        if (exposesServerTiming(event)) {
+            for (const timing of event.serverTiming) {
+                this.capturePerformanceEvent({
+                    [PERFORMANCE_EVENTS_MAPPING['timeOrigin']]: timeOrigin,
+                    [PERFORMANCE_EVENTS_MAPPING['timestamp']]: Math.floor(timeOrigin + event.startTime),
+                    [PERFORMANCE_EVENTS_MAPPING['name']]: timing.name,
+                    [PERFORMANCE_EVENTS_MAPPING['duration']]: timing.duration,
+                    // the spec has a closed list of possible types
+                    // https://developer.mozilla.org/en-US/docs/Web/API/PerformanceEntry/entryType
+                    // but we need to know this was a server timing so that we know to
+                    // match it to the appropriate navigation or resource timing
+                    // that matching will have to be on timestamp and $current_url
+                    [PERFORMANCE_EVENTS_MAPPING['entryType']]: 'serverTiming',
+                })
+            }
+        }
+    }
+
+    /**
+     * :TRICKY: Make sure we batch these requests, and don't truncate the strings.
+     */
+    private capturePerformanceEvent(properties: { [key: number]: any }) {
         this.instance.capture('$performance_event', properties, {
             transport: 'XHR',
             method: 'POST',
@@ -172,3 +195,11 @@ export class WebPerformanceObserver {
         })
     }
 }
+
+/**
+ *  Check if this PerformanceEntry is either a PerformanceResourceTiming or a PerformanceNavigationTiming
+ *  NB PerformanceNavigationTiming extends PerformanceResourceTiming
+ *  Here we don't care which interface it implements as both expose `serverTimings`
+ */
+const exposesServerTiming = (event: PerformanceEntry): event is PerformanceResourceTiming =>
+    event.entryType === 'navigation' || event.entryType === 'resource'
