@@ -1,3 +1,7 @@
+## 1.39.1 - 2023-01-03
+
+- feat: capture server timings (#497)
+
 ## 1.39.0 - 2022-12-23
 
 - feat: Adds performance capture (#488)
