@@ -303,7 +303,11 @@ export function isAngularStyleAttr(attributeName: string): boolean {
     return false
 }
 
-export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => void, restrictToHTMLBody?: boolean): void {
+export function loadScript(
+    scriptUrlToLoad: string,
+    callback: (event: Event) => void,
+    restrictToHTMLBody?: boolean
+): void {
     const scriptTag = document.createElement('script')
     scriptTag.type = 'text/javascript'
     scriptTag.src = scriptUrlToLoad
