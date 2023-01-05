@@ -1571,6 +1571,7 @@ export class PostHog {
 
         this._gdpr_call_func(optIn, options)
         this._gdpr_update_persistence(options)
+        this._start_queue_if_opted_in()
     }
 
     /**
