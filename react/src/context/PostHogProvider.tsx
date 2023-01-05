@@ -9,9 +9,7 @@ import { getPostHogContext } from './PostHogContext'
  */
 export interface FeatureFlags {
     active?: string[]
-    enabled: {
-        [flag: string]: boolean | string
-    }
+    enabled: FeatureFlags
 }
 
 /**

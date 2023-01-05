@@ -391,9 +391,7 @@ export class PostHog {
             const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
                 .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
                 .reduce(
-                    (res: FeatureFlags, key) => (
-                        (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
-                    ),
+                    (res: FeatureFlags, key) => ((res[key] = config.bootstrap?.featureFlags?.[key] || false), res),
                     {}
                 )
 
