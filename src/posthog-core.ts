@@ -51,6 +51,7 @@ import {
     XHROptions,
     AutocaptureConfig,
     FeatureFlags,
+    JsonType,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -935,7 +936,7 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined {
+    getFeatureFlag(key: string, options?: { send_event?: boolean }): JsonType | undefined {
         return this.featureFlags.getFeatureFlag(key, options)
     }
 
@@ -968,7 +969,7 @@ export class PostHog {
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
      *                              It'll return a list of feature flags enabled for the user.
      */
-    onFeatureFlags(callback: (flags: string[], variants: Record<string, boolean | string>) => void): void {
+    onFeatureFlags(callback: (flags: string[], variants: FeatureFlags) => void): void {
         return this.featureFlags.onFeatureFlags(callback)
     }
 
