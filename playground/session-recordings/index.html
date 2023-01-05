@@ -45,6 +45,7 @@
             </div>
 
             <button data-cy-open-new-window onclick="window.open(window.location)">Open new window</button>
+            <button data-cy-open-new-window onclick="posthog.sessionManager.resetSessionId();">Reset session</button>
         </div>
 
         <button onclick="posthog.startSessionRecording();">Start recording</button>
@@ -94,17 +95,17 @@
         </script>
 
         <script>
-            posthog.init('phc_gV2VtAdq8G5nA3bAJSPZDYafV5FxvPxw8DcXMHgotmT', {
+            posthog.init('phc_CUyITkD7ktJ1op4hYE9WfmWbs0BavAqs02Ss9xbqY1T', {
                 api_host: 'http://localhost:8000',
                 disable_session_recording: true,
                 capture_performance: true,
             })
 
-            setTimeout(() => {
+            setInterval(() => {
                 posthog.debug()
                 document.getElementById('current-session-id').innerHTML = posthog.sessionRecording.sessionId
                 document.getElementById('current-window-id').innerHTML = posthog.sessionRecording.windowId
-            }, 100)
+            }, 500)
         </script>
     </body>
 </html>

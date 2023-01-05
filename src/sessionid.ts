@@ -1,10 +1,12 @@
 import { PostHogPersistence, SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
-import { _UUID } from './utils'
+import { _getQueryParam, _UUID } from './utils'
 import { PostHogConfig } from './types'
 
 const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
+
+const SESSION_HASH_PARAM_NAME = 'ph_sh'
 
 export class SessionIdManager {
     persistence: PostHogPersistence
@@ -45,6 +47,7 @@ export class SessionIdManager {
         }
 
         this._listenToReloadWindow()
+        this._checkSessionHashInUrl()
     }
 
     // Note: this tries to store the windowId in sessionStorage. SessionStorage is unique to the current window/tab,
@@ -173,6 +176,39 @@ export class SessionIdManager {
         return {
             sessionId: sessionId,
             windowId: windowId,
+        }
+    }
+
+    /**
+     * This function returns a hash of the current sessionId. This can then be passed for instance via a URL query param
+     * to a different location in order to "stitch" the sessions together
+     */
+    getSessionHash(): string {
+        const [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
+        return `${sessionId}:${lastTimestamp}:${startTimestamp}`
+    }
+
+    setFromSessionHash(sessionHash: string): void {
+        const { sessionId } = this.checkAndGetSessionAndWindowId(true)
+        const [newSessionId, lastTimestamp, startTimestamp] = sessionHash.split(':')
+
+        if (!newSessionId || !lastTimestamp || !startTimestamp) {
+            console.warn("Can't set session from hash, invalid hash", sessionHash)
+            return
+        }
+
+        if (sessionId === newSessionId) {
+            return
+        }
+
+        this._setSessionId(sessionId, Number(lastTimestamp), Number(startTimestamp))
+    }
+
+    _checkSessionHashInUrl(): void {
+        const sessionHash = _getQueryParam(document.URL, SESSION_HASH_PARAM_NAME)
+
+        if (sessionHash) {
+            this.setFromSessionHash(sessionHash)
         }
     }
 }
