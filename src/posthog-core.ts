@@ -50,6 +50,7 @@ import {
     SnippetArrayItem,
     XHROptions,
     AutocaptureConfig,
+    FeatureFlags,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -389,7 +390,7 @@ export class PostHog {
             const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
                 .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
                 .reduce(
-                    (res: Record<string, string | boolean>, key) => (
+                    (res: FeatureFlags, key) => (
                         (res[key] = config.bootstrap?.featureFlags?.[key] || false), res
                     ),
                     {}

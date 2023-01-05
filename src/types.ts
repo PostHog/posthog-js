@@ -104,7 +104,7 @@ export interface PostHogConfig {
     bootstrap: {
         distinctID?: string
         isIdentifiedID?: boolean
-        featureFlags?: Record<string, boolean | string>
+        featureFlags?: FeatureFlags
     }
     segment?: any
 }
@@ -190,7 +190,7 @@ export interface DecideResponse {
         enable_collect_everything: boolean
     }
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
-    featureFlags: Record<string, string | boolean>
+    featureFlags: FeatureFlags
     capturePerformance?: boolean
     sessionRecording?: {
         endpoint?: string
@@ -203,7 +203,10 @@ export interface DecideResponse {
     siteApps: { id: number; url: string }[]
 }
 
-export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
+export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
+export type FeatureFlags = Record<string, JsonType>
+
+export type FeatureFlagsCallback = (flags: string[], variants: FeatureFlags) => void
 
 // TODO: delete custom_properties after changeless typescript refactor
 export interface AutoCaptureCustomProperty {
@@ -267,7 +270,7 @@ export interface ToolbarParams {
     distinctId?: string
     userEmail?: string
     dataAttributes?: string[]
-    featureFlags?: Record<string, string | boolean>
+    featureFlags?: FeatureFlags
 }
 
 export interface PostData {

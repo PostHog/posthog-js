@@ -1,6 +1,6 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse, FeatureFlagsCallback, RequestCallback } from './types'
+import { DecideResponse, FeatureFlagsCallback, RequestCallback, FeatureFlags, JsonType } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
 export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>, persistence: PostHogPersistence) => {
@@ -58,7 +58,7 @@ export class PostHogFeatureFlags {
         return Object.keys(this.getFlagVariants())
     }
 
-    getFlagVariants(): Record<string, string | boolean> {
+    getFlagVariants(): FeatureFlags {
         const enabledFlags = this.instance.get_property('$enabled_feature_flags')
         const overriddenFlags = this.instance.get_property('$override_feature_flags')
         if (!overriddenFlags) {
@@ -163,7 +163,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} key Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string {
+    getFeatureFlag(key: string, options: { send_event?: boolean } = {}): JsonType {
         if (!this.getFlags()) {
             console.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return false
@@ -217,13 +217,13 @@ export class PostHogFeatureFlags {
      *
      * @param {Object|Array|String} flags Flags to override with.
      */
-    override(flags: boolean | string[] | Record<string, string | boolean>): void {
+    override(flags: boolean | string[] | FeatureFlags): void {
         this._override_warning = false
 
         if (flags === false) {
             this.instance.persistence.unregister('$override_feature_flags')
         } else if (Array.isArray(flags)) {
-            const flagsObj: Record<string, string | boolean> = {}
+            const flagsObj: FeatureFlags = {}
             for (let i = 0; i < flags.length; i++) {
                 flagsObj[flags[i]] = true
             }
