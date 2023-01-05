@@ -18,6 +18,7 @@ export class PageViewIdManager {
         if (!this._pageViewId) {
             this._pageViewId = _UUID()
         }
+
         return this._pageViewId
     }
 }
