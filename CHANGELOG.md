@@ -1,3 +1,8 @@
+## 1.39.2 - 2023-01-06
+
+- fix: page view ids didn't work with server side config (#501)
+- chore(deps): Bump json5 from 2.1.3 to 2.2.3 in /react (#498)
+
 ## 1.39.1 - 2023-01-03
 
 - feat: capture server timings (#497)
