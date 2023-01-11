@@ -309,7 +309,7 @@ export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => 
     scriptTag.src = scriptUrlToLoad
     scriptTag.onload = callback
 
-    const scripts = document.getElementsByTagName('script')
+    const scripts = document.querySelectorAll('body > script')
     if (scripts.length > 0) {
         scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
     } else {

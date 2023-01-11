@@ -123,7 +123,8 @@ export class Toolbar {
         loadScript(toolbarUrl, () => {
             ;((window as any)['ph_load_toolbar'] || (window as any)['ph_load_editor'])(toolbarParams, this.instance)
         })
-        // Turbolinks doesn't fire an onload event but does replace the entire page, including the toolbar
+        // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
+        // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
         _register_event(window, 'turbolinks:load', () => {
             ;(window as any)['_postHogToolbarLoaded'] = false
             this.loadToolbar(toolbarParams)
