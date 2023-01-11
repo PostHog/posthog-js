@@ -306,15 +306,14 @@ export function isAngularStyleAttr(attributeName: string): boolean {
 export function loadScript(
     scriptUrlToLoad: string,
     callback: (event: Event) => void,
-    restrictToHTMLBody?: boolean
 ): void {
     const scriptTag = document.createElement('script')
     scriptTag.type = 'text/javascript'
     scriptTag.src = scriptUrlToLoad
     scriptTag.onload = callback
 
-    const scripts = document.getElementsByTagName('script')
-    if (scripts.length > 0 && !restrictToHTMLBody) {
+    const scripts = document.querySelectorAll('body > script')
+    if (scripts.length > 0) {
         scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
     } else {
         document.body.appendChild(scriptTag)
