@@ -124,8 +124,7 @@ export class Toolbar {
             toolbarUrl,
             () => {
                 ;((window as any)['ph_load_toolbar'] || (window as any)['ph_load_editor'])(toolbarParams, this.instance)
-            },
-            true
+            }
         )
         // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
         // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
