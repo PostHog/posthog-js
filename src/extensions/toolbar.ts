@@ -103,8 +103,14 @@ export class Toolbar {
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         ;(window as any)['_postHogToolbarLoaded'] = true
 
-        const host = params?.['jsURL'] || params?.['apiURL'] || this.instance.get_config('api_host')
-        const toolbarUrl = `${host}${host.endsWith('/') ? '' : '/'}static/toolbar.js?_ts=${new Date().getTime()}`
+        // the toolbar does not use the `jsURL` as that route is cached for 24 hours
+        // instead we request it from the `apiURL` (i.e. Django)
+        // that respects the query params for caching
+        const host = params?.['apiURL'] || this.instance.get_config('api_host')
+        const timestampToNearestThirtySeconds = Math.floor(Date.now() / 30000) * 30000
+        const toolbarUrl = `${host}${
+            host.endsWith('/') ? '' : '/'
+        }static/toolbar.js?_ts=${timestampToNearestThirtySeconds}`
         const disableToolbarMetrics =
             !POSTHOG_MANAGED_HOSTS.includes(this.instance.get_config('api_host')) &&
             this.instance.get_config('advanced_disable_toolbar_metrics')
