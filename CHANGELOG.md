@@ -1,3 +1,8 @@
+## 1.39.3 - 2023-01-11
+
+- fix(toolbar): Load toolbar only in body for turbolink (#499)
+- Install pnpm for usage in PR step (#502)
+
 ## 1.39.2 - 2023-01-06
 
 - fix: page view ids didn't work with server side config (#501)
