@@ -105,7 +105,7 @@ export class Toolbar {
 
         // the toolbar does not use the `jsURL` as that route is cached for 24 hours.
         // By design array.js, recorder.js, and toolbar.js are served from Django with no or limited caching, not from our CDN
-        // that respects the query params for caching
+        // Django respects the query params for caching, returning a 304 if appropriate
         const host = params?.['apiURL'] || this.instance.get_config('api_host')
         const timestampToNearestThirtySeconds = Math.floor(Date.now() / 30000) * 30000
         const toolbarUrl = `${host}${
