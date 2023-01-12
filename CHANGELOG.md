@@ -1,3 +1,7 @@
+## 1.39.4 - 2023-01-12
+
+- fix: use django cache for toolbar js (#503)
+
 ## 1.39.3 - 2023-01-11
 
 - fix(toolbar): Load toolbar only in body for turbolink (#499)
