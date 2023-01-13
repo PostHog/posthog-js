@@ -1,3 +1,7 @@
+## 1.39.5 - 2023-01-13
+
+- chore: move types dependency from dependencies to devdependencies (#504)
+
 ## 1.39.4 - 2023-01-12
 
 - fix: use django cache for toolbar js (#503)
