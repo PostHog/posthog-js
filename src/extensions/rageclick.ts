@@ -1,24 +1,21 @@
 // Naive rage click implementation: If mouse has not moved than RAGE_CLICK_THRESHOLD_PX
 // over RAGE_CLICK_CLICK_COUNT clicks with max RAGE_CLICK_TIMEOUT_MS between clicks, it's
 // counted as a rage click
-import { PostHog } from '../posthog-core'
 
 const RAGE_CLICK_THRESHOLD_PX = 30
 const RAGE_CLICK_TIMEOUT_MS = 1000
 const RAGE_CLICK_CLICK_COUNT = 3
 
 export default class RageClick {
-    instance: PostHog
     clicks: { x: number; y: number; timestamp: number }[]
     enabled: boolean
 
-    constructor(instance: PostHog, enabled = instance.get_config('rageclick')) {
+    constructor(enabled: boolean) {
         this.clicks = []
-        this.instance = instance
         this.enabled = enabled
     }
 
-    click(x: number, y: number, timestamp: number) {
+    click(x: number, y: number, timestamp: number, capture: (s: string) => void) {
         if (!this.enabled) {
             return
         }
@@ -32,7 +29,7 @@ export default class RageClick {
             this.clicks.push({ x, y, timestamp })
 
             if (this.clicks.length === RAGE_CLICK_CLICK_COUNT) {
-                this.instance.capture('$rageclick')
+                capture('$rageclick')
             }
         } else {
             this.clicks = [{ x, y, timestamp }]

@@ -1,11 +1,11 @@
 import RageClick from '../../extensions/rageclick'
 
 describe('RageClick()', () => {
-    given('instance', () => new RageClick({ capture: given.capture }, given.enabled))
+    given('instance', () => new RageClick(given.enabled))
     given('capture', () => jest.fn())
     given('enabled', () => true)
 
-    const click = (x, y, t) => given.instance.click(x, y, t)
+    const click = (x, y, t) => given.instance.click(x, y, t, given.capture)
 
     it('captures some rage clicking', () => {
         click(0, 0, 10)
