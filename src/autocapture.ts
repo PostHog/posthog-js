@@ -135,7 +135,7 @@ const autocapture = {
         }
     },
 
-    _captureEvent: function (e: Event, instance: PostHog): boolean | void {
+    _captureEvent: function (e: Event, instance: PostHog, eventName = '$autocapture'): boolean | void {
         /*** Don't mess with this code without running IE8 tests on it ***/
         let target = this._getEventTarget(e)
         if (isTextNode(target)) {
@@ -143,8 +143,10 @@ const autocapture = {
             target = (target.parentNode || null) as Element | null
         }
 
-        if (e.type === 'click' && e instanceof MouseEvent) {
-            this.rageclicks?.click(e.clientX, e.clientY, new Date().getTime())
+        if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
+            if (this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
+                this._captureEvent(e, instance, '$rageclick')
+            }
         }
 
         if (target && shouldCaptureDomEvent(target, e, this.config)) {
@@ -208,7 +210,7 @@ const autocapture = {
                 this._getCustomProperties(targetElementList)
             )
 
-            instance.capture('$autocapture', props)
+            instance.capture(eventName, props)
             return true
         }
     },
@@ -243,7 +245,7 @@ const autocapture = {
             this.config.url_allowlist = this.config.url_allowlist.map((url) => new RegExp(url))
         }
 
-        this.rageclicks = new RageClick(instance)
+        this.rageclicks = new RageClick(instance.get_config('rageclick'))
     },
 
     afterDecideResponse: function (response: DecideResponse, instance: PostHog): void {

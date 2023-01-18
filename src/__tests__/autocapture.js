@@ -376,6 +376,8 @@ describe('Autocapture system', () => {
                     switch (key) {
                         case 'mask_all_element_attributes':
                             return false
+                        case 'rageclick':
+                            return true
                     }
                 }),
             }
@@ -450,6 +452,34 @@ describe('Autocapture system', () => {
             expect(eventType1).toBe('my property value')
             expect(eventType2).toBe('my property value')
             lib.capture.resetHistory()
+        })
+
+        it('should capture rageclick', () => {
+            autocapture.init(lib)
+
+            const elTarget = document.createElement('img')
+            const elParent = document.createElement('span')
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'http://test.com')
+            elGrandparent.appendChild(elParent)
+            const fakeEvent = {
+                target: elTarget,
+                type: 'click',
+                clientX: 5,
+                clientY: 5,
+            }
+            Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+            autocapture._captureEvent(fakeEvent, lib)
+            autocapture._captureEvent(fakeEvent, lib)
+            autocapture._captureEvent(fakeEvent, lib)
+
+            expect(lib.capture.args.map((args) => args[0])).toEqual([
+                '$autocapture',
+                '$autocapture',
+                '$rageclick',
+                '$autocapture',
+            ])
         })
 
         it('should not capture events when get_config returns false, when an element matching any of the event selectors is clicked', () => {
