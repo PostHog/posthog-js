@@ -14,7 +14,7 @@ describe('RageClick()', () => {
         click(5, 5, 80)
         click(5, 5, 100)
 
-        expect(given.capture).toHaveBeenCalledWith('$rageclick')
+        expect(given.capture).toHaveBeenCalledWith()
     })
 
     it('does not capture rage clicks if not enabled', () => {

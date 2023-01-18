@@ -144,8 +144,11 @@ const autocapture = {
         }
 
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
-            this.rageclicks?.click(e.clientX, e.clientY, new Date().getTime(), (name: string) => {
-                this._captureEvent(e, instance, name)
+            this.rageclicks?.click(e.clientX, e.clientY, new Date().getTime(), () => {
+                // if `this.rageClicks` decides to capture the event,
+                // then it will call into _captureEvent here
+                // which will capture the event elements chain onto the rageclick event
+                this._captureEvent(e, instance, '$rageclick')
             })
         }
 
