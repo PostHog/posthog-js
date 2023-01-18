@@ -1,3 +1,7 @@
+## 1.40.0 - 2023-01-18
+
+- feat: capture clicked elements on rageclicks (#506)
+
 ## 1.39.5 - 2023-01-13
 
 - chore: move types dependency from dependencies to devdependencies (#504)
