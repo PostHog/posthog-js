@@ -15,9 +15,9 @@ export default class RageClick {
         this.enabled = enabled
     }
 
-    click(x: number, y: number, timestamp: number, captureRageClickEvent: () => void) {
+    isRageClick(x: number, y: number, timestamp: number): boolean {
         if (!this.enabled) {
-            return
+            return false
         }
 
         const lastClick = this.clicks[this.clicks.length - 1]
@@ -29,10 +29,12 @@ export default class RageClick {
             this.clicks.push({ x, y, timestamp })
 
             if (this.clicks.length === RAGE_CLICK_CLICK_COUNT) {
-                captureRageClickEvent()
+                return true
             }
         } else {
             this.clicks = [{ x, y, timestamp }]
         }
+
+        return false
     }
 }
