@@ -1,3 +1,7 @@
+## 1.40.1 - 2023-01-19
+
+- fix: Sentry URL for recording (#507)
+
 ## 1.40.0 - 2023-01-18
 
 - feat: capture clicked elements on rageclicks (#506)
