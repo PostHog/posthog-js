@@ -1,3 +1,7 @@
+## 1.40.2 - 2023-01-20
+
+- Revert "chore: move types dependency from dependencies to devdependencies (#504)" (#509)
+
 ## 1.40.1 - 2023-01-19
 
 - fix: Sentry URL for recording (#507)
