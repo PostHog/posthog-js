@@ -397,15 +397,12 @@ export class PostHog {
                 )
             const featureFlagPayloads = Object.keys(config.bootstrap?.featureFlagPayloads || {})
                 .filter((key) => activeFlags[key])
-                .reduce(
-                    (res: Record<string, JsonType>, key) => {
-                        if (config.bootstrap?.featureFlagPayloads?.[key]) {
-                            res[key] = config.bootstrap?.featureFlagPayloads?.[key]
-                        }
-                        return res
-                    },
-                    {}
-                )
+                .reduce((res: Record<string, JsonType>, key) => {
+                    if (config.bootstrap?.featureFlagPayloads?.[key]) {
+                        res[key] = config.bootstrap?.featureFlagPayloads?.[key]
+                    }
+                    return res
+                }, {})
 
             this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
         }

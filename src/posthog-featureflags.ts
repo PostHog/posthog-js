@@ -31,7 +31,7 @@ export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>
                 persistence.register({
                     $active_feature_flags: Object.keys(flags || {}),
                     $enabled_feature_flags: flags || {},
-                    $feature_flag_payloads: flagPayloads || {}
+                    $feature_flag_payloads: flagPayloads || {},
                 })
         }
     } else {
