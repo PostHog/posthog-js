@@ -13,9 +13,9 @@ describe('featureflags', () => {
             props: {
                 $feature_flag_payloads: {
                     'beta-feature': {
-                        'some': 'payload'
+                        some: 'payload',
                     },
-                    'alpha-feature-2': 200
+                    'alpha-feature-2': 200,
                 },
                 $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
                 $enabled_feature_flags: {
@@ -67,7 +67,7 @@ describe('featureflags', () => {
 
     it('should return the right payload', () => {
         expect(given.featureFlags.getFeatureFlagPayload('beta-feature')).toEqual({
-            'some': 'payload'
+            some: 'payload',
         })
         expect(given.featureFlags.getFeatureFlagPayload('alpha-feature-2')).toEqual(200)
         expect(given.featureFlags.getFeatureFlagPayload('multivariate-flag')).toEqual(undefined)
@@ -207,8 +207,8 @@ describe('parseFeatureFlagDecideResponse', () => {
             },
             featureFlagPayloads: {
                 'beta-feature': 300,
-                'alpha-feature-2': 'fake-payload'
-            }
+                'alpha-feature-2': 'fake-payload',
+            },
         }))
         given.subject()
 
@@ -221,8 +221,8 @@ describe('parseFeatureFlagDecideResponse', () => {
             },
             $feature_flag_payloads: {
                 'beta-feature': 300,
-                'alpha-feature-2': 'fake-payload'
-            }
+                'alpha-feature-2': 'fake-payload',
+            },
         })
     })
 
