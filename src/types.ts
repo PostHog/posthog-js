@@ -16,6 +16,16 @@ export type CaptureCallback = (response: any, data: any) => void
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
 export type DomAutocaptureEvents = 'click' | 'change' | 'submit'
 
+export interface EventCaptureConfig {
+    /**
+     * An object mapping events to URLs to allow capture on, can be strings to match
+     * or regexes e.g. ['https://example.com', 'test.com/.*']
+     *
+     * Events that are not in this object will be allowed on all URLs
+     */
+    url_allowlists?: Record<string, (string | RegExp)[]>
+}
+
 /**
  * If an array is passed for an allowlist, autocapture events will only be sent for elements matching
  * at least one of the elements in the array. Multiple allowlists can be used
@@ -65,6 +75,7 @@ export interface PostHogConfig {
     img: boolean
     capture_pageview: boolean
     capture_pageleave: boolean
+    event_capture_config: EventCaptureConfig
     debug: boolean
     cookie_expiration: number
     upgrade: boolean

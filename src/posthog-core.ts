@@ -115,6 +115,7 @@ const defaultConfig = (): PostHogConfig => ({
     img: false,
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
+    event_capture_config: {},
     debug: false,
     cookie_expiration: 365,
     upgrade: false,
@@ -348,6 +349,14 @@ export class PostHog {
                 callback_fn: (name === PRIMARY_INSTANCE_NAME ? name : PRIMARY_INSTANCE_NAME + '.' + name) + '._jsc',
             })
         )
+
+        // precompile the regex
+        if (!!this.config?.event_capture_config?.url_allowlists) {
+            const url_allowlists = this.config.event_capture_config.url_allowlists
+            Object.entries(url_allowlists).forEach(([key, value]) => {
+                url_allowlists[key] = value.map((url) => new RegExp(url))
+            })
+        }
 
         this._jsc = function () {} as JSC
 
@@ -719,6 +728,15 @@ export class PostHog {
 
         if (userOptedOut(this, false)) {
             return
+        }
+
+        const eventcaptureConfig = this.get_config('event_capture_config')
+        if (event_name in (eventcaptureConfig?.url_allowlists || {})) {
+            const allowlist = eventcaptureConfig.url_allowlists?.[event_name]
+            const url = window.location.href
+            if (allowlist && !allowlist.some((regex) => url.match(regex))) {
+                return
+            }
         }
 
         this._captureMetrics.incr('capture')
@@ -1286,6 +1304,10 @@ export class PostHog {
      *       // should we capture a page view on page load
      *       capture_pageview: true
      *
+     *       // empty url_allowlist by events allows all events to be sent
+     *       event_capture_config: {
+     *          url_allowlist: [],
+     *       }
      *       // if you set upgrade to be true, the library will check for
      *       // a cookie from our old js library and import super
      *       // properties from it, then the old cookie is deleted

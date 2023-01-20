@@ -277,6 +277,41 @@ describe('capture()', () => {
         const event = given.subject()
         expect(event.properties.key.length).toBe(50000)
     })
+
+    describe('url_allowlist matching event names', () => {
+        beforeEach(() => {
+            given.lib.__compress_and_send_json_request = jest.fn()
+            given('config', () => ({
+                property_blacklist: [],
+                event_capture_config: { url_allowlists: { $pageview: ['https://posthog.com/test/*'] } },
+            }))
+            delete window.location
+        })
+
+        it('capture() skipped when url does not match allowlist', () => {
+            window.location = new URL('https://posthog.com/docs/not-captured')
+
+            given.lib.capture('$pageview')
+
+            expect(given.lib.__compress_and_send_json_request).toHaveBeenCalledTimes(0)
+        })
+
+        it('capture() completes when url does match allowlist', () => {
+            window.location = new URL('https://posthog.com/test/captured')
+
+            given.lib.capture('$pageview')
+
+            expect(given.lib.__compress_and_send_json_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('capture() completes when event has no allowlist in config', () => {
+            window.location = new URL('https://posthog.com/test/captured')
+
+            given.lib.capture('a_different_event')
+
+            expect(given.lib.__compress_and_send_json_request).toHaveBeenCalledTimes(1)
+        })
+    })
 })
 
 describe('_calculate_event_properties()', () => {
@@ -678,6 +713,25 @@ describe('init()', () => {
 
         // Compression
         expect(given.lib['compression']).toEqual({})
+    })
+
+    it('precompiles regex in event_capture_config', () => {
+        given('config', () => ({
+            event_capture_config: {
+                url_allowlists: {
+                    $pageleave: ['https://example.com/*', 'https://example.org/*'],
+                    checked_out: ['https://example.com/*'],
+                },
+            },
+        }))
+
+        given.subject()
+
+        const url_allowlists_one = given.lib.get_config('event_capture_config').url_allowlists.$pageleave
+        expect(url_allowlists_one[0]).toBeInstanceOf(RegExp)
+        expect(url_allowlists_one[1]).toBeInstanceOf(RegExp)
+        const url_allowlists_two = given.lib.get_config('event_capture_config').url_allowlists.checked_out
+        expect(url_allowlists_two[0]).toBeInstanceOf(RegExp)
     })
 
     describe('device id behavior', () => {
