@@ -11,6 +11,12 @@ describe('featureflags', () => {
         _prepare_callback: (callback) => callback,
         persistence: {
             props: {
+                $feature_flag_payloads: {
+                    'beta-feature': {
+                        'some': 'payload'
+                    },
+                    'alpha-feature-2': 200
+                },
                 $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
                 $enabled_feature_flags: {
                     'beta-feature': true,
@@ -56,6 +62,15 @@ describe('featureflags', () => {
 
     it('should return the right feature flag and not call capture', () => {
         expect(given.featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
+        expect(given.instance.capture).not.toHaveBeenCalled()
+    })
+
+    it('should return the right payload', () => {
+        expect(given.featureFlags.getFeatureFlagPayload('beta-feature')).toEqual({
+            'some': 'payload'
+        })
+        expect(given.featureFlags.getFeatureFlagPayload('alpha-feature-2')).toEqual(200)
+        expect(given.featureFlags.getFeatureFlagPayload('multivariate-flag')).toEqual(undefined)
         expect(given.instance.capture).not.toHaveBeenCalled()
     })
 
@@ -183,13 +198,17 @@ describe('parseFeatureFlagDecideResponse', () => {
     given('persistence', () => ({ register: jest.fn(), unregister: jest.fn() }))
     given('subject', () => () => parseFeatureFlagDecideResponse(given.decideResponse, given.persistence))
 
-    it('enables multivariate feature flags from decide v2 response', () => {
+    it('enables multivariate feature flags from decide v2^ response', () => {
         given('decideResponse', () => ({
             featureFlags: {
                 'beta-feature': true,
                 'alpha-feature-2': true,
                 'multivariate-flag': 'variant-1',
             },
+            featureFlagPayloads: {
+                'beta-feature': 300,
+                'alpha-feature-2': 'fake-payload'
+            }
         }))
         given.subject()
 
@@ -200,6 +219,10 @@ describe('parseFeatureFlagDecideResponse', () => {
                 'alpha-feature-2': true,
                 'multivariate-flag': 'variant-1',
             },
+            $feature_flag_payloads: {
+                'beta-feature': 300,
+                'alpha-feature-2': 'fake-payload'
+            }
         })
     })
 

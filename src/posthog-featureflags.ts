@@ -1,10 +1,16 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse, FeatureFlagsCallback, RequestCallback } from './types'
+import { DecideResponse, FeatureFlagsCallback, JsonType, RequestCallback } from './types'
 import { PostHogPersistence } from './posthog-persistence'
+
+const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
+const PERSISTENCE_ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
+const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
+const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 
 export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>, persistence: PostHogPersistence) => {
     const flags = response['featureFlags']
+    const flagPayloads = response['featureFlagPayloads']
     if (flags) {
         // using the v1 api
         if (Array.isArray(flags)) {
@@ -20,17 +26,19 @@ export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>
                     $enabled_feature_flags,
                 })
         } else {
-            // using the v2 api
+            // using the v2^ api
             persistence &&
                 persistence.register({
                     $active_feature_flags: Object.keys(flags || {}),
                     $enabled_feature_flags: flags || {},
+                    $feature_flag_payloads: flagPayloads || {}
                 })
         }
     } else {
         if (persistence) {
-            persistence.unregister('$active_feature_flags')
-            persistence.unregister('$enabled_feature_flags')
+            persistence.unregister(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
+            persistence.unregister(PERSISTENCE_ENABLED_FEATURE_FLAGS)
+            persistence.unregister(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
         }
     }
 }
@@ -59,8 +67,8 @@ export class PostHogFeatureFlags {
     }
 
     getFlagVariants(): Record<string, string | boolean> {
-        const enabledFlags = this.instance.get_property('$enabled_feature_flags')
-        const overriddenFlags = this.instance.get_property('$override_feature_flags')
+        const enabledFlags = this.instance.get_property(PERSISTENCE_ENABLED_FEATURE_FLAGS)
+        const overriddenFlags = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         if (!overriddenFlags) {
             return enabledFlags || {}
         }
@@ -83,6 +91,11 @@ export class PostHogFeatureFlags {
             this._override_warning = true
         }
         return finalFlags
+    }
+
+    getFlagPayloads(): Record<string, JsonType> {
+        const flagPayloads = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+        return flagPayloads || {}
     }
 
     /**
@@ -136,7 +149,7 @@ export class PostHogFeatureFlags {
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            this.instance.get_config('api_host') + '/decide/?v=2',
+            this.instance.get_config('api_host') + '/decide/?v=3',
             { data: encoded_data },
             { method: 'POST' },
             this.instance._prepare_callback((response) => {
@@ -174,6 +187,11 @@ export class PostHogFeatureFlags {
             this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
         }
         return flagValue
+    }
+
+    getFeatureFlagPayload(key: string): JsonType {
+        const payloads = this.getFlagPayloads()
+        return payloads[key]
     }
 
     /*
