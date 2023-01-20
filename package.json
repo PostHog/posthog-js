@@ -38,6 +38,7 @@
         "react/dist/*"
     ],
     "dependencies": {
+        "@sentry/types": "7.22.0",
         "fflate": "^0.4.1",
         "rrweb-snapshot": "^1.1.14"
     },
@@ -49,7 +50,6 @@
         "@rollup/plugin-json": "^4.1.0",
         "@rollup/plugin-node-resolve": "^13.3.0",
         "@rollup/plugin-typescript": "^8.3.3",
-        "@sentry/types": "7.22.0",
         "@typescript-eslint/eslint-plugin": "^5.30.7",
         "@typescript-eslint/parser": "^5.30.7",
         "babel-eslint": "10.1.0",
