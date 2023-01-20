@@ -731,8 +731,8 @@ export class PostHog {
         }
 
         const eventcaptureConfig = this.get_config('event_capture_config')
-        if (event_name in (eventcaptureConfig?.url_allowlists || {})) {
-            const allowlist = eventcaptureConfig.url_allowlists?.[event_name]
+        if (!!eventcaptureConfig?.url_allowlists && event_name in (eventcaptureConfig?.url_allowlists || {})) {
+            const allowlist = eventcaptureConfig.url_allowlists[event_name]
             const url = window.location.href
             if (allowlist && !allowlist.some((regex) => url.match(regex))) {
                 return
