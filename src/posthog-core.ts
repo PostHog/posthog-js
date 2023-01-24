@@ -961,14 +961,11 @@ export class PostHog {
      */
     getFeatureFlagPayload(key: string): JsonType {
         const payload = this.featureFlags.getFeatureFlagPayload(key)
-        if (typeof payload === 'string') {
-            try {
-                return JSON.parse(payload)
-            } catch {
-                return payload
-            }
+        try {
+            return JSON.parse(payload as any)
+        } catch {
+            return payload
         }
-        return payload
     }
 
     /*
