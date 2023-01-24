@@ -22,16 +22,16 @@ export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>
             }
             persistence &&
                 persistence.register({
-                    $active_feature_flags: flags,
-                    $enabled_feature_flags,
+                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
+                    [PERSISTENCE_ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
                 })
         } else {
             // using the v2^ api
             persistence &&
                 persistence.register({
-                    $active_feature_flags: Object.keys(flags || {}),
-                    $enabled_feature_flags: flags || {},
-                    $feature_flag_payloads: flagPayloads || {},
+                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(flags || {}),
+                    [PERSISTENCE_ENABLED_FEATURE_FLAGS]: flags || {},
+                    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: flagPayloads || {},
                 })
         }
     } else {
@@ -239,15 +239,15 @@ export class PostHogFeatureFlags {
         this._override_warning = false
 
         if (flags === false) {
-            this.instance.persistence.unregister('$override_feature_flags')
+            this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         } else if (Array.isArray(flags)) {
             const flagsObj: Record<string, string | boolean> = {}
             for (let i = 0; i < flags.length; i++) {
                 flagsObj[flags[i]] = true
             }
-            this.instance.persistence.register({ $override_feature_flags: flagsObj })
+            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
         } else {
-            this.instance.persistence.register({ $override_feature_flags: flags })
+            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flags })
         }
     }
     /*
