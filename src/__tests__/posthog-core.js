@@ -546,7 +546,7 @@ describe('bootstrapping feature flags', () => {
     it('sets the right feature flag payloads', () => {
         given('config', () => ({
             bootstrap: {
-                featureFlags: { multivariant: 'variant-1', enabled: true, disabled: false, undef: undefined },
+                featureFlags: { multivariant: 'variant-1', enabled: true, jsonString: true, disabled: false, undef: undefined },
                 featureFlagPayloads: {
                     multivariant: 'some-payload',
                     enabled: {
@@ -554,6 +554,7 @@ describe('bootstrapping feature flags', () => {
                     },
                     disabled: 'should not show',
                     undef: 200,
+                    jsonString: '{"a":"payload"}'
                 },
             },
         }))
@@ -561,6 +562,7 @@ describe('bootstrapping feature flags', () => {
         given.subject()
         expect(given.lib.getFeatureFlagPayload('multivariant')).toBe('some-payload')
         expect(given.lib.getFeatureFlagPayload('enabled')).toEqual({ another: 'value' })
+        expect(given.lib.getFeatureFlagPayload('jsonString')).toEqual({ a: 'payload'})
         expect(given.lib.getFeatureFlagPayload('disabled')).toBe(undefined)
         expect(given.lib.getFeatureFlagPayload('undef')).toBe(undefined)
     })
