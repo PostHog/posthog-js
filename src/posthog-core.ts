@@ -50,6 +50,7 @@ import {
     SnippetArrayItem,
     XHROptions,
     AutocaptureConfig,
+    JsonType,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -394,8 +395,16 @@ export class PostHog {
                     ),
                     {}
                 )
+            const featureFlagPayloads = Object.keys(config.bootstrap?.featureFlagPayloads || {})
+                .filter((key) => activeFlags[key])
+                .reduce((res: Record<string, JsonType>, key) => {
+                    if (config.bootstrap?.featureFlagPayloads?.[key]) {
+                        res[key] = config.bootstrap?.featureFlagPayloads?.[key]
+                    }
+                    return res
+                }, {})
 
-            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags })
+            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
         }
 
         if (!this.get_distinct_id()) {
@@ -936,6 +945,27 @@ export class PostHog {
      */
     getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined {
         return this.featureFlags.getFeatureFlag(key, options)
+    }
+
+    /*
+     * Get feature flag payload value matching key for user (supports multivariate flags).
+     *
+     * ### Usage:
+     *
+     *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') {
+     *          const someValue = posthog.getFeatureFlagPayload('beta-feature')
+     *          // do something
+     *     }
+     *
+     * @param {Object|String} prop Key of the feature flag.
+     */
+    getFeatureFlagPayload(key: string): JsonType {
+        const payload = this.featureFlags.getFeatureFlagPayload(key)
+        try {
+            return JSON.parse(payload as any)
+        } catch {
+            return payload
+        }
     }
 
     /*

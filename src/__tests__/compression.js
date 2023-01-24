@@ -65,7 +65,7 @@ describe('Payload Compression', () => {
                 debug: true,
                 _prepare_callback: sandbox.spy((callback) => callback),
                 _send_request: sandbox.spy((url, params, options, callback) => {
-                    if (url === 'https://test.com/decide/?v=2') {
+                    if (url === 'https://test.com/decide/?v=3') {
                         callback({ config: { enable_collect_everything: true }, supportedCompression: ['lz64'] })
                     } else {
                         throw new Error('Should not get here')

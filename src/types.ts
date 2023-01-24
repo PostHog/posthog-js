@@ -105,6 +105,7 @@ export interface PostHogConfig {
         distinctID?: string
         isIdentifiedID?: boolean
         featureFlags?: Record<string, boolean | string>
+        featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
 }
@@ -191,6 +192,7 @@ export interface DecideResponse {
     }
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
+    featureFlagPayloads: Record<string, JsonType>
     capturePerformance?: boolean
     sessionRecording?: {
         endpoint?: string
@@ -282,3 +284,5 @@ export interface JSC {
 }
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
+
+export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
