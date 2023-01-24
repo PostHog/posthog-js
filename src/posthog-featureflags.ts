@@ -26,7 +26,7 @@ export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>
                     [PERSISTENCE_ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
                 })
         } else {
-            // using the v2^ api
+            // using the v2+ api
             persistence &&
                 persistence.register({
                     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(flags || {}),
