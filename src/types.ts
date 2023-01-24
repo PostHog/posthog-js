@@ -193,6 +193,7 @@ export interface DecideResponse {
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
+    errorsWhileComputingFlags: boolean
     capturePerformance?: boolean
     sessionRecording?: {
         endpoint?: string

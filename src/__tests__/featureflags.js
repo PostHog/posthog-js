@@ -191,6 +191,53 @@ describe('featureflags', () => {
             })
         })
     })
+
+    describe('when subsequent decide calls return partial results', () => {
+        given('decideResponse', () => ({
+            featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
+            errorsWhileComputingFlags: true
+        }))
+
+        given('config', () => ({
+            token: 'random fake token',
+        }))
+
+        it('should return combined results', () => {
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'multivariate-flag': 'variant-1',
+                'x-flag': 'x-value', 
+                'feature-1': false
+            })
+        })
+    })
+
+    describe('when subsequent decide calls return results without errors', () => {
+        given('decideResponse', () => ({
+            featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
+            errorsWhileComputingFlags: false
+        }))
+
+        given('config', () => ({
+            token: 'random fake token',
+        }))
+
+        it('should return combined results', () => {
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'x-flag': 'x-value', 
+                'feature-1': false
+            })
+        })
+    })
 })
 
 describe('parseFeatureFlagDecideResponse', () => {

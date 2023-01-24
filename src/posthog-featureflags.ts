@@ -8,7 +8,7 @@ const PERSISTENCE_ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 
-export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>, persistence: PostHogPersistence) => {
+export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>, persistence: PostHogPersistence, currentFlags: Record<string, string | boolean> = {}, currentFlagPayloads: Record<string, JsonType> = {}) => {
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
     if (flags) {
@@ -27,11 +27,18 @@ export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>
                 })
         } else {
             // using the v2+ api
+            let newFeatureFlags = flags
+            let newFeatureFlagPayloads = flagPayloads
+            if (response.errorsWhileComputingFlags) {
+                // if not all flags were computed, we upsert flags instead of replacing them
+                newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
+                newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads}
+            }
             persistence &&
                 persistence.register({
-                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(flags || {}),
-                    [PERSISTENCE_ENABLED_FEATURE_FLAGS]: flags || {},
-                    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: flagPayloads || {},
+                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(newFeatureFlags || {}),
+                    [PERSISTENCE_ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
+                    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
                 })
         }
     } else {
@@ -218,7 +225,9 @@ export class PostHogFeatureFlags {
 
     receivedFeatureFlags(response: Partial<DecideResponse>): void {
         this.instance.decideEndpointWasHit = true
-        parseFeatureFlagDecideResponse(response, this.instance.persistence)
+        const currentFlags = this.getFlagVariants()
+        const currentFlagPayloads = this.getFlagPayloads()
+        parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
         const flags = this.getFlags()
         const variants = this.getFlagVariants()
         this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
