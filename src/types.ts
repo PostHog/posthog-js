@@ -182,7 +182,7 @@ export interface XHRParams extends QueuedRequestData {
     captureMetrics: CaptureMetrics
     retryQueue: RetryQueue
     onXHRError: (req: XMLHttpRequest) => void
-    timeout: number
+    timeout?: number
 }
 
 export interface DecideResponse {
