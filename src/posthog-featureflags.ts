@@ -169,7 +169,9 @@ export class PostHogFeatureFlags {
                 // makes it through
                 this.$anon_distinct_id = undefined
 
-                this.receivedFeatureFlags(response as DecideResponse)
+                if (response && response.status === 200) {
+                    this.receivedFeatureFlags(response as DecideResponse)
+                }
 
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
