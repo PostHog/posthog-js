@@ -14,11 +14,6 @@ export const parseFeatureFlagDecideResponse = (
     currentFlags: Record<string, string | boolean> = {},
     currentFlagPayloads: Record<string, JsonType> = {}
 ) => {
-    if (response && response.status !== 200) {
-        // something else went wrong, or the server is down.
-        // In this case, don't override existing flags
-        return
-    }
 
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
@@ -174,8 +169,10 @@ export class PostHogFeatureFlags {
                 // reset anon_distinct_id after at least a single request with it
                 // makes it through
                 this.$anon_distinct_id = undefined
-
-                this.receivedFeatureFlags(response as DecideResponse)
+                
+                if (response && response.status === 200) {
+                    this.receivedFeatureFlags(response as DecideResponse)
+                }
 
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
