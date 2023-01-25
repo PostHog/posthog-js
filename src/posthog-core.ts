@@ -596,6 +596,7 @@ export class PostHog {
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,
                     onXHRError: this.get_config('on_xhr_error'),
+                    timeout: 10000
                 })
             } catch (e) {
                 console.error(e)

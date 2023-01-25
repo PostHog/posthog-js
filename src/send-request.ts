@@ -67,6 +67,7 @@ export const xhr = ({
     retriesPerformedSoFar,
     retryQueue,
     onXHRError,
+    timeout = 10000
 }: XHRParams) => {
     const req = new XMLHttpRequest()
     req.open(options.method || 'GET', url, true)
@@ -84,6 +85,7 @@ export const xhr = ({
         req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     }
 
+    req.timeout = timeout
     // send the ph_optout cookie
     // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
     req.withCredentials = true
