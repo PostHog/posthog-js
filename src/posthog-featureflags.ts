@@ -14,7 +14,6 @@ export const parseFeatureFlagDecideResponse = (
     currentFlags: Record<string, string | boolean> = {},
     currentFlagPayloads: Record<string, JsonType> = {}
 ) => {
-
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
     if (flags) {
@@ -169,7 +168,7 @@ export class PostHogFeatureFlags {
                 // reset anon_distinct_id after at least a single request with it
                 // makes it through
                 this.$anon_distinct_id = undefined
-                
+
                 if (response && response.status === 200) {
                     this.receivedFeatureFlags(response as DecideResponse)
                 }
