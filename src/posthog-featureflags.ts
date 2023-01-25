@@ -8,7 +8,12 @@ const PERSISTENCE_ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 
-export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>, persistence: PostHogPersistence, currentFlags: Record<string, string | boolean> = {}, currentFlagPayloads: Record<string, JsonType> = {}) => {
+export const parseFeatureFlagDecideResponse = (
+    response: Partial<DecideResponse>,
+    persistence: PostHogPersistence,
+    currentFlags: Record<string, string | boolean> = {},
+    currentFlagPayloads: Record<string, JsonType> = {}
+) => {
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
     if (flags) {
@@ -32,7 +37,7 @@ export const parseFeatureFlagDecideResponse = (response: Partial<DecideResponse>
             if (response.errorsWhileComputingFlags) {
                 // if not all flags were computed, we upsert flags instead of replacing them
                 newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-                newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads}
+                newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
             }
             persistence &&
                 persistence.register({

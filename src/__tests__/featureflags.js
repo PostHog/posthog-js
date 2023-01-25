@@ -195,7 +195,7 @@ describe('featureflags', () => {
     describe('when subsequent decide calls return partial results', () => {
         given('decideResponse', () => ({
             featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
-            errorsWhileComputingFlags: true
+            errorsWhileComputingFlags: true,
         }))
 
         given('config', () => ({
@@ -206,13 +206,13 @@ describe('featureflags', () => {
             given.featureFlags.reloadFeatureFlags()
 
             jest.runAllTimers()
-            
+
             expect(given.featureFlags.getFlagVariants()).toEqual({
                 'alpha-feature-2': true,
                 'beta-feature': true,
                 'multivariate-flag': 'variant-1',
-                'x-flag': 'x-value', 
-                'feature-1': false
+                'x-flag': 'x-value',
+                'feature-1': false,
             })
         })
     })
@@ -220,7 +220,7 @@ describe('featureflags', () => {
     describe('when subsequent decide calls return results without errors', () => {
         given('decideResponse', () => ({
             featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
-            errorsWhileComputingFlags: false
+            errorsWhileComputingFlags: false,
         }))
 
         given('config', () => ({
@@ -231,10 +231,10 @@ describe('featureflags', () => {
             given.featureFlags.reloadFeatureFlags()
 
             jest.runAllTimers()
-            
+
             expect(given.featureFlags.getFlagVariants()).toEqual({
-                'x-flag': 'x-value', 
-                'feature-1': false
+                'x-flag': 'x-value',
+                'feature-1': false,
             })
         })
     })
