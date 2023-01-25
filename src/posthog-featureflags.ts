@@ -14,7 +14,6 @@ export const parseFeatureFlagDecideResponse = (
     currentFlags: Record<string, string | boolean> = {},
     currentFlagPayloads: Record<string, JsonType> = {}
 ) => {
-
     if (response && response.status !== 200) {
         // something else went wrong, or the server is down.
         // In this case, don't override existing flags
