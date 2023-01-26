@@ -1,11 +1,12 @@
 ## 1.42.0 - 2023-01-26
-
+- N/A
 
 
 ## 1.41.0 - 2023-01-24
 
 - Use decide v3 and return defined JSON payloads with matching flags
 - Optimistically save evaluated flags even if server has issues
+
 ## 1.40.2 - 2023-01-20
 
 - Revert "chore: move types dependency from dependencies to devdependencies (#504)" (#509)
