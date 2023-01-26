@@ -70,8 +70,7 @@ describe('Decide', () => {
 
         it('properly parses decide response', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
-                status: 200,
+                enable_collect_everything: true
             }))
             given.subject()
 
