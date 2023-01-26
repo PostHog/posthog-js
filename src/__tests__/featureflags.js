@@ -113,7 +113,6 @@ describe('featureflags', () => {
 
     describe('reloadFeatureFlags', () => {
         given('decideResponse', () => ({
-            status: 200,
             featureFlags: {
                 first: 'variant-1',
                 second: true,
@@ -195,7 +194,6 @@ describe('featureflags', () => {
 
     describe('when subsequent decide calls return partial results', () => {
         given('decideResponse', () => ({
-            status: 200,
             featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
             errorsWhileComputingFlags: true,
         }))
@@ -221,7 +219,6 @@ describe('featureflags', () => {
 
     describe('when subsequent decide calls return results without errors', () => {
         given('decideResponse', () => ({
-            status: 200,
             featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
             errorsWhileComputingFlags: false,
         }))

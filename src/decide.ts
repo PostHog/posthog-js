@@ -50,9 +50,7 @@ export class Decide {
         autocapture.afterDecideResponse(response, this.instance)
         this.instance.webPerformance?.afterDecideResponse(response)
 
-        if (response && response.status === 200) {
-            this.instance.featureFlags.receivedFeatureFlags(response)
-        }
+        this.instance.featureFlags.receivedFeatureFlags(response)
 
         this.instance['compression'] = {}
         if (response['supportedCompression'] && !this.instance.get_config('disable_compression')) {
