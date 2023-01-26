@@ -168,10 +168,7 @@ export class PostHogFeatureFlags {
                 // reset anon_distinct_id after at least a single request with it
                 // makes it through
                 this.$anon_distinct_id = undefined
-
-                if (response && response.status === 200) {
-                    this.receivedFeatureFlags(response as DecideResponse)
-                }
+                this.receivedFeatureFlags(response as DecideResponse)
 
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
