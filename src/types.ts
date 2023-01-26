@@ -182,6 +182,7 @@ export interface XHRParams extends QueuedRequestData {
     captureMetrics: CaptureMetrics
     retryQueue: RetryQueue
     onXHRError: (req: XMLHttpRequest) => void
+    timeout?: number
 }
 
 export interface DecideResponse {
@@ -193,6 +194,7 @@ export interface DecideResponse {
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
+    errorsWhileComputingFlags: boolean
     capturePerformance?: boolean
     sessionRecording?: {
         endpoint?: string

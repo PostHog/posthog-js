@@ -69,7 +69,10 @@ describe('Decide', () => {
         given('subject', () => () => given.decide.parseDecideResponse(given.decideResponse))
 
         it('properly parses decide response', () => {
-            given('decideResponse', () => ({ enable_collect_everything: true }))
+            given('decideResponse', () => ({
+                enable_collect_everything: true,
+                status: 200,
+            }))
             given.subject()
 
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)

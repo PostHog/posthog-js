@@ -113,6 +113,7 @@ describe('featureflags', () => {
 
     describe('reloadFeatureFlags', () => {
         given('decideResponse', () => ({
+            status: 200,
             featureFlags: {
                 first: 'variant-1',
                 second: true,
@@ -188,6 +189,55 @@ describe('featureflags', () => {
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 // $anon_distinct_id: "rando_id"
+            })
+        })
+    })
+
+    describe('when subsequent decide calls return partial results', () => {
+        given('decideResponse', () => ({
+            status: 200,
+            featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
+            errorsWhileComputingFlags: true,
+        }))
+
+        given('config', () => ({
+            token: 'random fake token',
+        }))
+
+        it('should return combined results', () => {
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'multivariate-flag': 'variant-1',
+                'x-flag': 'x-value',
+                'feature-1': false,
+            })
+        })
+    })
+
+    describe('when subsequent decide calls return results without errors', () => {
+        given('decideResponse', () => ({
+            status: 200,
+            featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
+            errorsWhileComputingFlags: false,
+        }))
+
+        given('config', () => ({
+            token: 'random fake token',
+        }))
+
+        it('should return combined results', () => {
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'x-flag': 'x-value',
+                'feature-1': false,
             })
         })
     })
