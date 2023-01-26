@@ -1,3 +1,7 @@
+## 1.42.0 - 2023-01-26
+
+
+
 ## 1.41.0 - 2023-01-24
 
 - Use decide v3 and return defined JSON payloads with matching flags
