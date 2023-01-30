@@ -279,7 +279,16 @@ export class PostHogFeatureFlags {
         if (this.instance.decideEndpointWasHit) {
             const flags = this.getFlags()
             const flagVariants = this.getFlagVariants()
-            callback(flags, flagVariants)
+
+            // Return truthy
+            const truthyFlags = flags.filter((flag) => flagVariants[flag])
+            const truthyFlagVariants = Object.keys(flagVariants)
+                .filter((variantKey) => flagVariants[variantKey])
+                .reduce((res: Record<string, JsonType>, key) => {
+                    res[key] = flagVariants[key]
+                    return res
+                }, {})
+            callback(truthyFlags, truthyFlagVariants)
         }
     }
 }
