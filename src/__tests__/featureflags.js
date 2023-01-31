@@ -22,6 +22,7 @@ describe('featureflags', () => {
                     'beta-feature': true,
                     'alpha-feature-2': true,
                     'multivariate-flag': 'variant-1',
+                    'disabled-flag': false,
                 },
                 $override_feature_flags: false,
             },
@@ -43,11 +44,17 @@ describe('featureflags', () => {
     })
 
     it('should return the right feature flag and call capture', () => {
-        expect(given.featureFlags.getFlags()).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+        expect(given.featureFlags.getFlags()).toEqual([
+            'beta-feature',
+            'alpha-feature-2',
+            'multivariate-flag',
+            'disabled-flag',
+        ])
         expect(given.featureFlags.getFlagVariants()).toEqual({
             'alpha-feature-2': true,
             'beta-feature': true,
             'multivariate-flag': 'variant-1',
+            'disabled-flag': false,
         })
         expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
         expect(given.featureFlags.isFeatureEnabled('random')).toEqual(false)
@@ -95,20 +102,68 @@ describe('featureflags', () => {
         })
     })
 
-    it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
-        var called = false
+    describe('onFeatureFlags', () => {
+        given('decideResponse', () => ({
+            featureFlags: {
+                first: 'variant-1',
+                second: true,
+                third: false,
+            },
+        }))
 
-        given.featureFlags.onFeatureFlags(() => (called = true))
-        expect(called).toEqual(false)
-    })
+        given('config', () => ({
+            token: 'random fake token',
+        }))
 
-    it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
-        given.featureFlags.instance.decideEndpointWasHit = true
-        var called = false
-        given.featureFlags.onFeatureFlags(() => (called = true))
-        expect(called).toEqual(true)
+        it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
+            var called = false
+            let _flags = []
+            let _variants = {}
 
-        called = false
+            given.featureFlags.onFeatureFlags((flags, variants) => {
+                called = true
+                _flags = flags
+                _variants = variants
+            })
+            expect(called).toEqual(false)
+
+            given.featureFlags.setAnonymousDistinctId('rando_id')
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+            expect(_flags).toEqual(['first', 'second'])
+            expect(_variants).toEqual({
+                first: 'variant-1',
+                second: true,
+            })
+        })
+
+        it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
+            given.featureFlags.instance.decideEndpointWasHit = true
+            var called = false
+            given.featureFlags.onFeatureFlags(() => (called = true))
+            expect(called).toEqual(true)
+
+            called = false
+        })
+
+        it('onFeatureFlags should not return flags that are off', () => {
+            given.featureFlags.instance.decideEndpointWasHit = true
+            let _flags = []
+            let _variants = {}
+            given.featureFlags.onFeatureFlags((flags, variants) => {
+                _flags = flags
+                _variants = variants
+            })
+
+            expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+            expect(_variants).toEqual({
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            })
+        })
     })
 
     describe('reloadFeatureFlags', () => {
@@ -213,6 +268,7 @@ describe('featureflags', () => {
                 'multivariate-flag': 'variant-1',
                 'x-flag': 'x-value',
                 'feature-1': false,
+                'disabled-flag': false,
             })
         })
     })
