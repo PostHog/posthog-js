@@ -102,36 +102,68 @@ describe('featureflags', () => {
         })
     })
 
-    it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
-        var called = false
+    describe('onFeatureFlags', () => {
+        given('decideResponse', () => ({
+            featureFlags: {
+                first: 'variant-1',
+                second: true,
+                third: false
+            },
+        }))
 
-        given.featureFlags.onFeatureFlags(() => (called = true))
-        expect(called).toEqual(false)
-    })
+        given('config', () => ({
+            token: 'random fake token',
+        }))
 
-    it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
-        given.featureFlags.instance.decideEndpointWasHit = true
-        var called = false
-        given.featureFlags.onFeatureFlags(() => (called = true))
-        expect(called).toEqual(true)
+        it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
+            var called = false
+            let _flags = []
+            let _variants = {}
 
-        called = false
-    })
+            given.featureFlags.onFeatureFlags((flags, variants) => {
+                called = true
+                _flags = flags
+                _variants = variants
+            })
+            expect(called).toEqual(false)
+    
+            given.featureFlags.setAnonymousDistinctId('rando_id')
+            given.featureFlags.reloadFeatureFlags()
 
-    it('onFeatureFlags should not return flags that are off', () => {
-        given.featureFlags.instance.decideEndpointWasHit = true
-        let _flags = []
-        let _variants = {}
-        given.featureFlags.onFeatureFlags((flags, variants) => {
-            _flags = flags
-            _variants = variants
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+            expect(_flags).toEqual(['first', 'second'])
+            expect(_variants).toEqual({
+                'first': 'variant-1',
+                'second': true
+            })
+
         })
-
-        expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
-        expect(_variants).toEqual({
-            'beta-feature': true,
-            'alpha-feature-2': true,
-            'multivariate-flag': 'variant-1',
+    
+        it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
+            given.featureFlags.instance.decideEndpointWasHit = true
+            var called = false
+            given.featureFlags.onFeatureFlags(() => (called = true))
+            expect(called).toEqual(true)
+    
+            called = false
+        })
+    
+        it('onFeatureFlags should not return flags that are off', () => {
+            given.featureFlags.instance.decideEndpointWasHit = true
+            let _flags = []
+            let _variants = {}
+            given.featureFlags.onFeatureFlags((flags, variants) => {
+                _flags = flags
+                _variants = variants
+            })
+    
+            expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+            expect(_variants).toEqual({
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            })
         })
     })
 

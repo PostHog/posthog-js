@@ -232,9 +232,8 @@ export class PostHogFeatureFlags {
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
-        const flags = this.getFlags()
-        const variants = this.getFlagVariants()
-        this.featureFlagEventHandlers.forEach((handler) => handler(flags, variants))
+        const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
     }
 
     /*
@@ -277,18 +276,27 @@ export class PostHogFeatureFlags {
     onFeatureFlags(callback: FeatureFlagsCallback): void {
         this.addFeatureFlagsHandler(callback)
         if (this.instance.decideEndpointWasHit) {
-            const flags = this.getFlags()
-            const flagVariants = this.getFlagVariants()
+            const {flags, flagVariants} = this._prepareFeatureFlagsForCallbacks()
+            callback(flags, flagVariants)
+        }
+    }
 
-            // Return truthy
-            const truthyFlags = flags.filter((flag) => flagVariants[flag])
-            const truthyFlagVariants = Object.keys(flagVariants)
-                .filter((variantKey) => flagVariants[variantKey])
-                .reduce((res: Record<string, JsonType>, key) => {
-                    res[key] = flagVariants[key]
-                    return res
-                }, {})
-            callback(truthyFlags, truthyFlagVariants)
+    _prepareFeatureFlagsForCallbacks(): { flags: string[], flagVariants: Record<string, string | boolean> } {
+        const flags = this.getFlags()
+        const flagVariants = this.getFlagVariants()
+
+        // Return truthy
+        const truthyFlags = flags.filter((flag) => flagVariants[flag])
+        const truthyFlagVariants = Object.keys(flagVariants)
+            .filter((variantKey) => flagVariants[variantKey])
+            .reduce((res: Record<string, string | boolean>, key) => {
+                res[key] = flagVariants[key]
+                return res
+            }, {})
+
+        return {
+            flags: truthyFlags,
+            flagVariants: truthyFlagVariants
         }
     }
 }
