@@ -107,7 +107,7 @@ describe('featureflags', () => {
             featureFlags: {
                 first: 'variant-1',
                 second: true,
-                third: false
+                third: false,
             },
         }))
 
@@ -126,7 +126,7 @@ describe('featureflags', () => {
                 _variants = variants
             })
             expect(called).toEqual(false)
-    
+
             given.featureFlags.setAnonymousDistinctId('rando_id')
             given.featureFlags.reloadFeatureFlags()
 
@@ -134,21 +134,20 @@ describe('featureflags', () => {
             expect(called).toEqual(true)
             expect(_flags).toEqual(['first', 'second'])
             expect(_variants).toEqual({
-                'first': 'variant-1',
-                'second': true
+                first: 'variant-1',
+                second: true,
             })
-
         })
-    
+
         it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
             given.featureFlags.instance.decideEndpointWasHit = true
             var called = false
             given.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(true)
-    
+
             called = false
         })
-    
+
         it('onFeatureFlags should not return flags that are off', () => {
             given.featureFlags.instance.decideEndpointWasHit = true
             let _flags = []
@@ -157,7 +156,7 @@ describe('featureflags', () => {
                 _flags = flags
                 _variants = variants
             })
-    
+
             expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
             expect(_variants).toEqual({
                 'beta-feature': true,

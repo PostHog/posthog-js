@@ -276,12 +276,12 @@ export class PostHogFeatureFlags {
     onFeatureFlags(callback: FeatureFlagsCallback): void {
         this.addFeatureFlagsHandler(callback)
         if (this.instance.decideEndpointWasHit) {
-            const {flags, flagVariants} = this._prepareFeatureFlagsForCallbacks()
+            const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
             callback(flags, flagVariants)
         }
     }
 
-    _prepareFeatureFlagsForCallbacks(): { flags: string[], flagVariants: Record<string, string | boolean> } {
+    _prepareFeatureFlagsForCallbacks(): { flags: string[]; flagVariants: Record<string, string | boolean> } {
         const flags = this.getFlags()
         const flagVariants = this.getFlagVariants()
 
@@ -296,7 +296,7 @@ export class PostHogFeatureFlags {
 
         return {
             flags: truthyFlags,
-            flagVariants: truthyFlagVariants
+            flagVariants: truthyFlagVariants,
         }
     }
 }
