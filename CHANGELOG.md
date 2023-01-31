@@ -1,3 +1,7 @@
+## 1.42.3 - 2023-01-31
+
+- chore(feature-flag): only return truthy values for onFeatureFlag (#522)
+
 ## 1.42.2 - 2023-01-26
 
 
