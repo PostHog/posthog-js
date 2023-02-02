@@ -15,9 +15,10 @@ describe('identify()', () => {
 
     it('merges people as expected when reset is called', () => {
         cy.posthog().invoke('capture', 'an-anonymous-event')
-        cy.posthog().invoke('identify', 'first-identify')
+        cy.posthog().invoke('identify', 'first-identify') // test identify merges with previous events after init
         cy.posthog().invoke('capture', 'an-identified-event')
-        cy.posthog().invoke('identify', 'second-identify-should-be-ignored')
+        cy.posthog().invoke('identify', 'second-identify-should-not-be-merged') // test identify is not sent after previous identify
+        cy.posthog().invoke('capture', 'another-identified-event') // but does change the distinct id
         cy.posthog().invoke('reset')
         cy.posthog().invoke('capture', 'an-anonymous-event')
         cy.posthog().invoke('identify', 'third-identify')
@@ -33,6 +34,7 @@ describe('identify()', () => {
                 'an-anonymous-event',
                 '$identify',
                 'an-identified-event',
+                'another-identified-event',
                 'an-anonymous-event',
                 '$identify',
                 'an-identified-event',
@@ -47,15 +49,19 @@ describe('identify()', () => {
             expect(events[2].properties['$anon_distinct_id']).to.eql(events[0].properties.distinct_id)
             // and an event is sent with that distinct id
             expect(events[3].properties.distinct_id).to.eql('first-identify')
-            // then second identify is called and is ignored
+            // then second identify is called and is ignored but does change the distinct id
+            expect(events[4].event).to.eql('another-identified-event')
+            expect(events[4].properties.distinct_id).to.eql('second-identify-should-not-be-merged')
             // then reset is called and the next event has a new distinct id
-            expect(events[4].event).not.to.eql('$identify')
-            expect(events[4].properties.distinct_id).not.to.eql('first-identify')
+            expect(events[5].event).to.eql('an-anonymous-event')
+            expect(events[5].properties.distinct_id)
+                .not.to.eql('first-identify')
+                .and.not.to.eql('second-identify-should-not-be-merged')
             // then an identify merges that distinct id with the new distinct id
-            expect(events[5].properties.distinct_id).to.eql('third-identify')
-            expect(events[5].properties['$anon_distinct_id']).to.eql(events[4].properties.distinct_id)
-            // then a final identified event includes that identified distinct id
             expect(events[6].properties.distinct_id).to.eql('third-identify')
+            expect(events[6].properties['$anon_distinct_id']).to.eql(events[5].properties.distinct_id)
+            // then a final identified event includes that identified distinct id
+            expect(events[7].properties.distinct_id).to.eql('third-identify')
         })
     })
 })
