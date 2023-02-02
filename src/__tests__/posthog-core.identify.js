@@ -228,7 +228,7 @@ describe('identify()', () => {
 })
 
 describe('reset()', () => {
-    given('subject', () => () => given.lib.reset())
+    given('subject', () => (resetDeviceId) => given.lib.reset(resetDeviceId))
 
     given('config', () => ({
         api_host: 'https://test.com',
@@ -265,5 +265,21 @@ describe('reset()', () => {
         given.subject()
 
         expect(given.lib.persistence.get_user_state()).toEqual('anonymous')
+    })
+
+    it('does not reset the device id', () => {
+        const initialDeviceId = given.lib.get_property('$device_id')
+        given.subject()
+        const nextDeviceId = given.lib.get_property('$device_id')
+        expect(initialDeviceId).toEqual(nextDeviceId)
+    })
+
+    describe('when calling reset(true)', () => {
+        it('does reset the device id', () => {
+            const initialDeviceId = given.lib.get_property('$device_id')
+            given.subject(true)
+            const nextDeviceId = given.lib.get_property('$device_id')
+            expect(initialDeviceId).not.toEqual(nextDeviceId)
+        })
     })
 })
