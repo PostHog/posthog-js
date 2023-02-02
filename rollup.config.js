@@ -24,7 +24,7 @@ export default [
         input: 'src/loader-globals.ts',
         output: [
             {
-                file: 'dist/array.full.js',
+                file: 'dist/array.js',
                 sourcemap: true,
                 format: 'iife',
                 name: 'posthog',
@@ -54,7 +54,8 @@ export default [
                     {
                         src: 'dist/recorder.js',
                         dest: 'dist/',
-                        transform: (contents) => contents.toString().replace('rrweb-record.min.js.map', 'recorder.js.map')
+                        transform: (contents) =>
+                            contents.toString().replace('rrweb-record.min.js.map', 'recorder.js.map'),
                     },
                 ],
             }),
@@ -62,10 +63,10 @@ export default [
         ],
     },
     {
-        input: 'src/loader-globals.ts',
+        input: 'src/loader-globals-full.ts',
         output: [
             {
-                file: 'dist/array.js',
+                file: 'dist/array.full.js',
                 sourcemap: true,
                 format: 'iife',
                 name: 'posthog',
