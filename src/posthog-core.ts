@@ -1076,6 +1076,15 @@ export class PostHog {
             !this.get_property('$device_id') || previous_distinct_id === this.get_property('$device_id')
         const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
 
+        console.log('will identify?', {
+            new_distinct_id,
+            previous_distinct_id,
+            deviceIdMarksForIdentify,
+            isKnownAnonymous,
+            idChanged: new_distinct_id !== previous_distinct_id,
+            willIdentify: new_distinct_id !== previous_distinct_id && (isKnownAnonymous || deviceIdMarksForIdentify),
+        })
+
         // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && (isKnownAnonymous || deviceIdMarksForIdentify)) {
