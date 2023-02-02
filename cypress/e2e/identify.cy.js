@@ -61,7 +61,7 @@ describe('identify()', () => {
         })
     })
 
-    it.only('avoids merging people as expected when reset is not called', () => {
+    it('avoids merging people as expected when reset is not called', () => {
         cy.posthog().invoke('capture', 'an-anonymous-event')
         cy.posthog().invoke('identify', 'first-identify')
         cy.posthog().invoke('capture', 'an-identified-event')
