@@ -1450,10 +1450,10 @@ export class PostHog {
      * get_property() can only be called after the PostHog library has finished loading.
      * init() has a loaded function available to handle this automatically. For example:
      *
-     *     // grab value for 'user_id' after the posthog library has loaded
+     *     // grab value for '$user_id' after the posthog library has loaded
      *     posthog.init('YOUR PROJECT TOKEN', {
      *         loaded: function(posthog) {
-     *             user_id = posthog.get_property('user_id');
+     *             user_id = posthog.get_property('$user_id');
      *         }
      *     });
      *
