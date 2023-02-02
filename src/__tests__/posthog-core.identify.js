@@ -93,7 +93,7 @@ describe('identify()', () => {
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
-    it('does not call capture when identify changes and device id does not match the oldIdentity', () => {
+    it('does not call capture when distinct_id changes and device id does not match the oldIdentity', () => {
         /**
          * this is a proxy for back-to-back identify calls
          */
@@ -108,7 +108,7 @@ describe('identify()', () => {
         expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
     })
 
-    it('does not call capture when identify changes and user state is not anonymous', () => {
+    it('does not call capture when distinct_id changes, device id does not match the previous distinct id, and user state is not anonymous', () => {
         /**
          * user_state does not override existing behavior
          */
@@ -125,7 +125,7 @@ describe('identify()', () => {
         expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
     })
 
-    it('does call capture when identify changes and device id does not match the oldIdentity but user is marked as anonymous', () => {
+    it('does call capture when distinct_id changes and device id does not match the previous_id but user is marked as anonymous', () => {
         given('identity', () => 'a-new-id')
         given('oldIdentity', () => 'oldIdentity')
         given('deviceId', () => 'not the oldIdentity')
