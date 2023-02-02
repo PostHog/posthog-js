@@ -419,6 +419,8 @@ export class PostHog {
                 },
                 ''
             )
+            // distinct id == $device_id is a proxy for anonymous user
+            this.persistence.set_user_state('anonymous')
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
