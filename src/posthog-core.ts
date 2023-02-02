@@ -1070,12 +1070,14 @@ export class PostHog {
             this.register({ distinct_id: new_distinct_id })
         }
 
+        const deviceIdMarksForIdentify =
+            !this.get_property('$device_id') || previous_distinct_id === this.get_property('$device_id')
+        const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
+
         // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
         // - logic on the server will determine whether or not to do anything with it.
-        if (
-            new_distinct_id !== previous_distinct_id &&
-            (!this.get_property('$device_id') || previous_distinct_id === this.get_property('$device_id'))
-        ) {
+        if (new_distinct_id !== previous_distinct_id && (isKnownAnonymous || deviceIdMarksForIdentify)) {
+            this.persistence.set_user_state('identified')
             this.capture(
                 '$identify',
                 {
@@ -1155,6 +1157,7 @@ export class PostHog {
     reset(reset_device_id?: boolean): void {
         const device_id = this.get_property('$device_id')
         this.persistence.clear()
+        this.persistence.set_user_state('anonymous')
         this.sessionManager.resetSessionId()
         const uuid = this.get_config('get_device_id')(_UUID())
         this.register_once(

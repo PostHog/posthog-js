@@ -54,6 +54,7 @@ export class PostHogPersistence {
     expire_days: number | undefined
     default_expiry: number | undefined
     cross_subdomain: boolean | undefined
+    user_state: 'anonymous' | 'identified' | undefined
 
     constructor(config: PostHogConfig) {
         // clean chars that aren't accepted by the http spec for cookie values
@@ -87,6 +88,8 @@ export class PostHogPersistence {
         } else {
             this.storage = cookieStore
         }
+
+        this.user_state = undefined
 
         this.load()
         this.update_config(config)
@@ -302,5 +305,14 @@ export class PostHogPersistence {
             this.save()
         }
         return timestamp
+    }
+
+    get_user_state(): 'anonymous' | 'identified' | undefined {
+        return this.user_state
+    }
+
+    set_user_state(state: 'anonymous' | 'identified'): void {
+        this.user_state = state
+        this.save()
     }
 }
