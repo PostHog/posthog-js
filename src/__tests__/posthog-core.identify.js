@@ -49,7 +49,12 @@ describe('identify()', () => {
     given('oldIdentity', () => 'oldIdentity')
     given('deviceId', () => given.oldIdentity)
 
-    given('user_state', () => undefined)
+    beforeEach(() => {
+        // in the past starting with device id == distinct id (as these tests do)
+        // was a proxy for being anonymous
+        // this is now set explicitly
+        given.lib.persistence.set_user_state('anonymous')
+    })
 
     it('registers new user id and updates alias', () => {
         given.subject()
@@ -59,7 +64,7 @@ describe('identify()', () => {
     })
 
     it('calls capture when identity changes', () => {
-        given('identity', () => 'a-new-id')
+        given('identity', () => 'calls capture when identity changes')
         given('oldIdentity', () => 'oldIdentity')
 
         given.subject()
@@ -67,13 +72,22 @@ describe('identify()', () => {
         expect(given.overrides.capture).toHaveBeenCalledWith(
             '$identify',
             {
-                distinct_id: 'a-new-id',
+                distinct_id: 'calls capture when identity changes',
                 $anon_distinct_id: 'oldIdentity',
             },
             { $set: {}, $set_once: {} }
         )
         expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+    })
+
+    it('sets user state when identifying', () => {
+        given('identity', () => 'calls capture when identity changes')
+        given('oldIdentity', () => 'oldIdentity')
+
+        given.subject()
+
+        expect(given.lib.persistence.get_user_state()).toEqual('identified')
     })
 
     it('calls capture when there is no device id', () => {
@@ -95,11 +109,14 @@ describe('identify()', () => {
 
     it('does not call capture when distinct_id changes and device id does not match the oldIdentity', () => {
         /**
-         * this is a proxy for back-to-back identify calls
+         * originally this was a proxy for back-to-back identify calls
          */
+        given('deviceId', () => 'not the oldIdentity')
+        // now this is set explicitly by identify
+        given.lib.persistence.set_user_state('identified')
+
         given('identity', () => 'a-new-id')
         given('oldIdentity', () => 'oldIdentity')
-        given('deviceId', () => 'not the oldIdentity')
 
         given.subject()
 

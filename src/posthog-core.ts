@@ -372,6 +372,7 @@ export class PostHog {
                 this.register({
                     distinct_id: config.segment.user().id(),
                 })
+                this.persistence.set_user_state('identified')
             }
 
             config.segment.register(this.segmentIntegration())
@@ -380,6 +381,7 @@ export class PostHog {
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.get_config('get_device_id')(_UUID())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
+            this.persistence.set_user_state(config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
                 distinct_id: config.bootstrap.distinctID,
                 $device_id: deviceID,
@@ -1072,8 +1074,7 @@ export class PostHog {
             this.register({ distinct_id: new_distinct_id })
         }
 
-        const deviceIdMarksForIdentify =
-            !this.get_property('$device_id') || previous_distinct_id === this.get_property('$device_id')
+        const deviceIdMarksForIdentify = !this.get_property('$device_id')
         const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
 
         // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID

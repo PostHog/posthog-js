@@ -331,6 +331,7 @@ describe('bootstrapping feature flags', () => {
         given.subject()
         expect(given.lib.get_distinct_id()).toBe('abcd')
         expect(given.lib.get_property('$device_id')).toBe('abcd')
+        expect(given.lib.persistence.get_user_state()).toBe('anonymous')
 
         given.lib.identify('efgh')
 
@@ -356,6 +357,7 @@ describe('bootstrapping feature flags', () => {
         given.subject()
         expect(given.lib.get_distinct_id()).toBe('abcd')
         expect(given.lib.get_property('$device_id')).toBe('og-device-id')
+        expect(given.lib.persistence.get_user_state()).toBe('identified')
 
         given.lib.identify('efgh')
         expect(given.overrides.capture).not.toHaveBeenCalled()
