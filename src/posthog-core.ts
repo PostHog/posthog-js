@@ -1031,6 +1031,7 @@ export class PostHog {
      * they will appear to be a new user.
      *
      * Users are marked as 'identified' when an $identify event is sent to posthog.
+     * See https://github.com/PostHog/posthog-js/issues/512 for more context.
      *
      * This means if (in a single browser "session") you call
      *
