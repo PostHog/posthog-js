@@ -23,6 +23,8 @@ export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
 export const SESSION_ID = '$sesid'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
+const USER_STATE = '$user_state'
+
 export const RESERVED_PROPERTIES = [
     SET_QUEUE_KEY,
     SET_ONCE_QUEUE_KEY,
@@ -38,6 +40,7 @@ export const RESERVED_PROPERTIES = [
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
+    USER_STATE,
 ]
 
 /**
@@ -308,11 +311,11 @@ export class PostHogPersistence {
     }
 
     get_user_state(): 'anonymous' | 'identified' | undefined {
-        return this.user_state
+        return this.props[USER_STATE]
     }
 
     set_user_state(state: 'anonymous' | 'identified'): void {
-        this.user_state = state
+        this.props[USER_STATE] = state
         this.save()
     }
 }
