@@ -31,7 +31,7 @@ beforeEach(() => {
         cy.intercept('**/static/array.js', { body })
     })
 
-    cy.readFile('node_modules/rrweb/dist/rrweb.min.js').then((body) => {
+    cy.readFile('dist/recorder.js').then((body) => {
         cy.intercept('**/static/recorder.js*', { body }).as('recorder')
     })
 })
