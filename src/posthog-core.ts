@@ -1075,7 +1075,7 @@ export class PostHog {
         }
 
         const deviceIdMarksForIdentify = !this.get_property('$device_id')
-        const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
+        const isKnownAnonymous = this.persistence.get_user_state() !== 'identified'
 
         // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
         // - logic on the server will determine whether or not to do anything with it.
