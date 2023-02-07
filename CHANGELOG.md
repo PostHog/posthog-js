@@ -1,3 +1,7 @@
+## 1.43.0 - 2023-02-07
+
+- feat: reset marks user anonymous (#524)
+
 ## 1.42.3 - 2023-01-31
 
 - chore(feature-flag): only return truthy values for onFeatureFlag (#522)
