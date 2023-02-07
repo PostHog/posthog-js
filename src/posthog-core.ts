@@ -354,6 +354,13 @@ export class PostHog {
 
         this._jsc = function () {} as JSC
 
+        // Check if recorder.js is already loaded
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        if (window?.rrweb?.record || window?.rrwebRecord) {
+            this.__loaded_recorder = true
+        }
+
         this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
         this._requestQueue = new RequestQueue(this._captureMetrics, this._handle_queued_event.bind(this))
         this._retryQueue = new RetryQueue(this._captureMetrics, this.get_config('on_xhr_error'))
@@ -362,13 +369,6 @@ export class PostHog {
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
-
-        // Check if recorder.js is already loaded
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        if (window?.rrweb?.record || window?.rrwebRecord) {
-            this.__loaded_recorder = true
-        }
 
         this._gdpr_init()
 

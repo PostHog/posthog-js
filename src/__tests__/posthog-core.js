@@ -507,6 +507,26 @@ describe('init()', () => {
         expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
     })
 
+    it('does not set __loaded_recorder flag to true if recording script has not been included', () => {
+        given('overrides', () => ({
+            __loaded_recorder: false,
+        }))
+        given(window.rrweb.record, () => undefined)
+        given(window.rrwebRecord, () => undefined)
+        given.subject()
+        expect(given.lib.__loaded_recorder).toEqual(false)
+    })
+
+    it('set __loaded_recorder flag to true if recording script has been included', () => {
+        given('overrides', () => ({
+            __loaded_recorder: false,
+        }))
+        given(window.rrweb.record, () => 'anything')
+        given(window.rrwebRecord, () => 'is possible')
+        given.subject()
+        expect(given.lib.__loaded_recorder).toEqual(true)
+    })
+
     it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
         given('overrides', () => ({
             sessionRecording: {
