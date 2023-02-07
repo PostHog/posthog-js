@@ -1,12 +1,12 @@
 import { loadScript } from '../../autocapture-utils'
+import { SessionRecording } from '../../extensions/sessionrecording'
+import { PostHogPersistence, SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
+import { SessionIdManager } from '../../sessionid'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
-    SessionRecording,
-} from '../../extensions/sessionrecording'
-import { PostHogPersistence, SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
-import { SessionIdManager } from '../../sessionid'
+} from '../../extensions/sessionrecording-utils'
 
 // Type and source defined here designate a non-user-generated recording event
 const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
