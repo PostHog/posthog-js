@@ -66,25 +66,7 @@ describe('identify()', () => {
     it('calls capture when identity changes', () => {
         given('identity', () => 'calls capture when identity changes')
         given('oldIdentity', () => 'oldIdentity')
-
-        given.subject()
-
-        expect(given.overrides.capture).toHaveBeenCalledWith(
-            '$identify',
-            {
-                distinct_id: 'calls capture when identity changes',
-                $anon_distinct_id: 'oldIdentity',
-            },
-            { $set: {}, $set_once: {} }
-        )
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
-        expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
-    })
-
-    it('calls capture when user has not been explictly identified', () => {
-        given('identity', () => 'calls capture when identity changes')
-        given('oldIdentity', () => 'oldIdentity')
-        given.lib.persistence.set_user_state(undefined)
+        given.lib.persistence.set_user_state('anonymous')
 
         given.subject()
 

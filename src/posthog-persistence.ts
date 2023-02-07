@@ -54,7 +54,7 @@ export class PostHogPersistence {
     expire_days: number | undefined
     default_expiry: number | undefined
     cross_subdomain: boolean | undefined
-    user_state: 'anonymous' | 'identified' | undefined
+    user_state: 'anonymous' | 'identified'
 
     constructor(config: PostHogConfig) {
         // clean chars that aren't accepted by the http spec for cookie values
@@ -89,7 +89,7 @@ export class PostHogPersistence {
             this.storage = cookieStore
         }
 
-        this.user_state = undefined
+        this.user_state = 'anonymous'
 
         this.load()
         this.update_config(config)
