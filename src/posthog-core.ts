@@ -1021,7 +1021,7 @@ export class PostHog {
      *      posthog.identify('[user unique id]')
      *      // set the user's unique id and set the user's properties
      *      posthog.identify('[user unique id]', { email: 'john@example.com' })
-     *      // set the user's unique id and set the user's properties
+     *      // set the user's unique id
      *      // and set the user's referral code _if it hasn't already been set_
      *      posthog.identify('[user unique id]', {}, { referral_code: '12345' })
      *
