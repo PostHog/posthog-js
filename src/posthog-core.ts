@@ -1011,12 +1011,18 @@ export class PostHog {
      * then unique visitors will be identified by a UUID generated
      * the first time they visit the site.
      *
+     * Usually `identify` is called after successful login, and `reset` is called on logout.
+     *
      * If user properties are passed, they are also sent to posthog.
      *
      * ### Usage:
      *
+     *      // set the user's unique id
      *      posthog.identify('[user unique id]')
+     *      // set the user's unique id and set the user's properties
      *      posthog.identify('[user unique id]', { email: 'john@example.com' })
+     *      // set the user's unique id and set the user's properties
+     *      // and set the user's referral code _if it hasn't already been set_
      *      posthog.identify('[user unique id]', {}, { referral_code: '12345' })
      *
      * ### Notes:
@@ -1025,6 +1031,26 @@ export class PostHog {
      * unique ID for the current user. PostHog cannot translate
      * between IDs at this time, so when you change a user's ID
      * they will appear to be a new user.
+     *
+     * Users are marked as 'identified' when an $identify event is sent to posthog.
+     * See https://github.com/PostHog/posthog-js/issues/512 for more context.
+     *
+     * This means if (in a single browser "session") you call
+     *
+     * identify('a') => capture('event 1') => identify('b') => capture('event 2')
+     *
+     * event 1 is linked to person a, and event 2 is linked to person b.
+     * person a and person b are not merged
+     *
+     * Users are marked as 'anonymous' when reset is called and in some cases on init.
+     *
+     * This means if (in a single browser "session") you call
+     *
+     * identify('a') => capture('event 1') => reset() => capture('event 2') => identify('b') => capture('event 3')
+     *
+     * person a and person b are merged, and event 1, 2, and event 3 are linked to person b.
+     *
+     * If you need more control over how users are merged, you can use the alias method.
      *
      * When used alone, posthog.identify will change the user's
      * distinct_id to the unique ID provided. When used in tandem
@@ -1037,6 +1063,11 @@ export class PostHog {
      * at the same time can cause a race condition, so it is best
      * practice to call identify on the original, anonymous ID
      * right after you've aliased it.
+     *
+     * A user can be initalised as identified by segment or posthog boostrap
+     * in that case we mark them as 'identified' and don't capture an $identify event
+     * That happens in init so we should not be able to capture any "anonymous" events
+     * before we call identify. So an $identify event is not necessary.
      *
      * @param {String} [new_distinct_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
@@ -1074,6 +1105,8 @@ export class PostHog {
             this.register({ distinct_id: new_distinct_id })
         }
 
+        // historically we checked for a missing device id *or* distinct_id == device_id as a proxy for detecting anonymous users
+        // we now have the explicit anonymous user state but we still check for a missing device id to maintain backwards compatibility
         const deviceIdMarksForIdentify = !this.get_property('$device_id')
         const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
 
