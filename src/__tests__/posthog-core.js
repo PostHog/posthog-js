@@ -467,7 +467,7 @@ describe('bootstrapping feature flags', () => {
 })
 
 describe('init()', () => {
-    let windowSpy = jest.spyOn(window, "window", "get");
+    let windowSpy = jest.spyOn(window, 'window', 'get')
     given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 
     given('overrides', () => ({
@@ -513,7 +513,7 @@ describe('init()', () => {
             __loaded_recorder: false,
         }))
         delete window.rrweb
-        window.rrweb = {record: undefined}
+        window.rrweb = { record: undefined }
         delete window.rrwebRecord
         window.rrwebRecord = undefined
         given.subject()
@@ -525,9 +525,9 @@ describe('init()', () => {
             __loaded_recorder: false,
         }))
         delete window.rrweb
-        window.rrweb = {record: "anything"}
+        window.rrweb = { record: 'anything' }
         delete window.rrwebRecord
-        window.rrwebRecord = "is possible"
+        window.rrwebRecord = 'is possible'
         given.subject()
         expect(given.lib.__loaded_recorder).toEqual(true)
     })
