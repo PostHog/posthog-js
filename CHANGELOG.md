@@ -1,3 +1,7 @@
+## 1.43.1 - 2023-02-07
+
+- fix: correctly persist user state across page loads (#531)
+
 ## 1.43.0 - 2023-02-07
 
 - feat: reset marks user anonymous (#524)
