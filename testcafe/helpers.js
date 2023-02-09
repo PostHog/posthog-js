@@ -20,7 +20,7 @@ export const captureLogger = RequestLogger(/ip=1/, {
     stringifyResponseBody: true,
 })
 
-export const staticFilesFullMock = RequestMock()
+export const staticFilesMock = RequestMock()
     .onRequestTo(/array.full.js/)
     .respond((req, res) => {
         const arrayjs = fs.readFileSync(path.resolve(__dirname, '../dist/array.full.js'))
@@ -29,18 +29,6 @@ export const staticFilesFullMock = RequestMock()
     .onRequestTo(/playground/)
     .respond((req, res) => {
         const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
-        res.setBody(html)
-    })
-
-export const staticFilesMock = RequestMock()
-    .onRequestTo(/array.js/)
-    .respond((req, res) => {
-        const arrayjs = fs.readFileSync(path.resolve(__dirname, '../dist/array.js'))
-        res.setBody(arrayjs)
-    })
-    .onRequestTo(/playground/)
-    .respond((req, res) => {
-        const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress/index.html'))
         res.setBody(html)
     })
 
