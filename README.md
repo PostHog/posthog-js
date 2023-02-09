@@ -21,6 +21,16 @@ Testing on IE11 requires a bit more setup.
 4. Export browserstack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`.
 5. Run tests: `npx testcafe "browserstack:ie" testcafe/e2e.spec.js`.
 
+### Running local create react app example
+
+You can use the create react app setup in `playground/package` to test posthog-js as an npm module from a high level.
+
+1. Run `posthog` locally on port 8000 (`DEBUG=1 TEST=1 ./bin/start`).
+2. Run `python manage.py setup_dev --no-data` on posthog repo, which sets up a demo account.
+3. Optional: rebuild array.js on changes: `nodemon -w src/ --exec bash -c "yarn build-rollup"`.
+4. Copy posthog token found in `http://localhost:8000/project/settings` and replace the token in `playground/package/src/initPosthog.ts`
+5. Run `yarn start` and then navigate to `localhost:3000`
+
 ### Tiers of testing
 
 1. Unit tests - this verifies the behavior of the library in bite-sized chunks. Keep this coverage close to 100%, test corner cases and internal behavior here

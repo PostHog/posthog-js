@@ -21,14 +21,24 @@ export const captureLogger = RequestLogger(/ip=1/, {
 })
 
 export const staticFilesMock = RequestMock()
+    .onRequestTo(/array.full.js/)
+    .respond((req, res) => {
+        const arrayjs = fs.readFileSync(path.resolve(__dirname, '../dist/array.full.js'))
+        res.setBody(arrayjs)
+    })
     .onRequestTo(/array.js/)
     .respond((req, res) => {
         const arrayjs = fs.readFileSync(path.resolve(__dirname, '../dist/array.js'))
         res.setBody(arrayjs)
     })
-    .onRequestTo(/playground/)
+    .onRequestTo(/playground\/cypress-full/)
     .respond((req, res) => {
         const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
+        res.setBody(html)
+    })
+    .onRequestTo(/playground\/cypress/)
+    .respond((req, res) => {
+        const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress/index.html'))
         res.setBody(html)
     })
 
