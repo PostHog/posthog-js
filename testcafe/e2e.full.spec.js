@@ -1,9 +1,9 @@
 import { t } from 'testcafe'
-import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock } from './helpers'
+import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesFullMock } from './helpers'
 
 fixture('posthog.js capture')
     .page('http://localhost:8000/playground/cypress-full/index.html')
-    .requestHooks(captureLogger, staticFilesMock)
+    .requestHooks(captureLogger, staticFilesFullMock)
     .afterEach(async () => {
         const browserLogs = await t.getBrowserConsoleMessages()
         Object.keys(browserLogs).forEach((level) => {
