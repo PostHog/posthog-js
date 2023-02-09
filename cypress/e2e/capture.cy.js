@@ -27,7 +27,7 @@ describe('Event capture', () => {
             },
         }).as('decide')
 
-        cy.visit('./playground/cypress', {
+        cy.visit('./playground/cypress-full', {
             onBeforeLoad(win) {
                 cy.stub(win.console, 'error').as('consoleError')
             },

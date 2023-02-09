@@ -28,7 +28,7 @@ export const staticFilesMock = RequestMock()
     })
     .onRequestTo(/playground/)
     .respond((req, res) => {
-        const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress/index.html'))
+        const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
         res.setBody(html)
     })
 
