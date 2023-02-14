@@ -1,4 +1,4 @@
-import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
+import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'

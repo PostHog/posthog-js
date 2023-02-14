@@ -8,6 +8,10 @@ if (typeof window !== 'undefined') {
     Posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'http://localhost:8000',
     })
+
+    // OPTIONAL: If you want be able to debug posthog from the browser you can store it on the window object
+    Posthog.debug()
+    ;(window as any).posthog = Posthog
 }
 
 // We recommend wrapping Posthog like this so that you can ensure only calling it client-side

@@ -32,6 +32,18 @@ export default [
         plugins: [...plugins, terser({ toplevel: true })],
     },
     {
+        input: 'src/loader-recorder-v2.ts',
+        output: [
+            {
+                file: 'dist/recorder-v2.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [...plugins, terser({ toplevel: true })],
+    },
+    {
         input: 'src/loader-globals.ts',
         output: [
             {
