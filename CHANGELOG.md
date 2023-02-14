@@ -1,3 +1,7 @@
+## 1.45.1 - 2023-02-14
+
+- fix: default persons to anonymous (#534)
+
 ## 1.45.0 - 2023-02-14
 
 
