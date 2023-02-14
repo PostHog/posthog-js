@@ -49,7 +49,8 @@ export const initPosthog = (config) => {
     })
 }
 
-export async function retryUntilResults(operation, target_results, limit = 100) {
+// NOTE: Ingestion delays events by up to 60 seconds for new IDs hence we need to wait at least 60 seconds
+export async function retryUntilResults(operation, target_results, limit = 4, delay = 30000) {
     const attempt = (count, resolve, reject) => {
         if (count === limit) {
             return reject(new Error(`Failed to fetch results in ${limit} attempts`))
@@ -57,11 +58,16 @@ export async function retryUntilResults(operation, target_results, limit = 100) 
 
         setTimeout(() => {
             operation()
-                .then((results) =>
-                    results.length >= target_results ? resolve(results) : attempt(count + 1, resolve, reject)
-                )
+                .then((results) => {
+                    if (results.length >= target_results) {
+                        resolve(results)
+                    } else {
+                        console.log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
+                        attempt(count + 1, resolve, reject)
+                    }
+                })
                 .catch(reject)
-        }, 600)
+        }, delay)
     }
 
     return new Promise((...args) => attempt(0, ...args))
@@ -76,8 +82,8 @@ export async function queryAPI(testSessionId) {
     const data = await response.text()
 
     if (!response.ok) {
-        console.error("Bad Response", response.status, data)
-        throw new Error("Bad Response")
+        console.error('Bad Response', response.status, data)
+        throw new Error('Bad Response')
     }
 
     const { results } = JSON.parse(data)
