@@ -1,9 +1,10 @@
-import { FULL_SNAPSHOT_EVENT_TYPE, PLUGIN_EVENT_TYPE } from '../../extensions/sessionrecording'
 import {
     filterDataURLsFromLargeDataObjects,
     replacementImageURI,
     truncateLargeConsoleLogs,
     CONSOLE_LOG_PLUGIN_NAME,
+    PLUGIN_EVENT_TYPE,
+    FULL_SNAPSHOT_EVENT_TYPE,
 } from '../../extensions/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from './test_data/sessionrecording-utils-test-data'
 

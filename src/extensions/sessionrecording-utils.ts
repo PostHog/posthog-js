@@ -1,8 +1,13 @@
-import { PLUGIN_EVENT_TYPE } from './sessionrecording'
-import { pluginEvent } from 'rrweb/typings/types'
+import type { pluginEvent } from 'rrweb/typings/types'
 
 export const replacementImageURI =
     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNOCAwSDE2TDAgMTZWOEw4IDBaIiBmaWxsPSIjMkQyRDJEIi8+CjxwYXRoIGQ9Ik0xNiA4VjE2SDhMMTYgOFoiIGZpbGw9IiMyRDJEMkQiLz4KPC9zdmc+Cg=='
+
+export const FULL_SNAPSHOT_EVENT_TYPE = 2
+export const META_EVENT_TYPE = 4
+export const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
+export const PLUGIN_EVENT_TYPE = 6
+export const MUTATION_SOURCE_TYPE = 0
 
 /*
  * Check whether a data payload is nearing 5mb. If it is, it checks the data for

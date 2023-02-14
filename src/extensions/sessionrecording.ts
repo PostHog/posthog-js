@@ -1,22 +1,23 @@
-import { loadScript } from '../autocapture-utils'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
 } from '../posthog-persistence'
-import Config from '../config'
-import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
+import {
+    filterDataURLsFromLargeDataObjects,
+    FULL_SNAPSHOT_EVENT_TYPE,
+    INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+    META_EVENT_TYPE,
+    MUTATION_SOURCE_TYPE,
+    truncateLargeConsoleLogs,
+} from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
 import type { record } from 'rrweb/typings'
 import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
+import { loadScript } from '../autocapture-utils'
+import Config from '../config'
 
 const BASE_ENDPOINT = '/e/'
-
-export const FULL_SNAPSHOT_EVENT_TYPE = 2
-export const META_EVENT_TYPE = 4
-export const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
-export const PLUGIN_EVENT_TYPE = 6
-export const MUTATION_SOURCE_TYPE = 0
 
 export class SessionRecording {
     instance: PostHog
@@ -111,10 +112,15 @@ export class SessionRecording {
         }
         if (!this.captureStarted && !this.instance.get_config('disable_session_recording')) {
             this.captureStarted = true
-            loadScript(
-                this.instance.get_config('api_host') + '/static/recorder.js?v=' + Config.LIB_VERSION,
-                this._onScriptLoaded.bind(this)
-            )
+            // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is imported), don't load script.
+            // Otherwise, remotely import recorder.js from cdn since it hasn't been loaded
+            if (!this.instance.__loaded_recorder) {
+                loadScript(
+                    this.instance.get_config('api_host') + '/static/recorder.js?v=' + Config.LIB_VERSION,
+                    this._onScriptLoaded.bind(this)
+                )
+            }
+            this._onScriptLoaded()
         }
     }
 
@@ -162,7 +168,7 @@ export class SessionRecording {
         // @ts-ignore
         this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
 
-        // only allows user to set our 'whitelisted' options
+        // only allows user to set our 'allowlisted' options
         const userSessionRecordingOptions = this.instance.get_config('session_recording')
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
