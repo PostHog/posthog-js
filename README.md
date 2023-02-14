@@ -23,13 +23,12 @@ Testing on IE11 requires a bit more setup.
 
 ### Running local create react app example
 
-You can use the create react app setup in `playground/package` to test posthog-js as an npm module from a high level.
+You can use the create react app setup in `playground/nextjs` to test posthog-js as an npm module in a Nextjs application.
 
 1. Run `posthog` locally on port 8000 (`DEBUG=1 TEST=1 ./bin/start`).
 2. Run `python manage.py setup_dev --no-data` on posthog repo, which sets up a demo account.
-3. Optional: rebuild array.js on changes: `nodemon -w src/ --exec bash -c "yarn build-rollup"`.
-4. Copy posthog token found in `http://localhost:8000/project/settings` and replace the token in `playground/package/src/initPosthog.ts`
-5. Run `yarn start` and then navigate to `localhost:3000`
+3. Copy posthog token found in `http://localhost:8000/project/settings` and then
+4. `cd playground/nextjs`and run `NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' yarn dev`
 
 ### Tiers of testing
 
