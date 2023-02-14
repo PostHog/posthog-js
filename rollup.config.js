@@ -4,7 +4,6 @@ import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import dts from 'rollup-plugin-dts'
 import pkg from './package.json'
-import pkgFull from './full/package.json'
 import { terser } from 'rollup-plugin-terser'
 
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
@@ -76,29 +75,6 @@ export default [
     {
         input: './lib/src/loader-module.d.ts',
         output: [{ file: pkg.types, format: 'es' }],
-        plugins: [dts()],
-    },
-
-    {
-        input: 'src/loader-module-full.ts',
-        output: [
-            {
-                file: pkgFull.main.replace('../', './'),
-                format: 'cjs',
-                sourcemap: true,
-                exports: 'auto',
-            },
-            {
-                file: pkgFull.module.replace('../', './'),
-                format: 'es',
-                sourcemap: true,
-            },
-        ],
-        plugins,
-    },
-    {
-        input: './lib/src/loader-module-full.d.ts',
-        output: [{ file: pkgFull.types.replace('../', './'), format: 'es' }],
         plugins: [dts()],
     },
 ]

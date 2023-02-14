@@ -35,8 +35,7 @@
     "files": [
         "lib/*",
         "dist/*",
-        "react/dist/*",
-        "full/*"
+        "react/dist/*"
     ],
     "dependencies": {
         "@sentry/types": "7.22.0",

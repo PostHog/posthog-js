@@ -1,5 +1,7 @@
-// Importing the "full" version includes extra code like Session Recording, avoiding the delayed loading at runtime
-import Posthog from 'posthog-js/full'
+import Posthog from 'posthog-js'
+
+// OPTIONAL: As an optimisation, you can include the extra Recording code this way. If you don't use recordings, then you don't need this.
+import 'posthog-js/dist/recorder'
 
 // If you do not need Recordings, or are happy for it to be loaded at runtime you can simply use:
 // import Posthog from 'posthog-js'
