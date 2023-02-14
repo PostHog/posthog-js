@@ -1,3 +1,7 @@
+## 1.45.0 - 2023-02-14
+
+
+
 ## 1.43.1 - 2023-02-07
 
 - fix: correctly persist user state across page loads (#531)
