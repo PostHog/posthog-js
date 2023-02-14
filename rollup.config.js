@@ -20,10 +20,34 @@ const plugins = [
 
 export default [
     {
+        input: 'src/loader-recorder.ts',
+        output: [
+            {
+                file: 'dist/recorder.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [...plugins, terser({ toplevel: true })],
+    },
+    {
         input: 'src/loader-globals.ts',
         output: [
             {
                 file: 'dist/array.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [...plugins, terser({ toplevel: true })],
+    },
+    {
+        input: 'src/loader-globals-full.ts',
+        output: [
+            {
+                file: 'dist/array.full.js',
                 sourcemap: true,
                 format: 'iife',
                 name: 'posthog',

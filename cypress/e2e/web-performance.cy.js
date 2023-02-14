@@ -19,7 +19,7 @@ describe('Web Performance', () => {
             },
         }).as('decide')
 
-        cy.visit('./playground/cypress')
+        cy.visit('./playground/cypress-full')
         cy.posthogInit(given.options)
         cy.wait('@decide')
         cy.wait('@capture')

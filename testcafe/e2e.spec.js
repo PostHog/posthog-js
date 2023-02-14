@@ -2,7 +2,7 @@ import { t } from 'testcafe'
 import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock } from './helpers'
 
 fixture('posthog.js capture')
-    .page('http://localhost:8000/playground/cypress/index.html')
+    .page('http://localhost:8000/playground/cypress-full/index.html')
     .requestHooks(captureLogger, staticFilesMock)
     .afterEach(async () => {
         const browserLogs = await t.getBrowserConsoleMessages()

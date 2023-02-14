@@ -1,12 +1,12 @@
 import { loadScript } from '../../autocapture-utils'
+import { SessionRecording } from '../../extensions/sessionrecording'
+import { PostHogPersistence, SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
+import { SessionIdManager } from '../../sessionid'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
-    SessionRecording,
-} from '../../extensions/sessionrecording'
-import { PostHogPersistence, SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
-import { SessionIdManager } from '../../sessionid'
+} from '../../extensions/sessionrecording-utils'
 
 // Type and source defined here designate a non-user-generated recording event
 const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
@@ -34,6 +34,7 @@ describe('SessionRecording', () => {
         _captureMetrics: { incr: jest.fn() },
         sessionManager: given.sessionManager,
         _addCaptureHook: jest.fn(),
+        __loaded_recorder: given.__loaded_recorder,
     }))
 
     given('config', () => ({
@@ -51,6 +52,7 @@ describe('SessionRecording', () => {
     given('$session_recording_enabled_server_side', () => true)
     given('$console_log_enabled_server_side', () => false)
     given('disabled', () => false)
+    given('__loaded_recorder', () => false)
 
     beforeEach(() => {
         window.rrwebRecord = jest.fn()
@@ -244,6 +246,12 @@ describe('SessionRecording', () => {
                     _metrics: expect.anything(),
                 }
             )
+        })
+
+        it("doesn't load recording script if already loaded", () => {
+            given('__loaded_recorder', () => true)
+            given.sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).not.toHaveBeenCalled()
         })
 
         it('loads recording script from right place', () => {

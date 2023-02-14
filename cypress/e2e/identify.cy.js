@@ -2,7 +2,7 @@
 
 describe('identify()', () => {
     beforeEach(() => {
-        cy.visit('./playground/cypress')
+        cy.visit('./playground/cypress-full')
         cy.posthogInit({})
 
         cy.wait('@decide')
