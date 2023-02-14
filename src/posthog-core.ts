@@ -1008,7 +1008,7 @@ export class PostHog {
     /**
      * Identify a user with a unique ID instead of a PostHog
      * randomly generated distinct_id. If the method is never called,
-     * then unique visitors will be identified by a UUID generated
+     * then unique visitors will be identified by a UUID that is generated
      * the first time they visit the site.
      *
      * If user properties are passed, they are also sent to posthog.
@@ -1022,21 +1022,30 @@ export class PostHog {
      * ### Notes:
      *
      * You can call this function to overwrite a previously set
-     * unique ID for the current user. PostHog cannot translate
-     * between IDs at this time, so when you change a user's ID
-     * they will appear to be a new user.
+     * unique ID for the current user.
      *
-     * When used alone, posthog.identify will change the user's
-     * distinct_id to the unique ID provided. When used in tandem
-     * with posthog.alias, it will allow you to identify based on
-     * unique ID and map that back to the original, anonymous
-     * distinct_id given to the user upon her first arrival to your
-     * site (thus connecting anonymous pre-signup activity to
-     * post-signup activity). Though the two work together, do not
-     * call identify() at the same time as alias(). Calling the two
-     * at the same time can cause a race condition, so it is best
-     * practice to call identify on the original, anonymous ID
-     * right after you've aliased it.
+     * If the user has been identified ($user_state in persistence is set to 'identified'),
+     * then capture of $identify is skipped to avoid merging users. For example,
+     * if your system allows an admin user to impersonate another user.
+     *
+     * Then a single browser instance can have:
+     *
+     *  `identify('a') -> capture(1) -> identify('b') -> capture(2)`
+     *
+     * and capture 1 and capture 2 will have the correct distinct_id.
+     * but users a and b will NOT be merged in posthog.
+     *
+     * However, if reset is called then:
+     *
+     *  `identify('a') -> capture(1) -> reset() -> capture(2) -> identify('b') -> capture(3)`
+     *
+     * users a and b are not merged.
+     * Capture 1 is associated with user a.
+     * A new distinct id is generated for capture 2.
+     * which is merged with user b.
+     * So, capture 2 and 3 are associated with user b.
+     *
+     * If you want to merge two identified users, you can call posthog.alias
      *
      * @param {String} [new_distinct_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
@@ -1055,12 +1064,15 @@ export class PostHog {
         this.register({ $user_id: new_distinct_id })
 
         if (!this.get_property('$device_id')) {
-            // The persisted distinct id might not actually be a device id at all
-            // it might be a distinct id of the user from before
+            // if there is no device id, then either the user is definitely anonymous,
+            // or posthog's persistence is set so that we don't have a stored user_state
+            // so we treat them as anonymous
+            this.persistence.set_user_state('anonymous')
             const device_id = previous_distinct_id
             this.register_once(
                 {
                     $had_persisted_distinct_id: true,
+                    $had_persisted_device_id: false,
                     $device_id: device_id,
                 },
                 ''
