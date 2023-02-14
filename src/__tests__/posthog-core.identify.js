@@ -104,6 +104,34 @@ describe('identify()', () => {
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
+    it('calls capture when there is no device id (on first check) even if user is not set to anonymous', () => {
+        given.lib.persistence.set_user_state(undefined)
+        given('oldIdentity', () => 'oldIdentity')
+        // if null deviceId is set inside identify, but given doesn't reflect that change so....
+        let wasCalled = false
+        given('deviceId', () => {
+            if (wasCalled) {
+                return 'oldIdentity'
+            } else {
+                wasCalled = true
+                return null
+            }
+        })
+
+        given.subject()
+
+        expect(given.overrides.capture).toHaveBeenCalledWith(
+            '$identify',
+            {
+                distinct_id: 'a-new-id',
+                $anon_distinct_id: 'oldIdentity',
+            },
+            { $set: {}, $set_once: {} }
+        )
+        expect(given.overrides.people.set).not.toHaveBeenCalled()
+        expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+    })
+
     it('does not call capture when distinct_id changes and device id does not match the oldIdentity', () => {
         /**
          * originally this was a proxy for back-to-back identify calls
