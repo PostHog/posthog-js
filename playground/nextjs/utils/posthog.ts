@@ -3,13 +3,8 @@ import Posthog from 'posthog-js'
 // OPTIONAL: As an optimisation, you can include the extra Recording code this way. If you don't use recordings, then you don't need this.
 import 'posthog-js/dist/recorder'
 
-// If you do not need Recordings, or are happy for it to be loaded at runtime you can simply use:
-// import Posthog from 'posthog-js'
-
 if (typeof window !== 'undefined') {
     // This ensures that as long as we are client-side, posthog is always ready
-    // NOTE: If set as an environment variable be sure to prefix with `NEXT_PUBLIC_`
-    // For more info see https://nextjs.org/docs/basic-features/environment-variables#exposing-environment-variables-to-the-browser
     Posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'http://localhost:8000',
     })
