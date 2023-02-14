@@ -7,6 +7,9 @@ jest.mock('../gdpr-utils', () => ({
 }))
 jest.mock('../decide')
 
+// in the past starting with device id == distinct id (as these tests do)
+// was a proxy for being anonymous
+// this is explicitly stored and only set to identified when $identify is captured
 given('lib', () => Object.assign(new PostHog(), given.overrides))
 
 describe('identify()', () => {
@@ -50,10 +53,7 @@ describe('identify()', () => {
     given('deviceId', () => given.oldIdentity)
 
     beforeEach(() => {
-        // in the past starting with device id == distinct id (as these tests do)
-        // was a proxy for being anonymous
-        // this is now set explicitly
-        given.lib.persistence.set_user_state('anonymous')
+        given.lib.persistence.set_user_state(undefined)
     })
 
     it('registers new user id and updates alias', () => {
