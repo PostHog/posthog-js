@@ -1,0 +1,7 @@
+{
+    "name": "posthog-js/full",
+    "private": true,
+    "main": "../dist/module.full.js",
+    "module": "../dist/es.full.js",
+    "types": "../dist/module.d.ts"
+}
