@@ -46,6 +46,10 @@ export const initPosthog = (config) => {
         ...config,
         api_host: process.env.POSTHOG_API_HOST || 'https://app.posthog.com',
         api_key: process.env.POSTHOG_PROJECT_KEY,
+        bootstrap: {
+            distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
+            isIdentifiedID: true,
+        },
     })
 }
 
