@@ -50,9 +50,6 @@ describe('identify()', () => {
     given('deviceId', () => given.oldIdentity)
 
     beforeEach(() => {
-        // in the past starting with device id == distinct id (as these tests do)
-        // was a proxy for being anonymous
-        // this is now set explicitly
         given.lib.persistence.set_user_state('anonymous')
     })
 
@@ -92,6 +89,34 @@ describe('identify()', () => {
 
     it('calls capture when there is no device id', () => {
         given('deviceId', () => null)
+
+        given.subject()
+
+        expect(given.overrides.capture).toHaveBeenCalledWith(
+            '$identify',
+            {
+                distinct_id: 'a-new-id',
+                $anon_distinct_id: 'oldIdentity',
+            },
+            { $set: {}, $set_once: {} }
+        )
+        expect(given.overrides.people.set).not.toHaveBeenCalled()
+        expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+    })
+
+    it('calls capture when there is no device id (on first check) even if user is not set to anonymous', () => {
+        given.lib.persistence.set_user_state(undefined)
+        given('oldIdentity', () => 'oldIdentity')
+        // if null deviceId is set inside identify, but given doesn't reflect that change so....
+        let wasCalled = false
+        given('deviceId', () => {
+            if (wasCalled) {
+                return 'oldIdentity'
+            } else {
+                wasCalled = true
+                return null
+            }
+        })
 
         given.subject()
 
