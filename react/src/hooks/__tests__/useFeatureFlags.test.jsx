@@ -1,15 +1,14 @@
 import * as React from 'react'
 import { renderHook, act } from '@testing-library/react-hooks'
 import { PostHogProvider } from '../../context'
-import { useFeatureFlags } from '..'
+import { useFeatureFlag } from '..'
 
 jest.useFakeTimers()
 
 const ACTIVE_FEATURE_FLAGS = ['example_feature_1', 'example_feature_2', 'example_feature_3', 'multivariate_feature']
 const ENABLED_FEATURE_FLAGS = {
-    example_feature_1: true,
-    example_feature_2: true,
-    example_feature_3: false,
+    example_feature_true: true,
+    example_feature_false: false,
     multivariate_feature: 'string-value',
 }
 
@@ -18,60 +17,30 @@ describe('useFeatureFlags hook', () => {
         <PostHogProvider client={given.posthog}>{children}</PostHogProvider>
     ))
 
-    given('props', () => undefined)
-
-    given('subject', () => () => renderHook(() => useFeatureFlags(given.props), { wrapper: given.renderProvider }))
-
-    given('onFeatureFlags', () => (callback) => callback(ACTIVE_FEATURE_FLAGS))
-
     given('posthog', () => ({
-        onFeatureFlags: given.onFeatureFlags,
-        isFeatureEnabled: (flag) => flag !== 'example_feature_3',
+        isFeatureEnabled: (flag) =>
+            flag === 'example_feature_1' || flag === 'example_feature_2' || flag === 'multivariate_feature',
         getFeatureFlag: (flag) => ENABLED_FEATURE_FLAGS[flag],
-        featureFlags: { reloadFeatureFlags: jest.fn() },
+        onFeatureFlags: (callback) => {
+            callback(ACTIVE_FEATURE_FLAGS)
+            return () => {}
+        },
     }))
 
-    it('should return an empty `enabled` object by default', () => {
-        given('onFeatureFlags', () => () => {})
-
-        expect(given.subject().result.current).toEqual({
-            enabled: {},
+    it('should evaluate the feature flag value', () => {
+        let { result: result_1 } = renderHook(() => useFeatureFlag('example_feature_true'), {
+            wrapper: given.renderProvider,
         })
-    })
+        expect(result_1.current).toEqual(true)
 
-    it('should return `active` and `enabled` features when feature flags are changed', async () => {
-        expect(given.subject().result.current).toEqual({
-            active: ACTIVE_FEATURE_FLAGS,
-            enabled: ENABLED_FEATURE_FLAGS,
+        let { result: result_2 } = renderHook(() => useFeatureFlag('example_feature_false'), {
+            wrapper: given.renderProvider,
         })
-    })
+        expect(result_2.current).toEqual(false)
 
-    it('should not refresh feature flags on an interval if no refreshInterval is provided', () => {
-        given.subject()
-
-        act(() => {
-            const reloadFeatureFlags = given.posthog.featureFlags.reloadFeatureFlags
-            expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
-            jest.advanceTimersByTime(1000)
-            expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
-            jest.advanceTimersByTime(3000)
-            expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
+        let { result: result_3 } = renderHook(() => useFeatureFlag('multivariate_feature'), {
+            wrapper: given.renderProvider,
         })
-    })
-
-    it('should refresh feature flags on an interval if a non-zero refreshInterval is provided', () => {
-        given('props', () => ({ refreshInterval: 1 }))
-        given.subject()
-
-        act(() => {
-            const reloadFeatureFlags = given.posthog.featureFlags.reloadFeatureFlags
-            expect(reloadFeatureFlags).toHaveBeenCalledTimes(0)
-            jest.advanceTimersByTime(1000)
-            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
-            jest.advanceTimersByTime(1000)
-            expect(reloadFeatureFlags).toHaveBeenCalledTimes(2)
-            jest.advanceTimersByTime(3000)
-            expect(reloadFeatureFlags).toHaveBeenCalledTimes(5)
-        })
+        expect(result_3.current).toEqual('string-value')
     })
 })

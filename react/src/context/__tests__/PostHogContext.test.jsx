@@ -9,12 +9,14 @@ describe('usePostHogContext hook', () => {
         return null
     }
 
-    given('render', () => () =>
-        render(
-            <PostHogProvider client={given.posthog}>
-                <App />
-            </PostHogProvider>
-        )
+    given(
+        'render',
+        () => () =>
+            render(
+                <PostHogProvider client={given.posthog}>
+                    <App />
+                </PostHogProvider>
+            )
     )
     given('posthog', () => ({}))
 
