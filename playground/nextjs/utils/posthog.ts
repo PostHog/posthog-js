@@ -1,7 +1,7 @@
 import Posthog from 'posthog-js'
 
-// OPTIONAL: As an optimisation, you can include the extra Recording code this way. If you don't use recordings, then you don't need this.
-import 'posthog-js/dist/recorder'
+// // OPTIONAL: As an optimisation, you can include the extra Recording code this way. If you don't use recordings, then you don't need this.
+// import 'posthog-js/dist/recorder'
 
 if (typeof window !== 'undefined') {
     // This ensures that as long as we are client-side, posthog is always ready
