@@ -6,16 +6,11 @@ export default function Test() {
 
     const result = useFeatureFlag('test')
 
-    // const [text, setText] = useState('')
-
-    // useEffect(() => {
-    //     setText(result?.toString() || '')
-    // }, [result])
-
     return (
         <div>
             <p>Test</p>
-            <button onClick={() => posthog?.capture('Clicked')}>This is a button {result?.toString()}</button>
+            <button onClick={() => posthog?.capture('Clicked')}>This is a button</button>
+            <p>Feature flag response: {JSON.stringify(result)}</p>
         </div>
     )
 }
