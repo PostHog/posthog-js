@@ -1,10 +1,12 @@
+// import { usePostHog } from './posthog-provider'
+
 import { usePostHog } from './posthog-provider'
 
 export default function Button() {
     const posthog = usePostHog()
     const clicked = () => {
         console.log('clicked')
-        console.log(posthog)
+        console.log(posthog?.capture)
         posthog?.capture('button clicked')
     }
     return (

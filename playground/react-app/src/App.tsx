@@ -3,8 +3,8 @@ import posthog from 'posthog-js'
 import Button from './Button'
 
 function App() {
-    posthog.init(process.env.POSTHOG_API_KEY || '', {
-        api_host: process.env.POSTHOG_HOST || 'https://app.posthog.com',
+    posthog.init('phc_aIYpRzs2pU7hk93fqoTWtNezdeMUsNRCQFw7vnvDoOs', {
+        api_host: 'https://app.posthog.com',
     })
 
     return (
