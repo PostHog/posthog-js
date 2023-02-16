@@ -1,4 +1,4 @@
-import { PostHogProvider } from './posthog-provider'
+import { PostHogProvider } from './posthog'
 import posthog from 'posthog-js'
 import Button from './Button'
 import { FeatureFlagGetter } from './FeatureFlagGetter'

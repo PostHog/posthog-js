@@ -1,4 +1,4 @@
-import { useFeatureFlag } from './posthog-provider'
+import { useFeatureFlag } from './posthog'
 
 export function FeatureFlagGetter() {
     const featureFlag = useFeatureFlag('test')

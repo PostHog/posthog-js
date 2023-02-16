@@ -1,6 +1,4 @@
-// import { usePostHog } from './posthog-provider'
-
-import { usePostHog } from './posthog-provider'
+import { usePostHog } from './posthog'
 
 export default function Button() {
     const posthog = usePostHog()
