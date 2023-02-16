@@ -27,6 +27,12 @@ export function PostHogProvider({
             )
         }
 
+        if (client && options) {
+            console.warn(
+                'You have provided both a client and options to PostHogProvider. The options will be ignored in favour of the client.'
+            )
+        }
+
         if (client) {
             setPosthog(client)
         } else if (apiKey) {
