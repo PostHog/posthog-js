@@ -1,5 +1,5 @@
 {
-    "name": "posthog-js-react",
+    "name": "posthog-js",
     "version": "1.0.0-alpha.1",
     "private": false,
     "description": "Provides components and hooks for React integrations of PostHog.",

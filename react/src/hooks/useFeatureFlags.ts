@@ -1,44 +1,22 @@
-import { useEffect, useCallback } from 'react'
-import { usePostHogContext, FeatureFlags } from '../context'
+import { useEffect, useState } from 'react'
+import { usePostHog } from './usePostHog'
 
-/**
- * A hook that fetches active feature flags and determines which flags are enabled for the user.
- * @param props.refreshInterval - How often to refresh the feature flags, in seconds.
- * @param props.sendEvent - A flag that controls whether an event will be sent on flag refresh.
- * @returns An object containing active flags and flags that are enabled for the user.
- */
-export function useFeatureFlags(props: { refreshInterval?: number; sendEvent?: boolean } = {}): FeatureFlags {
-    const { refreshInterval = 0, sendEvent = true } = props
-    const { client: posthog, featureFlags, setFeatureFlags } = usePostHogContext()
+export function useFeatureFlag(flag: string): string | boolean | undefined {
+    const client = usePostHog()
 
-    const getEnabledFlags = useCallback(
-        (flags): void => {
-            const enabled = flags.reduce((result: FeatureFlags['enabled'], flag: string) => {
-                const flagValue = posthog?.getFeatureFlag(flag, {
-                    send_event: sendEvent,
-                })
-                if (typeof flagValue !== 'undefined') {
-                    result[flag] = flagValue
-                }
-                return result
-            }, {})
-            setFeatureFlags({ active: flags, enabled })
-        },
-        [posthog, sendEvent, setFeatureFlags]
-    )
+    const [featureFlag, setFeatureFlag] = useState<boolean | string | undefined>()
+    // would be nice to have a default value above however it's not possible due
+    // to a hydration error when using nextjs
 
     useEffect(() => {
-        if (posthog && refreshInterval > 0) {
-            const interval = setInterval(() => {
-                posthog?.featureFlags.reloadFeatureFlags()
-            }, refreshInterval * 1000)
-            return () => clearInterval(interval)
+        if (!client) {
+            return
         }
-    }, [posthog, refreshInterval, getEnabledFlags])
+        setFeatureFlag(client.getFeatureFlag(flag))
+        return client.onFeatureFlags(() => {
+            setFeatureFlag(client.getFeatureFlag(flag))
+        })
+    }, [client, flag])
 
-    useEffect(() => {
-        posthog?.onFeatureFlags(getEnabledFlags)
-    }, [posthog, getEnabledFlags])
-
-    return featureFlags
+    return featureFlag
 }
