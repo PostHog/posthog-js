@@ -1,17 +1,42 @@
 import * as React from 'react'
 import { useEffect, useState } from 'react'
 
-import posthog from 'posthog-js'
+import posthogJs from 'posthog-js'
 
-type PostHog = typeof posthog
+type PostHog = typeof posthogJs
 
 const PostHogContext = React.createContext<{ client?: PostHog }>({ client: undefined })
 
-export function PostHogProvider({ children, client }: { children: React.ReactNode; client: PostHog }) {
-    return <PostHogContext.Provider value={{ client }}>{children}</PostHogContext.Provider>
-}
+export function PostHogProvider({
+    children,
+    client,
+    apiKey,
+    options,
+}: {
+    children?: React.ReactNode
+    client?: PostHog | undefined
+    apiKey?: string | undefined
+    options?: any | undefined
+}) {
+    const [posthog, setPosthog] = useState<PostHog | undefined>()
 
-// TODO: add options and apiKey
+    useEffect(() => {
+        if (client && apiKey) {
+            console.warn(
+                'You have provided both a client and an apiKey to PostHogProvider. The apiKey will be ignored in favour of the client.'
+            )
+        }
+
+        if (client) {
+            setPosthog(client)
+        } else if (apiKey) {
+            posthogJs.init(apiKey, options)
+            setPosthog(posthogJs)
+        }
+    }, [client, apiKey, options])
+
+    return <PostHogContext.Provider value={{ client: posthog }}>{children}</PostHogContext.Provider>
+}
 
 export const usePostHog = (): PostHog | undefined => {
     const { client } = React.useContext(PostHogContext)
