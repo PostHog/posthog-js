@@ -38,7 +38,7 @@
         "react/dist/*"
     ],
     "dependencies": {
-        "@sentry/types": "7.22.0",
+        "@sentry/types": "7.37.2",
         "fflate": "^0.4.1",
         "rrweb-snapshot": "^1.1.14"
     },
