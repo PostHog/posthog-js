@@ -1,4 +1,4 @@
-import { JsonType } from './../../../src/types';
+import { JsonType } from './../../../src/types'
 import { useEffect, useState } from 'react'
 import { usePostHog } from './usePostHog'
 
