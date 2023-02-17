@@ -1,6 +1,6 @@
-import { useFeatureFlag } from './posthog'
+import { useFeatureFlagEnabled } from 'posthog-js/react'
 
 export function FeatureFlagGetter() {
-    const featureFlag = useFeatureFlag('test')
+    const featureFlag = useFeatureFlagEnabled('test')
     return <div>Feature flag response: {JSON.stringify(featureFlag)}</div>
 }

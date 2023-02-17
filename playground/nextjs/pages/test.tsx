@@ -1,10 +1,10 @@
-import { useFeatureFlag, usePostHog } from '@/posthog'
+import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
 import { useEffect, useState } from 'react'
 
 export default function Test() {
     const posthog = usePostHog()
 
-    const result = useFeatureFlag('test')
+    const result = useFeatureFlagEnabled('test')
 
     return (
         <div>
