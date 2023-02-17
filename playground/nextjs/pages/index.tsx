@@ -11,8 +11,14 @@ export default function Home() {
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
             </Head>
             <main>
-                <p>PostHog React</p>
-                <button onClick={() => posthog?.capture('Clicked button')}>This is a button</button>
+                <h1>PostHog React</h1>
+
+                <div className="buttons">
+                    <button onClick={() => posthog?.capture('Clicked button')}>Capture event</button>
+                    <button data-attr="autocapture-button">Autocapture buttons</button>
+                    <button className="ph-no-capture">Ignore certain elements</button>
+                </div>
+
                 <p>Feature flag response: {JSON.stringify(result)}</p>
             </main>
         </>

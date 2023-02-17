@@ -1,0 +1,11 @@
+main {
+    margin: 0 auto;
+    max-width: 1200px;
+    padding: 2rem;
+    font-family: helvetica, arial, sans-serif;
+}
+
+.buttons {
+    display: flex;
+    gap: 0.5rem;
+}
