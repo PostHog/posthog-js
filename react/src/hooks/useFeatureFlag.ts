@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { JsonType } from './jsontype'
+import { JsonType } from 'posthog-js'
 import { usePostHog } from './usePostHog'
 
 export function useFeatureFlag<T = JsonType>(flag: string): T | undefined {
