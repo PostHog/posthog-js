@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { usePostHog } from './usePostHog'
 
-export function useFeatureFlag(flag: string): string | boolean | undefined {
+export function useFeatureFlagEnabled(flag: string): string | boolean | undefined {
     const client = usePostHog()
 
-    const [featureFlag, setFeatureFlag] = useState<boolean | string | undefined>()
+    const [isEnabled, setIsEnabled] = useState<boolean | string | undefined>()
     // would be nice to have a default value above however it's not possible due
     // to a hydration error when using nextjs
 
@@ -12,11 +12,10 @@ export function useFeatureFlag(flag: string): string | boolean | undefined {
         if (!client) {
             return
         }
-        setFeatureFlag(client.getFeatureFlag(flag))
         return client.onFeatureFlags(() => {
-            setFeatureFlag(client.getFeatureFlag(flag))
+            setIsEnabled(client.isFeatureEnabled(flag))
         })
     }, [client, flag])
 
-    return featureFlag
+    return isEnabled
 }

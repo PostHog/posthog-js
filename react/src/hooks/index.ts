@@ -1,2 +1,2 @@
-export * from './useFeatureFlag'
+export * from './useFeatureFlagEnabled'
 export * from './usePostHog'
