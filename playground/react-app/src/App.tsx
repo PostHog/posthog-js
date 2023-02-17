@@ -1,5 +1,5 @@
 import posthog from 'posthog-js'
-import { PostHogProvider } from 'posthog-js/react'
+import { PostHogProvider } from './posthog'
 
 import Button from './Button'
 import { FeatureFlagGetter } from './FeatureFlagGetter'
