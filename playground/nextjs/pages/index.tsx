@@ -1,18 +1,19 @@
 import Head from 'next/head'
-import styles from '@/styles/Home.module.css'
+import { useFeatureFlag, usePostHog } from 'posthog-js/react'
 
 export default function Home() {
+    const posthog = usePostHog()
+    const result = useFeatureFlag('test')
     return (
         <>
             <Head>
                 <title>PostHog</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
             </Head>
-            <main className={styles.main}>
-                <div className={styles.description}>
-                    <p>PostHog</p>
-                    <p>Feature flag response</p>
-                </div>
+            <main>
+                <p>PostHog React</p>
+                <button onClick={() => posthog?.capture('Clicked button')}>This is a button</button>
+                <p>Feature flag response: {JSON.stringify(result)}</p>
             </main>
         </>
     )

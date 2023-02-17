@@ -1,11 +1,11 @@
+import '@/styles/globals.css'
+
 import { useEffect } from 'react'
 import type { AppProps } from 'next/app'
 import { useRouter } from 'next/router'
 
 import posthog from 'posthog-js'
-
-import '@/styles/globals.css'
-import { PostHogProvider } from '@/posthog'
+import { PostHogProvider } from 'posthog-js/react'
 
 if (typeof window !== 'undefined') {
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
