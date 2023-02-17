@@ -4,6 +4,7 @@ import { PostHogProvider } from '../../context'
 import { useFeatureFlagPayload } from '../useFeatureFlagPayload'
 import { useFeatureFlagEnabled } from '../useFeatureFlagEnabled'
 import { useFeatureFlags } from '../useFeatureFlags'
+import { useFeatureFlag } from '../useFeatureFlag'
 
 jest.useFakeTimers()
 
@@ -11,11 +12,11 @@ const FEATURE_FLAG_STATUS = {
     example_feature_true: true,
     example_feature_false: false,
     multivariate_feature: 'string-value',
-    example_feature_1_payload: true,
+    example_feature_payload: 'test',
 }
 
 const FEATURE_FLAG_PAYLOADS = {
-    example_feature_1_payload: {
+    example_feature_payload: {
         id: 1,
         name: 'example_feature_1_payload',
         key: 'example_feature_1_payload',
@@ -43,44 +44,69 @@ describe('useFeatureFlagPayload hook', () => {
         },
     }))
 
-    it('should get the feature flag when present', () => {
-        let { result: result_1 } = renderHook(() => useFeatureFlagEnabled('example_feature_true'), {
+    it.each([
+        ['example_feature_true', true],
+        ['example_feature_false', false],
+        ['missing', undefined],
+        ['multivariate_feature', 'string-value'],
+        [
+            'example_feature_payload',
+            {
+                id: 1,
+                name: 'example_feature_1_payload',
+                key: 'example_feature_1_payload',
+            },
+        ],
+    ])('should get the generic feature flag', (flag, expected) => {
+        let { result } = renderHook(() => useFeatureFlag(flag), {
             wrapper: given.renderProvider,
         })
-        expect(result_1.current).toEqual(true)
-
-        let { result: result_2 } = renderHook(() => useFeatureFlagEnabled('example_feature_false'), {
-            wrapper: given.renderProvider,
-        })
-        expect(result_2.current).toEqual(false)
-
-        let { result: result_3 } = renderHook(() => useFeatureFlagEnabled('example_feature_random'), {
-            wrapper: given.renderProvider,
-        })
-        expect(result_3.current).toEqual(undefined)
+        expect(result.current).toEqual(expected)
     })
 
-    it('should get the feature flag payload', () => {
-        let { result: result_1 } = renderHook(() => useFeatureFlagEnabled('example_feature_1_payload'), {
+    it.each([
+        ['example_feature_true', true],
+        ['example_feature_false', false],
+        ['missing', undefined],
+        ['multivariate_feature', true],
+        ['example_feature_payload', true]
+    ])('should get the boolean feature flag', (flag, expected) => {
+        let { result } = renderHook(() => useFeatureFlagEnabled(flag), {
             wrapper: given.renderProvider,
         })
-        expect(result_1.current).toEqual(true)
+        expect(result.current).toEqual(expected)
+    })
 
-        let { result: result_2 } = renderHook(() => useFeatureFlagPayload('example_feature_1_payload'), {
+    it.each([
+        ['example_feature_true', true],
+        ['example_feature_false', false],
+        ['missing', undefined],
+        ['multivariate_feature', true],
+        ['example_feature_payload', true],
+    ])('should get the payload feature flag', (flag, expected) => {
+        let { result } = renderHook(() => useFeatureFlagEnabled(flag), {
             wrapper: given.renderProvider,
         })
-        expect(result_2.current).toEqual(FEATURE_FLAG_PAYLOADS.example_feature_1_payload)
+        expect(result.current).toEqual(expected)
+    })
 
-        let { result: result_3 } = renderHook(() => useFeatureFlagPayload('example_feature_true'), {
+    it.each([
+        ['example_feature_true', undefined],
+        ['example_feature_false', undefined],
+        ['missing', undefined],
+        ['multivariate_feature', undefined],
+        ['example_feature_payload', FEATURE_FLAG_PAYLOADS.example_feature_payload],
+    ])('should get the payload feature flag', (flag, expected) => {
+        let { result } = renderHook(() => useFeatureFlagPayload(flag), {
             wrapper: given.renderProvider,
         })
-        expect(result_3.current).toEqual(undefined)
+        expect(result.current).toEqual(expected)
     })
 
     it('should return the active feature flags', () => {
         let { result } = renderHook(() => useFeatureFlags(), {
             wrapper: given.renderProvider,
         })
-        expect(result.current).toEqual(['example_feature_true', 'multivariate_feature', 'example_feature_1_payload'])
+        expect(result.current).toEqual(['example_feature_true', 'multivariate_feature', 'example_feature_payload'])
     })
 })
