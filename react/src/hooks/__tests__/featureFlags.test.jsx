@@ -29,6 +29,7 @@ describe('useFeatureFlagPayload hook', () => {
 
     given('posthog', () => ({
         isFeatureEnabled: (flag) => FEATURE_FLAG_STATUS[flag],
+        getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
         getFeatureFlagPayload: (flag) => FEATURE_FLAG_PAYLOADS[flag],
         onFeatureFlags: (callback) => {
             const activeFlags = []
