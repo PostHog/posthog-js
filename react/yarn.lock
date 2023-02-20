@@ -531,10 +531,10 @@
     estree-walker "^1.0.1"
     picomatch "^2.2.2"
 
-"@sentry/types@7.22.0":
-  version "7.22.0"
-  resolved "https://registry.yarnpkg.com/@sentry/types/-/types-7.22.0.tgz#58e4ce77b523048e0f31e2ea4b597946d76f6079"
-  integrity sha512-LhCL+wb1Jch+OesB2CIt6xpfO1Ab6CRvoNYRRzVumWPLns1T3ZJkarYfhbLaOEIb38EIbPgREdxn2AJT560U4Q==
+"@sentry/types@7.37.2":
+  version "7.37.2"
+  resolved "https://registry.yarnpkg.com/@sentry/types/-/types-7.37.2.tgz#99fd76230d7c1d3c6901ed4c0bea35be7d6fe26d"
+  integrity sha512-SxKQOCX94ZaQM4C2ysNjHdJsjYapu/NYZCz1cnPyCdDvYfhwiVge1uq6ZHiQ/ARfxAAOmc3R4Mh3VvEz7WUOdw==
 
 "@sinonjs/commons@^1.7.0":
   version "1.8.1"
@@ -2957,11 +2957,8 @@ posix-character-classes@^0.1.0:
   integrity sha1-AerA/jta9xoqbAL+q7jB/vfgDqs=
 
 "posthog-js@link:..":
-  version "1.39.1"
-  dependencies:
-    "@sentry/types" "7.22.0"
-    fflate "^0.4.1"
-    rrweb-snapshot "^1.1.14"
+  version "0.0.0"
+  uid ""
 
 prelude-ls@~1.1.2:
   version "1.1.2"
