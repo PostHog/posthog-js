@@ -30,6 +30,7 @@ export class SessionRecording {
     sessionId: string | null
     receivedDecide: boolean
     rrwebRecord: typeof record | undefined
+    recorderVersion?: string
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -86,6 +87,10 @@ export class SessionRecording {
         if (response.sessionRecording?.endpoint) {
             this.endpoint = response.sessionRecording?.endpoint
         }
+
+        if (response.sessionRecording?.recorderVersion) {
+            this.recorderVersion = response.sessionRecording.recorderVersion
+        }
         this.startRecordingIfEnabled()
     }
 
@@ -111,12 +116,17 @@ export class SessionRecording {
             return
         }
         if (!this.captureStarted && !this.instance.get_config('disable_session_recording')) {
+            const userSessionRecordingOptions = this.instance.get_config('session_recording')
+            // Always use the client side setting if given, otherwise use the server side setting
+            this.recorderVersion = userSessionRecordingOptions?.recorderVersion || this.recorderVersion
+            const recorderJS = this.recorderVersion === 'v2' ? 'recorder-v2.js' : 'recorder.js'
+
             this.captureStarted = true
             // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is imported), don't load script.
             // Otherwise, remotely import recorder.js from cdn since it hasn't been loaded
             if (!this.instance.__loaded_recorder) {
                 loadScript(
-                    this.instance.get_config('api_host') + '/static/recorder.js?v=' + Config.LIB_VERSION,
+                    this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
                     this._onScriptLoaded.bind(this)
                 )
             }
