@@ -1,3 +1,8 @@
+## 1.46.1 - 2023-02-21
+
+- chore: Remove Sentry types to reduce clashes (#546)
+- fix: Removed Sentry types from compiled types (#545)
+
 ## 1.46.0 - 2023-02-21
 
 - feat: Add optional loading of rrweb2 (#543)
