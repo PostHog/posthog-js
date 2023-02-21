@@ -26,6 +26,12 @@ export default function Home() {
                         I only get rendered if the flag <b>test</b> resolves to <code>true</code>
                     </p>
                 </PostHogFeature>
+
+                <PostHogFeature flag="test">
+                    {(value: any) => (
+                        <p>I always render and display the value of a feature flag: {JSON.stringify(value)}</p>
+                    )}
+                </PostHogFeature>
             </main>
         </>
     )

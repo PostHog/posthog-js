@@ -9,7 +9,7 @@ export type PostHogFeatureProps = {
 export function PostHogFeature({ flag, match, children }: PostHogFeatureProps): React.ReactNode {
     const value = useFeatureFlag(flag)
 
-    if (value === match) {
+    if (match === undefined || value === match) {
         return typeof children === 'function' ? children(value) : children
     }
 
