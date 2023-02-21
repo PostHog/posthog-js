@@ -19,8 +19,8 @@
 import { Properties } from '../types'
 import { PostHog } from '../posthog-core'
 
-// NOTE - we can't import from @sentry/types because it's not a dependency of posthog-js
-// Doing so cause clashes everytime sentry package is updated. Instead we implement our own types as a minimal subset of the sentry ones
+// NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
+// We only use a small subset of the types, so we can just define the integration overall and use any for the rest
 
 // import {
 //     Event as _SentryEvent,
