@@ -1,3 +1,9 @@
+## 1.46.0 - 2023-02-21
+
+- feat: Add optional loading of rrweb2 (#543)
+- feat: Add rrweb2 support (experimental) (#536)
+- chore: upgrade @sentry/types (#539)
+
 ## 1.45.1 - 2023-02-14
 
 - fix: default persons to anonymous (#534)
