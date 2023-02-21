@@ -1,5 +1,5 @@
 import Head from 'next/head'
-import { useFeatureFlag, usePostHog } from 'posthog-js/react'
+import { useFeatureFlag, usePostHog, PostHogFeature } from 'posthog-js/react'
 
 export default function Home() {
     const posthog = usePostHog()
@@ -20,6 +20,12 @@ export default function Home() {
                 </div>
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>
+
+                <PostHogFeature flag="test" match={true}>
+                    <p>
+                        I only get rendered if the flag <b>test</b> resolves to <code>true</code>
+                    </p>
+                </PostHogFeature>
             </main>
         </>
     )
