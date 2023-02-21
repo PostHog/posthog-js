@@ -50,8 +50,6 @@ export class SentryIntegration implements _SentryIntegration {
 
     constructor(_posthog: PostHog, organization?: string, projectId?: number, prefix?: string) {
         // setupOnce gets called by Sentry when it intializes the plugin
-        // 'this' is not this: PostHogLib object, but the new class that's created.
-        // TODO: refactor to a real class. The types
         this.name = 'posthog-js'
         this.setupOnce = function (addGlobalEventProcessor: (callback: _SentryEventProcessor) => void) {
             addGlobalEventProcessor((event: _SentryEvent) => {
