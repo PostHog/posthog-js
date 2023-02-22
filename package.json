@@ -32,11 +32,7 @@
     "main": "dist/module.js",
     "module": "dist/es.js",
     "types": "dist/module.d.ts",
-    "files": [
-        "lib/*",
-        "dist/*",
-        "react/dist/*"
-    ],
+    "files": ["lib/*", "dist/*", "react/dist/*"],
     "dependencies": {
         "fflate": "^0.4.1",
         "rrweb-snapshot": "^1.1.14"
