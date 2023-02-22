@@ -1,3 +1,7 @@
+## 1.46.2 - 2023-02-22
+
+- fix: more leniency for envs with 'window' undefined (#541)
+
 ## 1.46.1 - 2023-02-21
 
 - chore: Remove Sentry types to reduce clashes (#546)
