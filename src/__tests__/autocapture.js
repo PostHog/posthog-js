@@ -111,6 +111,82 @@ describe('Autocapture system', () => {
         })
     })
 
+    describe('_getAugmentPropertiesFromElement', () => {
+        let div, div2, input, sensitiveInput, hidden, password
+        beforeEach(() => {
+            div = document.createElement('div')
+            div.className = 'class1 class2 class3          ' // Lots of spaces might mess things up
+            div.innerHTML = 'my <span>sweet <i>inner</i></span> text'
+            div.setAttribute('data-ph-augment-autocapture-one-on-the-div', 'one')
+            div.setAttribute('data-ph-augment-autocapture-two-on-the-div', 'two')
+            div.setAttribute('data-ph-augment-autocapture-falsey-on-the-div', '0')
+            div.setAttribute('data-ph-augment-autocapture-false-on-the-div', false)
+
+            input = document.createElement('input')
+            input.setAttribute('data-ph-augment-autocapture-on-the-input', 'is on the input')
+            input.value = 'test val'
+
+            sensitiveInput = document.createElement('input')
+            sensitiveInput.value = 'test val'
+            sensitiveInput.setAttribute(
+                'data-ph-augment-autocapture-on-the-sensitive-input',
+                'is on the sensitive-input'
+            )
+            sensitiveInput.className = 'ph-sensitive'
+
+            hidden = document.createElement('div')
+            hidden.setAttribute('type', 'hidden')
+            hidden.setAttribute('data-ph-augment-autocapture-on-the-hidden', 'is on the hidden')
+            hidden.value = 'hidden val'
+
+            password = document.createElement('div')
+            password.setAttribute('type', 'password')
+            password.setAttribute('data-ph-augment-autocapture-on-the-password', 'is on the password')
+            password.value = 'password val'
+
+            const divSibling = document.createElement('div')
+            const divSibling2 = document.createElement('span')
+
+            div2 = document.createElement('div')
+            div2.className = 'parent'
+            div2.appendChild(divSibling)
+            div2.appendChild(divSibling2)
+            div2.appendChild(div)
+            div2.appendChild(input)
+            div2.appendChild(sensitiveInput)
+            div2.appendChild(hidden)
+            div2.appendChild(password)
+        })
+
+        it('should collect multiple augments from elements', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(div)
+            expect(props['one-on-the-div']).toBe('one')
+            expect(props['two-on-the-div']).toBe('two')
+            expect(props['falsey-on-the-div']).toBe('0')
+            expect(props['false-on-the-div']).toBe('false')
+        })
+
+        it('should collect augment from input value', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(input)
+            expect(props['on-the-input']).toBe('is on the input')
+        })
+
+        it('should collect augment from input with class "ph-sensitive"', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(sensitiveInput)
+            expect(props['on-the-sensitive-input']).toBe('is on the sensitive-input')
+        })
+
+        it('should collect augment from the hidden element value', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(hidden)
+            expect(props['on-the-hidden']).toBe('is on the hidden')
+        })
+
+        it('should collect augment from the password element value', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(password)
+            expect(props['on-the-password']).toBe('is on the password')
+        })
+    })
+
     describe('isBrowserSupported', () => {
         let orig
         beforeEach(() => {
@@ -480,6 +556,31 @@ describe('Autocapture system', () => {
                 '$rageclick',
                 '$autocapture',
             ])
+        })
+
+        it('should capture augment properties', () => {
+            autocapture.init(lib)
+
+            const elTarget = document.createElement('img')
+            elTarget.setAttribute('data-ph-augment-autocapture-target-augment', 'the target')
+            const elParent = document.createElement('span')
+            elParent.setAttribute('data-ph-augment-autocapture-parent-augment', 'the parent')
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'http://test.com')
+            elGrandparent.appendChild(elParent)
+            const fakeEvent = {
+                target: elTarget,
+                type: 'click',
+                clientX: 5,
+                clientY: 5,
+            }
+            Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+            autocapture._captureEvent(fakeEvent, lib)
+
+            const captureProperties = lib.capture.args[0][1]
+            expect(captureProperties).toHaveProperty('target-augment', 'the target')
+            expect(captureProperties).toHaveProperty('parent-augment', 'the parent')
         })
 
         it('should not capture events when get_config returns false, when an element matching any of the event selectors is clicked', () => {
