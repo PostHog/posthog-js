@@ -1,4 +1,4 @@
-import { version } from 'rrweb2/package.json'
+import { version } from 'rrweb/package.json'
 
 // Same as loader-globals.ts except includes rrweb scripts.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

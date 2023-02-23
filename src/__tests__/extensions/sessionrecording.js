@@ -1,6 +1,10 @@
 import { loadScript } from '../../autocapture-utils'
 import { SessionRecording } from '../../extensions/sessionrecording'
-import { PostHogPersistence, SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../posthog-persistence'
+import {
+    PostHogPersistence,
+    SESSION_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
+} from '../../posthog-persistence'
 import { SessionIdManager } from '../../sessionid'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -25,7 +29,9 @@ describe('SessionRecording', () => {
     }))
     given('posthog', () => ({
         get_property: (property_key) =>
-            property_key === SESSION_RECORDING_ENABLED_SERVER_SIDE
+            property_key === SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE
+                ? given.$session_recording_recorder_version_server_side
+                : property_key === SESSION_RECORDING_ENABLED_SERVER_SIDE
                 ? given.$session_recording_enabled_server_side
                 : given.$console_log_enabled_server_side,
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
@@ -34,7 +40,7 @@ describe('SessionRecording', () => {
         _captureMetrics: { incr: jest.fn() },
         sessionManager: given.sessionManager,
         _addCaptureHook: jest.fn(),
-        __loaded_recorder: given.__loaded_recorder,
+        __loaded_recorder_version: given.__loaded_recorder_version,
     }))
 
     given('config', () => ({
@@ -46,13 +52,15 @@ describe('SessionRecording', () => {
             maskAllInputs: false,
             recordCanvas: true,
             someUnregisteredProp: 'abc',
+            recorderVersion: given.recorder_version_client_side,
         },
         persistence: 'memory',
     }))
     given('$session_recording_enabled_server_side', () => true)
     given('$console_log_enabled_server_side', () => false)
+    given('$session_recording_recorder_version_server_side', () => undefined)
     given('disabled', () => false)
-    given('__loaded_recorder', () => false)
+    given('__loaded_recorder_version', () => undefined)
 
     beforeEach(() => {
         window.rrwebRecord = jest.fn()
@@ -101,6 +109,35 @@ describe('SessionRecording', () => {
 
             given('$console_log_enabled_server_side', () => true)
             expect(given.subject()).toBe(true)
+        })
+    })
+
+    describe('getRecordingVersion', () => {
+        given('subject', () => () => given.sessionRecording.getRecordingVersion())
+
+        it('uses client side setting v2 over server side', () => {
+            given('$session_recording_recorder_version_server_side', () => 'v1')
+            given('recorder_version_client_side', () => 'v2')
+            expect(given.subject()).toBe('v2')
+        })
+
+        it('uses client side setting v1 over server side', () => {
+                        given('$session_recording_recorder_version_server_side', () => 'v2')
+            given('recorder_version_client_side', () => 'v1')
+            expect(given.subject()).toBe('v1')
+        })
+
+        it('uses server side setting if client side setting is not set', () => {
+            given('recorder_version_client_side', () => undefined)
+
+            given('$session_recording_recorder_version_server_side', () => 'v1')
+            expect(given.subject()).toBe('v1')
+
+            given('$session_recording_recorder_version_server_side', () => 'v2')
+            expect(given.subject()).toBe('v2')
+
+            given('$session_recording_recorder_version_server_side', () => undefined)
+            expect(given.subject()).toBe('v1')
         })
     })
 
@@ -249,15 +286,38 @@ describe('SessionRecording', () => {
         })
 
         it("doesn't load recording script if already loaded", () => {
-            given('__loaded_recorder', () => true)
+            given('__loaded_recorder_version', () => 'v1')
             given.sessionRecording.startRecordingIfEnabled()
             expect(loadScript).not.toHaveBeenCalled()
         })
 
-        it('loads recording script from right place', () => {
+        it('loads recording v1 script from right place', () => {
             given.sessionRecording.startRecordingIfEnabled()
 
             expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js?v=v0.0.1', expect.anything())
+        })
+
+        it('loads recording v2 script from right place', () => {
+            given('$session_recording_recorder_version_server_side', () => 'v2')
+            given.sessionRecording.startRecordingIfEnabled()
+
+            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder-v2.js?v=v0.0.1', expect.anything())
+        })
+
+        it('do not load recording script again', () => {
+            given('__loaded_recorder_version', () => 'v1')
+            given('$session_recording_recorder_version_server_side', () => 'v1')
+            given.sessionRecording.startRecordingIfEnabled()
+
+            expect(loadScript).not.toHaveBeenCalled()
+        })
+
+        it('load correct recording version if there is a cached mismatch', () => {
+            given('__loaded_recorder_version', () => 'v1')
+            given('$session_recording_recorder_version_server_side', () => 'v2')
+            given.sessionRecording.startRecordingIfEnabled()
+
+            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder-v2.js?v=v0.0.1', expect.anything())
         })
 
         it('loads script after `startCaptureAndTrySendingQueuedSnapshots` if not previously loaded', () => {

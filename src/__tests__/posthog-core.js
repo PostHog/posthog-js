@@ -508,28 +508,40 @@ describe('init()', () => {
         expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
     })
 
-    it('does not set __loaded_recorder flag to true if recording script has not been included', () => {
+    it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
         given('overrides', () => ({
-            __loaded_recorder: false,
+            __loaded_recorder_version: undefined,
         }))
         delete window.rrweb
         window.rrweb = { record: undefined }
         delete window.rrwebRecord
         window.rrwebRecord = undefined
         given.subject()
-        expect(given.lib.__loaded_recorder).toEqual(false)
+        expect(given.lib.__loaded_recorder_version).toEqual(undefined)
     })
 
-    it('set __loaded_recorder flag to true if recording script has been included', () => {
+    it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
         given('overrides', () => ({
-            __loaded_recorder: false,
+            __loaded_recorder_version: undefined,
         }))
         delete window.rrweb
-        window.rrweb = { record: 'anything' }
+        window.rrweb = { record: 'anything', version: "1.1.3" }
         delete window.rrwebRecord
         window.rrwebRecord = 'is possible'
         given.subject()
-        expect(given.lib.__loaded_recorder).toEqual(true)
+        expect(given.lib.__loaded_recorder_version).toMatch(new RegExp(`^1\.?`)) // start with 1.?.?
+    })
+
+    it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
+        given('overrides', () => ({
+            __loaded_recorder_version: undefined,
+        }))
+        delete window.rrweb
+        window.rrweb = { record: 'anything', version: "2.0.0-alpha.5" }
+        delete window.rrwebRecord
+        window.rrwebRecord = 'is possible'
+        given.subject()
+        expect(given.lib.__loaded_recorder_version).toMatch(new RegExp(`^2\.?`)) // start with 2.?.?
     })
 
     it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {

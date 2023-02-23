@@ -243,7 +243,7 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
  */
 export class PostHog {
     __loaded: boolean
-    __loaded_recorder: boolean // flag that checks if recorder.js is loaded already
+    __loaded_recorder_version: "v1" | "v2" | undefined // flag that keeps track of which version of recorder is loaded
     config: PostHogConfig
 
     persistence: PostHogPersistence
@@ -280,7 +280,7 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
-        this.__loaded_recorder = false
+        this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
         this.people = new PostHogPeople(this)
@@ -358,7 +358,9 @@ export class PostHog {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         if (window?.rrweb?.record || window?.rrwebRecord) {
-            this.__loaded_recorder = true
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            this.__loaded_recorder_version = window?.rrweb?.version
         }
 
         this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
