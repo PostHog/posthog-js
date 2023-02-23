@@ -43,13 +43,18 @@ const autocapture = {
     },
 
     _getAugmentPropertiesFromElement: function (elem: Element): Properties {
+        const shouldCaptureEl = shouldCaptureElement(elem)
+        if (!shouldCaptureEl) {
+            return {}
+        }
+
         const props: Properties = {}
 
         _each(elem.attributes, function (attr: Attr) {
             if (attr.name.startsWith('data-ph-augment-autocapture')) {
                 const propertyKey = attr.name.replace('data-ph-augment-autocapture-', '')
                 const propertyValue = attr.value
-                if (propertyKey && propertyValue) {
+                if (propertyKey && propertyValue && shouldCaptureValue(propertyValue)) {
                     props[propertyKey] = propertyValue
                 }
             }
@@ -205,10 +210,8 @@ const autocapture = {
                     )
                 )
 
-                if (shouldCaptureEl) {
-                    const augmentProperties = this._getAugmentPropertiesFromElement(el)
-                    _extend(autocaptureAugmentProperties, augmentProperties)
-                }
+                const augmentProperties = this._getAugmentPropertiesFromElement(el)
+                _extend(autocaptureAugmentProperties, augmentProperties)
             })
 
             if (!instance.get_config('mask_all_text')) {

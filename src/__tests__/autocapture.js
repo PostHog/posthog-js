@@ -173,7 +173,7 @@ describe('Autocapture system', () => {
 
         it('should collect augment from input with class "ph-sensitive"', () => {
             const props = autocapture._getAugmentPropertiesFromElement(sensitiveInput)
-            expect(props['on-the-sensitive-input']).toBe('is on the sensitive-input')
+            expect(props['on-the-sensitive-input']).toBeUndefined()
         })
 
         it('should collect augment from the hidden element value', () => {
