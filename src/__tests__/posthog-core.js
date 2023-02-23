@@ -467,7 +467,7 @@ describe('bootstrapping feature flags', () => {
 })
 
 describe('init()', () => {
-    let windowSpy = jest.spyOn(window, 'window', 'get')
+    jest.spyOn(window, 'window', 'get')
     given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 
     given('overrides', () => ({

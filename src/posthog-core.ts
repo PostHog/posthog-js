@@ -243,7 +243,7 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
  */
 export class PostHog {
     __loaded: boolean
-    __loaded_recorder_version: "v1" | "v2" | undefined // flag that keeps track of which version of recorder is loaded
+    __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
     config: PostHogConfig
 
     persistence: PostHogPersistence
