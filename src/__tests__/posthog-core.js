@@ -525,7 +525,7 @@ describe('init()', () => {
             __loaded_recorder_version: undefined,
         }))
         delete window.rrweb
-        window.rrweb = { record: 'anything', version: "1.1.3" }
+        window.rrweb = { record: 'anything', version: '1.1.3' }
         delete window.rrwebRecord
         window.rrwebRecord = 'is possible'
         given.subject()
@@ -537,7 +537,7 @@ describe('init()', () => {
             __loaded_recorder_version: undefined,
         }))
         delete window.rrweb
-        window.rrweb = { record: 'anything', version: "2.0.0-alpha.5" }
+        window.rrweb = { record: 'anything', version: '2.0.0-alpha.5' }
         delete window.rrwebRecord
         window.rrwebRecord = 'is possible'
         given.subject()

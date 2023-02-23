@@ -122,7 +122,7 @@ describe('SessionRecording', () => {
         })
 
         it('uses client side setting v1 over server side', () => {
-                        given('$session_recording_recorder_version_server_side', () => 'v2')
+            given('$session_recording_recorder_version_server_side', () => 'v2')
             given('recorder_version_client_side', () => 'v1')
             expect(given.subject()).toBe('v1')
         })
@@ -301,7 +301,10 @@ describe('SessionRecording', () => {
             given('$session_recording_recorder_version_server_side', () => 'v2')
             given.sessionRecording.startRecordingIfEnabled()
 
-            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder-v2.js?v=v0.0.1', expect.anything())
+            expect(loadScript).toHaveBeenCalledWith(
+                'https://test.com/static/recorder-v2.js?v=v0.0.1',
+                expect.anything()
+            )
         })
 
         it('do not load recording script again', () => {
@@ -317,7 +320,10 @@ describe('SessionRecording', () => {
             given('$session_recording_recorder_version_server_side', () => 'v2')
             given.sessionRecording.startRecordingIfEnabled()
 
-            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder-v2.js?v=v0.0.1', expect.anything())
+            expect(loadScript).toHaveBeenCalledWith(
+                'https://test.com/static/recorder-v2.js?v=v0.0.1',
+                expect.anything()
+            )
         })
 
         it('loads script after `startCaptureAndTrySendingQueuedSnapshots` if not previously loaded', () => {
