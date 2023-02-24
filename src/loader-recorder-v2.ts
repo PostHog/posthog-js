@@ -12,7 +12,7 @@ import { getRecordConsolePlugin } from 'rrweb2/es/rrweb/packages/rrweb/src/plugi
 
 const win: Window & typeof globalThis = typeof window !== 'undefined' ? window : ({} as typeof window)
 
-;(win as any).rrweb = { record: rrwebRecord, version: version }
+;(win as any).rrweb = { record: rrwebRecord, version }
 ;(win as any).rrwebConsoleRecord = { getRecordConsolePlugin }
 
 export default rrwebRecord
