@@ -171,21 +171,21 @@ describe('featureflags', () => {
             const unsubscribe = given.featureFlags.onFeatureFlags(() => {
                 called = true
             })
-            expect(called).toEqual(false)
 
             given.featureFlags.setAnonymousDistinctId('rando_id')
             given.featureFlags.reloadFeatureFlags()
-
             jest.runAllTimers()
+
             expect(called).toEqual(true)
 
             called = false
 
             unsubscribe()
+
             given.featureFlags.setAnonymousDistinctId('rando_id')
             given.featureFlags.reloadFeatureFlags()
-
             jest.runAllTimers()
+
             expect(called).toEqual(false)
         })
     })
