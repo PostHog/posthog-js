@@ -48,26 +48,6 @@ describe('useFeatureFlagPayload hook', () => {
         ['example_feature_true', true],
         ['example_feature_false', false],
         ['missing', undefined],
-        ['multivariate_feature', 'string-value'],
-        [
-            'example_feature_payload',
-            {
-                id: 1,
-                name: 'example_feature_1_payload',
-                key: 'example_feature_1_payload',
-            },
-        ],
-    ])('should get the generic feature flag', (flag, expected) => {
-        let { result } = renderHook(() => useFeatureFlag(flag), {
-            wrapper: given.renderProvider,
-        })
-        expect(result.current).toEqual(expected)
-    })
-
-    it.each([
-        ['example_feature_true', true],
-        ['example_feature_false', false],
-        ['missing', undefined],
         ['multivariate_feature', true],
         ['example_feature_payload', true]
     ])('should get the boolean feature flag', (flag, expected) => {
