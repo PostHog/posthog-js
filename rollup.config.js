@@ -16,6 +16,7 @@ const plugins = [
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
     }),
+    terser({ toplevel: true }),
 ]
 
 export default [
@@ -29,7 +30,7 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: 'src/loader-recorder-v2.ts',
@@ -41,7 +42,7 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: 'src/loader-globals.ts',
@@ -53,7 +54,7 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: 'src/loader-globals-full.ts',
@@ -65,7 +66,7 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: 'src/loader-module.ts',
@@ -82,7 +83,7 @@ export default [
                 sourcemap: true,
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: './lib/src/loader-module.d.ts',
