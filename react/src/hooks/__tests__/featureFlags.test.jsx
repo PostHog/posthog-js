@@ -28,7 +28,7 @@ describe('useFeatureFlagPayload hook', () => {
     ))
 
     given('posthog', () => ({
-        isFeatureEnabled: (flag) => FEATURE_FLAG_STATUS[flag],
+        isFeatureEnabled: (flag) => !!FEATURE_FLAG_STATUS[flag],
         getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
         getFeatureFlagPayload: (flag) => FEATURE_FLAG_PAYLOADS[flag],
         onFeatureFlags: (callback) => {
@@ -46,7 +46,7 @@ describe('useFeatureFlagPayload hook', () => {
     it.each([
         ['example_feature_true', true],
         ['example_feature_false', false],
-        ['missing', undefined],
+        ['missing', false],
         ['multivariate_feature', true],
         ['example_feature_payload', true]
     ])('should get the boolean feature flag', (flag, expected) => {
@@ -59,7 +59,7 @@ describe('useFeatureFlagPayload hook', () => {
     it.each([
         ['example_feature_true', true],
         ['example_feature_false', false],
-        ['missing', undefined],
+        ['missing', false],
         ['multivariate_feature', true],
         ['example_feature_payload', true],
     ])('should get the payload feature flag', (flag, expected) => {
