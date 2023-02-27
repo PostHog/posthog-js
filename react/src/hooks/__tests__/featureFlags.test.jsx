@@ -4,7 +4,6 @@ import { PostHogProvider } from '../../context'
 import { useFeatureFlagPayload } from '../useFeatureFlagPayload'
 import { useFeatureFlagEnabled } from '../useFeatureFlagEnabled'
 import { useFeatureFlags } from '../useFeatureFlags'
-import { useFeatureFlag } from '../useFeatureFlag'
 
 jest.useFakeTimers()
 
