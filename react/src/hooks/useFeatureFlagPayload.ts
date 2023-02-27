@@ -13,7 +13,7 @@ export function useFeatureFlagPayload(flag: string): JsonType | undefined {
         if (!client) {
             return
         }
-        client.onFeatureFlags(() => {
+        return client.onFeatureFlags(() => {
             setFeatureFlagPayload(client.getFeatureFlagPayload(flag))
         })
     }, [client, flag])

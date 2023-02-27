@@ -12,7 +12,7 @@ export function useFeatureFlagEnabled(flag: string): boolean | undefined {
         if (!client) {
             return
         }
-        client.onFeatureFlags(() => {
+        return client.onFeatureFlags(() => {
             setFeatureEnabled(client.isFeatureEnabled(flag))
         })
     }, [client, flag])

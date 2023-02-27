@@ -164,6 +164,30 @@ describe('featureflags', () => {
                 'multivariate-flag': 'variant-1',
             })
         })
+
+        it('onFeatureFlags should return function to unsubscribe the function from onFeatureFlags', () => {
+            let called = false
+
+            const unsubscribe = given.featureFlags.onFeatureFlags((flags, variants) => {
+                called = true
+            })
+            expect(called).toEqual(false)
+
+            given.featureFlags.setAnonymousDistinctId('rando_id')
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+
+            called = false
+
+            unsubscribe()
+            given.featureFlags.setAnonymousDistinctId('rando_id')
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(false)
+        })
     })
 
     describe('reloadFeatureFlags', () => {
