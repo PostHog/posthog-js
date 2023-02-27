@@ -1,3 +1,7 @@
+## 1.48.0 - 2023-02-27
+
+- fix: apply terser plugin to module.js and es.js (#555)
+
 ## 1.47.0 - 2023-02-27
 
 - chore: no-op change to allow version bump (#554)
