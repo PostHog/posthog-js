@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react-hooks'
 import { PostHogProvider } from '../../context'
 import { useFeatureFlagPayload } from '../useFeatureFlagPayload'
 import { useFeatureFlagEnabled } from '../useFeatureFlagEnabled'
-import { useFeatureFlags } from '../useFeatureFlags'
+import { useActiveFeatureFlags } from '../useActiveFeatureFlags'
 
 jest.useFakeTimers()
 
@@ -83,7 +83,7 @@ describe('useFeatureFlagPayload hook', () => {
     })
 
     it('should return the active feature flags', () => {
-        let { result } = renderHook(() => useFeatureFlags(), {
+        let { result } = renderHook(() => useActiveFeatureFlags(), {
             wrapper: given.renderProvider,
         })
         expect(result.current).toEqual(['example_feature_true', 'multivariate_feature', 'example_feature_payload'])

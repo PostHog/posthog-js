@@ -1,13 +1,13 @@
 import * as React from 'react'
-import { renderHook, act } from '@testing-library/react-hooks'
+import { renderHook } from '@testing-library/react-hooks'
 import { PostHogProvider } from '../../context'
-import { useFeatureFlag, usePostHog } from '..'
+import { usePostHog } from '..'
 
 jest.useFakeTimers()
 
 const posthog = { posthog_client: true }
 
-describe('useFeatureFlags hook', () => {
+describe('usePostHog hook', () => {
     given('renderProvider', () => ({ children }) => (
         <PostHogProvider client={given.posthog}>{children}</PostHogProvider>
     ))
