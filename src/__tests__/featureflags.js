@@ -168,7 +168,7 @@ describe('featureflags', () => {
         it('onFeatureFlags should return function to unsubscribe the function from onFeatureFlags', () => {
             let called = false
 
-            const unsubscribe = given.featureFlags.onFeatureFlags((flags, variants) => {
+            const unsubscribe = given.featureFlags.onFeatureFlags(() => {
                 called = true
             })
             expect(called).toEqual(false)
