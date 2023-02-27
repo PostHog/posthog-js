@@ -1,9 +1,9 @@
 import Head from 'next/head'
-import { useFeatureFlag, usePostHog } from 'posthog-js/react'
+import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
 
 export default function Home() {
     const posthog = usePostHog()
-    const result = useFeatureFlag('test')
+    const result = useFeatureFlagEnabled('test')
     return (
         <>
             <Head>

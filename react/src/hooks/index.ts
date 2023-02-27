@@ -1,5 +1,4 @@
 export * from './useFeatureFlagEnabled'
 export * from './useFeatureFlagPayload'
 export * from './useFeatureFlags'
-export * from './useFeatureFlag'
 export * from './usePostHog'
