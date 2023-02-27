@@ -82,7 +82,7 @@ export default [
                 sourcemap: true,
             },
         ],
-        plugins,
+        plugins: [...plugins, terser({ toplevel: true })],
     },
     {
         input: './lib/src/loader-module.d.ts',
