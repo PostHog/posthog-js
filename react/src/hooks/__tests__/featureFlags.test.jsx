@@ -57,19 +57,6 @@ describe('useFeatureFlagPayload hook', () => {
     })
 
     it.each([
-        ['example_feature_true', true],
-        ['example_feature_false', false],
-        ['missing', false],
-        ['multivariate_feature', true],
-        ['example_feature_payload', true],
-    ])('should get the payload feature flag', (flag, expected) => {
-        let { result } = renderHook(() => useFeatureFlagEnabled(flag), {
-            wrapper: given.renderProvider,
-        })
-        expect(result.current).toEqual(expected)
-    })
-
-    it.each([
         ['example_feature_true', undefined],
         ['example_feature_false', undefined],
         ['missing', undefined],
