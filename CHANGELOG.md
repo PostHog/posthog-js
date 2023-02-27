@@ -1,3 +1,24 @@
+## 1.47.0 - 2023-02-27
+
+- chore: no-op change to allow version bump (#554)
+- feat(rrweb): implement rrweb2 dynamic loading on decide (#552)
+
+## 1.46.2 - 2023-02-22
+
+- no-op change to allow version bump (#549)
+- more leniency for envs with 'window' undefined (#541)
+
+## 1.46.1 - 2023-02-21
+
+- chore: Remove Sentry types to reduce clashes (#546)
+- fix: Removed Sentry types from compiled types (#545)
+
+## 1.46.0 - 2023-02-21
+
+- feat: Add optional loading of rrweb2 (#543)
+- feat: Add rrweb2 support (experimental) (#536)
+- chore: upgrade @sentry/types (#539)
+
 ## 1.45.1 - 2023-02-14
 
 - fix: default persons to anonymous (#534)

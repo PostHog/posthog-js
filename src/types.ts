@@ -1,4 +1,4 @@
-import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
+import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'
@@ -137,6 +137,7 @@ export interface SessionRecordingOptions {
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
+    recorderVersion?: 'v1' | 'v2'
 }
 
 export enum Compression {
@@ -199,6 +200,7 @@ export interface DecideResponse {
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
+        recorderVersion?: 'v1' | 'v2'
     }
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */

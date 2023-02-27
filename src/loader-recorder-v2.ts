@@ -1,12 +1,12 @@
-import { version } from 'rrweb/package.json'
+import { version } from 'rrweb2/package.json'
 
-// Same as loader-globals.ts except includes rrweb scripts.
+// Same as loader-globals.ts except includes rrweb2 scripts.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import rrwebRecord from 'rrweb/es/rrweb/packages/rrweb/src/record'
+import rrwebRecord from 'rrweb2/es/rrweb/packages/rrweb/src/record'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugins/console/record'
+import { getRecordConsolePlugin } from 'rrweb2/es/rrweb/packages/rrweb/src/plugins/console/record'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 

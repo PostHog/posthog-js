@@ -1,6 +1,7 @@
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../posthog-persistence'
 import {
     filterDataURLsFromLargeDataObjects,
@@ -30,6 +31,7 @@ export class SessionRecording {
     sessionId: string | null
     receivedDecide: boolean
     rrwebRecord: typeof record | undefined
+    recorderVersion?: string
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -75,16 +77,27 @@ export class SessionRecording {
         return enabled_client_side ?? enabled_server_side
     }
 
+    getRecordingVersion() {
+        const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
+        const recordingVersion_client_side = this.instance.get_config('session_recording')?.recorderVersion
+        return recordingVersion_client_side || recordingVersion_server_side || 'v1'
+    }
+
     afterDecideResponse(response: DecideResponse) {
         this.receivedDecide = true
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
+                [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
             })
         }
         if (response.sessionRecording?.endpoint) {
             this.endpoint = response.sessionRecording?.endpoint
+        }
+
+        if (response.sessionRecording?.recorderVersion) {
+            this.recorderVersion = response.sessionRecording.recorderVersion
         }
         this.startRecordingIfEnabled()
     }
@@ -110,13 +123,16 @@ export class SessionRecording {
         if (typeof Object.assign === 'undefined') {
             return
         }
+        // Nested if block ensures we do not switch recorder versions midway through a recording.
         if (!this.captureStarted && !this.instance.get_config('disable_session_recording')) {
+            const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
             this.captureStarted = true
-            // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is imported), don't load script.
-            // Otherwise, remotely import recorder.js from cdn since it hasn't been loaded
-            if (!this.instance.__loaded_recorder) {
+            // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
+            // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
+            // recorder.js from cdn since it hasn't been loaded.
+            if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
                 loadScript(
-                    this.instance.get_config('api_host') + '/static/recorder.js?v=' + Config.LIB_VERSION,
+                    this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
                     this._onScriptLoaded.bind(this)
                 )
             }

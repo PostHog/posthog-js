@@ -64,5 +64,8 @@
         "setupFilesAfterEnv": [
             "given2/setup"
         ]
+    },
+    "dependencies": {
+        "@sentry/types": "7.37.2"
     }
 }
