@@ -1,3 +1,8 @@
+## 1.47.0 - 2023-02-27
+
+- chore: no-op change to allow version bump (#554)
+- feat(rrweb): implement rrweb2 dynamic loading on decide (#552)
+
 ## 1.46.2 - 2023-02-22
 
 - no-op change to allow version bump (#549)
