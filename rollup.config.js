@@ -4,7 +4,7 @@ import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import dts from 'rollup-plugin-dts'
 import pkg from './package.json'
-import { terser } from 'rollup-plugin-terser'
+import terser from '@rollup/plugin-terser'
 
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
 const plugins = [
@@ -16,6 +16,7 @@ const plugins = [
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
     }),
+    terser({ toplevel: true }),
 ]
 
 export default [
@@ -29,7 +30,7 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: 'src/loader-recorder-v2.ts',
@@ -41,7 +42,7 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: 'src/loader-globals.ts',
@@ -53,7 +54,7 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: 'src/loader-globals-full.ts',
@@ -65,7 +66,7 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins, terser({ toplevel: true })],
+        plugins: [...plugins],
     },
     {
         input: 'src/loader-module.ts',
@@ -82,7 +83,7 @@ export default [
                 sourcemap: true,
             },
         ],
-        plugins,
+        plugins: [...plugins],
     },
     {
         input: './lib/src/loader-module.d.ts',
