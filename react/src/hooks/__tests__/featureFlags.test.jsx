@@ -1,9 +1,7 @@
 import * as React from 'react'
 import { renderHook } from '@testing-library/react-hooks'
 import { PostHogProvider } from '../../context'
-import { useFeatureFlagPayload } from '../useFeatureFlagPayload'
-import { useFeatureFlagEnabled } from '../useFeatureFlagEnabled'
-import { useActiveFeatureFlags } from '../useActiveFeatureFlags'
+import { useFeatureFlagPayload, useFeatureFlagVariantKey, useFeatureFlagEnabled, useActiveFeatureFlags } from '../index'
 
 jest.useFakeTimers()
 
@@ -74,5 +72,17 @@ describe('useFeatureFlagPayload hook', () => {
             wrapper: given.renderProvider,
         })
         expect(result.current).toEqual(['example_feature_true', 'multivariate_feature', 'example_feature_payload'])
+    })
+
+    it.each([
+        ['example_feature_true', true],
+        ['example_feature_false', false],
+        ['missing', undefined],
+        ['multivariate_feature', 'string-value'],
+    ])('should get the feature flag variant key', (flag, expected) => {
+        let { result } = renderHook(() => useFeatureFlagVariantKey(flag), {
+            wrapper: given.renderProvider,
+        })
+        expect(result.current).toEqual(expected)
     })
 })
