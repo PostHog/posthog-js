@@ -165,7 +165,7 @@ export class WebPerformanceObserver {
         this.capturePerformanceEvent(properties)
 
         if (exposesServerTiming(event)) {
-            for (const timing of event.serverTiming) {
+            for (const timing of event.serverTiming || []) {
                 this.capturePerformanceEvent({
                     [PERFORMANCE_EVENTS_MAPPING['timeOrigin']]: timeOrigin,
                     [PERFORMANCE_EVENTS_MAPPING['timestamp']]: Math.floor(timeOrigin + event.startTime),
@@ -173,7 +173,7 @@ export class WebPerformanceObserver {
                     [PERFORMANCE_EVENTS_MAPPING['duration']]: timing.duration,
                     // the spec has a closed list of possible types
                     // https://developer.mozilla.org/en-US/docs/Web/API/PerformanceEntry/entryType
-                    // but we need to know this was a server timing so that we know to
+                    // but, we need to know this was a server timing so that we know to
                     // match it to the appropriate navigation or resource timing
                     // that matching will have to be on timestamp and $current_url
                     [PERFORMANCE_EVENTS_MAPPING['entryType']]: 'serverTiming',
