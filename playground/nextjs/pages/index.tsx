@@ -1,28 +1,25 @@
 import Head from 'next/head'
-import styles from '@/styles/Home.module.css'
-import { useEffect, useState } from 'react'
-import { posthog } from '@/utils/posthog'
+import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
 
 export default function Home() {
-    const [flagValue, setFlagValue] = useState<any>()
-
-    useEffect(() => {
-        posthog?.onFeatureFlags(() => {
-            setFlagValue(posthog?.getFeatureFlag('test'))
-        })
-    }, [])
-
+    const posthog = usePostHog()
+    const result = useFeatureFlagEnabled('test')
     return (
         <>
             <Head>
                 <title>PostHog</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
             </Head>
-            <main className={styles.main}>
-                <div className={styles.description}>
-                    <p>PostHog</p>
-                    <p>Feature flag response: {JSON.stringify(flagValue)}</p>
+            <main>
+                <h1>PostHog React</h1>
+
+                <div className="buttons">
+                    <button onClick={() => posthog?.capture('Clicked button')}>Capture event</button>
+                    <button data-attr="autocapture-button">Autocapture buttons</button>
+                    <button className="ph-no-capture">Ignore certain elements</button>
                 </div>
+
+                <p>Feature flag response: {JSON.stringify(result)}</p>
             </main>
         </>
     )

@@ -1,34 +1,6 @@
-import React, { useContext } from 'react'
-import { PostHogProviderValue } from './PostHogProvider'
+import posthogJs from 'posthog-js'
+import { createContext } from 'react'
 
-// Track the PostHog context in global state to ensure that all consumers of the context
-// are accessing the same context object
-const cache = new Map<typeof React.createContext, React.Context<any>>()
+export type PostHog = typeof posthogJs
 
-/**
- * A helper function that stores the PostHog context in global state
- * @returns The React context that contains the PostHog context
- */
-export function getPostHogContext(): React.Context<any> {
-    let context: React.Context<any> | undefined = cache.get(React.createContext)
-    if (!context) {
-        context = React.createContext<any>({})
-        cache.set(React.createContext, context)
-    }
-    return context
-}
-
-/**
- * An abstraction for consuming the PostHog context
- * @returns The PostHog context object
- */
-export function usePostHogContext(): PostHogProviderValue {
-    const context = useContext(getPostHogContext())
-    if (!context.client) {
-        throw new Error(
-            'No PostHog client instance can be found. ' +
-                'Please ensure that your application is wrapped by `PostHogProvider`.'
-        )
-    }
-    return context
-}
+export const PostHogContext = createContext<{ client?: PostHog }>({ client: undefined })

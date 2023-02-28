@@ -5,14 +5,17 @@ import typescript from 'rollup-plugin-typescript2'
 import packageJson from './package.json'
 
 const plugins = [
+    // Resolve modules from node_modules
     resolve({
         preferBuiltins: false,
         mainFields: ['module', 'main', 'jsnext:main', 'browser'],
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
     }),
+    // Compile typescript to javascript
     typescript({
         useTsconfigDeclarationDir: true,
     }),
+    // Convert commonjs modules to esm
     commonjs(),
 ]
 

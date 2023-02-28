@@ -227,6 +227,10 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers.push(handler)
     }
 
+    removeFeatureFlagsHandler(handler: FeatureFlagsCallback): void {
+        this.featureFlagEventHandlers = this.featureFlagEventHandlers.filter((h) => h !== handler)
+    }
+
     receivedFeatureFlags(response: Partial<DecideResponse>): void {
         this.instance.decideEndpointWasHit = true
         const currentFlags = this.getFlagVariants()
@@ -272,13 +276,15 @@ export class PostHogFeatureFlags {
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
      *                              It'll return a list of feature flags enabled for the user.
+     * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
-    onFeatureFlags(callback: FeatureFlagsCallback): void {
+    onFeatureFlags(callback: FeatureFlagsCallback): () => void {
         this.addFeatureFlagsHandler(callback)
         if (this.instance.decideEndpointWasHit) {
             const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
             callback(flags, flagVariants)
         }
+        return () => this.removeFeatureFlagsHandler(callback)
     }
 
     _prepareFeatureFlagsForCallbacks(): { flags: string[]; flagVariants: Record<string, string | boolean> } {

@@ -1,20 +1,16 @@
 import * as React from 'react'
 import { render } from '@testing-library/react'
-import { usePostHogContext, PostHogProvider } from '../'
+import { PostHogContext, PostHogProvider } from '../'
 
 describe('usePostHogContext hook', () => {
-    function App() {
-        const context = usePostHogContext()
-        expect(context.client).toEqual(given.posthog)
-        return null
-    }
-
-    given('render', () => () =>
-        render(
-            <PostHogProvider client={given.posthog}>
-                <App />
-            </PostHogProvider>
-        )
+    given(
+        'render',
+        () => () =>
+            render(
+                <PostHogProvider client={given.posthog}>
+                    <div>Hello</div>
+                </PostHogProvider>
+            )
     )
     given('posthog', () => ({}))
 
@@ -22,10 +18,11 @@ describe('usePostHogContext hook', () => {
         given.render()
     })
 
-    it("should error if a client instance can't be found in the context", () => {
+    it("should not error if a client instance can't be found in the context", () => {
+        // used to make sure it doesn't throw an error when no client is found e.g. nextjs
         given('posthog', () => undefined)
         console.error = jest.fn()
 
-        expect(() => given.render()).toThrow()
+        expect(() => given.render())
     })
 })

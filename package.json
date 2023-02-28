@@ -35,7 +35,8 @@
     "files": [
         "lib/*",
         "dist/*",
-        "react/dist/*"
+        "react/dist/*",
+        "react/package.json"
     ],
     "dependencies": {
         "fflate": "^0.4.1",
