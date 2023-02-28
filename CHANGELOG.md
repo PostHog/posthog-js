@@ -1,3 +1,7 @@
+## 1.50.0 - 2023-02-28
+
+- feat: react library (#540)
+
 ## 1.49.0 - 2023-02-28
 
 - feat: augment autocapture using data attributes (#551)
