@@ -51,8 +51,8 @@ const autocapture = {
         const props: Properties = {}
 
         _each(elem.attributes, function (attr: Attr) {
-            if (attr.name.startsWith('data-ph-augment-autocapture')) {
-                const propertyKey = attr.name.replace('data-ph-augment-autocapture-', '')
+            if (attr.name.startsWith('data-ph-capture-attribute')) {
+                const propertyKey = attr.name.replace('data-ph-capture-attribute-', '')
                 const propertyValue = attr.value
                 if (propertyKey && propertyValue && shouldCaptureValue(propertyValue)) {
                     props[propertyKey] = propertyValue

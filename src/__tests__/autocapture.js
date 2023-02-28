@@ -117,31 +117,28 @@ describe('Autocapture system', () => {
             div = document.createElement('div')
             div.className = 'class1 class2 class3          ' // Lots of spaces might mess things up
             div.innerHTML = 'my <span>sweet <i>inner</i></span> text'
-            div.setAttribute('data-ph-augment-autocapture-one-on-the-div', 'one')
-            div.setAttribute('data-ph-augment-autocapture-two-on-the-div', 'two')
-            div.setAttribute('data-ph-augment-autocapture-falsey-on-the-div', '0')
-            div.setAttribute('data-ph-augment-autocapture-false-on-the-div', false)
+            div.setAttribute('data-ph-capture-attribute-one-on-the-div', 'one')
+            div.setAttribute('data-ph-capture-attribute-two-on-the-div', 'two')
+            div.setAttribute('data-ph-capture-attribute-falsey-on-the-div', '0')
+            div.setAttribute('data-ph-capture-attribute-false-on-the-div', false)
 
             input = document.createElement('input')
-            input.setAttribute('data-ph-augment-autocapture-on-the-input', 'is on the input')
+            input.setAttribute('data-ph-capture-attribute-on-the-input', 'is on the input')
             input.value = 'test val'
 
             sensitiveInput = document.createElement('input')
             sensitiveInput.value = 'test val'
-            sensitiveInput.setAttribute(
-                'data-ph-augment-autocapture-on-the-sensitive-input',
-                'is on the sensitive-input'
-            )
+            sensitiveInput.setAttribute('data-ph-capture-attribute-on-the-sensitive-input', 'is on the sensitive-input')
             sensitiveInput.className = 'ph-sensitive'
 
             hidden = document.createElement('div')
             hidden.setAttribute('type', 'hidden')
-            hidden.setAttribute('data-ph-augment-autocapture-on-the-hidden', 'is on the hidden')
+            hidden.setAttribute('data-ph-capture-attribute-on-the-hidden', 'is on the hidden')
             hidden.value = 'hidden val'
 
             password = document.createElement('div')
             password.setAttribute('type', 'password')
-            password.setAttribute('data-ph-augment-autocapture-on-the-password', 'is on the password')
+            password.setAttribute('data-ph-capture-attribute-on-the-password', 'is on the password')
             password.value = 'password val'
 
             const divSibling = document.createElement('div')
@@ -562,9 +559,9 @@ describe('Autocapture system', () => {
             autocapture.init(lib)
 
             const elTarget = document.createElement('img')
-            elTarget.setAttribute('data-ph-augment-autocapture-target-augment', 'the target')
+            elTarget.setAttribute('data-ph-capture-attribute-target-augment', 'the target')
             const elParent = document.createElement('span')
-            elParent.setAttribute('data-ph-augment-autocapture-parent-augment', 'the parent')
+            elParent.setAttribute('data-ph-capture-attribute-parent-augment', 'the parent')
             elParent.appendChild(elTarget)
             const elGrandparent = document.createElement('a')
             elGrandparent.setAttribute('href', 'http://test.com')
