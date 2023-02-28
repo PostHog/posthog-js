@@ -1,3 +1,7 @@
+## 1.48.2 - 2023-02-28
+
+- fix: safari iteration error on web performance server timing (#558)
+
 ## 1.48.1 - 2023-02-28
 
 - chore: expose errors (#557)
