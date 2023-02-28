@@ -1,3 +1,8 @@
+## 1.48.1 - 2023-02-28
+
+- chore: expose errors (#557)
+-  try the compressed-size-action GH action (#556)
+
 ## 1.48.0 - 2023-02-27
 
 - fix: apply terser plugin to module.js and es.js (#555)
