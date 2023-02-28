@@ -1,3 +1,7 @@
+## 1.49.0 - 2023-02-28
+
+- feat: augment autocapture using data attributes (#551)
+
 ## 1.48.2 - 2023-02-28
 
 - fix: safari iteration error on web performance server timing (#558)
