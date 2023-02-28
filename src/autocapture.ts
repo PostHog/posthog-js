@@ -42,6 +42,26 @@ const autocapture = {
         }
     },
 
+    _getAugmentPropertiesFromElement: function (elem: Element): Properties {
+        const shouldCaptureEl = shouldCaptureElement(elem)
+        if (!shouldCaptureEl) {
+            return {}
+        }
+
+        const props: Properties = {}
+
+        _each(elem.attributes, function (attr: Attr) {
+            if (attr.name.startsWith('data-ph-capture-attribute')) {
+                const propertyKey = attr.name.replace('data-ph-capture-attribute-', '')
+                const propertyValue = attr.value
+                if (propertyKey && propertyValue && shouldCaptureValue(propertyValue)) {
+                    props[propertyKey] = propertyValue
+                }
+            }
+        })
+        return props
+    },
+
     _getPropertiesFromElement: function (elem: Element, maskInputs: boolean, maskText: boolean): Properties {
         const tag_name = elem.tagName.toLowerCase()
         const props: Properties = {
@@ -163,6 +183,7 @@ const autocapture = {
             }
 
             const elementsJson: Properties[] = []
+            const autocaptureAugmentProperties: Properties = {}
             let href,
                 explicitNoCapture = false
             _each(targetElementList, (el) => {
@@ -188,6 +209,9 @@ const autocapture = {
                         instance.get_config('mask_all_text')
                     )
                 )
+
+                const augmentProperties = this._getAugmentPropertiesFromElement(el)
+                _extend(autocaptureAugmentProperties, augmentProperties)
             })
 
             if (!instance.get_config('mask_all_text')) {
@@ -207,7 +231,8 @@ const autocapture = {
                 {
                     $elements: elementsJson,
                 },
-                this._getCustomProperties(targetElementList)
+                this._getCustomProperties(targetElementList),
+                autocaptureAugmentProperties
             )
 
             instance.capture(eventName, props)

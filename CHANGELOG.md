@@ -1,3 +1,20 @@
+## 1.49.0 - 2023-02-28
+
+- feat: augment autocapture using data attributes (#551)
+
+## 1.48.2 - 2023-02-28
+
+- fix: safari iteration error on web performance server timing (#558)
+
+## 1.48.1 - 2023-02-28
+
+- chore: expose errors (#557)
+-  try the compressed-size-action GH action (#556)
+
+## 1.48.0 - 2023-02-27
+
+- fix: apply terser plugin to module.js and es.js (#555)
+
 ## 1.47.0 - 2023-02-27
 
 - chore: no-op change to allow version bump (#554)

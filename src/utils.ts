@@ -271,9 +271,7 @@ export const _safewrap = function <F extends (...args: any[]) => any = (...args:
             return f.apply(this, args)
         } catch (e) {
             logger.critical('Implementation error. Please turn on debug and contact support@posthog.com.')
-            if (Config.DEBUG) {
-                logger.critical(e)
-            }
+            logger.critical(e)
         }
     } as F
 }
