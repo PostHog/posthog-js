@@ -1,3 +1,8 @@
+## 1.50.1 - 2023-03-01
+
+- feat: allow record canvas (#562)
+- chore: remove old nextjs utils folder (#559)
+
 ## 1.50.0 - 2023-02-28
 
 - feat: react library (#540)
