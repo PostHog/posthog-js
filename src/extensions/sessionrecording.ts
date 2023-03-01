@@ -177,6 +177,7 @@ export class SessionRecording {
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
+            recordCanvas: false,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
