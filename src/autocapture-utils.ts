@@ -326,7 +326,7 @@ export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => 
  */
 export function getDirectAndNestedSpanText(target: Element): string {
     let text = getSafeText(target)
-    text = concatenateStringsWithSpace(text, getNestedSpanText(target))
+    text = concatenateStringsWithSpace([text, getNestedSpanText(target)])
     return shouldCaptureValue(text) ? text : ''
 }
 
@@ -342,10 +342,10 @@ export function getNestedSpanText(target: Element): string {
         if (child && child.nodeType === 1 && child.tagName.toLowerCase() === 'span') {
             const spanText = getSafeText(child)
             if (shouldCaptureValue(spanText)) {
-                text = concatenateStringsWithSpace(text, spanText)
+                text = concatenateStringsWithSpace([text, spanText])
             }
             if (child.children.length > 0) {
-                text = concatenateStringsWithSpace(text, getNestedSpanText(child))
+                text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
             }
         }
     }
@@ -357,6 +357,6 @@ export function getNestedSpanText(target: Element): string {
  * @param {strings} [] - strings to join
  * @returns {string} - joined strings
  */
-export function concatenateStringsWithSpace(...strings: string[]): string {
+export function concatenateStringsWithSpace(strings: string[]): string {
     return strings.filter((string) => string).join(' ')
 }
