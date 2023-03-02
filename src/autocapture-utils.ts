@@ -316,3 +316,31 @@ export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => 
         document.body.appendChild(scriptTag)
     }
 }
+
+/*
+ * Iterate through children of a target element looking for span tags
+ * and return the text content of the span tags, separated by spaces
+ * @param {Element} target - element to check
+ * @returns {string} text content of span tags
+ */
+export function getNestedSpanText(target: Element): string {
+    let text = ''
+    if (target.children.length > 0) {
+        const children = target.children
+        for (const child of children) {
+            if (child && child.nodeType === 1 && child.tagName.toLowerCase() === 'span') {
+                const spanText = getSafeText(child)
+                if (shouldCaptureValue(spanText)) {
+                    text = `${
+                        // if there is already text on the element, add a space
+                        text !== '' ? ' ' : ''
+                    }${spanText}`
+                }
+                if (child.children.length > 0) {
+                    text = `${text}${getNestedSpanText(child)}`
+                }
+            }
+        }
+    }
+    return text
+}
