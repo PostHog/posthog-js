@@ -316,3 +316,49 @@ export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => 
         document.body.appendChild(scriptTag)
     }
 }
+
+/*
+ * Iterate through children of a target element looking for span tags
+ * and return the text content of the span tags, separated by spaces,
+ * along with the direct text content of the target element
+ * @param {Element} target - element to check
+ * @returns {string} text content of the target element and its child span tags
+ */
+export function getDirectAndNestedSpanText(target: Element): string {
+    let text = getSafeText(target)
+    text = concatenateStringsWithSpace([text, getNestedSpanText(target)])
+    return shouldCaptureValue(text) ? text : ''
+}
+
+/*
+ * Iterate through children of a target element looking for span tags
+ * and return the text content of the span tags, separated by spaces
+ * @param {Element} target - element to check
+ * @returns {string} text content of span tags
+ */
+export function getNestedSpanText(target: Element): string {
+    let text = ''
+    if (target.children?.length > 0) {
+        for (const child of target.children) {
+            if (child && child.nodeType === 1 && child.tagName.toLowerCase() === 'span') {
+                const spanText = getSafeText(child)
+                if (shouldCaptureValue(spanText)) {
+                    text = concatenateStringsWithSpace([text, spanText])
+                }
+                if (child.children.length > 0) {
+                    text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
+                }
+            }
+        }
+    }
+    return text
+}
+
+/*
+ * Take a list of strings and join them with spaces, filtering out empty strings
+ * @param {strings} [] - strings to join
+ * @returns {string} - joined strings
+ */
+export function concatenateStringsWithSpace(strings: string[]): string {
+    return strings.filter((s) => s).join(' ')
+}
