@@ -1,3 +1,7 @@
+## 1.50.3 - 2023-03-02
+
+- fix: spans inside buttons (#563)
+
 ## 1.50.2 - 2023-03-02
 
 - fix(bots): add "hubspot" and "crawler" to blocked user agents (#564)
