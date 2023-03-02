@@ -325,20 +325,17 @@ export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => 
  */
 export function getNestedSpanText(target: Element): string {
     let text = ''
-    if (target.children.length > 0) {
-        const children = target.children
-        for (const child of children) {
-            if (child && child.nodeType === 1 && child.tagName.toLowerCase() === 'span') {
-                const spanText = getSafeText(child)
-                if (shouldCaptureValue(spanText)) {
-                    text += `${
-                        // if there is already text on the element, add a space
-                        text !== '' ? ' ' : ''
-                    }${spanText}`
-                }
-                if (child.children.length > 0) {
-                    text += `${text && ' '}${getNestedSpanText(child)}`
-                }
+    for (const child of target?.children || []) {
+        if (child && child.nodeType === 1 && child.tagName.toLowerCase() === 'span') {
+            const spanText = getSafeText(child)
+            if (shouldCaptureValue(spanText)) {
+                text += `${
+                    // if there is already text on the element, add a space
+                    text !== '' ? ' ' : ''
+                }${spanText}`
+            }
+            if (child.children.length > 0) {
+                text += `${text && ' '}${getNestedSpanText(child)}`
             }
         }
     }
