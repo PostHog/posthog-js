@@ -338,14 +338,16 @@ export function getDirectAndNestedSpanText(target: Element): string {
  */
 export function getNestedSpanText(target: Element): string {
     let text = ''
-    for (const child of target?.children || []) {
-        if (child && child.nodeType === 1 && child.tagName.toLowerCase() === 'span') {
-            const spanText = getSafeText(child)
-            if (shouldCaptureValue(spanText)) {
-                text = concatenateStringsWithSpace([text, spanText])
-            }
-            if (child.children.length > 0) {
-                text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
+    if (target.children?.length > 0) {
+        for (const child of target?.children) {
+            if (child && child.nodeType === 1 && child.tagName.toLowerCase() === 'span') {
+                const spanText = getSafeText(child)
+                if (shouldCaptureValue(spanText)) {
+                    text = concatenateStringsWithSpace([text, spanText])
+                }
+                if (child.children.length > 0) {
+                    text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
+                }
             }
         }
     }
@@ -358,5 +360,5 @@ export function getNestedSpanText(target: Element): string {
  * @returns {string} - joined strings
  */
 export function concatenateStringsWithSpace(strings: string[]): string {
-    return strings.filter((string) => string).join(' ')
+    return strings.filter((s) => s).join(' ')
 }
