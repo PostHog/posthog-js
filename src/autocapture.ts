@@ -217,14 +217,13 @@ const autocapture = {
 
             if (!instance.get_config('mask_all_text')) {
                 elementsJson[0]['$el_text'] = getSafeText(target)
-                // if the element is a button or anchor tag, and if there is no direct text on it,
-                // get the span text from any children and include it as the text
-                // property on the parent element
-                if (
-                    !elementsJson[0]['$el_text'] &&
-                    (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button')
-                ) {
-                    elementsJson[0]['$el_text'] = getNestedSpanText(target)
+                // if the element is a button or anchor tag get the span text from any
+                // children and include it as/with the text property on the parent element
+                if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
+                    const additionalText = getNestedSpanText(target)
+                    elementsJson[0]['$el_text'] += `${
+                        elementsJson[0]['$el_text'] && additionalText && ' '
+                    }${additionalText}`
                 }
             }
 
