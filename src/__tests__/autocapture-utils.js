@@ -9,6 +9,7 @@ import {
     loadScript,
     isAngularStyleAttr,
     getNestedSpanText,
+    getDirectAndNestedSpanText,
 } from '../autocapture-utils'
 
 describe(`Autocapture utility functions`, () => {
@@ -378,6 +379,22 @@ describe(`Autocapture utility functions`, () => {
         it('should be safe for non-string attribute names', () => {
             expect(isAngularStyleAttr(1)).toBe(false)
             expect(isAngularStyleAttr(null)).toBe(false)
+        })
+    })
+
+    describe(`getDirectAndNestedSpanText`, () => {
+        it(`should return direct text on the element with no children`, () => {
+            const el = document.createElement(`button`)
+            el.innerHTML = `test`
+            expect(getDirectAndNestedSpanText(el)).toBe('test')
+        })
+        it(`should return the direct text on the el and text from child spans`, () => {
+            const parent = document.createElement(`button`)
+            parent.innerHTML = `test`
+            const child = document.createElement(`span`)
+            child.innerHTML = `test 1`
+            parent.appendChild(child)
+            expect(getDirectAndNestedSpanText(parent)).toBe('test test 1')
         })
     })
 
