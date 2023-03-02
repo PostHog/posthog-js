@@ -1,3 +1,7 @@
+## 1.50.2 - 2023-03-02
+
+- fix(bots): add "hubspot" and "crawler" to blocked user agents (#564)
+
 ## 1.50.1 - 2023-03-01
 
 - feat: allow record canvas (#562)
