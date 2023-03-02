@@ -8,6 +8,7 @@ import {
     shouldCaptureValue,
     loadScript,
     isAngularStyleAttr,
+    getNestedSpanText,
 } from '../autocapture-utils'
 
 describe(`Autocapture utility functions`, () => {
@@ -377,6 +378,34 @@ describe(`Autocapture utility functions`, () => {
         it('should be safe for non-string attribute names', () => {
             expect(isAngularStyleAttr(1)).toBe(false)
             expect(isAngularStyleAttr(null)).toBe(false)
+        })
+    })
+
+    describe(`getNestedSpanText`, () => {
+        it(`should return an empty string if there are no children or text`, () => {
+            const el = document.createElement(`button`)
+            expect(getNestedSpanText(el)).toBe('')
+        })
+        it(`should return the text from sibling child spans`, () => {
+            const parent = document.createElement(`button`)
+            const child1 = document.createElement(`span`)
+            child1.innerHTML = `test`
+            parent.appendChild(child1)
+            expect(getNestedSpanText(parent)).toBe('test')
+            const child2 = document.createElement(`span`)
+            child2.innerHTML = `test2`
+            parent.appendChild(child2)
+            expect(getNestedSpanText(parent)).toBe('test test2')
+        })
+        it(`should return the text from nested child spans`, () => {
+            const parent = document.createElement(`button`)
+            const child1 = document.createElement(`span`)
+            child1.innerHTML = `test`
+            parent.appendChild(child1)
+            const child2 = document.createElement(`span`)
+            child2.innerHTML = `test2`
+            child1.appendChild(child2)
+            expect(getNestedSpanText(parent)).toBe('test test2')
         })
     })
 })
