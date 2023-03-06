@@ -31,13 +31,6 @@ export function PostHogProvider({
             )
         }
 
-        if (posthog) {
-            console.warn(
-                'This provider has already been initialized. You should only initialize it once at the root of your app.'
-            )
-            return
-        }
-
         if (client) {
             setPosthog(client)
         } else if (apiKey) {
