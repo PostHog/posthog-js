@@ -235,7 +235,6 @@ describe('SessionRecording', () => {
                 slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],
-                recordCanvas: false,
                 inlineStylesheet: true,
             })
         })

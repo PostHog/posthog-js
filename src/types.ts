@@ -138,7 +138,6 @@ export interface SessionRecordingOptions {
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recorderVersion?: 'v1' | 'v2'
-    recordCanvas?: boolean
 }
 
 export enum Compression {
