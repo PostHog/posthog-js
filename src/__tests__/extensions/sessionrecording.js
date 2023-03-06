@@ -50,6 +50,7 @@ describe('SessionRecording', () => {
         autocapture: false, // Assert that session recording works even if `autocapture = false`
         session_recording: {
             maskAllInputs: false,
+            recordCanvas: true,
             someUnregisteredProp: 'abc',
             recorderVersion: given.recorder_version_client_side,
         },
@@ -235,7 +236,6 @@ describe('SessionRecording', () => {
                 slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],
-                recordCanvas: false,
                 inlineStylesheet: true,
             })
         })
