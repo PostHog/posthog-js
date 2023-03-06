@@ -1,3 +1,8 @@
+## 1.50.4 - 2023-03-06
+
+- chore: Revert canvas recording option (#567)
+- tolerate undefined target (#565)
+
 ## 1.50.3 - 2023-03-02
 
 - fix: spans inside buttons (#563)
