@@ -31,6 +31,10 @@ export function PostHogProvider({
             )
         }
 
+        if (posthog) {
+            return
+        }
+
         if (client) {
             setPosthog(client)
         } else if (apiKey) {
