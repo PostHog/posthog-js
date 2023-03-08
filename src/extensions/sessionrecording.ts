@@ -123,19 +123,25 @@ export class SessionRecording {
         if (typeof Object.assign === 'undefined') {
             return
         }
-        // Nested if block ensures we do not switch recorder versions midway through a recording.
-        if (!this.captureStarted && !this.instance.get_config('disable_session_recording')) {
-            const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
-            this.captureStarted = true
-            // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
-            // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
-            // recorder.js from cdn since it hasn't been loaded.
-            if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
-                loadScript(
-                    this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
-                    this._onScriptLoaded.bind(this)
-                )
-            }
+
+        // We do not switch recorder versions midway through a recording.
+        if (this.captureStarted || this.instance.get_config('disable_session_recording')) {
+            return
+        }
+
+        this.captureStarted = true
+
+        const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
+
+        // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
+        // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
+        // recorder.js from cdn since it hasn't been loaded.
+        if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
+            loadScript(
+                this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
+                this._onScriptLoaded.bind(this)
+            )
+        } else {
             this._onScriptLoaded()
         }
     }
