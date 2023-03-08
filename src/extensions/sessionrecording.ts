@@ -200,7 +200,14 @@ export class SessionRecording {
             }
         }
 
-        this.stopRrweb = this.rrwebRecord?.({
+        if (!this.rrwebRecord) {
+            console.warn(
+                'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
+            )
+            return
+        }
+
+        this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 event = truncateLargeConsoleLogs(
                     filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
@@ -234,7 +241,7 @@ export class SessionRecording {
         //   Dropping the initial event is fine (it's always captured by rrweb).
         this.instance._addCaptureHook((eventName) => {
             if (eventName === '$pageview') {
-                this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
+                this.rrwebRecord.addCustomEvent('$pageview', { href: window.location.href })
             }
         })
     }
