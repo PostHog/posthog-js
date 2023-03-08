@@ -17,7 +17,7 @@ import type { record } from 'rrweb/typings'
 import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
 import { loadScript } from '../autocapture-utils'
 import Config from '../config'
-import { logger } from 'utils'
+import { logger } from '../utils'
 
 const BASE_ENDPOINT = '/e/'
 
