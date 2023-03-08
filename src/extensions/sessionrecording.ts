@@ -17,6 +17,7 @@ import type { record } from 'rrweb/typings'
 import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
 import { loadScript } from '../autocapture-utils'
 import Config from '../config'
+import { logger } from '../utils'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -123,19 +124,25 @@ export class SessionRecording {
         if (typeof Object.assign === 'undefined') {
             return
         }
-        // Nested if block ensures we do not switch recorder versions midway through a recording.
-        if (!this.captureStarted && !this.instance.get_config('disable_session_recording')) {
-            const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
-            this.captureStarted = true
-            // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
-            // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
-            // recorder.js from cdn since it hasn't been loaded.
-            if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
-                loadScript(
-                    this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
-                    this._onScriptLoaded.bind(this)
-                )
-            }
+
+        // We do not switch recorder versions midway through a recording.
+        if (this.captureStarted || this.instance.get_config('disable_session_recording')) {
+            return
+        }
+
+        this.captureStarted = true
+
+        const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
+
+        // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
+        // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
+        // recorder.js from cdn since it hasn't been loaded.
+        if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
+            loadScript(
+                this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
+                this._onScriptLoaded.bind(this)
+            )
+        } else {
             this._onScriptLoaded()
         }
     }
@@ -194,7 +201,14 @@ export class SessionRecording {
             }
         }
 
-        this.stopRrweb = this.rrwebRecord?.({
+        if (!this.rrwebRecord) {
+            logger.error(
+                'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
+            )
+            return
+        }
+
+        this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 event = truncateLargeConsoleLogs(
                     filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
@@ -227,8 +241,13 @@ export class SessionRecording {
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
         //   Dropping the initial event is fine (it's always captured by rrweb).
         this.instance._addCaptureHook((eventName) => {
-            if (eventName === '$pageview') {
-                this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
+            // If anything could go wrong here it has the potential to block the main loop so we catch all errors.
+            try {
+                if (eventName === '$pageview') {
+                    this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
+                }
+            } catch (e) {
+                logger.error('Could not add $pageview to rrweb session', e)
             }
         })
     }
