@@ -17,6 +17,7 @@ import type { record } from 'rrweb/typings'
 import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
 import { loadScript } from '../autocapture-utils'
 import Config from '../config'
+import { logger } from 'utils'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -201,7 +202,7 @@ export class SessionRecording {
         }
 
         if (!this.rrwebRecord) {
-            console.warn(
+            logger.error(
                 'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
             )
             return
@@ -240,8 +241,13 @@ export class SessionRecording {
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
         //   Dropping the initial event is fine (it's always captured by rrweb).
         this.instance._addCaptureHook((eventName) => {
-            if (eventName === '$pageview') {
-                this.rrwebRecord.addCustomEvent('$pageview', { href: window.location.href })
+            // If anything could go wrong here it has the potential to block the main loop so we catch all errors.
+            try {
+                if (eventName === '$pageview') {
+                    this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
+                }
+            } catch (e) {
+                logger.error('Could not add $pageview to rrweb session', e)
             }
         })
     }
