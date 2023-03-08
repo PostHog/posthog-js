@@ -22,7 +22,6 @@ import {
     autocaptureCompatibleElements,
     isAngularStyleAttr,
     isDocumentFragment,
-    getDirectAndNestedSpanText,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
@@ -69,11 +68,7 @@ const autocapture = {
             tag_name: tag_name,
         }
         if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
-            if (elem.tagName.toLowerCase() === 'a' || elem.tagName.toLowerCase() === 'button') {
-                props['$el_text'] = getDirectAndNestedSpanText(elem)
-            } else {
-                props['$el_text'] = getSafeText(elem)
-            }
+            props['$el_text'] = getSafeText(elem)
         }
 
         const classes = getClassName(elem)
@@ -220,13 +215,7 @@ const autocapture = {
             })
 
             if (!instance.get_config('mask_all_text')) {
-                // if the element is a button or anchor tag get the span text from any
-                // children and include it as/with the text property on the parent element
-                if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
-                    elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target)
-                } else {
-                    elementsJson[0]['$el_text'] = getSafeText(target)
-                }
+                elementsJson[0]['$el_text'] = getSafeText(target)
             }
 
             if (href) {
