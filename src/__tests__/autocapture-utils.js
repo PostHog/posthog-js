@@ -381,48 +381,4 @@ describe(`Autocapture utility functions`, () => {
             expect(isAngularStyleAttr(null)).toBe(false)
         })
     })
-
-    describe(`getDirectAndNestedSpanText`, () => {
-        it(`should return direct text on the element with no children`, () => {
-            const el = document.createElement(`button`)
-            el.innerHTML = `test`
-            expect(getDirectAndNestedSpanText(el)).toBe('test')
-        })
-        it(`should return the direct text on the el and text from child spans`, () => {
-            const parent = document.createElement(`button`)
-            parent.innerHTML = `test`
-            const child = document.createElement(`span`)
-            child.innerHTML = `test 1`
-            parent.appendChild(child)
-            expect(getDirectAndNestedSpanText(parent)).toBe('test test 1')
-        })
-    })
-
-    describe(`getNestedSpanText`, () => {
-        it(`should return an empty string if there are no children or text`, () => {
-            const el = document.createElement(`button`)
-            expect(getNestedSpanText(el)).toBe('')
-        })
-        it(`should return the text from sibling child spans`, () => {
-            const parent = document.createElement(`button`)
-            const child1 = document.createElement(`span`)
-            child1.innerHTML = `test`
-            parent.appendChild(child1)
-            expect(getNestedSpanText(parent)).toBe('test')
-            const child2 = document.createElement(`span`)
-            child2.innerHTML = `test2`
-            parent.appendChild(child2)
-            expect(getNestedSpanText(parent)).toBe('test test2')
-        })
-        it(`should return the text from nested child spans`, () => {
-            const parent = document.createElement(`button`)
-            const child1 = document.createElement(`span`)
-            child1.innerHTML = `test`
-            parent.appendChild(child1)
-            const child2 = document.createElement(`span`)
-            child2.innerHTML = `test2`
-            child1.appendChild(child2)
-            expect(getNestedSpanText(parent)).toBe('test test2')
-        })
-    })
 })
