@@ -1,3 +1,9 @@
+## 1.50.5 - 2023-03-09
+
+- Update rrweb (#570)
+- fix: Race condition error with loading rrweb (#569)
+- fix: remove warning of duplicate nextjs import (#566)
+
 ## 1.50.4 - 2023-03-06
 
 - chore: Revert canvas recording option (#567)
