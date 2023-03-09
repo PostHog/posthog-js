@@ -1,3 +1,7 @@
+## 1.50.7 - 2023-03-09
+
+- fix: debug return empty string on getNestedSpanText (#573)
+
 ## 1.50.6 - 2023-03-09
 
 - fix: Only call capture snapshot if recording (#572)
