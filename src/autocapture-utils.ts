@@ -324,9 +324,9 @@ export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => 
  * @param {Element} target - element to check
  * @returns {string} text content of the target element and its child span tags
  */
-export function getDirectAndNestedSpanText(target: Element): string {
+export function getDirectAndNestedSpanText(target: Element, getNestedText: (t: Element) => string): string {
     let text = getSafeText(target)
-    text = concatenateStringsWithSpace([text, getNestedSpanText(target)])
+    text = concatenateStringsWithSpace([text, getNestedText(target)])
     return shouldCaptureValue(text) ? text : ''
 }
 
