@@ -353,7 +353,7 @@ export function getNestedSpanText(target: Element): string {
     //     }
     // }
     // return texs
-    return ''
+    return target ? '' : ''
 }
 
 /*
