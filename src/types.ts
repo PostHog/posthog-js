@@ -196,6 +196,7 @@ export interface DecideResponse {
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
+    autocapture?: boolean
     capturePerformance?: boolean
     sessionRecording?: {
         endpoint?: string

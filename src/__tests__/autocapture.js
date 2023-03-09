@@ -2,6 +2,7 @@ import sinon from 'sinon'
 
 import { autocapture } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
+import { AUTOCAPTURE_ENABLED_SERVER_SIDE } from '../posthog-persistence'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
@@ -497,7 +498,12 @@ describe('Autocapture system', () => {
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),
                 },
+                get_property: (property_key) =>
+                    property_key === AUTOCAPTURE_ENABLED_SERVER_SIDE
+                        ? given.$autocapture_enabled_server_side
+                        : undefined,
             }
+            given('$autocapture_enabled_server_side', () => true)
             autocapture.init(lib)
             autocapture.afterDecideResponse(given.decideResponse, lib)
 
@@ -603,7 +609,12 @@ describe('Autocapture system', () => {
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),
                 },
+                get_property: (property_key) =>
+                    property_key === AUTOCAPTURE_ENABLED_SERVER_SIDE
+                        ? given.$autocapture_enabled_server_side
+                        : undefined,
             }
+            given('$autocapture_enabled_server_side', () => true)
             autocapture.init(lib)
             autocapture.afterDecideResponse(given.decideResponse, lib)
 
@@ -1021,6 +1032,8 @@ describe('Autocapture system', () => {
             token: 'testtoken',
             capture: jest.fn(),
             get_distinct_id: () => 'distinctid',
+            get_property: (property_key) =>
+                property_key === AUTOCAPTURE_ENABLED_SERVER_SIDE ? given.$autocapture_enabled_server_side : undefined,
         }))
 
         given('config', () => ({
@@ -1039,6 +1052,7 @@ describe('Autocapture system', () => {
         })
 
         it('should call _addDomEventHandlders if autocapture is true', () => {
+            given('$autocapture_enabled_server_side', () => true)
             given.subject()
 
             expect(autocapture._addDomEventHandlers).toHaveBeenCalled()
@@ -1050,9 +1064,8 @@ describe('Autocapture system', () => {
                 token: 'testtoken',
                 autocapture: false,
             }))
-
+            given('$autocapture_enabled_server_side', () => false)
             given.subject()
-
             expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
@@ -1071,6 +1084,7 @@ describe('Autocapture system', () => {
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
+            given('$autocapture_enabled_server_side', () => true)
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 

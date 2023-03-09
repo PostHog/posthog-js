@@ -27,9 +27,18 @@ import {
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
+import { AUTOCAPTURE_ENABLED_SERVER_SIDE } from './posthog-persistence'
 
 const autocapture = {
     _initializedTokens: [] as string[],
+
+    _isAutocaptureEnabled: false as boolean,
+
+    _setIsAutocaptureEnabled: function (instance: PostHog): void {
+        const enabled_server_side = !!instance.get_property(AUTOCAPTURE_ENABLED_SERVER_SIDE)
+        const enabled_client_side = !!instance.get_config('autocapture')
+        this._isAutocaptureEnabled = enabled_client_side && enabled_server_side
+    },
 
     _previousElementSibling: function (el: Element): Element | null {
         if (el.previousElementSibling) {
@@ -285,10 +294,17 @@ const autocapture = {
     },
 
     afterDecideResponse: function (response: DecideResponse, instance: PostHog): void {
+        this._setIsAutocaptureEnabled(instance)
         const token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
             logger.log('autocapture already initialized for token "' + token + '"')
             return
+        }
+
+        if (instance.persistence) {
+            instance.persistence.register({
+                [AUTOCAPTURE_ENABLED_SERVER_SIDE]: !!response['autocapture'],
+            })
         }
 
         this._initializedTokens.push(token)
@@ -297,7 +313,7 @@ const autocapture = {
             response &&
             response['config'] &&
             response['config']['enable_collect_everything'] &&
-            instance.get_config('autocapture')
+            this._isAutocaptureEnabled
         ) {
             // TODO: delete custom_properties after changeless typescript refactor
             if (response['custom_properties']) {
