@@ -161,6 +161,7 @@ export class SessionRecording {
 
         // Event types FullSnapshot and Meta mean we're already in the process of sending a full snapshot
         if (
+            this.captureStarted &&
             (this.windowId !== windowId || this.sessionId !== sessionId) &&
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1
         ) {
