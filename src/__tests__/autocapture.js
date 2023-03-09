@@ -638,6 +638,47 @@ describe('Autocapture system', () => {
             lib.capture.resetHistory()
         })
 
+        it('should not capture events when get_config returns true but server setting is false', () => {
+            lib = {
+                _prepare_callback: sandbox.spy((callback) => callback),
+                get_config: sandbox.spy(function (key) {
+                    switch (key) {
+                        case 'api_host':
+                            return 'https://test.com'
+                        case 'token':
+                            return 'testtoken'
+                        case 'mask_all_element_attributes':
+                            return false
+                        case 'autocapture':
+                            return true
+                    }
+                }),
+                token: 'testtoken',
+                capture: sandbox.spy(),
+                get_distinct_id() {
+                    return 'distinctid'
+                },
+                toolbar: {
+                    maybeLoadToolbar: jest.fn(),
+                },
+                get_property: (property_key) =>
+                    property_key === AUTOCAPTURE_ENABLED_SERVER_SIDE
+                        ? given.$autocapture_enabled_server_side
+                        : undefined,
+            }
+            given('$autocapture_enabled_server_side', () => false)
+            autocapture.init(lib)
+            autocapture.afterDecideResponse(given.decideResponse, lib)
+
+            const eventElement = document.createElement('a')
+            document.body.appendChild(eventElement)
+
+            expect(lib.capture.callCount).toBe(0)
+            simulateClick(eventElement)
+            expect(lib.capture.callCount).toBe(0)
+            lib.capture.resetHistory()
+        })
+
         it('includes necessary metadata as properties when capturing an event', () => {
             const elTarget = document.createElement('a')
             elTarget.setAttribute('href', 'http://test.com')
