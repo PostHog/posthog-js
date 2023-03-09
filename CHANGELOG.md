@@ -1,3 +1,7 @@
+## 1.50.6 - 2023-03-09
+
+- fix: Only call capture snapshot if recording (#572)
+
 ## 1.50.5 - 2023-03-09
 
 - Update rrweb (#570)
