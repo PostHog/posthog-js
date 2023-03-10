@@ -408,14 +408,14 @@ describe(`Autocapture utility functions`, () => {
             const child1 = document.createElement(`span`)
             child1.innerHTML = `test`
             parent.appendChild(child1)
-            // expect(getNestedSpanText(parent)).toBe('test')
+            expect(getNestedSpanText(parent)).toBe('test')
             const child2 = document.createElement(`span`)
             child2.innerHTML = `test2`
             parent.appendChild(child2)
-            // expect(getNestedSpanText(parent)).toBe('test test2')
-            expect(getNestedSpanText(parent)).toBe('')
+            expect(getNestedSpanText(parent)).toBe('test test2')
         })
         it(`should return the text from nested child spans`, () => {
+            // for debugging, this currently does not go multiple levels deep
             const parent = document.createElement(`button`)
             const child1 = document.createElement(`span`)
             child1.innerHTML = `test`
@@ -424,7 +424,7 @@ describe(`Autocapture utility functions`, () => {
             child2.innerHTML = `test2`
             child1.appendChild(child2)
             // expect(getNestedSpanText(parent)).toBe('test test2')
-            expect(getNestedSpanText(parent)).toBe('')
+            expect(getNestedSpanText(parent)).toBe('test')
         })
     })
 })
