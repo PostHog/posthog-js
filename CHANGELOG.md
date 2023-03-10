@@ -1,3 +1,7 @@
+## 1.50.8 - 2023-03-10
+
+- reinstate getNestedSpanText, but with no recursion (#576)
+
 ## 1.50.7 - 2023-03-09
 
 - fix: debug return empty string on getNestedSpanText (#573)
