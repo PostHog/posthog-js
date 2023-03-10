@@ -337,23 +337,21 @@ export function getDirectAndNestedSpanText(target: Element): string {
  * @returns {string} text content of span tags
  */
 export function getNestedSpanText(target: Element): string {
-    // for temporary debugging, we are just returning an empty string from this function
-    // let text = ''
-    // if (target && target.children?.length > 0) {
-    //     for (const child of target.children) {
-    //         if (child && child.nodeType === 1 && child.tagName.toLowerCase() === 'span') {
-    //             const spanText = getSafeText(child)
-    //             if (shouldCaptureValue(spanText)) {
-    //                 text = concatenateStringsWithSpace([text, spanText])
-    //             }
-    //             if (child.children.length > 0) {
-    //                 text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
-    //             }
-    //         }
-    //     }
-    // }
-    // return texs
-    return target ? '' : ''
+    let text = ''
+    if (target && target.children?.length > 0) {
+        for (const child of target.children) {
+            if (child && child.nodeType === 1 && child.tagName?.toLowerCase() === 'span') {
+                const spanText = getSafeText(child)
+                if (shouldCaptureValue(spanText)) {
+                    text = concatenateStringsWithSpace([text, spanText])
+                }
+                // if (child.children.length > 0) {
+                //     text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
+                // }
+            }
+        }
+    }
+    return text
 }
 
 /*
