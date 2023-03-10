@@ -27,7 +27,7 @@ import {
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
-import { AUTOCAPTURE_ENABLED_SERVER_SIDE } from './posthog-persistence'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './posthog-persistence'
 
 const autocapture = {
     _initializedTokens: [] as string[],
@@ -35,9 +35,9 @@ const autocapture = {
     _isAutocaptureEnabled: false as boolean,
 
     _setIsAutocaptureEnabled: function (instance: PostHog): void {
-        const enabled_server_side = !!instance.get_property(AUTOCAPTURE_ENABLED_SERVER_SIDE)
+        const disabled_server_side = !!instance.get_property(AUTOCAPTURE_DISABLED_SERVER_SIDE)
         const enabled_client_side = !!instance.get_config('autocapture')
-        this._isAutocaptureEnabled = enabled_client_side && enabled_server_side
+        this._isAutocaptureEnabled = enabled_client_side && !disabled_server_side
     },
 
     _previousElementSibling: function (el: Element): Element | null {
@@ -303,7 +303,7 @@ const autocapture = {
 
         if (instance.persistence) {
             instance.persistence.register({
-                [AUTOCAPTURE_ENABLED_SERVER_SIDE]: !!response['autocapture'],
+                [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
             })
         }
 
