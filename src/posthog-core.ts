@@ -21,7 +21,7 @@ import {
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
+import { ALIAS_ID_KEY, AUTOCAPTURE_DISABLED_SERVER_SIDE, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
@@ -206,6 +206,7 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
     instance.webPerformance.startObservingIfEnabled()
 
     instance.__autocapture = instance.get_config('autocapture')
+    autocapture._setIsAutocaptureEnabled(instance)
     if (autocapture._isAutocaptureEnabled) {
         instance.__autocapture = instance.get_config('autocapture')
         const num_buckets = 100
