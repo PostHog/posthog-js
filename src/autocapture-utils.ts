@@ -361,5 +361,5 @@ export function getNestedSpanText(target: Element): string {
  */
 export function concatenateStringsWithSpace(strings: string[]): string {
     // return strings.filter((s) => s).join(' ')
-    return strings ? '' : ''
+    return strings[0]
 }
