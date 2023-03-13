@@ -345,9 +345,9 @@ export function getNestedSpanText(target: Element): string {
                 if (shouldCaptureValue(spanText)) {
                     text = concatenateStringsWithSpace([text, spanText])
                 }
-                // if (child.children.length > 0) {
-                //     text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
-                // }
+                if (child.children.length > 0) {
+                    text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
+                }
             }
         }
     }
@@ -360,5 +360,6 @@ export function getNestedSpanText(target: Element): string {
  * @returns {string} - joined strings
  */
 export function concatenateStringsWithSpace(strings: string[]): string {
-    return strings.filter((s) => s).join(' ')
+    // return strings.filter((s) => s).join(' ')
+    return strings[0]
 }
