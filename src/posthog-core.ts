@@ -206,7 +206,8 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
     instance.webPerformance.startObservingIfEnabled()
 
     instance.__autocapture = instance.get_config('autocapture')
-    if (instance.get_config('autocapture')) {
+    autocapture._setIsAutocaptureEnabled(instance)
+    if (autocapture._isAutocaptureEnabled) {
         instance.__autocapture = instance.get_config('autocapture')
         const num_buckets = 100
         const num_enabled_buckets = 100

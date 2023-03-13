@@ -2,6 +2,7 @@ import sinon from 'sinon'
 import { autocapture } from '../autocapture'
 import { decideCompression, compressData } from '../compression'
 import { Decide } from '../decide'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../posthog-persistence'
 
 describe('decideCompression()', () => {
     given('subject', () => decideCompression(given.compressionSupport))
@@ -96,8 +97,13 @@ describe('Payload Compression', () => {
                     receivedFeatureFlags: jest.fn(),
                 },
                 _hasBootstrappedFeatureFlags: jest.fn(),
+                get_property: (property_key) =>
+                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE
+                        ? given.$autocapture_disabled_server_side
+                        : undefined,
             }
         })
+        given('$autocapture_disabled_server_side', () => false)
 
         afterEach(() => {
             sandbox.restore()
