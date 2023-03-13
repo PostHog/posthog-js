@@ -11,7 +11,7 @@ env:
 
 jobs:
   browsers:
-    name: Test on ${{ matix.name }}
+    name: Test on ${{ matrix.name }}
     runs-on: ubuntu-latest
 
     strategy:
@@ -43,5 +43,5 @@ jobs:
       - name: Set up posthog-js
         run: yarn && yarn build-rollup
 
-      - name: Run ${{ matix.name }} test
+      - name: Run ${{ matrix.name }} test
         run: npx testcafe "browserstack:${{ matrix.browserstack }}" testcafe/*.spec.js
