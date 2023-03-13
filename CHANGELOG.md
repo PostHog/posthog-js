@@ -1,3 +1,8 @@
+## 1.50.9 - 2023-03-13
+
+- fix: debug nested span text (part 2) (#577)
+- feat: use autocapture setting from decide (#575)
+
 ## 1.50.8 - 2023-03-10
 
 - reinstate getNestedSpanText, but with no recursion (#576)
