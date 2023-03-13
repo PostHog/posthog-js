@@ -11,8 +11,23 @@ env:
 
 jobs:
   browsers:
-    name: Test on Chrome, IE11, and Safari
+    name: Test on ${{ matix.name }}
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix: 
+        browserstack:
+          - chrome
+          - ie
+          - safari
+        include:
+          - browserstack: chrome
+            name: Chrome
+          - browserstack: ie
+            name: IE11
+          - browserstack: safari
+            name: Safari
+
     steps:
       - name: Check out posthog-js
         uses: actions/checkout@v2
@@ -28,11 +43,5 @@ jobs:
       - name: Set up posthog-js
         run: yarn && yarn build-rollup
 
-      - name: Run chrome test
-        run: npx testcafe "browserstack:chrome" testcafe/*.spec.js
-
-      - name: Run ie11 test
-        run: npx testcafe "browserstack:ie" testcafe/*.spec.js
-
-      - name: Run safari test
-        run: npx testcafe "browserstack:safari" testcafe/*.spec.js
+      - name: Run ${{ matix.name }} test
+        run: npx testcafe "browserstack:${{ matrix.browserstack }}" testcafe/*.spec.js
