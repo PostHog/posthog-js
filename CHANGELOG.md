@@ -1,3 +1,7 @@
+## 1.51.1 - 2023-03-14
+
+- fix: debug nested span text, part 3 (#582)
+
 ## 1.51.0 - 2023-03-14
 
 - added types for PostHog provider `options` (#581)
