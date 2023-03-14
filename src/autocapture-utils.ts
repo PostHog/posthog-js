@@ -338,7 +338,7 @@ export function getDirectAndNestedSpanText(target: Element): string {
  */
 export function getNestedSpanText(target: Element): string {
     let text = ''
-    if (target && target.children?.length > 0) {
+    if (target && target.nodeType === 1 && target.children?.length > 0) {
         for (const child of target.children) {
             if (child && child.nodeType === 1 && child.tagName?.toLowerCase() === 'span') {
                 const spanText = getSafeText(child)
@@ -360,6 +360,5 @@ export function getNestedSpanText(target: Element): string {
  * @returns {string} - joined strings
  */
 export function concatenateStringsWithSpace(strings: string[]): string {
-    // return strings.filter((s) => s).join(' ')
-    return strings[0]
+    return strings.filter((s) => s).join(' ')
 }
