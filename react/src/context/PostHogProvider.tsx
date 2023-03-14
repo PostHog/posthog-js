@@ -1,4 +1,4 @@
-import posthogJs from 'posthog-js'
+import posthogJs, { PostHogConfig } from 'posthog-js'
 
 import * as React from 'react'
 
@@ -14,7 +14,7 @@ export function PostHogProvider({
     children?: React.ReactNode
     client?: PostHog | undefined
     apiKey?: string | undefined
-    options?: any | undefined
+    options?: Partial<PostHogConfig> | undefined
 }) {
     const [posthog, setPosthog] = useState<PostHog | undefined>(client)
 
@@ -41,7 +41,7 @@ export function PostHogProvider({
             posthogJs.init(apiKey, options)
             setPosthog(posthogJs)
         }
-    }, [client, apiKey, options])
+    }, [posthog, client, apiKey, options])
 
     return <PostHogContext.Provider value={{ client: posthog }}>{children}</PostHogContext.Provider>
 }
