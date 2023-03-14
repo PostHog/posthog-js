@@ -1,3 +1,8 @@
+## 1.51.0 - 2023-03-14
+
+- added types for PostHog provider `options` (#581)
+- ci(testcafe): run browser tests in parallel (#579)
+
 ## 1.50.9 - 2023-03-13
 
 - fix: debug nested span text (part 2) (#577)
