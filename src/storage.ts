@@ -67,7 +67,7 @@ export const cookieStore: PersistentStore = {
                 '=' +
                 encodeURIComponent(JSON.stringify(value)) +
                 expires +
-                '; SameSite=None; path=/' +
+                '; SameSite=Lax; path=/' +
                 cdomain +
                 secure
             document.cookie = new_cookie_val
