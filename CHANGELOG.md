@@ -1,3 +1,7 @@
+## 1.51.2 - 2023-03-15
+
+- fix: Catch fullsnapshot error (#583)
+
 ## 1.51.1 - 2023-03-14
 
 - fix: debug nested span text, part 3 (#582)
