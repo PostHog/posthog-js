@@ -63,7 +63,13 @@ export const cookieStore: PersistentStore = {
             }
 
             const new_cookie_val =
-                name + '=' + encodeURIComponent(JSON.stringify(value)) + expires + '; path=/' + cdomain + secure
+                name +
+                '=' +
+                encodeURIComponent(JSON.stringify(value)) +
+                expires +
+                '; SameSite=Lax; path=/' +
+                cdomain +
+                secure
             document.cookie = new_cookie_val
             return new_cookie_val
         } catch (err) {
