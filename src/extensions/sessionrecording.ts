@@ -165,7 +165,12 @@ export class SessionRecording {
             (this.windowId !== windowId || this.sessionId !== sessionId) &&
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1
         ) {
-            this.rrwebRecord?.takeFullSnapshot()
+            try {
+                this.rrwebRecord?.takeFullSnapshot()
+            } catch (e) {
+                // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
+                logger.error('Error taking full snapshot.', e)
+            }
         }
         this.windowId = windowId
         this.sessionId = sessionId
