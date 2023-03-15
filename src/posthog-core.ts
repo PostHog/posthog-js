@@ -19,7 +19,6 @@ import {
     _eachArray,
 } from './utils'
 import { autocapture } from './autocapture'
-import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
@@ -250,7 +249,6 @@ export class PostHog {
     persistence: PostHogPersistence
     sessionManager: SessionIdManager
     pageViewIdManager: PageViewIdManager
-    people: PostHogPeople
     featureFlags: PostHogFeatureFlags
     feature_flags: PostHogFeatureFlags
     toolbar: Toolbar
@@ -272,6 +270,12 @@ export class PostHog {
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
 
+    /** DEPRECATED: We keep this to support existing usage but now one should just call .identify */
+    people: {
+        set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
+        set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
+    }
+
     constructor() {
         this.config = defaultConfig()
         this.compression = {}
@@ -284,7 +288,7 @@ export class PostHog {
         this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
-        this.people = new PostHogPeople(this)
+
         this.featureFlags = new PostHogFeatureFlags(this)
         this.feature_flags = this.featureFlags
         this.toolbar = new Toolbar(this)
@@ -296,6 +300,20 @@ export class PostHog {
         this._retryQueue = undefined as any
         this.persistence = undefined as any
         this.sessionManager = undefined as any
+
+        // NOTE: See the property definition for deprecation notice
+        this.people = {
+            set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
+                const setProps = typeof prop === 'string' ? { [prop]: to } : prop
+                this.identify(this.get_distinct_id(), setProps)
+                callback?.({})
+            },
+            set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
+                const setProps = typeof prop === 'string' ? { [prop]: to } : prop
+                this.identify(this.get_distinct_id(), undefined, setProps)
+                callback?.({})
+            },
+        }
     }
 
     // Initialization methods
@@ -1112,13 +1130,15 @@ export class PostHog {
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
-        } else {
-            if (userPropertiesToSet) {
-                this.people.set(userPropertiesToSet)
-            }
-            if (userPropertiesToSetOnce) {
-                this.people.set_once(userPropertiesToSetOnce)
-            }
+        } else if (userPropertiesToSet || userPropertiesToSetOnce) {
+            // If the distinct_id is not changing, but we have user properties to set, send an $identify event
+            this.capture(
+                '$identify',
+                {
+                    distinct_id: new_distinct_id,
+                },
+                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
+            )
         }
 
         // Reload active feature flags if the user identity changes.
