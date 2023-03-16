@@ -331,7 +331,7 @@ export class PostHog {
         const instance: PostHog = create_mplib(token, config, name)
         posthog_master[name] = instance
         if (instance.__init_promise) {
-            instance.__init_promise.then(instance._loaded)
+            instance.__init_promise.then(instance._loaded.bind(instance))
         } else {
             console.warn('posthog.__init_promise was not set. This is likely a bug. Please report to PostHog')
         }
@@ -1785,7 +1785,7 @@ const override_ph_init_func = function () {
                     instances[name] =
                         create_mplib(token || '', config || {}, name))
                 if (instance.__init_promise) {
-                    instance.__init_promise.then(instance._loaded)
+                    instance.__init_promise.then(instance._loaded.bind(instance))
                 } else {
                     console.warn('posthog.__init_promise was not set. This is likely a bug. Please report to PostHog')
                 }
@@ -1801,7 +1801,7 @@ const override_ph_init_func = function () {
                 // intialize the main posthog lib
                 instance = create_mplib(token, config || {}, PRIMARY_INSTANCE_NAME)
                 if (instance.__init_promise) {
-                    instance.__init_promise.then(instance._loaded)
+                    instance.__init_promise.then(instance._loaded.bind(instance))
                 } else {
                     console.warn('posthog.__init_promise was not set. This is likely a bug. Please report to PostHog')
                 }
@@ -1876,7 +1876,7 @@ export function init_from_snippet(): void {
     // Fire loaded events after updating the window's posthog object
     _each(instances, function (instance) {
         if (instance.__init_promise) {
-            instance.__init_promise.then(instance._loaded)
+            instance.__init_promise.then(instance._loaded.bind(instance))
         } else {
             console.warn('posthog.__init_promise was not set. This is likely a bug. Please report to PostHog')
         }
