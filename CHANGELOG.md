@@ -1,3 +1,8 @@
+## 1.51.3 - 2023-03-17
+
+- try/catch the bit that fails so we don't just eject the element (#585)
+- fix(persistence): set SameSite=None explicitly (#578)
+
 ## 1.51.2 - 2023-03-15
 
 - fix: Catch fullsnapshot error (#583)
