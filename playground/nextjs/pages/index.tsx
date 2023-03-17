@@ -1,4 +1,5 @@
 import Head from 'next/head'
+import Link from 'next/link'
 import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
 
 export default function Home() {
@@ -20,6 +21,10 @@ export default function Home() {
                 </div>
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>
+
+                <Link href="/iframe">Go to Iframe</Link>
+                <br />
+                <Link href="/canvas">Go to Canvas</Link>
             </main>
         </>
     )
