@@ -245,6 +245,7 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
 export class PostHog {
     __loaded: boolean
     __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
+    __init_promise: Promise<void> | null // Promise to handle deferring calling `loaded` until init is complete. Null if _init hasn't been called yet.
     config: PostHogConfig
 
     persistence: PostHogPersistence
@@ -282,6 +283,7 @@ export class PostHog {
         this.__request_queue = []
         this.__loaded = false
         this.__loaded_recorder_version = undefined
+        this.__init_promise = null
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
         this.people = new PostHogPeople(this)
@@ -328,7 +330,11 @@ export class PostHog {
 
         const instance: PostHog = create_mplib(token, config, name)
         posthog_master[name] = instance
-        instance._loaded()
+        if (instance.__init_promise) {
+            instance.__init_promise.then(instance._loaded.bind(instance))
+        } else {
+            console.warn('posthog.__init_promise was not set. This is likely a bug. Please report to PostHog')
+        }
 
         return instance
     }
@@ -344,6 +350,7 @@ export class PostHog {
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
+        const initPromises: Promise<any>[] = []
 
         this.set_config(
             _extend({}, defaultConfig(), config, {
@@ -387,7 +394,7 @@ export class PostHog {
                 this.persistence.set_user_state('identified')
             }
 
-            config.segment.register(this.segmentIntegration())
+            initPromises.push(config.segment.register(this.segmentIntegration()))
         }
 
         if (config.bootstrap?.distinctID !== undefined) {
@@ -440,6 +447,10 @@ export class PostHog {
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
         window.addEventListener &&
             window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
+
+        // Set a promise that will resolve when all init steps are done.
+        // Discarding the result.
+        this.__init_promise = Promise.all(initPromises).then(() => {})
     }
 
     // Private methods
@@ -1769,8 +1780,15 @@ const override_ph_init_func = function () {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_mplib(token || '', config || {}, name)
-                posthog_master[name]._loaded()
+                const instance =
+                    (posthog_master[name] =
+                    instances[name] =
+                        create_mplib(token || '', config || {}, name))
+                if (instance.__init_promise) {
+                    instance.__init_promise.then(instance._loaded.bind(instance))
+                } else {
+                    console.warn('posthog.__init_promise was not set. This is likely a bug. Please report to PostHog')
+                }
             }
             return posthog_master[name]
         } else {
@@ -1782,7 +1800,11 @@ const override_ph_init_func = function () {
             } else if (token) {
                 // intialize the main posthog lib
                 instance = create_mplib(token, config || {}, PRIMARY_INSTANCE_NAME)
-                instance._loaded()
+                if (instance.__init_promise) {
+                    instance.__init_promise.then(instance._loaded.bind(instance))
+                } else {
+                    console.warn('posthog.__init_promise was not set. This is likely a bug. Please report to PostHog')
+                }
                 instances[PRIMARY_INSTANCE_NAME] = instance
             }
 
@@ -1853,7 +1875,11 @@ export function init_from_snippet(): void {
 
     // Fire loaded events after updating the window's posthog object
     _each(instances, function (instance) {
-        instance._loaded()
+        if (instance.__init_promise) {
+            instance.__init_promise.then(instance._loaded.bind(instance))
+        } else {
+            console.warn('posthog.__init_promise was not set. This is likely a bug. Please report to PostHog')
+        }
     })
 
     add_dom_loaded_handler()
