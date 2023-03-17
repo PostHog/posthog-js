@@ -394,7 +394,7 @@ describe(`Autocapture utility functions`, () => {
             const child = document.createElement(`span`)
             child.innerHTML = `test 1`
             parent.appendChild(child)
-            // expect(getDirectAndNestedSpanText(parent)).toBe('test test 1')
+            expect(getDirectAndNestedSpanText(parent)).toBe('test test 1')
         })
     })
 
@@ -415,7 +415,6 @@ describe(`Autocapture utility functions`, () => {
             expect(getNestedSpanText(parent)).toBe('test test2')
         })
         it(`should return the text from nested child spans`, () => {
-            // for debugging, this currently does not go multiple levels deep
             const parent = document.createElement(`button`)
             const child1 = document.createElement(`span`)
             child1.innerHTML = `test`

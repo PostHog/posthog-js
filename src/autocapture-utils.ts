@@ -341,12 +341,16 @@ export function getNestedSpanText(target: Element): string {
     if (target && target.nodeType === 1 && target.children?.length > 0) {
         for (const child of target.children) {
             if (child && child.nodeType === 1 && child.tagName?.toLowerCase() === 'span') {
-                const spanText = getSafeText(child)
-                if (shouldCaptureValue(spanText)) {
-                    text = concatenateStringsWithSpace([text, spanText])
-                }
-                if (child.children.length > 0) {
-                    text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
+                try {
+                    const spanText = getSafeText(child)
+                    if (shouldCaptureValue(spanText)) {
+                        text = concatenateStringsWithSpace([text, spanText])
+                    }
+                    if (child.children.length > 0) {
+                        text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
+                    }
+                } catch (e) {
+                    console.error(e)
                 }
             }
         }
