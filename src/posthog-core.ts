@@ -55,6 +55,7 @@ import {
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
+import 'core-js/modules/es.promise' // We use `Promise` in this file to help with initialization logic. This polyfill is needed for IE11.
 
 /*
 SIMPLE STYLE GUIDE:
