@@ -1,3 +1,7 @@
+## 1.51.4 - 2023-03-20
+
+- fix: fewer moving parts more like safe text (#590)
+
 ## 1.51.3 - 2023-03-17
 
 - try/catch the bit that fails so we don't just eject the element (#585)
