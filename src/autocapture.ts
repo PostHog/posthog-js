@@ -78,7 +78,7 @@ const autocapture = {
             tag_name: tag_name,
         }
         if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
-            if (elem.tagName.toLowerCase() === 'a' || elem.tagName.toLowerCase() === 'button') {
+            if (tag_name.toLowerCase() === 'a' || tag_name.toLowerCase() === 'button') {
                 props['$el_text'] = getDirectAndNestedSpanText(elem)
             } else {
                 props['$el_text'] = getSafeText(elem)
