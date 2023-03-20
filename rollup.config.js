@@ -1,21 +1,37 @@
 import babel from '@rollup/plugin-babel'
 import json from '@rollup/plugin-json'
-import resolve from '@rollup/plugin-node-resolve'
+import { nodeResolve } from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import dts from 'rollup-plugin-dts'
 import pkg from './package.json'
 import terser from '@rollup/plugin-terser'
+import commonjs from '@rollup/plugin-commonjs'
 
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
 const plugins = [
-    json(),
-    resolve({ browser: true, modulesOnly: true }),
+    json(), // Needed for rrweb import of `package.json`
+    nodeResolve({ browser: true }),
+    commonjs(),
     typescript({ sourceMap: true }),
     babel({
         extensions,
         babelHelpers: 'bundled',
-        presets: ['@babel/preset-env'],
+        presets: [
+            [
+                '@babel/preset-env',
+                {
+                    debug: true,
+                    spec: true,
+                    modules: false,
+                    forceAllTransforms: true,
+                    useBuiltIns: 'usage',
+                    corejs: 3,
+                },
+            ],
+        ],
     }),
+    nodeResolve(),
+    commonjs(), // `core-js` is distributed as a CommonJS module
     terser({ toplevel: true }),
 ]
 
