@@ -39,6 +39,7 @@
         "react/package.json"
     ],
     "dependencies": {
+        "core-js": "^3.29.1",
         "fflate": "^0.4.1",
         "rrweb-snapshot": "^1.1.14"
     },
