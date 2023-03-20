@@ -3,8 +3,9 @@ import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import dts from 'rollup-plugin-dts'
-import pkg from './package.json'
+import pkg from './package.json' assert { type: 'json', integrity: 'sha384-ABC123' }
 import terser from '@rollup/plugin-terser'
+import commonjs from '@rollup/plugin-commonjs'
 
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
 const plugins = [
@@ -14,8 +15,26 @@ const plugins = [
     babel({
         extensions,
         babelHelpers: 'bundled',
-        presets: ['@babel/preset-env'],
+        presets: [
+            [
+                '@babel/preset-env',
+                {
+                    debug: true,
+                    // We are targetting ES5, but want to support developing
+                    // using modern browser features. So we use the "usage"
+                    // option, which will only include polyfills from `corejs`
+                    // for features that are actually used.
+                    useBuiltIns: 'usage',
+                    corejs: '3.29',
+                    // Rollup will handle module transformations, so we don't
+                    // want bable to do anything.
+                    modules: false,
+                },
+            ],
+        ],
     }),
+    resolve(),
+    commonjs(),
     terser({ toplevel: true }),
 ]
 
