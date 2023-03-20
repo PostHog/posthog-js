@@ -338,7 +338,7 @@ export function getDirectAndNestedSpanText(target: Element): string {
  */
 export function getNestedSpanText(target: Element): string {
     let text = ''
-    if (target && target.nodeType === 1 && target.childNodes && target.childNodes.length) {
+    if (target && target.childNodes && target.childNodes.length) {
         _each(target.childNodes, function (child) {
             if (child && child.tagName?.toLowerCase() === 'span') {
                 try {
