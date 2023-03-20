@@ -326,7 +326,7 @@ export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => 
  */
 export function getDirectAndNestedSpanText(target: Element): string {
     let text = getSafeText(target)
-    text = concatenateStringsWithSpace([text, getNestedSpanText(target)])
+    text = `${text} ${getNestedSpanText(target)}`.trim()
     return shouldCaptureValue(text) ? text : ''
 }
 
@@ -338,31 +338,21 @@ export function getDirectAndNestedSpanText(target: Element): string {
  */
 export function getNestedSpanText(target: Element): string {
     let text = ''
-    if (target && target.nodeType === 1 && target.children?.length > 0) {
-        for (const child of target.children) {
-            if (child && child.nodeType === 1 && child.tagName?.toLowerCase() === 'span') {
+    if (target && target.nodeType === 1 && target.childNodes && target.childNodes.length) {
+        _each(target.childNodes, function (child) {
+            if (child && child.tagName?.toLowerCase() === 'span') {
                 try {
                     const spanText = getSafeText(child)
-                    if (shouldCaptureValue(spanText)) {
-                        text = concatenateStringsWithSpace([text, spanText])
-                    }
-                    if (child.children.length > 0) {
-                        text = concatenateStringsWithSpace([text, getNestedSpanText(child)])
+                    text = `${text} ${spanText}`.trim()
+
+                    if (child.childNodes && child.childNodes.length) {
+                        text = `${text} ${getNestedSpanText(child)}`.trim()
                     }
                 } catch (e) {
                     console.error(e)
                 }
             }
-        }
+        })
     }
     return text
-}
-
-/*
- * Take a list of strings and join them with spaces, filtering out empty strings
- * @param {strings} [] - strings to join
- * @returns {string} - joined strings
- */
-export function concatenateStringsWithSpace(strings: string[]): string {
-    return strings.filter((s) => s).join(' ')
 }
