@@ -1,6 +1,6 @@
 import babel from '@rollup/plugin-babel'
 import json from '@rollup/plugin-json'
-import { nodeResolve } from '@rollup/plugin-node-resolve'
+import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import dts from 'rollup-plugin-dts'
 import pkg from './package.json'
@@ -10,8 +10,7 @@ import commonjs from '@rollup/plugin-commonjs'
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
 const plugins = [
     json(), // Needed for rrweb import of `package.json`
-    nodeResolve({ browser: true }),
-    commonjs(),
+    resolve({ browser: true }),
     typescript({ sourceMap: true }),
     babel({
         extensions,
@@ -30,9 +29,9 @@ const plugins = [
             ],
         ],
     }),
-    nodeResolve(),
+    resolve({ browser: true }),
     commonjs(), // `core-js` is distributed as a CommonJS module
-    terser({ toplevel: true }),
+    // terser({ toplevel: true }),  // TODO: uncomment this when we're ready to minify
 ]
 
 export default [

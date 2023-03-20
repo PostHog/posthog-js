@@ -32,6 +32,7 @@
     "main": "dist/module.js",
     "module": "dist/es.js",
     "types": "dist/module.d.ts",
+    "browser": "./dist/array.full.js",
     "files": [
         "lib/*",
         "dist/*",
