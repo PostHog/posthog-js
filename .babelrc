@@ -4,7 +4,7 @@
             "@babel/preset-env",
             {
                 "spec": true,
-                "modules": false,
+                "modules": "auto", // We use auto to handle both Jest and Rollup compatibility
                 "forceAllTransforms": true,
                 "useBuiltIns": "usage",
                 "corejs": "3.29"
