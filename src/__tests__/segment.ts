@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals'
 
 import posthog from '../loader-module'
-import { PostHog } from 'posthog-js'
+import { PostHog } from '../posthog-core'
 import { _UUID } from '../utils'
 
 describe(`Module-based loader in Node env`, () => {
