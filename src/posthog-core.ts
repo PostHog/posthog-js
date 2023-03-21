@@ -1918,11 +1918,7 @@ export function init_from_snippet(): void {
 
     // Fire loaded events after updating the window's posthog object
     _each(instances, function (instance) {
-        if (instance.__init_async_complete) {
-            instance.__init_async_complete.then(() => instance._loaded())
-        } else {
-            console.warn('posthog.__init_async_complete was not set. This is likely a bug. Please report to PostHog')
-        }
+        instance._loaded()
     })
 
     add_dom_loaded_handler()
