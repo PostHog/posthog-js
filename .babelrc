@@ -6,7 +6,7 @@
                 "spec": true,
                 "modules": "auto", // We use auto to handle both Jest and Rollup compatibility
                 "forceAllTransforms": true,
-                "useBuiltIns": "usage",
+                "useBuiltIns": "entry",
                 "corejs": "3.29"
             }
         ],

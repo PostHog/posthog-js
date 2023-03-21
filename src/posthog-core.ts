@@ -55,6 +55,7 @@ import {
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
+import 'core-js/modules/es.promise'
 
 /*
 SIMPLE STYLE GUIDE:
