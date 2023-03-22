@@ -1,7 +1,7 @@
 /* eslint camelcase: "off" */
 
 import { _each, _extend, _include, _info, _isObject, _isUndefined, _strip_empty_properties, logger } from './utils'
-import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
+import { cookieStore, localStore, localPlusCookieStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 
 /*
@@ -86,6 +86,8 @@ export class PostHogPersistence {
         }
         if (storage_type === 'localstorage' && localStore.is_supported()) {
             this.storage = localStore
+        } else if (storage_type === 'sessionstorage' && sessionStore.is_supported()){
+            this.storage = sessionStore
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
             this.storage = localPlusCookieStore
         } else if (storage_type === 'memory') {

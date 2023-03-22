@@ -12,7 +12,7 @@
  */
 
 import { _each, _includes, _isNumber, _isString, window } from './utils'
-import { cookieStore, localStore, localPlusCookieStore } from './storage'
+import { cookieStore, localStore, localPlusCookieStore, sessionStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
 import { PostHog } from './posthog-core'
 
@@ -112,11 +112,14 @@ export function clearOptInOut(token: string, options: GDPROptions) {
  */
 function _getStorage(options: GDPROptions): PersistentStore {
     options = options || {}
-    if (options.persistenceType === 'localStorage') {
-        return localStore
-    }
-    if (options.persistenceType === 'localStorage+cookie') {
-        return localPlusCookieStore
+
+    switch (options.persistenceType) {
+        case 'localStorage': 
+            return localStore
+        case 'sessionStorage': 
+            return sessionStore
+        case 'localStorage+cookie':
+            return localPlusCookieStore
     }
     return cookieStore
 }
