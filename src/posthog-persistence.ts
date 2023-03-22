@@ -86,7 +86,7 @@ export class PostHogPersistence {
         }
         if (storage_type === 'localstorage' && localStore.is_supported()) {
             this.storage = localStore
-        } else if (storage_type === 'sessionstorage' && sessionStore.is_supported()){
+        } else if (storage_type === 'sessionstorage' && sessionStore.is_supported()) {
             this.storage = sessionStore
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
             this.storage = localPlusCookieStore
