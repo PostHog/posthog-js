@@ -1,3 +1,7 @@
+## 1.51.5 - 2023-03-23
+
+- fix(segment): handle race condition on loading segment integration (#586)
+
 ## 1.51.4 - 2023-03-20
 
 - fix: fewer moving parts more like safe text (#590)
