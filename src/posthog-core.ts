@@ -1893,7 +1893,54 @@ const add_dom_loaded_handler = function () {
     _register_event(window, 'load', dom_loaded_handler, true)
 }
 
+function ensure_es6_features(onload: () => void): void {
+    // To ensure we can use ES6 features, we polyfill them with the
+    // `core-js` bundle. This is only needed for browsers that don't support ES6
+    // features. We use the `nomodule` attribute to ensure that the polyfill is
+    // only loaded by browsers that don't support ES6 modules. At the time of
+    // writing, this is around 4.5% of users according to
+    // https://caniuse.com/es6-module . This is compared to around 2.3% of users
+    // using browsers that don't support ES6 features according to
+    // https://caniuse.com/es6 . Note that these users will still be able to use
+    // the library, they will just incur the download cost of the polyfill. We
+    // opted to use nomodules rather than trying to enumerate all the browsers
+    // that support ES6 modules for the purposes of maintainability.
+    //
+    // An alternative to doing this would be to use the babel transpiler to
+    // inject polyfills directly into the code, but that would increase the
+    // size of the bundle for all browsers.
+    //
+    // For reference, we tried to use core-js loaded by @babel/preset-env to
+    // only use polyfills when needed i.e. specifically using {useBuildIns:
+    // 'usage'} config, but this resulted in a 25% increase in bundle size.
+    // There was some duplication with the manual polyfills we have added in
+    // `utils.ts`, so we tried to use the core-js/modules/es.promise lib
+    // directly, but this still introduced a considerable increase in size. If
+    // you like pain, have a look at the commit history on
+    // https://github.com/PostHog/posthog-js/pull/586 for more details.
+    //
+    // Note that we use core-js as our polyfill library via jsdelivr,
+    // which caches the polyfill bundle on their CDN. Assuming users on old
+    // browsers have already visited a site using this polyfill from the CDN,
+    // they should not have to download it again.
+    // Add the polyfill script to the DOM, with the nomodules attribute set to
+    // ensure it is only loaded by browsers that don't support ES6 modules. Use
+    // the onload callback to ensure we don't execute any code until the script
+    // is loaded.
+    const script = document.createElement('script')
+    script.src = 'https://cdn.jsdelivr.net/npm/core-js-bundle@3.29.1/minified.min.js'
+    script.setAttribute('nomodule', 'true')
+    script.onload = onload
+    document.head.appendChild(script)
+}
+
 export function init_from_snippet(): void {
+    ensure_es6_features(() => {
+        _init_from_snippet()
+    })
+}
+
+function _init_from_snippet(): void {
     init_type = InitType.INIT_SNIPPET
     if (_isUndefined((window as any).posthog)) {
         ;(window as any).posthog = []
