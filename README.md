@@ -13,13 +13,20 @@ Cypress: run `yarn serve` to have a test server running and separately `yarn cyp
 
 ### Running TestCafe E2E tests with BrowserStack
 
-Testing on IE11 requires a bit more setup.
+Testing on IE11 requires a bit more setup. TestCafe tests will use the
+playground application to test the locally built array.full.js bundle. It will
+also verify that the events emitted during the testing of playground are loaded
+into the PostHog app. By default it uses https://app.posthog.com and the
+project with ID 11213. See the testcafe tests to see how to override these if
+needed. For PostHog internal users ask @benjackwhite or @hazzadous to invite you
+to the Project. You'll need to set `POSTHOG_API_KEY` to your personal API key, and
+`POSTHOG_PROJECT_KEY` to the key for the project you are using.
 
-1. Run `posthog` locally on port 8000 (`DEBUG=1 TEST=1 ./bin/start`).
-2. Run `python manage.py setup_dev --no-data` on posthog repo, which sets up a demo account.
-3. Optional: rebuild array.js on changes: `nodemon -w src/ --exec bash -c "yarn build-rollup"`.
-4. Export browserstack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`.
-5. Run tests: `npx testcafe "browserstack:ie" testcafe/e2e.spec.js`.
+You'll also need to sign up to [BrowserStack](https://www.browserstack.com/).
+After all this, you'll be able to run through the below steps:
+
+1. Export browserstack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`.
+1. Run tests: `npx testcafe "browserstack:ie" testcafe/e2e.spec.js`.
 
 ### Running local create react app example
 
