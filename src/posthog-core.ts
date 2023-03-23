@@ -178,10 +178,27 @@ const defaultConfig = (): PostHogConfig => ({
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_mplib = function (token: string, config?: Partial<PostHogConfig>, name?: string): PostHog {
+const create_mplib = function (
+    token: string,
+    config?: Partial<PostHogConfig>,
+    name?: string,
+    createComplete?: (instance: PostHog) => void
+): PostHog {
     let instance: PostHog
     const target =
         name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : name ? posthog_master[name] : undefined
+    const callbacksHandled = {
+        initComplete: false,
+        syncCode: false,
+    }
+    const handleCallback = (callbackName: keyof typeof callbacksHandled) => (instance: PostHog) => {
+        if (!callbacksHandled[callbackName]) {
+            callbacksHandled[callbackName] = true
+            if (callbacksHandled.initComplete && callbacksHandled.syncCode) {
+                createComplete?.(instance)
+            }
+        }
+    }
 
     if (target && init_type === InitType.INIT_MODULE) {
         instance = target as any
@@ -196,7 +213,7 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
         instance = new PostHog()
     }
 
-    instance._init(token, config, name)
+    instance._init(token, config, name, handleCallback('initComplete'))
     instance.toolbar.maybeLoadToolbar()
 
     instance.sessionRecording = new SessionRecording(instance)
@@ -235,6 +252,7 @@ const create_mplib = function (token: string, config?: Partial<PostHogConfig>, n
         instance._execute_array(target)
     }
 
+    handleCallback('syncCode')(instance)
     return instance
 }
 
@@ -326,9 +344,11 @@ export class PostHog {
             return
         }
 
-        const instance: PostHog = create_mplib(token, config, name)
+        const instance: PostHog = create_mplib(token, config, name, (instance: PostHog) => {
+            posthog_master[name] = instance
+            instance._loaded()
+        })
         posthog_master[name] = instance
-        instance._loaded()
 
         return instance
     }
@@ -340,10 +360,39 @@ export class PostHog {
     // method is this one initializes the actual instance, whereas the
     // init(...) method sets up a new library and calls _init on it.
     //
-    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): void {
+    // Note that there are operations that can be asynchronous, so we
+    // accept a callback that is called when all the asynchronous work
+    // is done. Note that we do not use promises because we want to be
+    // IE11 compatible. We could use polyfills, which would make the
+    // code a bit cleaner, but will add some overhead.
+    //
+    _init(
+        token: string,
+        config: Partial<PostHogConfig> = {},
+        name?: string,
+        initComplete?: (instance: PostHog) => void
+    ): void {
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
+
+        // To avoid using Promises and their helper functions, we instead keep
+        // track of which callbacks have been called, and then call initComplete
+        // when all of them have been called. To add additional async code, add
+        // to `callbacksHandled` and pass updateInitComplete as a callback to
+        // the async code.
+        const callbacksHandled = { segmentRegister: false, syncCode: false }
+        const updateInitComplete = (callbackName: keyof typeof callbacksHandled) => () => {
+            // Update the register of callbacks that have been called, and if
+            // they have all been called, then we are ready to call
+            // initComplete.
+            if (!callbacksHandled[callbackName]) {
+                callbacksHandled[callbackName] = true
+                if (callbacksHandled.segmentRegister && callbacksHandled.syncCode) {
+                    initComplete?.(this)
+                }
+            }
+        }
 
         this.set_config(
             _extend({}, defaultConfig(), config, {
@@ -387,7 +436,9 @@ export class PostHog {
                 this.persistence.set_user_state('identified')
             }
 
-            config.segment.register(this.segmentIntegration())
+            config.segment.register(this.segmentIntegration()).then(updateInitComplete('segmentRegister'))
+        } else {
+            updateInitComplete('segmentRegister')()
         }
 
         if (config.bootstrap?.distinctID !== undefined) {
@@ -440,13 +491,18 @@ export class PostHog {
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
         window.addEventListener &&
             window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
+
+        // Make sure that we also call the initComplete callback at the end of
+        // the synchronous code as well.
+        updateInitComplete('syncCode')()
     }
 
     // Private methods
 
     _loaded(): void {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right afterwards
+        // These feature flags are loaded in the decide call made right
+        // afterwards
         this.featureFlags.setReloadingPaused(true)
 
         try {
@@ -1769,8 +1825,15 @@ const override_ph_init_func = function () {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_mplib(token || '', config || {}, name)
-                posthog_master[name]._loaded()
+                posthog_master[name] = instances[name] = create_mplib(
+                    token || '',
+                    config || {},
+                    name,
+                    (instance: PostHog) => {
+                        posthog_master[name] = instances[name] = instance
+                        instance._loaded()
+                    }
+                )
             }
             return posthog_master[name]
         } else {
@@ -1781,8 +1844,10 @@ const override_ph_init_func = function () {
                 instance = instances[PRIMARY_INSTANCE_NAME]
             } else if (token) {
                 // intialize the main posthog lib
-                instance = create_mplib(token, config || {}, PRIMARY_INSTANCE_NAME)
-                instance._loaded()
+                instance = create_mplib(token, config || {}, PRIMARY_INSTANCE_NAME, (instance: PostHog) => {
+                    instances[PRIMARY_INSTANCE_NAME] = instance
+                    instance._loaded()
+                })
                 instances[PRIMARY_INSTANCE_NAME] = instance
             }
 
