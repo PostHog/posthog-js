@@ -23,6 +23,9 @@ to the Project. You'll need to set `POSTHOG_API_KEY` to your personal API key, a
 `POSTHOG_PROJECT_KEY` to the key for the project you are using.
 
 You'll also need to sign up to [BrowserStack](https://www.browserstack.com/).
+Note that if you are using CodeSpaces, these variables will also be available in
+your shell env variables.
+
 After all this, you'll be able to run through the below steps:
 
 1. Export browserstack credentials: `export BROWSERSTACK_USERNAME=xxx BROWSERSTACK_ACCESS_KEY=xxx`.
