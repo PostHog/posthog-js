@@ -230,6 +230,8 @@ describe('SessionRecording', () => {
                 blockClass: 'ph-no-capture',
                 blockSelector: undefined,
                 ignoreClass: 'ph-ignore-input',
+                maskTextClass: 'ph-mask',
+                maskTextSelector: undefined,
                 maskInputOptions: {},
                 maskInputFn: undefined,
                 slimDOMOptions: {},
