@@ -1032,12 +1032,7 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      */
     getFeatureFlagPayload(key: string): JsonType {
-        const payload = this.featureFlags.getFeatureFlagPayload(key)
-        try {
-            return JSON.parse(payload as any)
-        } catch {
-            return payload
-        }
+        return this.featureFlags.getFeatureFlagPayload(key)
     }
 
     /*

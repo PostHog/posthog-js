@@ -17,7 +17,7 @@ export const parseFeatureFlagDecideResponse = (
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
     if (flags) {
-        // using the v1 api
+        // Using the v1 api
         if (Array.isArray(flags)) {
             const $enabled_feature_flags: Record<string, boolean> = {}
             if (flags) {
@@ -31,11 +31,22 @@ export const parseFeatureFlagDecideResponse = (
                     [PERSISTENCE_ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
                 })
         } else {
-            // using the v2+ api
+            // Using the v2+ api
             let newFeatureFlags = flags
             let newFeatureFlagPayloads = flagPayloads
+            // JSON-parse new payloads
+            if (newFeatureFlagPayloads) {
+                for (const key in newFeatureFlagPayloads) {
+                    try {
+                        newFeatureFlagPayloads[key] = JSON.parse(newFeatureFlagPayloads[key] as any)
+                    } catch {
+                        // Leave raw string
+                    }
+                }
+            }
+
             if (response.errorsWhileComputingFlags) {
-                // if not all flags were computed, we upsert flags instead of replacing them
+                // If not all flags were computed, we upsert flags instead of replacing them
                 newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
                 newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
             }
