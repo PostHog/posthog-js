@@ -186,8 +186,9 @@ export interface XHRParams extends QueuedRequestData {
     timeout?: number
 }
 
-/** A feature that isn't publicly available yet. */
+/** A feature that isn't publicly available yet.*/
 export interface FeaturePreview {
+    // Sync this with the backend's FeaturePreviewSerializer!
     name: string
     description: string
     status: 'concept' | 'alpha' | 'beta'
