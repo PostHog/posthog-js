@@ -190,7 +190,7 @@ export interface XHRParams extends QueuedRequestData {
 export interface FeaturePreview {
     name: string
     description: string
-    status: 'concept' | 'alpha' | 'closed-beta' | 'open-beta'
+    status: 'concept' | 'alpha' | 'beta'
     imageUrl: string | null
     documentationUrl: string | null
     flagKey: string | null
