@@ -1,12 +1,13 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse, FeatureFlagsCallback, JsonType, RequestCallback } from './types'
+import { DecideResponse, FeatureFlagsCallback, FeaturePreview, JsonType, RequestCallback } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+const PERSISTENCE_FEATURE_PREVIEWS = '$feature_previews'
 
 export const parseFeatureFlagDecideResponse = (
     response: Partial<DecideResponse>,
@@ -16,6 +17,7 @@ export const parseFeatureFlagDecideResponse = (
 ) => {
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
+    const previews = response['featurePreviews']
     if (flags) {
         // using the v1 api
         if (Array.isArray(flags)) {
@@ -44,6 +46,7 @@ export const parseFeatureFlagDecideResponse = (
                     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(newFeatureFlags || {}),
                     [PERSISTENCE_ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
                     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
+                    [PERSISTENCE_FEATURE_PREVIEWS]: previews || [],
                 })
         }
     } else {
@@ -51,6 +54,7 @@ export const parseFeatureFlagDecideResponse = (
             persistence.unregister(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
             persistence.unregister(PERSISTENCE_ENABLED_FEATURE_FLAGS)
             persistence.unregister(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+            persistence.unregister(PERSISTENCE_FEATURE_PREVIEWS)
         }
     }
 }
@@ -231,6 +235,10 @@ export class PostHogFeatureFlags {
                 [`$feature_enrollment/${key}`]: isEnrolled,
             },
         })
+    }
+
+    getFeaturePreviews(): FeaturePreview[] {
+        return this.instance.get_property(PERSISTENCE_FEATURE_PREVIEWS) || []
     }
 
     addFeatureFlagsHandler(handler: FeatureFlagsCallback): void {

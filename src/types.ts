@@ -186,6 +186,16 @@ export interface XHRParams extends QueuedRequestData {
     timeout?: number
 }
 
+/** A feature that isn't publicly available yet. */
+export interface FeaturePreview {
+    name: string
+    description: string
+    status: 'concept' | 'alpha' | 'closed-beta' | 'open-beta'
+    imageUrl: string | null
+    documentationUrl: string | null
+    flagKey: string | null
+}
+
 export interface DecideResponse {
     status: number
     supportedCompression: Compression[]
@@ -195,6 +205,8 @@ export interface DecideResponse {
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
+    /** Only included in v4 of the endpoint. */
+    featurePreviews?: FeaturePreview[]
     errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
     capturePerformance?: boolean
