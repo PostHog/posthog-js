@@ -350,6 +350,7 @@ describe('parseFeatureFlagDecideResponse', () => {
                 'beta-feature': 300,
                 'alpha-feature-2': 'fake-payload',
             },
+            $feature_previews: [],
         })
     })
 
