@@ -48,7 +48,7 @@ describe('Decide', () => {
             given.subject()
 
             expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/?v=3',
+                'https://test.com/decide/?v=4',
                 {
                     data: _base64Encode(
                         JSON.stringify({

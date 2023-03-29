@@ -165,7 +165,7 @@ export class PostHogFeatureFlags {
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            this.instance.get_config('api_host') + '/decide/?v=3',
+            this.instance.get_config('api_host') + '/decide/?v=4',
             { data: encoded_data },
             { method: 'POST' },
             this.instance._prepare_callback((response) => {
