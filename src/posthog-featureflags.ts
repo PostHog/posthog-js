@@ -223,6 +223,16 @@ export class PostHogFeatureFlags {
         return !!this.getFeatureFlag(key, options)
     }
 
+    updateFeaturePreviewEnrollment(key: string, isEnrolled: boolean): void {
+        this.instance.capture('$feature_enrollment_update', {
+            $feature_flag: key,
+            $feature_enrollment: isEnrolled,
+            $set: {
+                [`$feature_enrollment/${key}`]: isEnrolled,
+            },
+        })
+    }
+
     addFeatureFlagsHandler(handler: FeatureFlagsCallback): void {
         this.featureFlagEventHandlers.push(handler)
     }

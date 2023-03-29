@@ -1058,6 +1058,10 @@ export class PostHog {
         this.featureFlags.reloadFeatureFlags()
     }
 
+    updateFeaturePreviewEnrollment(key: string, isEnrolled: boolean): void {
+        this.featureFlags.updateFeaturePreviewEnrollment(key, isEnrolled)
+    }
+
     /*
      * Register an event listener that runs when feature flags become available or when they change.
      * If there are flags, the listener is called immediately in addition to being called on future changes.
