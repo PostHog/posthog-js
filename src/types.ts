@@ -191,7 +191,7 @@ export interface FeaturePreview {
     // Sync this with the backend's FeaturePreviewSerializer!
     name: string
     description: string
-    status: 'concept' | 'alpha' | 'beta'
+    stage: 'concept' | 'alpha' | 'beta'
     imageUrl: string | null
     documentationUrl: string | null
     flagKey: string | null
