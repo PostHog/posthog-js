@@ -240,6 +240,7 @@ export class PostHogFeatureFlags {
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(newFlags),
             [PERSISTENCE_ENABLED_FEATURE_FLAGS]: newFlags,
         })
+        this._fireFeatureFlagsCallbacks()
     }
 
     getFeaturePreviews(): FeaturePreview[] {
@@ -259,8 +260,7 @@ export class PostHogFeatureFlags {
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
-        const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
-        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
+        this._fireFeatureFlagsCallbacks()
     }
 
     /*
@@ -327,5 +327,10 @@ export class PostHogFeatureFlags {
             flags: truthyFlags,
             flagVariants: truthyFlagVariants,
         }
+    }
+
+    _fireFeatureFlagsCallbacks(): void {
+        const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
     }
 }
