@@ -907,15 +907,6 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        // update properties with pageview info and super-properties
-        properties = _extend(
-            {},
-            _info.properties(),
-            this.persistence.properties(),
-            this.sessionPersistence.properties(),
-            properties
-        )
-
         if (this.webPerformance?.isEnabled) {
             if (event_name === '$pageview') {
                 this.pageViewIdManager.onPageview()
@@ -942,7 +933,13 @@ export class PostHog {
         // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
-        properties = _extend({}, infoProperties, this.persistence.properties(), properties)
+        properties = _extend(
+            {},
+            _info.properties(),
+            this.persistence.properties(),
+            this.sessionPersistence.properties(),
+            properties
+        )
 
         const property_blacklist = this.get_config('property_blacklist')
         if (_isArray(property_blacklist)) {

@@ -12,7 +12,7 @@
  */
 
 import { _each, _includes, _isNumber, _isString, window } from './utils'
-import { cookieStore, localStore, localPlusCookieStore } from './storage'
+import { cookieStore, localStore, localPlusCookieStore, sessionStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
 import { PostHog } from './posthog-core'
 
@@ -119,7 +119,7 @@ function _getStorage(options: GDPROptions): PersistentStore {
         return localPlusCookieStore
     }
     if (options.persistenceType === 'sessionStorage') {
-        return localPlusCookieStore
+        return sessionStore
     }
     return cookieStore
 }
