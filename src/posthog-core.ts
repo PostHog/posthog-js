@@ -357,9 +357,9 @@ export class PostHog {
         this.persistence = new PostHogPersistence(this.config)
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPersistence =
-            this.config.persistence === 'session'
+            this.config.persistence === 'sessionStorage'
                 ? this.persistence
-                : new PostHogPersistence({ ...this.config, persistence: 'session' })
+                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
         this._gdpr_init()
 

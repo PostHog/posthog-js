@@ -1111,7 +1111,7 @@ describe('reset()', () => {
 
     given('overrides', () => ({
         persistence: new PostHogPersistence(given.config),
-        sessionPersistence: new PostHogPersistence({ ...given.config, persistence: 'session' }),
+        sessionPersistence: new PostHogPersistence({ ...given.config, persistence: 'sessionstorage' }),
     }))
 
     beforeEach(() => {

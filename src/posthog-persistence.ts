@@ -26,12 +26,11 @@ export const RESERVED_PROPERTIES = [
     ENABLED_FEATURE_FLAGS,
 ]
 
-const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[]
-= [
+const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',
     'localstorage',
     'localstorage+cookie',
-    'session',
+    'sessionStorage',
     'memory',
 ]
 
@@ -68,21 +67,23 @@ export class PostHogPersistence {
             this.name = 'ph_' + token + '_posthog'
         }
 
-        let storage_type = config['persistence'].toLowerCase()
         if (
-            CASE_INSENSITIVE_PERSISTENCE_TYPES.indexOf(storage_type as Lowercase<PostHogConfig['persistence']>) === -1
+            CASE_INSENSITIVE_PERSISTENCE_TYPES.indexOf(
+                config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
+            ) === -1
         ) {
-            logger.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
-            storage_type = config['persistence'] = 'cookie'
+            logger.critical('Unknown persistence type ' + config['persistence'] + '; falling back to cookie')
+            config['persistence'] = 'cookie'
         }
+        const storage_type = config['persistence'] as Lowercase<PostHogConfig['persistence']>
         if (storage_type === 'localstorage' && localStore.is_supported()) {
             this.storage = localStore
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
             this.storage = localPlusCookieStore
+        } else if (storage_type === 'sessionstorage' && sessionStore.is_supported()) {
+            this.storage = sessionStore
         } else if (storage_type === 'memory') {
             this.storage = memoryStore
-        } else if (storage_type === 'session') {
-            this.storage = sessionStore
         } else {
             this.storage = cookieStore
         }
