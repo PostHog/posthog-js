@@ -1609,6 +1609,7 @@ export class PostHog {
      *
      * ### Notes:
      *
+     * This is based on browser-level `sessionStorage`, NOT the PostHog session.
      * getSessionProperty() can only be called after the PostHog library has finished loading.
      * init() has a loaded function available to handle this automatically. For example:
      *
