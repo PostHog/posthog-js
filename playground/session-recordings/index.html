@@ -65,7 +65,7 @@
                         }
                         ;((p = t.createElement('script')).type = 'text/javascript'),
                             (p.async = !0),
-                            (p.src = 'http://localhost:3001' + '/static/array.js'),
+                            (p.src = 'http://localhost:3001' + '/static/array.full.js'),
                             (r = t.getElementsByTagName('script')[0]).parentNode.insertBefore(p, r)
                         var u = e
                         for (
@@ -97,6 +97,7 @@
             posthog.init('phc_gV2VtAdq8G5nA3bAJSPZDYafV5FxvPxw8DcXMHgotmT', {
                 api_host: 'http://localhost:8000',
                 disable_session_recording: true,
+                capture_performance: true,
             })
 
             setTimeout(() => {

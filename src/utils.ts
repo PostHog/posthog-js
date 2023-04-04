@@ -271,9 +271,7 @@ export const _safewrap = function <F extends (...args: any[]) => any = (...args:
             return f.apply(this, args)
         } catch (e) {
             logger.critical('Implementation error. Please turn on debug and contact support@posthog.com.')
-            if (Config.DEBUG) {
-                logger.critical(e)
-            }
+            logger.critical(e)
         }
     } as F
 }
@@ -513,7 +511,7 @@ export const _UUID = (function () {
     }
 
     return function () {
-        const se = (window.screen.height * window.screen.width).toString(16)
+        const se = typeof window !== 'undefined' ? (window.screen.height * window.screen.width).toString(16) : '0'
         return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
     }
 })()
@@ -523,7 +521,7 @@ export const _UUID = (function () {
 // sending false capturing data
 export const _isBlockedUA = function (ua: string): boolean {
     if (
-        /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog|applebot|semrushbot|duckduckbot|twitterbot|rogerbot|linkedinbot|mj12bot|sitebulb|bot.htm|bot.php)/i.test(
+        /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog|applebot|semrushbot|duckduckbot|twitterbot|rogerbot|linkedinbot|mj12bot|sitebulb|bot.htm|bot.php|hubspot|crawler)/i.test(
             ua
         )
     ) {
@@ -872,20 +870,20 @@ export const _info = {
         return _extend(
             _strip_empty_properties({
                 $os: _info.os(),
-                $browser: _info.browser(userAgent, navigator.vendor, (window as any).opera),
+                $browser: _info.browser(userAgent, navigator.vendor, (win as any).opera),
                 $device: _info.device(userAgent),
                 $device_type: _info.deviceType(userAgent),
             }),
             {
-                $current_url: window.location.href,
-                $host: window.location.host,
-                $pathname: window.location.pathname,
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor, (window as any).opera),
+                $current_url: win?.location.href,
+                $host: win?.location.host,
+                $pathname: win?.location.pathname,
+                $browser_version: _info.browserVersion(userAgent, navigator.vendor, (win as any).opera),
                 $browser_language: _info.browserLanguage(),
-                $screen_height: window.screen.height,
-                $screen_width: window.screen.width,
-                $viewport_height: window.innerHeight,
-                $viewport_width: window.innerWidth,
+                $screen_height: win?.screen.height,
+                $screen_width: win?.screen.width,
+                $viewport_height: win?.innerHeight,
+                $viewport_width: win?.innerWidth,
                 $lib: 'web',
                 $lib_version: Config.LIB_VERSION,
                 $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
@@ -898,10 +896,10 @@ export const _info = {
         return _extend(
             _strip_empty_properties({
                 $os: _info.os(),
-                $browser: _info.browser(userAgent, navigator.vendor, (window as any).opera),
+                $browser: _info.browser(userAgent, navigator.vendor, (win as any).opera),
             }),
             {
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor, (window as any).opera),
+                $browser_version: _info.browserVersion(userAgent, navigator.vendor, (win as any).opera),
             }
         )
     },

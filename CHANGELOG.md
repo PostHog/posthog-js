@@ -1,3 +1,188 @@
+## 1.51.5 - 2023-03-23
+
+- fix(segment): handle race condition on loading segment integration (#586)
+
+## 1.51.4 - 2023-03-20
+
+- fix: fewer moving parts more like safe text (#590)
+
+## 1.51.3 - 2023-03-17
+
+- try/catch the bit that fails so we don't just eject the element (#585)
+- fix(persistence): set SameSite=None explicitly (#578)
+
+## 1.51.2 - 2023-03-15
+
+- fix: Catch fullsnapshot error (#583)
+
+## 1.51.1 - 2023-03-14
+
+- fix: debug nested span text, part 3 (#582)
+
+## 1.51.0 - 2023-03-14
+
+- added types for PostHog provider `options` (#581)
+- ci(testcafe): run browser tests in parallel (#579)
+
+## 1.50.9 - 2023-03-13
+
+- fix: debug nested span text (part 2) (#577)
+- feat: use autocapture setting from decide (#575)
+
+## 1.50.8 - 2023-03-10
+
+- reinstate getNestedSpanText, but with no recursion (#576)
+
+## 1.50.7 - 2023-03-09
+
+- fix: debug return empty string on getNestedSpanText (#573)
+
+## 1.50.6 - 2023-03-09
+
+- fix: Only call capture snapshot if recording (#572)
+
+## 1.50.5 - 2023-03-09
+
+- Update rrweb (#570)
+- fix: Race condition error with loading rrweb (#569)
+- fix: remove warning of duplicate nextjs import (#566)
+
+## 1.50.4 - 2023-03-06
+
+- chore: Revert canvas recording option (#567)
+- tolerate undefined target (#565)
+
+## 1.50.3 - 2023-03-02
+
+- fix: spans inside buttons (#563)
+
+## 1.50.2 - 2023-03-02
+
+- fix(bots): add "hubspot" and "crawler" to blocked user agents (#564)
+
+## 1.50.1 - 2023-03-01
+
+- feat: allow record canvas (#562)
+- chore: remove old nextjs utils folder (#559)
+
+## 1.50.0 - 2023-02-28
+
+- feat: react library (#540)
+
+## 1.49.0 - 2023-02-28
+
+- feat: augment autocapture using data attributes (#551)
+
+## 1.48.2 - 2023-02-28
+
+- fix: safari iteration error on web performance server timing (#558)
+
+## 1.48.1 - 2023-02-28
+
+- chore: expose errors (#557)
+-  try the compressed-size-action GH action (#556)
+
+## 1.48.0 - 2023-02-27
+
+- fix: apply terser plugin to module.js and es.js (#555)
+
+## 1.47.0 - 2023-02-27
+
+- chore: no-op change to allow version bump (#554)
+- feat(rrweb): implement rrweb2 dynamic loading on decide (#552)
+
+## 1.46.2 - 2023-02-22
+
+- no-op change to allow version bump (#549)
+- more leniency for envs with 'window' undefined (#541)
+
+## 1.46.1 - 2023-02-21
+
+- chore: Remove Sentry types to reduce clashes (#546)
+- fix: Removed Sentry types from compiled types (#545)
+
+## 1.46.0 - 2023-02-21
+
+- feat: Add optional loading of rrweb2 (#543)
+- feat: Add rrweb2 support (experimental) (#536)
+- chore: upgrade @sentry/types (#539)
+
+## 1.45.1 - 2023-02-14
+
+- fix: default persons to anonymous (#534)
+
+## 1.45.0 - 2023-02-14
+
+
+
+## 1.43.1 - 2023-02-07
+
+- fix: correctly persist user state across page loads (#531)
+
+## 1.43.0 - 2023-02-07
+
+- feat: reset marks user anonymous (#524)
+
+## 1.42.3 - 2023-01-31
+
+- chore(feature-flag): only return truthy values for onFeatureFlag (#522)
+
+## 1.42.2 - 2023-01-26
+
+
+
+## 1.42.1 - 2023-01-26
+- Revert status check
+
+## 1.42.0 - 2023-01-26
+- N/A
+
+
+## 1.41.0 - 2023-01-24
+
+- Use decide v3 and return defined JSON payloads with matching flags
+- Optimistically save evaluated flags even if server has issues
+
+## 1.40.2 - 2023-01-20
+
+- Revert "chore: move types dependency from dependencies to devdependencies (#504)" (#509)
+
+## 1.40.1 - 2023-01-19
+
+- fix: Sentry URL for recording (#507)
+
+## 1.40.0 - 2023-01-18
+
+- feat: capture clicked elements on rageclicks (#506)
+
+## 1.39.5 - 2023-01-13
+
+- chore: move types dependency from dependencies to devdependencies (#504)
+
+## 1.39.4 - 2023-01-12
+
+- fix: use django cache for toolbar js (#503)
+
+## 1.39.3 - 2023-01-11
+
+- fix(toolbar): Load toolbar only in body for turbolink (#499)
+- Install pnpm for usage in PR step (#502)
+
+## 1.39.2 - 2023-01-06
+
+- fix: page view ids didn't work with server side config (#501)
+- chore(deps): Bump json5 from 2.1.3 to 2.2.3 in /react (#498)
+
+## 1.39.1 - 2023-01-03
+
+- feat: capture server timings (#497)
+
+## 1.39.0 - 2022-12-23
+
+- feat: Adds performance capture (#488)
+- fix(options): Add capture_pageleave option (#491)
+- fix(cd): use pnpm to install posthog-js version in main repo (#495)
+
 ## 1.38.1 - 2022-12-15
 
 - fix: Reduce cookie modifications to stop infinite loops with CMP tools (#489)

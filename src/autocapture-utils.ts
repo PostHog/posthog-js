@@ -309,10 +309,50 @@ export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => 
     scriptTag.src = scriptUrlToLoad
     scriptTag.onload = callback
 
-    const scripts = document.getElementsByTagName('script')
+    const scripts = document.querySelectorAll('body > script')
     if (scripts.length > 0) {
         scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
     } else {
         document.body.appendChild(scriptTag)
     }
+}
+
+/*
+ * Iterate through children of a target element looking for span tags
+ * and return the text content of the span tags, separated by spaces,
+ * along with the direct text content of the target element
+ * @param {Element} target - element to check
+ * @returns {string} text content of the target element and its child span tags
+ */
+export function getDirectAndNestedSpanText(target: Element): string {
+    let text = getSafeText(target)
+    text = `${text} ${getNestedSpanText(target)}`.trim()
+    return shouldCaptureValue(text) ? text : ''
+}
+
+/*
+ * Iterate through children of a target element looking for span tags
+ * and return the text content of the span tags, separated by spaces
+ * @param {Element} target - element to check
+ * @returns {string} text content of span tags
+ */
+export function getNestedSpanText(target: Element): string {
+    let text = ''
+    if (target && target.childNodes && target.childNodes.length) {
+        _each(target.childNodes, function (child) {
+            if (child && child.tagName?.toLowerCase() === 'span') {
+                try {
+                    const spanText = getSafeText(child)
+                    text = `${text} ${spanText}`.trim()
+
+                    if (child.childNodes && child.childNodes.length) {
+                        text = `${text} ${getNestedSpanText(child)}`.trim()
+                    }
+                } catch (e) {
+                    console.error(e)
+                }
+            }
+        })
+    }
+    return text
 }

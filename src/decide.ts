@@ -24,7 +24,7 @@ export class Decide {
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            `${this.instance.get_config('api_host')}/decide/?v=2`,
+            `${this.instance.get_config('api_host')}/decide/?v=3`,
             { data: encoded_data, verbose: true },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response as DecideResponse)
@@ -48,6 +48,7 @@ export class Decide {
         this.instance.toolbar.afterDecideResponse(response)
         this.instance.sessionRecording?.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
+        this.instance.webPerformance?.afterDecideResponse(response)
 
         this.instance.featureFlags.receivedFeatureFlags(response)
 

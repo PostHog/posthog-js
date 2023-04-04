@@ -15,31 +15,51 @@
  * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
  * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  */
-import { Event, EventProcessor, Hub, Integration } from '@sentry/types'
+
 import { Properties } from '../types'
 import { PostHog } from '../posthog-core'
 
-export class SentryIntegration implements Integration {
+// NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
+// We only use a small subset of the types, so we can just define the integration overall and use any for the rest
+
+// import {
+//     Event as _SentryEvent,
+//     EventProcessor as _SentryEventProcessor,
+//     Hub as _SentryHub,
+//     Integration as _SentryIntegration,
+// } from '@sentry/types'
+
+// Uncomment the above and comment the below to get type checking for development
+
+type _SentryEvent = any
+type _SentryEventProcessor = any
+type _SentryHub = any
+
+interface _SentryIntegration {
+    name: string
+    setupOnce(addGlobalEventProcessor: (callback: _SentryEventProcessor) => void, getCurrentHub: () => _SentryHub): void
+}
+
+export class SentryIntegration implements _SentryIntegration {
     name: string
 
-    setupOnce: (addGlobalEventProcessor: (callback: EventProcessor) => void, getCurrentHub: () => Hub) => void
+    setupOnce: (
+        addGlobalEventProcessor: (callback: _SentryEventProcessor) => void,
+        getCurrentHub: () => _SentryHub
+    ) => void
 
     constructor(_posthog: PostHog, organization?: string, projectId?: number, prefix?: string) {
         // setupOnce gets called by Sentry when it intializes the plugin
-        // 'this' is not this: PostHogLib object, but the new class that's created.
-        // TODO: refactor to a real class. The types
         this.name = 'posthog-js'
-        this.setupOnce = function (addGlobalEventProcessor: (callback: EventProcessor) => void) {
-            addGlobalEventProcessor((event: Event) => {
+        this.setupOnce = function (addGlobalEventProcessor: (callback: _SentryEventProcessor) => void) {
+            addGlobalEventProcessor((event: _SentryEvent) => {
                 if (event.level !== 'error' || !_posthog.__loaded) return event
                 if (!event.tags) event.tags = {}
                 const host = _posthog.config.ui_host || _posthog.config.api_host
                 event.tags['PostHog Person URL'] = host + '/person/' + _posthog.get_distinct_id()
                 if (_posthog.sessionRecordingStarted()) {
                     event.tags['PostHog Recording URL'] =
-                        host +
-                        '/recordings/#sessionRecordingId=' +
-                        _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
+                        host + '/recordings/' + _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
                 }
                 const exceptions = event.exception?.values || []
                 const data: Properties = {

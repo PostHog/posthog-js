@@ -63,7 +63,13 @@ export const cookieStore: PersistentStore = {
             }
 
             const new_cookie_val =
-                name + '=' + encodeURIComponent(JSON.stringify(value)) + expires + '; path=/' + cdomain + secure
+                name +
+                '=' +
+                encodeURIComponent(JSON.stringify(value)) +
+                expires +
+                '; SameSite=Lax; path=/' +
+                cdomain +
+                secure
             document.cookie = new_cookie_val
             return new_cookie_val
         } catch (err) {
@@ -89,7 +95,7 @@ export const localStore: PersistentStore = {
         }
 
         let supported = true
-        if (window) {
+        if (typeof window !== 'undefined') {
             try {
                 const key = '__mplssupport__',
                     val = 'xyz'
@@ -236,7 +242,7 @@ export const sessionStore: PersistentStore = {
             return sessionStorageSupported
         }
         sessionStorageSupported = true
-        if (window) {
+        if (typeof window !== 'undefined') {
             try {
                 const key = '__support__',
                     val = 'xyz'

@@ -23,6 +23,7 @@ import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
+import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -33,7 +34,6 @@ import { compressData, decideCompression } from './compression'
 import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
-import { getPerformanceData } from './apm'
 import {
     CaptureOptions,
     CaptureResult,
@@ -50,6 +50,7 @@ import {
     SnippetArrayItem,
     XHROptions,
     AutocaptureConfig,
+    JsonType,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -114,6 +115,7 @@ const defaultConfig = (): PostHogConfig => ({
     verbose: false,
     img: false,
     capture_pageview: true,
+    capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
     debug: false,
     cookie_expiration: 365,
     upgrade: false,
@@ -161,7 +163,7 @@ const defaultConfig = (): PostHogConfig => ({
     // Used for internal testing
     _onCapture: __NOOP,
     _capture_metrics: false,
-    _capture_performance: false,
+    capture_performance: undefined,
     name: 'posthog',
     callback_fn: 'posthog._jsc',
     bootstrap: {},
@@ -176,10 +178,27 @@ const defaultConfig = (): PostHogConfig => ({
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_phlib = function (token: string, config?: Partial<PostHogConfig>, name?: string): PostHog {
+const create_phlib = function (
+    token: string,
+    config?: Partial<PostHogConfig>,
+    name?: string,
+    createComplete?: (instance: PostHog) => void
+): PostHog {
     let instance: PostHog
     const target =
         name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : name ? posthog_master[name] : undefined
+    const callbacksHandled = {
+        initComplete: false,
+        syncCode: false,
+    }
+    const handleCallback = (callbackName: keyof typeof callbacksHandled) => (instance: PostHog) => {
+        if (!callbacksHandled[callbackName]) {
+            callbacksHandled[callbackName] = true
+            if (callbacksHandled.initComplete && callbacksHandled.syncCode) {
+                createComplete?.(instance)
+            }
+        }
+    }
 
     if (target && init_type === InitType.INIT_MODULE) {
         instance = target as any
@@ -194,14 +213,18 @@ const create_phlib = function (token: string, config?: Partial<PostHogConfig>, n
         instance = new PostHog()
     }
 
-    instance._init(token, config, name)
+    instance._init(token, config, name, handleCallback('initComplete'))
     instance.toolbar.maybeLoadToolbar()
 
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
+    instance.webPerformance = new WebPerformanceObserver(instance)
+    instance.webPerformance.startObservingIfEnabled()
+
     instance.__autocapture = instance.get_config('autocapture')
-    if (instance.get_config('autocapture')) {
+    autocapture._setIsAutocaptureEnabled(instance)
+    if (autocapture._isAutocaptureEnabled) {
         instance.__autocapture = instance.get_config('autocapture')
         const num_buckets = 100
         const num_enabled_buckets = 100
@@ -229,6 +252,7 @@ const create_phlib = function (token: string, config?: Partial<PostHogConfig>, n
         instance._execute_array(target)
     }
 
+    handleCallback('syncCode')(instance)
     return instance
 }
 
@@ -238,6 +262,7 @@ const create_phlib = function (token: string, config?: Partial<PostHogConfig>, n
  */
 export class PostHog {
     __loaded: boolean
+    __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
     config: PostHogConfig
 
     persistence: PostHogPersistence
@@ -249,6 +274,7 @@ export class PostHog {
     feature_flags: PostHogFeatureFlags
     toolbar: Toolbar
     sessionRecording: SessionRecording | undefined
+    webPerformance: WebPerformanceObserver | undefined
 
     _captureMetrics: CaptureMetrics
     _requestQueue: RequestQueue
@@ -274,6 +300,7 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
+        this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
         this.people = new PostHogPeople(this)
@@ -319,9 +346,11 @@ export class PostHog {
             return
         }
 
-        const instance: PostHog = create_phlib(token, config, name)
+        const instance: PostHog = create_phlib(token, config, name, (instance: PostHog) => {
+            posthog_master[name] = instance
+            instance._loaded()
+        })
         posthog_master[name] = instance
-        instance._loaded()
 
         return instance
     }
@@ -333,10 +362,39 @@ export class PostHog {
     // method is this one initializes the actual instance, whereas the
     // init(...) method sets up a new library and calls _init on it.
     //
-    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): void {
+    // Note that there are operations that can be asynchronous, so we
+    // accept a callback that is called when all the asynchronous work
+    // is done. Note that we do not use promises because we want to be
+    // IE11 compatible. We could use polyfills, which would make the
+    // code a bit cleaner, but will add some overhead.
+    //
+    _init(
+        token: string,
+        config: Partial<PostHogConfig> = {},
+        name?: string,
+        initComplete?: (instance: PostHog) => void
+    ): void {
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
+
+        // To avoid using Promises and their helper functions, we instead keep
+        // track of which callbacks have been called, and then call initComplete
+        // when all of them have been called. To add additional async code, add
+        // to `callbacksHandled` and pass updateInitComplete as a callback to
+        // the async code.
+        const callbacksHandled = { segmentRegister: false, syncCode: false }
+        const updateInitComplete = (callbackName: keyof typeof callbacksHandled) => () => {
+            // Update the register of callbacks that have been called, and if
+            // they have all been called, then we are ready to call
+            // initComplete.
+            if (!callbacksHandled[callbackName]) {
+                callbacksHandled[callbackName] = true
+                if (callbacksHandled.segmentRegister && callbacksHandled.syncCode) {
+                    initComplete?.(this)
+                }
+            }
+        }
 
         this.set_config(
             _extend({}, defaultConfig(), config, {
@@ -347,6 +405,15 @@ export class PostHog {
         )
 
         this._jsc = function () {} as JSC
+
+        // Check if recorder.js is already loaded
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        if (window?.rrweb?.record || window?.rrwebRecord) {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            this.__loaded_recorder_version = window?.rrweb?.version
+        }
 
         this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
         this._requestQueue = new RequestQueue(this._captureMetrics, this._handle_queued_event.bind(this))
@@ -372,14 +439,18 @@ export class PostHog {
                 this.register({
                     distinct_id: config.segment.user().id(),
                 })
+                this.persistence.set_user_state('identified')
             }
 
-            config.segment.register(this.segmentIntegration())
+            config.segment.register(this.segmentIntegration()).then(updateInitComplete('segmentRegister'))
+        } else {
+            updateInitComplete('segmentRegister')()
         }
 
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.get_config('get_device_id')(_UUID())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
+            this.persistence.set_user_state(config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
                 distinct_id: config.bootstrap.distinctID,
                 $device_id: deviceID,
@@ -395,8 +466,16 @@ export class PostHog {
                     ),
                     {}
                 )
+            const featureFlagPayloads = Object.keys(config.bootstrap?.featureFlagPayloads || {})
+                .filter((key) => activeFlags[key])
+                .reduce((res: Record<string, JsonType>, key) => {
+                    if (config.bootstrap?.featureFlagPayloads?.[key]) {
+                        res[key] = config.bootstrap?.featureFlagPayloads?.[key]
+                    }
+                    return res
+                }, {})
 
-            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags })
+            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
         }
 
         if (!this.get_distinct_id()) {
@@ -411,18 +490,25 @@ export class PostHog {
                 },
                 ''
             )
+            // distinct id == $device_id is a proxy for anonymous user
+            this.persistence.set_user_state('anonymous')
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
         window.addEventListener &&
             window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
+
+        // Make sure that we also call the initComplete callback at the end of
+        // the synchronous code as well.
+        updateInitComplete('syncCode')()
     }
 
     // Private methods
 
     _loaded(): void {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right afterwards
+        // These feature flags are loaded in the decide call made right
+        // afterwards
         this.featureFlags.setReloadingPaused(true)
 
         try {
@@ -506,13 +592,13 @@ export class PostHog {
 
     _handle_unload(): void {
         if (!this.get_config('request_batching')) {
-            if (this.get_config('capture_pageview')) {
+            if (this.get_config('capture_pageview') && this.get_config('capture_pageleave')) {
                 this.capture('$pageleave', null, { transport: 'sendBeacon' })
             }
             return
         }
 
-        if (this.get_config('capture_pageview')) {
+        if (this.get_config('capture_pageview') && this.get_config('capture_pageleave')) {
             this.capture('$pageleave')
         }
         if (this.get_config('_capture_metrics')) {
@@ -813,20 +899,13 @@ export class PostHog {
             return properties
         }
 
-        // set $duration if time_event was previously called for this event
-        if (typeof start_timestamp !== 'undefined') {
-            const duration_in_ms = new Date().getTime() - start_timestamp
-            properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
-        }
+        const infoProperties = _info.properties()
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
         }
-        // note: extend writes to the first object, so lets make sure we
-        // don't write to the persistence properties object and info
-        // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
         properties = _extend(
@@ -837,16 +916,33 @@ export class PostHog {
             properties
         )
 
-        if (this.get_config('_capture_performance')) {
+        if (this.webPerformance?.isEnabled) {
             if (event_name === '$pageview') {
                 this.pageViewIdManager.onPageview()
             }
             properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
         }
 
-        if (event_name === '$pageview' && this.get_config('_capture_performance')) {
-            properties = _extend(properties, getPerformanceData())
+        if (event_name === '$performance_event') {
+            const persistenceProps = this.persistence.properties()
+            // Early exit for $performance_event as we only need session and $current_url
+            properties['distinct_id'] = persistenceProps.distinct_id
+            properties['$current_url'] = infoProperties.$current_url
+            return properties
         }
+
+        // set $duration if time_event was previously called for this event
+        if (typeof start_timestamp !== 'undefined') {
+            const duration_in_ms = new Date().getTime() - start_timestamp
+            properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+        }
+
+        // note: extend writes to the first object, so lets make sure we
+        // don't write to the persistence properties object and info
+        // properties object by passing in a new object
+
+        // update properties with pageview info and super-properties
+        properties = _extend({}, infoProperties, this.persistence.properties(), properties)
 
         const property_blacklist = this.get_config('property_blacklist')
         if (_isArray(property_blacklist)) {
@@ -982,6 +1078,27 @@ export class PostHog {
     }
 
     /*
+     * Get feature flag payload value matching key for user (supports multivariate flags).
+     *
+     * ### Usage:
+     *
+     *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') {
+     *          const someValue = posthog.getFeatureFlagPayload('beta-feature')
+     *          // do something
+     *     }
+     *
+     * @param {Object|String} prop Key of the feature flag.
+     */
+    getFeatureFlagPayload(key: string): JsonType {
+        const payload = this.featureFlags.getFeatureFlagPayload(key)
+        try {
+            return JSON.parse(payload as any)
+        } catch {
+            return payload
+        }
+    }
+
+    /*
      * See if feature flag is enabled for user.
      *
      * ### Usage:
@@ -1009,15 +1126,16 @@ export class PostHog {
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
      *                              It'll return a list of feature flags enabled for the user.
+     * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
-    onFeatureFlags(callback: (flags: string[], variants: Record<string, boolean | string>) => void): void {
+    onFeatureFlags(callback: (flags: string[], variants: Record<string, string | boolean>) => void): () => void {
         return this.featureFlags.onFeatureFlags(callback)
     }
 
     /**
      * Identify a user with a unique ID instead of a PostHog
      * randomly generated distinct_id. If the method is never called,
-     * then unique visitors will be identified by a UUID generated
+     * then unique visitors will be identified by a UUID that is generated
      * the first time they visit the site.
      *
      * If user properties are passed, they are also sent to posthog.
@@ -1031,21 +1149,30 @@ export class PostHog {
      * ### Notes:
      *
      * You can call this function to overwrite a previously set
-     * unique ID for the current user. PostHog cannot translate
-     * between IDs at this time, so when you change a user's ID
-     * they will appear to be a new user.
+     * unique ID for the current user.
      *
-     * When used alone, posthog.identify will change the user's
-     * distinct_id to the unique ID provided. When used in tandem
-     * with posthog.alias, it will allow you to identify based on
-     * unique ID and map that back to the original, anonymous
-     * distinct_id given to the user upon her first arrival to your
-     * site (thus connecting anonymous pre-signup activity to
-     * post-signup activity). Though the two work together, do not
-     * call identify() at the same time as alias(). Calling the two
-     * at the same time can cause a race condition, so it is best
-     * practice to call identify on the original, anonymous ID
-     * right after you've aliased it.
+     * If the user has been identified ($user_state in persistence is set to 'identified'),
+     * then capture of $identify is skipped to avoid merging users. For example,
+     * if your system allows an admin user to impersonate another user.
+     *
+     * Then a single browser instance can have:
+     *
+     *  `identify('a') -> capture(1) -> identify('b') -> capture(2)`
+     *
+     * and capture 1 and capture 2 will have the correct distinct_id.
+     * but users a and b will NOT be merged in posthog.
+     *
+     * However, if reset is called then:
+     *
+     *  `identify('a') -> capture(1) -> reset() -> capture(2) -> identify('b') -> capture(3)`
+     *
+     * users a and b are not merged.
+     * Capture 1 is associated with user a.
+     * A new distinct id is generated for capture 2.
+     * which is merged with user b.
+     * So, capture 2 and 3 are associated with user b.
+     *
+     * If you want to merge two identified users, you can call posthog.alias
      *
      * @param {String} [new_distinct_id] A string that uniquely identifies a user. If not provided, the distinct_id currently in the persistent store (cookie or localStorage) will be used.
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
@@ -1076,19 +1203,18 @@ export class PostHog {
             )
         }
 
-        // identify only changes the distinct id if it doesn't match either the existing or the alias;
-        // if it's new, blow away the alias as well.
+        // if the previous distinct id had an alias stored, then we clear it
         if (new_distinct_id !== previous_distinct_id && new_distinct_id !== this.get_property(ALIAS_ID_KEY)) {
             this.unregister(ALIAS_ID_KEY)
             this.register({ distinct_id: new_distinct_id })
         }
 
+        const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
+
         // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
         // - logic on the server will determine whether or not to do anything with it.
-        if (
-            new_distinct_id !== previous_distinct_id &&
-            (!this.get_property('$device_id') || previous_distinct_id === this.get_property('$device_id'))
-        ) {
+        if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
+            this.persistence.set_user_state('identified')
             this.capture(
                 '$identify',
                 {
@@ -1169,6 +1295,7 @@ export class PostHog {
         const device_id = this.get_property('$device_id')
         this.persistence.clear()
         this.sessionPersistence.clear()
+        this.persistence.set_user_state('anonymous')
         this.sessionManager.resetSessionId()
         const uuid = this.get_config('get_device_id')(_UUID())
         this.register_once(
@@ -1784,8 +1911,15 @@ const override_ph_init_func = function () {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_phlib(token || '', config || {}, name)
-                posthog_master[name]._loaded()
+                posthog_master[name] = instances[name] = create_phlib(
+                    token || '',
+                    config || {},
+                    name,
+                    (instance: PostHog) => {
+                        posthog_master[name] = instances[name] = instance
+                        instance._loaded()
+                    }
+                )
             }
             return posthog_master[name]
         } else {
@@ -1796,8 +1930,10 @@ const override_ph_init_func = function () {
                 instance = instances[PRIMARY_INSTANCE_NAME]
             } else if (token) {
                 // intialize the main posthog lib
-                instance = create_phlib(token, config || {}, PRIMARY_INSTANCE_NAME)
-                instance._loaded()
+                instance = create_phlib(token, config || {}, PRIMARY_INSTANCE_NAME, (instance: PostHog) => {
+                    instances[PRIMARY_INSTANCE_NAME] = instance
+                    instance._loaded()
+                })
                 instances[PRIMARY_INSTANCE_NAME] = instance
             }
 

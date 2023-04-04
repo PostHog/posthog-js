@@ -27,7 +27,7 @@ describe('Event capture', () => {
             },
         }).as('decide')
 
-        cy.visit('./playground/cypress', {
+        cy.visit('./playground/cypress-full', {
             onBeforeLoad(win) {
                 cy.stub(win.console, 'error').as('consoleError')
             },
@@ -316,48 +316,6 @@ describe('Event capture', () => {
 
             cy.get('[data-cy-custom-event-button]').click()
             cy.phCaptures().should('deep.equal', [])
-        })
-    })
-
-    describe('capturing performance', () => {
-        it('sends performance timing with the pageview when enabled', () => {
-            given('options', () => ({ capture_pageview: true, _capture_performance: true }))
-            start()
-
-            // Pageview will be sent immediately
-            cy.wait('@capture').should(({ request, url }) => {
-                expect(request.headers).to.eql({
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                })
-
-                expect(url).to.match(urlWithVersion)
-
-                const captures = getBase64EncodedPayload(request)
-
-                expect(captures.event).to.equal('$pageview')
-
-                const pageLoad = captures.properties.$performance_page_loaded
-                expect(pageLoad).to.be.a('number')
-
-                const rawPerformance = JSON.parse(captures.properties.$performance_raw)
-
-                expect(rawPerformance).to.have.property('navigation')
-                expect(rawPerformance.navigation).to.be.instanceof(Array).and.to.have.length(2)
-                expect(rawPerformance.navigation[0]).to.contain('domContentLoadedEventEnd')
-
-                expect(rawPerformance).to.have.property('resource')
-                expect(rawPerformance.resource).to.be.instanceof(Array).and.to.have.length(2)
-                expect(rawPerformance.resource[0]).to.contain('connectEnd')
-
-                expect(rawPerformance).to.have.property('paint')
-                expect(rawPerformance.paint).to.be.instanceof(Array)
-                // we can't guarantee we run early enough to capture paint results
-                // so, we check if they are present before asserting on them
-                if (rawPerformance.paint.length === 2 && rawPerformance.paint[0].length > 0) {
-                    expect(rawPerformance.paint).to.be.instanceof(Array).and.to.have.length(2)
-                    expect(rawPerformance.paint[0]).to.contain('startTime')
-                }
-            })
         })
     })
 

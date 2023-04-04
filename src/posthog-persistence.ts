@@ -12,10 +12,14 @@ export const PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id'
 export const ALIAS_ID_KEY = '__alias'
 export const CAMPAIGN_IDS_KEY = '__cmpns'
 export const EVENT_TIMERS_KEY = '__timers'
+export const AUTOCAPTURE_DISABLED_SERVER_SIDE = '$autocapture_disabled_server_side'
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
+export const SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE = '$session_recording_recorder_version_server_side' // follows rrweb versioning
 export const SESSION_ID = '$sesid'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
+const USER_STATE = '$user_state'
+
 export const RESERVED_PROPERTIES = [
     PEOPLE_DISTINCT_ID_KEY,
     ALIAS_ID_KEY,
@@ -24,6 +28,7 @@ export const RESERVED_PROPERTIES = [
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
+    USER_STATE,
 ]
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
@@ -48,6 +53,7 @@ export class PostHogPersistence {
     expire_days: number | undefined
     default_expiry: number | undefined
     cross_subdomain: boolean | undefined
+    user_state: 'anonymous' | 'identified'
 
     constructor(config: PostHogConfig) {
         // clean chars that aren't accepted by the http spec for cookie values
@@ -88,6 +94,8 @@ export class PostHogPersistence {
         } else {
             this.storage = cookieStore
         }
+
+        this.user_state = 'anonymous'
 
         this.load()
         this.update_config(config)
@@ -301,5 +309,14 @@ export class PostHogPersistence {
             this.save()
         }
         return timestamp
+    }
+
+    get_user_state(): 'anonymous' | 'identified' {
+        return this.props[USER_STATE] || 'anonymous'
+    }
+
+    set_user_state(state: 'anonymous' | 'identified'): void {
+        this.props[USER_STATE] = state
+        this.save()
     }
 }

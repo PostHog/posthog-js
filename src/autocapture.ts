@@ -22,13 +22,23 @@ import {
     autocaptureCompatibleElements,
     isAngularStyleAttr,
     isDocumentFragment,
+    getDirectAndNestedSpanText,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './posthog-persistence'
 
 const autocapture = {
     _initializedTokens: [] as string[],
+
+    _isAutocaptureEnabled: false as boolean,
+
+    _setIsAutocaptureEnabled: function (instance: PostHog): void {
+        const disabled_server_side = !!instance.get_property(AUTOCAPTURE_DISABLED_SERVER_SIDE)
+        const enabled_client_side = !!instance.get_config('autocapture')
+        this._isAutocaptureEnabled = enabled_client_side && !disabled_server_side
+    },
 
     _previousElementSibling: function (el: Element): Element | null {
         if (el.previousElementSibling) {
@@ -42,13 +52,37 @@ const autocapture = {
         }
     },
 
+    _getAugmentPropertiesFromElement: function (elem: Element): Properties {
+        const shouldCaptureEl = shouldCaptureElement(elem)
+        if (!shouldCaptureEl) {
+            return {}
+        }
+
+        const props: Properties = {}
+
+        _each(elem.attributes, function (attr: Attr) {
+            if (attr.name.startsWith('data-ph-capture-attribute')) {
+                const propertyKey = attr.name.replace('data-ph-capture-attribute-', '')
+                const propertyValue = attr.value
+                if (propertyKey && propertyValue && shouldCaptureValue(propertyValue)) {
+                    props[propertyKey] = propertyValue
+                }
+            }
+        })
+        return props
+    },
+
     _getPropertiesFromElement: function (elem: Element, maskInputs: boolean, maskText: boolean): Properties {
         const tag_name = elem.tagName.toLowerCase()
         const props: Properties = {
             tag_name: tag_name,
         }
         if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
-            props['$el_text'] = getSafeText(elem)
+            if (tag_name.toLowerCase() === 'a' || tag_name.toLowerCase() === 'button') {
+                props['$el_text'] = getDirectAndNestedSpanText(elem)
+            } else {
+                props['$el_text'] = getSafeText(elem)
+            }
         }
 
         const classes = getClassName(elem)
@@ -135,7 +169,7 @@ const autocapture = {
         }
     },
 
-    _captureEvent: function (e: Event, instance: PostHog): boolean | void {
+    _captureEvent: function (e: Event, instance: PostHog, eventName = '$autocapture'): boolean | void {
         /*** Don't mess with this code without running IE8 tests on it ***/
         let target = this._getEventTarget(e)
         if (isTextNode(target)) {
@@ -143,8 +177,10 @@ const autocapture = {
             target = (target.parentNode || null) as Element | null
         }
 
-        if (e.type === 'click' && e instanceof MouseEvent) {
-            this.rageclicks?.click(e.clientX, e.clientY, new Date().getTime())
+        if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
+            if (this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
+                this._captureEvent(e, instance, '$rageclick')
+            }
         }
 
         if (target && shouldCaptureDomEvent(target, e, this.config)) {
@@ -161,6 +197,7 @@ const autocapture = {
             }
 
             const elementsJson: Properties[] = []
+            const autocaptureAugmentProperties: Properties = {}
             let href,
                 explicitNoCapture = false
             _each(targetElementList, (el) => {
@@ -186,10 +223,19 @@ const autocapture = {
                         instance.get_config('mask_all_text')
                     )
                 )
+
+                const augmentProperties = this._getAugmentPropertiesFromElement(el)
+                _extend(autocaptureAugmentProperties, augmentProperties)
             })
 
             if (!instance.get_config('mask_all_text')) {
-                elementsJson[0]['$el_text'] = getSafeText(target)
+                // if the element is a button or anchor tag get the span text from any
+                // children and include it as/with the text property on the parent element
+                if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
+                    elementsJson[0]['$el_text'] = getDirectAndNestedSpanText(target)
+                } else {
+                    elementsJson[0]['$el_text'] = getSafeText(target)
+                }
             }
 
             if (href) {
@@ -205,10 +251,11 @@ const autocapture = {
                 {
                     $elements: elementsJson,
                 },
-                this._getCustomProperties(targetElementList)
+                this._getCustomProperties(targetElementList),
+                autocaptureAugmentProperties
             )
 
-            instance.capture('$autocapture', props)
+            instance.capture(eventName, props)
             return true
         }
     },
@@ -243,14 +290,21 @@ const autocapture = {
             this.config.url_allowlist = this.config.url_allowlist.map((url) => new RegExp(url))
         }
 
-        this.rageclicks = new RageClick(instance)
+        this.rageclicks = new RageClick(instance.get_config('rageclick'))
     },
 
     afterDecideResponse: function (response: DecideResponse, instance: PostHog): void {
+        this._setIsAutocaptureEnabled(instance)
         const token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
             logger.log('autocapture already initialized for token "' + token + '"')
             return
+        }
+
+        if (instance.persistence) {
+            instance.persistence.register({
+                [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
+            })
         }
 
         this._initializedTokens.push(token)
@@ -259,7 +313,7 @@ const autocapture = {
             response &&
             response['config'] &&
             response['config']['enable_collect_everything'] &&
-            instance.get_config('autocapture')
+            this._isAutocaptureEnabled
         ) {
             // TODO: delete custom_properties after changeless typescript refactor
             if (response['custom_properties']) {

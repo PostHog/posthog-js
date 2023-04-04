@@ -1,4 +1,4 @@
-import { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
+import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'
@@ -64,6 +64,7 @@ export interface PostHogConfig {
     verbose: boolean
     img: boolean
     capture_pageview: boolean
+    capture_pageleave: boolean
     debug: boolean
     cookie_expiration: number
     upgrade: boolean
@@ -97,13 +98,14 @@ export interface PostHogConfig {
     callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     _capture_metrics: boolean
-    _capture_performance: boolean
+    capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
     bootstrap: {
         distinctID?: string
         isIdentifiedID?: boolean
         featureFlags?: Record<string, boolean | string>
+        featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
 }
@@ -135,6 +137,7 @@ export interface SessionRecordingOptions {
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
+    recorderVersion?: 'v1' | 'v2'
 }
 
 export enum Compression {
@@ -180,6 +183,7 @@ export interface XHRParams extends QueuedRequestData {
     captureMetrics: CaptureMetrics
     retryQueue: RetryQueue
     onXHRError: (req: XMLHttpRequest) => void
+    timeout?: number
 }
 
 export interface DecideResponse {
@@ -190,9 +194,14 @@ export interface DecideResponse {
     }
     custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
+    featureFlagPayloads: Record<string, JsonType>
+    errorsWhileComputingFlags: boolean
+    autocapture_opt_out?: boolean
+    capturePerformance?: boolean
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
+        recorderVersion?: 'v1' | 'v2'
     }
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
@@ -281,3 +290,5 @@ export interface JSC {
 }
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
+
+export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>

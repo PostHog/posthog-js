@@ -19,7 +19,7 @@ export class RetryQueue extends RequestQueueScaffold {
         this.areWeOnline = true
         this.onXHRError = onXHRError
 
-        if ('onLine' in window.navigator) {
+        if (typeof window !== 'undefined' && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
                 this._handleWeAreNowOnline()

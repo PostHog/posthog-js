@@ -75,6 +75,17 @@ jobs:
                   repository: 'PostHog/posthog'
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
+            - name: Install pnpm
+              uses: pnpm/action-setup@v2
+              with:
+                  version: 7.x.x
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v3
+              with:
+                  node-version: 18
+                  cache: pnpm
+
             - name: Install new posthog-js version in main repo
               id: pnpm-upgrade
               run: |
@@ -97,11 +108,11 @@ jobs:
               uses: peter-evans/create-pull-request@v3
               with:
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
-                  commit-message: "chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}"
+                  commit-message: 'chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}'
                   branch: posthog-js-${{ env.COMMITTED_VERSION }}
                   delete-branch: true
                   labels: automerge
-                  title: "chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}"
+                  title: 'chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}'
                   body: |
                       ## Changes
 

@@ -14,172 +14,6 @@ jest.mock('../decide')
 
 given('lib', () => Object.assign(new PostHog(), given.overrides))
 
-describe('identify()', () => {
-    given(
-        'subject',
-        () => () => given.lib.identify(given.identity, given.userPropertiesToSet, given.userPropertiesToSetOnce)
-    )
-
-    given('identity', () => 'a-new-id')
-
-    given('overrides', () => ({
-        get_distinct_id: () => given.oldIdentity,
-        capture: jest.fn(),
-        register: jest.fn(),
-        register_once: jest.fn(),
-        unregister: jest.fn(),
-        get_property: () => given.deviceId,
-        people: {
-            set: jest.fn(),
-            set_once: jest.fn(),
-        },
-        _flags: {},
-        _captureMetrics: {
-            incr: jest.fn(),
-        },
-        featureFlags: {
-            setAnonymousDistinctId: jest.fn(),
-        },
-        reloadFeatureFlags: jest.fn(),
-    }))
-
-    given('properties', () => ({ $device_id: '123', __alias: 'efg' }))
-    given('oldIdentity', () => 'oldIdentity')
-    given('deviceId', () => given.oldIdentity)
-
-    it('registers new user id and updates alias', () => {
-        given.subject()
-
-        expect(given.overrides.register).toHaveBeenCalledWith({ $user_id: 'a-new-id' })
-        expect(given.overrides.register).toHaveBeenCalledWith({ distinct_id: 'a-new-id' })
-    })
-
-    it('calls capture when identity changes', () => {
-        given.subject()
-
-        expect(given.overrides.capture).toHaveBeenCalledWith(
-            '$identify',
-            {
-                distinct_id: 'a-new-id',
-                $anon_distinct_id: 'oldIdentity',
-            },
-            { $set: {}, $set_once: {} }
-        )
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
-        expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
-    })
-
-    it('calls capture when identity changes and old ID is anonymous', () => {
-        given('deviceId', () => null)
-
-        given.subject()
-
-        expect(given.overrides.capture).toHaveBeenCalledWith(
-            '$identify',
-            {
-                distinct_id: 'a-new-id',
-                $anon_distinct_id: 'oldIdentity',
-            },
-            { $set: {}, $set_once: {} }
-        )
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
-        expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
-    })
-
-    it("don't identify if the old id isn't anonymous", () => {
-        given('deviceId', () => 'anonymous-id')
-
-        given.subject()
-
-        expect(given.overrides.capture).not.toHaveBeenCalled()
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
-        expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
-    })
-
-    it('calls capture with user properties if passed', () => {
-        given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
-        given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
-
-        given.subject()
-
-        expect(given.overrides.capture).toHaveBeenCalledWith(
-            '$identify',
-            {
-                distinct_id: 'a-new-id',
-                $anon_distinct_id: 'oldIdentity',
-            },
-            { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } }
-        )
-        expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
-    })
-
-    describe('identity did not change', () => {
-        given('oldIdentity', () => given.identity)
-
-        it('does not capture or set user properties', () => {
-            given.subject()
-
-            expect(given.overrides.capture).not.toHaveBeenCalled()
-            expect(given.overrides.people.set).not.toHaveBeenCalled()
-            expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
-        })
-
-        it('calls people.set when user properties passed', () => {
-            given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
-            given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
-
-            given.subject()
-
-            expect(given.overrides.capture).not.toHaveBeenCalled()
-            expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
-            expect(given.overrides.people.set).toHaveBeenCalledWith({ email: 'john@example.com' })
-            expect(given.overrides.people.set_once).toHaveBeenCalledWith({ howOftenAmISet: 'once!' })
-        })
-    })
-
-    describe('invalid id passed', () => {
-        given('identity', () => null)
-
-        it('does not update user', () => {
-            console.error = jest.fn()
-
-            given.subject()
-
-            expect(given.overrides.capture).not.toHaveBeenCalled()
-            expect(given.overrides.register).not.toHaveBeenCalled()
-            expect(console.error).toHaveBeenCalledWith('Unique user id has not been set in posthog.identify')
-        })
-    })
-
-    describe('reloading feature flags', () => {
-        it('reloads when identity changes', () => {
-            given.subject()
-
-            expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
-            expect(given.overrides.reloadFeatureFlags).toHaveBeenCalled()
-        })
-
-        it('does not reload feature flags if identity does not change', () => {
-            given('oldIdentity', () => given.identity)
-
-            given.subject()
-
-            expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
-            expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
-        })
-
-        it('does not reload feature flags if identity does not change but properties do', () => {
-            given('oldIdentity', () => given.identity)
-            given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
-            given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
-
-            given.subject()
-            expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
-            expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
-        })
-    })
-})
-
 describe('capture()', () => {
     given('eventName', () => '$event')
 
@@ -295,154 +129,6 @@ describe('capture()', () => {
         const event = given.subject()
         expect(event.properties.key.length).toBe(50000)
     })
-
-    describe('capturing window performance', () => {
-        given('eventName', () => '$pageview')
-
-        given('config', () => ({
-            property_blacklist: [],
-            _capture_performance: true,
-            _onCapture: jest.fn(),
-        }))
-
-        given('performanceEntries', () => ({
-            navigation: [{ duration: 1234 }],
-            paint: [{ a: 'b' }],
-            resource: [{ c: 'd' }],
-        }))
-
-        // e.g. IE does not implement performance paint timing
-        // https://developer.mozilla.org/en-US/docs/Web/API/PerformancePaintTiming
-        // even though it implements getEntriesByType
-        given('paintTimingsImplementedByBrowser', () => true)
-
-        given('clearResourceTimings', () => jest.fn())
-
-        given('getEntriesByType', () =>
-            jest.fn().mockImplementation((type) => {
-                if (!given.paintTimingsImplementedByBrowser && type === 'paint') {
-                    throw new Error('IE does not implement this')
-                } else {
-                    return given.performanceEntries[type]
-                }
-            })
-        )
-
-        beforeEach(() => {
-            /*
-                window.performance is not a complete implementation in jsdom
-                see github issue https://github.com/jsdom/jsdom/issues/3309
-                while it is not completely implemented we can follow the Jest instructions
-                here: https://jestjs.io/docs/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom
-             */
-
-            Object.defineProperty(window, 'performance', {
-                writable: true,
-                value: {
-                    getEntriesByType: given.getEntriesByType,
-                    clearResourceTimings: given.clearResourceTimings,
-                },
-            })
-        })
-
-        it('does not capture performance when disabled', () => {
-            given('config', () => ({
-                property_blacklist: [],
-                _capture_performance: false,
-                _onCapture: jest.fn(),
-            }))
-
-            given.subject()
-
-            expect(given.getEntriesByType).not.toHaveBeenCalled()
-            expect(given.clearResourceTimings).not.toHaveBeenCalled()
-        })
-
-        it('captures pageview with performance when enabled', () => {
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                '{"navigation":[["duration"],[[1234]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
-            )
-
-            expect(captured_event.properties).toHaveProperty('$performance_page_loaded', 1234)
-
-            expect(given.getEntriesByType).toHaveBeenCalledTimes(3)
-            expect(given.getEntriesByType).toHaveBeenNthCalledWith(1, 'navigation')
-            expect(given.getEntriesByType).toHaveBeenNthCalledWith(2, 'paint')
-            expect(given.getEntriesByType).toHaveBeenNthCalledWith(3, 'resource')
-            expect(given.clearResourceTimings).toHaveBeenCalled()
-        })
-
-        it('captures pageview with performance even if duration is not available', () => {
-            given('performanceEntries', () => ({
-                navigation: [{}],
-                paint: [{ a: 'b' }],
-                resource: [{ c: 'd' }],
-            }))
-
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                '{"navigation":[[],[[]]],"paint":[["a"],[["b"]]],"resource":[["c"],[["d"]]]}'
-            )
-
-            expect(captured_event.properties).not.toHaveProperty('$performance_page_loaded')
-        })
-
-        it('safely attempts to capture pageview with performance when enabled but not available in browser', () => {
-            delete window.performance
-
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                JSON.stringify({
-                    navigation: [],
-                    paint: [],
-                    resource: [],
-                })
-            )
-        })
-
-        it('safely attempts to capture pageview with performance when enabled but getEntriesByType is not available in browser', () => {
-            delete window.performance.getEntriesByType
-
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                JSON.stringify({
-                    navigation: [],
-                    paint: [],
-                    resource: [],
-                })
-            )
-        })
-
-        it('safely attempts to capture performance if a type of entry is not available in a browser', () => {
-            given('paintTimingsImplementedByBrowser', () => false)
-
-            const captured_event = given.subject()
-
-            expect(captured_event.properties).toHaveProperty(
-                '$performance_raw',
-                '{"navigation":[["duration"],[[1234]]],"paint":[],"resource":[["c"],[["d"]]]}'
-            )
-        })
-
-        it('supports timestamp override', () => {
-            const date = new Date(1234)
-            given('options', () => ({
-                timestamp: date,
-            }))
-
-            const captured_event = given.subject()
-            expect(captured_event.timestamp).toBe(date)
-        })
-    })
 })
 
 describe('_calculate_event_properties()', () => {
@@ -517,6 +203,18 @@ describe('_calculate_event_properties()', () => {
         expect(given.overrides.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
     })
 
+    it('only adds a few propertes if event is $performance_event', () => {
+        given('event_name', () => '$performance_event')
+        expect(given.subject).toEqual({
+            distinct_id: 'abc',
+            event: 'prop', // from actual mock event properties
+            $current_url: undefined,
+            $session_id: 'sessionId',
+            $window_id: 'windowId',
+            token: 'testtoken',
+        })
+    })
+
     it('calls sanitize_properties', () => {
         given('sanitize_properties', () => (props, event_name) => ({ token: props.token, event_name }))
 
@@ -562,10 +260,12 @@ describe('_handle_unload()', () => {
 
     given('config', () => ({
         capture_pageview: given.capturePageviews,
+        capture_pageleave: given.capturePageleave,
         request_batching: given.batching,
     }))
 
     given('capturePageviews', () => true)
+    given('capturePageleave', () => true)
     given('batching', () => true)
 
     it('captures $pageleave', () => {
@@ -652,6 +352,7 @@ describe('bootstrapping feature flags', () => {
         given.subject()
         expect(given.lib.get_distinct_id()).toBe('abcd')
         expect(given.lib.get_property('$device_id')).toBe('abcd')
+        expect(given.lib.persistence.get_user_state()).toBe('anonymous')
 
         given.lib.identify('efgh')
 
@@ -677,6 +378,7 @@ describe('bootstrapping feature flags', () => {
         given.subject()
         expect(given.lib.get_distinct_id()).toBe('abcd')
         expect(given.lib.get_property('$device_id')).toBe('og-device-id')
+        expect(given.lib.persistence.get_user_state()).toBe('identified')
 
         given.lib.identify('efgh')
         expect(given.overrides.capture).not.toHaveBeenCalled()
@@ -696,6 +398,36 @@ describe('bootstrapping feature flags', () => {
         expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
         expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
         expect(given.lib.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1', enabled: true })
+    })
+
+    it('sets the right feature flag payloads', () => {
+        given('config', () => ({
+            bootstrap: {
+                featureFlags: {
+                    multivariant: 'variant-1',
+                    enabled: true,
+                    jsonString: true,
+                    disabled: false,
+                    undef: undefined,
+                },
+                featureFlagPayloads: {
+                    multivariant: 'some-payload',
+                    enabled: {
+                        another: 'value',
+                    },
+                    disabled: 'should not show',
+                    undef: 200,
+                    jsonString: '{"a":"payload"}',
+                },
+            },
+        }))
+
+        given.subject()
+        expect(given.lib.getFeatureFlagPayload('multivariant')).toBe('some-payload')
+        expect(given.lib.getFeatureFlagPayload('enabled')).toEqual({ another: 'value' })
+        expect(given.lib.getFeatureFlagPayload('jsonString')).toEqual({ a: 'payload' })
+        expect(given.lib.getFeatureFlagPayload('disabled')).toBe(undefined)
+        expect(given.lib.getFeatureFlagPayload('undef')).toBe(undefined)
     })
 
     it('does nothing when empty', () => {
@@ -756,6 +488,7 @@ describe('bootstrapping feature flags', () => {
 })
 
 describe('init()', () => {
+    jest.spyOn(window, 'window', 'get')
     given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 
     given('overrides', () => ({
@@ -794,6 +527,42 @@ describe('init()', () => {
         given.subject()
         expect(given.decide).toBe(undefined)
         expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
+    })
+
+    it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
+        given('overrides', () => ({
+            __loaded_recorder_version: undefined,
+        }))
+        delete window.rrweb
+        window.rrweb = { record: undefined }
+        delete window.rrwebRecord
+        window.rrwebRecord = undefined
+        given.subject()
+        expect(given.lib.__loaded_recorder_version).toEqual(undefined)
+    })
+
+    it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
+        given('overrides', () => ({
+            __loaded_recorder_version: undefined,
+        }))
+        delete window.rrweb
+        window.rrweb = { record: 'anything', version: '1.1.3' }
+        delete window.rrwebRecord
+        window.rrwebRecord = 'is possible'
+        given.subject()
+        expect(given.lib.__loaded_recorder_version).toMatch(new RegExp(`^1\.?`)) // start with 1.?.?
+    })
+
+    it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
+        given('overrides', () => ({
+            __loaded_recorder_version: undefined,
+        }))
+        delete window.rrweb
+        window.rrweb = { record: 'anything', version: '2.0.0-alpha.6' }
+        delete window.rrwebRecord
+        window.rrwebRecord = 'is possible'
+        given.subject()
+        expect(given.lib.__loaded_recorder_version).toMatch(new RegExp(`^2\.?`)) // start with 2.?.?
     })
 
     it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
@@ -1098,42 +867,5 @@ describe('_loaded()', () => {
         expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
         expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
         expect(given.overrides.featureFlags.resetRequestQueue).toHaveBeenCalled()
-    })
-})
-
-describe('reset()', () => {
-    given('subject', () => () => given.lib.reset())
-
-    given('config', () => ({
-        api_host: 'https://test.com',
-        token: 'testtoken',
-        persistence: 'localStorage',
-    }))
-
-    given('overrides', () => ({
-        persistence: new PostHogPersistence(given.config),
-        sessionPersistence: new PostHogPersistence({ ...given.config, persistence: 'sessionstorage' }),
-    }))
-
-    beforeEach(() => {
-        given.lib._init('testtoken', given.config, 'testhog')
-    })
-
-    it('clears persistence', () => {
-        given.lib.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
-        given.lib.register_for_session({ $more_flags: { flag: 'variant', other: true } })
-        expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
-        expect(given.lib.sessionPersistence.props['$more_flags']).toEqual({ flag: 'variant', other: true })
-        given.subject()
-        expect(given.lib.persistence.props['$enabled_feature_flags']).toEqual(undefined)
-        expect(given.lib.sessionPersistence.props['$more_flags']).toEqual(undefined)
-    })
-
-    it('resets the session_id and window_id', () => {
-        const initialSessionAndWindowId = given.lib.sessionManager.checkAndGetSessionAndWindowId()
-        given.subject()
-        const nextSessionAndWindowId = given.lib.sessionManager.checkAndGetSessionAndWindowId()
-        expect(initialSessionAndWindowId.sessionId).not.toEqual(nextSessionAndWindowId.sessionId)
-        expect(initialSessionAndWindowId.windowId).not.toEqual(nextSessionAndWindowId.windowId)
     })
 })

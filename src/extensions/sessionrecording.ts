@@ -1,22 +1,25 @@
-import { loadScript } from '../autocapture-utils'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../posthog-persistence'
-import Config from '../config'
-import { filterDataURLsFromLargeDataObjects, truncateLargeConsoleLogs } from './sessionrecording-utils'
+import {
+    filterDataURLsFromLargeDataObjects,
+    FULL_SNAPSHOT_EVENT_TYPE,
+    INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+    META_EVENT_TYPE,
+    MUTATION_SOURCE_TYPE,
+    truncateLargeConsoleLogs,
+} from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
 import type { record } from 'rrweb/typings'
 import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
+import { loadScript } from '../autocapture-utils'
+import Config from '../config'
+import { logger } from '../utils'
 
 const BASE_ENDPOINT = '/e/'
-
-export const FULL_SNAPSHOT_EVENT_TYPE = 2
-export const META_EVENT_TYPE = 4
-export const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
-export const PLUGIN_EVENT_TYPE = 6
-export const MUTATION_SOURCE_TYPE = 0
 
 export class SessionRecording {
     instance: PostHog
@@ -29,6 +32,7 @@ export class SessionRecording {
     sessionId: string | null
     receivedDecide: boolean
     rrwebRecord: typeof record | undefined
+    recorderVersion?: string
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -74,16 +78,27 @@ export class SessionRecording {
         return enabled_client_side ?? enabled_server_side
     }
 
+    getRecordingVersion() {
+        const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
+        const recordingVersion_client_side = this.instance.get_config('session_recording')?.recorderVersion
+        return recordingVersion_client_side || recordingVersion_server_side || 'v1'
+    }
+
     afterDecideResponse(response: DecideResponse) {
         this.receivedDecide = true
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
+                [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
             })
         }
         if (response.sessionRecording?.endpoint) {
             this.endpoint = response.sessionRecording?.endpoint
+        }
+
+        if (response.sessionRecording?.recorderVersion) {
+            this.recorderVersion = response.sessionRecording.recorderVersion
         }
         this.startRecordingIfEnabled()
     }
@@ -109,12 +124,26 @@ export class SessionRecording {
         if (typeof Object.assign === 'undefined') {
             return
         }
-        if (!this.captureStarted && !this.instance.get_config('disable_session_recording')) {
-            this.captureStarted = true
+
+        // We do not switch recorder versions midway through a recording.
+        if (this.captureStarted || this.instance.get_config('disable_session_recording')) {
+            return
+        }
+
+        this.captureStarted = true
+
+        const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
+
+        // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
+        // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
+        // recorder.js from cdn since it hasn't been loaded.
+        if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
             loadScript(
-                this.instance.get_config('api_host') + '/static/recorder.js?v=' + Config.LIB_VERSION,
+                this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
                 this._onScriptLoaded.bind(this)
             )
+        } else {
+            this._onScriptLoaded()
         }
     }
 
@@ -132,10 +161,16 @@ export class SessionRecording {
 
         // Event types FullSnapshot and Meta mean we're already in the process of sending a full snapshot
         if (
+            this.captureStarted &&
             (this.windowId !== windowId || this.sessionId !== sessionId) &&
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1
         ) {
-            this.rrwebRecord?.takeFullSnapshot()
+            try {
+                this.rrwebRecord?.takeFullSnapshot()
+            } catch (e) {
+                // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
+                logger.error('Error taking full snapshot.', e)
+            }
         }
         this.windowId = windowId
         this.sessionId = sessionId
@@ -162,7 +197,7 @@ export class SessionRecording {
         // @ts-ignore
         this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
 
-        // only allows user to set our 'whitelisted' options
+        // only allows user to set our 'allowlisted' options
         const userSessionRecordingOptions = this.instance.get_config('session_recording')
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
@@ -172,7 +207,14 @@ export class SessionRecording {
             }
         }
 
-        this.stopRrweb = this.rrwebRecord?.({
+        if (!this.rrwebRecord) {
+            logger.error(
+                'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
+            )
+            return
+        }
+
+        this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 event = truncateLargeConsoleLogs(
                     filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
@@ -205,8 +247,13 @@ export class SessionRecording {
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
         //   Dropping the initial event is fine (it's always captured by rrweb).
         this.instance._addCaptureHook((eventName) => {
-            if (eventName === '$pageview') {
-                this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
+            // If anything could go wrong here it has the potential to block the main loop so we catch all errors.
+            try {
+                if (eventName === '$pageview') {
+                    this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
+                }
+            } catch (e) {
+                logger.error('Could not add $pageview to rrweb session', e)
             }
         })
     }

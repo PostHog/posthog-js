@@ -48,7 +48,7 @@ describe('Decide', () => {
             given.subject()
 
             expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/?v=2',
+                'https://test.com/decide/?v=3',
                 {
                     data: _base64Encode(
                         JSON.stringify({
@@ -69,7 +69,9 @@ describe('Decide', () => {
         given('subject', () => () => given.decide.parseDecideResponse(given.decideResponse))
 
         it('properly parses decide response', () => {
-            given('decideResponse', () => ({ enable_collect_everything: true }))
+            given('decideResponse', () => ({
+                enable_collect_everything: true,
+            }))
             given.subject()
 
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)

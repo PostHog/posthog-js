@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { render } from '@testing-library/react'
-import { PostHogProvider, getPostHogContext } from '..'
+import { PostHogProvider, PostHogContext } from '..'
 
 describe('PostHogProvider component', () => {
     given('render', () => () =>
@@ -11,29 +11,5 @@ describe('PostHogProvider component', () => {
 
     it('should render children components', () => {
         expect(given.render().getByText('Test')).toBeTruthy()
-    })
-
-    it('should require a client', () => {
-        given('posthog', () => undefined)
-        console.error = jest.fn()
-
-        expect(() => given.render()).toThrow()
-    })
-
-    it('should make the context consumable by the children', () => {
-        function TestChild() {
-            const context = React.useContext(getPostHogContext())
-            expect(context.client).toEqual(given.posthog)
-            return null
-        }
-
-        given('childComponent', () => (
-            <>
-                <TestChild />
-                <TestChild />
-            </>
-        ))
-
-        given.render()
     })
 })

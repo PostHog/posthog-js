@@ -66,6 +66,25 @@ describe('persistence', () => {
         expect(document.cookie).toEqual('')
     })
 
+    it('should save user state', () => {
+        let lib = new PostHogPersistence({ name: 'bla', persistence: 'cookie' })
+        lib.set_user_state('identified')
+        expect(document.cookie).toEqual('ph__posthog=%7B%22%24user_state%22%3A%22identified%22%7D')
+    })
+
+    it('can load user state', () => {
+        let lib = new PostHogPersistence({ name: 'bla', persistence: 'cookie' })
+        lib.set_user_state('identified')
+        expect(lib.get_user_state()).toEqual('identified')
+    })
+
+    it('has user state as a reserved property key', () => {
+        let lib = new PostHogPersistence({ name: 'bla', persistence: 'cookie' })
+        lib.register({ distinct_id: 'testy', test_prop: 'test_value' })
+        lib.set_user_state('identified')
+        expect(lib.properties()).toEqual({ distinct_id: 'testy', test_prop: 'test_value' })
+    })
+
     it(`should register once LS`, () => {
         let lib = new PostHogPersistence({ name: 'test', persistence: 'localStorage+cookie' })
         lib.register_once({ distinct_id: 'hi', test_prop: 'test_val' })

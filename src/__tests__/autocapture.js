@@ -2,6 +2,7 @@ import sinon from 'sinon'
 
 import { autocapture } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../posthog-persistence'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
@@ -108,6 +109,79 @@ describe('Autocapture system', () => {
             const props = autocapture._getPropertiesFromElement(angularDiv)
             expect(props['_ngcontent-dpm-c448']).toBeUndefined()
             expect(props['_nghost-dpm-c448']).toBeUndefined()
+        })
+    })
+
+    describe('_getAugmentPropertiesFromElement', () => {
+        let div, div2, input, sensitiveInput, hidden, password
+        beforeEach(() => {
+            div = document.createElement('div')
+            div.className = 'class1 class2 class3          ' // Lots of spaces might mess things up
+            div.innerHTML = 'my <span>sweet <i>inner</i></span> text'
+            div.setAttribute('data-ph-capture-attribute-one-on-the-div', 'one')
+            div.setAttribute('data-ph-capture-attribute-two-on-the-div', 'two')
+            div.setAttribute('data-ph-capture-attribute-falsey-on-the-div', '0')
+            div.setAttribute('data-ph-capture-attribute-false-on-the-div', false)
+
+            input = document.createElement('input')
+            input.setAttribute('data-ph-capture-attribute-on-the-input', 'is on the input')
+            input.value = 'test val'
+
+            sensitiveInput = document.createElement('input')
+            sensitiveInput.value = 'test val'
+            sensitiveInput.setAttribute('data-ph-capture-attribute-on-the-sensitive-input', 'is on the sensitive-input')
+            sensitiveInput.className = 'ph-sensitive'
+
+            hidden = document.createElement('div')
+            hidden.setAttribute('type', 'hidden')
+            hidden.setAttribute('data-ph-capture-attribute-on-the-hidden', 'is on the hidden')
+            hidden.value = 'hidden val'
+
+            password = document.createElement('div')
+            password.setAttribute('type', 'password')
+            password.setAttribute('data-ph-capture-attribute-on-the-password', 'is on the password')
+            password.value = 'password val'
+
+            const divSibling = document.createElement('div')
+            const divSibling2 = document.createElement('span')
+
+            div2 = document.createElement('div')
+            div2.className = 'parent'
+            div2.appendChild(divSibling)
+            div2.appendChild(divSibling2)
+            div2.appendChild(div)
+            div2.appendChild(input)
+            div2.appendChild(sensitiveInput)
+            div2.appendChild(hidden)
+            div2.appendChild(password)
+        })
+
+        it('should collect multiple augments from elements', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(div)
+            expect(props['one-on-the-div']).toBe('one')
+            expect(props['two-on-the-div']).toBe('two')
+            expect(props['falsey-on-the-div']).toBe('0')
+            expect(props['false-on-the-div']).toBe('false')
+        })
+
+        it('should collect augment from input value', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(input)
+            expect(props['on-the-input']).toBe('is on the input')
+        })
+
+        it('should collect augment from input with class "ph-sensitive"', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(sensitiveInput)
+            expect(props['on-the-sensitive-input']).toBeUndefined()
+        })
+
+        it('should collect augment from the hidden element value', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(hidden)
+            expect(props['on-the-hidden']).toBe('is on the hidden')
+        })
+
+        it('should collect augment from the password element value', () => {
+            const props = autocapture._getAugmentPropertiesFromElement(password)
+            expect(props['on-the-password']).toBe('is on the password')
         })
     })
 
@@ -376,6 +450,8 @@ describe('Autocapture system', () => {
                     switch (key) {
                         case 'mask_all_element_attributes':
                             return false
+                        case 'rageclick':
+                            return true
                     }
                 }),
             }
@@ -422,7 +498,12 @@ describe('Autocapture system', () => {
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),
                 },
+                get_property: (property_key) =>
+                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE
+                        ? given.$autocapture_disabled_server_side
+                        : undefined,
             }
+            given('$autocapture_disabled_server_side', () => false)
             autocapture.init(lib)
             autocapture.afterDecideResponse(given.decideResponse, lib)
 
@@ -452,6 +533,59 @@ describe('Autocapture system', () => {
             lib.capture.resetHistory()
         })
 
+        it('should capture rageclick', () => {
+            autocapture.init(lib)
+
+            const elTarget = document.createElement('img')
+            const elParent = document.createElement('span')
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'http://test.com')
+            elGrandparent.appendChild(elParent)
+            const fakeEvent = {
+                target: elTarget,
+                type: 'click',
+                clientX: 5,
+                clientY: 5,
+            }
+            Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+            autocapture._captureEvent(fakeEvent, lib)
+            autocapture._captureEvent(fakeEvent, lib)
+            autocapture._captureEvent(fakeEvent, lib)
+
+            expect(lib.capture.args.map((args) => args[0])).toEqual([
+                '$autocapture',
+                '$autocapture',
+                '$rageclick',
+                '$autocapture',
+            ])
+        })
+
+        it('should capture augment properties', () => {
+            autocapture.init(lib)
+
+            const elTarget = document.createElement('img')
+            elTarget.setAttribute('data-ph-capture-attribute-target-augment', 'the target')
+            const elParent = document.createElement('span')
+            elParent.setAttribute('data-ph-capture-attribute-parent-augment', 'the parent')
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'http://test.com')
+            elGrandparent.appendChild(elParent)
+            const fakeEvent = {
+                target: elTarget,
+                type: 'click',
+                clientX: 5,
+                clientY: 5,
+            }
+            Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+            autocapture._captureEvent(fakeEvent, lib)
+
+            const captureProperties = lib.capture.args[0][1]
+            expect(captureProperties).toHaveProperty('target-augment', 'the target')
+            expect(captureProperties).toHaveProperty('parent-augment', 'the parent')
+        })
+
         it('should not capture events when get_config returns false, when an element matching any of the event selectors is clicked', () => {
             lib = {
                 _prepare_callback: sandbox.spy((callback) => callback),
@@ -475,7 +609,12 @@ describe('Autocapture system', () => {
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),
                 },
+                get_property: (property_key) =>
+                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE
+                        ? given.$autocapture_disabled_server_side
+                        : undefined,
             }
+            given('$autocapture_disabled_server_side', () => false)
             autocapture.init(lib)
             autocapture.afterDecideResponse(given.decideResponse, lib)
 
@@ -495,6 +634,47 @@ describe('Autocapture system', () => {
             expect(lib.capture.callCount).toBe(0)
             simulateClick(eventElement1)
             simulateClick(eventElement2)
+            expect(lib.capture.callCount).toBe(0)
+            lib.capture.resetHistory()
+        })
+
+        it('should not capture events when get_config returns true but server setting is disabled', () => {
+            lib = {
+                _prepare_callback: sandbox.spy((callback) => callback),
+                get_config: sandbox.spy(function (key) {
+                    switch (key) {
+                        case 'api_host':
+                            return 'https://test.com'
+                        case 'token':
+                            return 'testtoken'
+                        case 'mask_all_element_attributes':
+                            return false
+                        case 'autocapture':
+                            return true
+                    }
+                }),
+                token: 'testtoken',
+                capture: sandbox.spy(),
+                get_distinct_id() {
+                    return 'distinctid'
+                },
+                toolbar: {
+                    maybeLoadToolbar: jest.fn(),
+                },
+                get_property: (property_key) =>
+                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE
+                        ? given.$autocapture_disabled_server_side
+                        : undefined,
+            }
+            given('$autocapture_disabled_server_side', () => true)
+            autocapture.init(lib)
+            autocapture.afterDecideResponse(given.decideResponse, lib)
+
+            const eventElement = document.createElement('a')
+            document.body.appendChild(eventElement)
+
+            expect(lib.capture.callCount).toBe(0)
+            simulateClick(eventElement)
             expect(lib.capture.callCount).toBe(0)
             lib.capture.resetHistory()
         })
@@ -893,6 +1073,8 @@ describe('Autocapture system', () => {
             token: 'testtoken',
             capture: jest.fn(),
             get_distinct_id: () => 'distinctid',
+            get_property: (property_key) =>
+                property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? given.$autocapture_disabled_server_side : undefined,
         }))
 
         given('config', () => ({
@@ -911,20 +1093,20 @@ describe('Autocapture system', () => {
         })
 
         it('should call _addDomEventHandlders if autocapture is true', () => {
+            given('$autocapture_disabled_server_side', () => false)
             given.subject()
 
             expect(autocapture._addDomEventHandlers).toHaveBeenCalled()
         })
 
-        it('should not call _addDomEventHandlders if autocapture is false', () => {
+        it('should not call _addDomEventHandlders if autocapture is disabled', () => {
             given('config', () => ({
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: false,
             }))
-
+            given('$autocapture_disabled_server_side', () => true)
             given.subject()
-
             expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
@@ -943,6 +1125,7 @@ describe('Autocapture system', () => {
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
+            given('$autocapture_disabled_server_side', () => false)
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
