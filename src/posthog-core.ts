@@ -744,13 +744,13 @@ export class PostHog {
         }
 
         // update persistence
-        this.sessionPersistence.update_search_keyword(document.referrer)
+        this.sessionPersistence.update_search_keyword()
 
         if (this.get_config('store_google')) {
             this.sessionPersistence.update_campaign_params()
         }
         if (this.get_config('save_referrer')) {
-            this.sessionPersistence.update_referrer_info(document.referrer)
+            this.sessionPersistence.update_referrer_info()
         }
 
         let data: CaptureResult = {
@@ -868,7 +868,7 @@ export class PostHog {
     /**
      * Register a set of super properties, which are included with all
      * events. This will overwrite previous super property values, except
-     * for session properties (see `registerSession(properties)`).
+     * for session properties (see `register_for_session(properties)`).
      *
      * ### Usage:
      *
@@ -928,10 +928,10 @@ export class PostHog {
      * ### Usage:
      *
      *     // register on all events this session
-     *     posthog.registerSession({'referer': customGetReferer()});
+     *     posthog.register_for_session({'referer': customGetReferer()});
      *
      *     // register several session super properties when a user signs up
-     *     posthog.registerSession({
+     *     posthog.register_for_session({
      *         'selectedPlan': 'pro',
      *         'completedSteps': 4,
      *     });
@@ -941,7 +941,7 @@ export class PostHog {
      *
      * @param {Object} properties An associative array of properties to store about the user
      */
-    registerSession(properties: Properties): void {
+    register_for_session(properties: Properties): void {
         this.sessionPersistence.register(properties)
     }
 
@@ -959,7 +959,7 @@ export class PostHog {
      *
      * @param {String} property The name of the session super property to remove
      */
-    unregisterSession(property: string): void {
+    unregister_for_session(property: string): void {
         this.sessionPersistence.unregister(property)
     }
 

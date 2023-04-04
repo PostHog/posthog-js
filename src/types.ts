@@ -114,7 +114,7 @@ export interface OptInOutCapturingOptions {
     capture_properties: Properties
     enable_persistence: boolean
     clear_persistence: boolean
-    persistence_type: string
+    persistence_type: 'cookie' | 'localStorage' | 'localStorage+cookie' | 'sessionStorage'
     cookie_prefix: string
     cookie_expiration: number
     cross_subdomain_cookie: boolean
@@ -223,7 +223,8 @@ export interface GDPROptions {
     ) => void /** function used for capturing a PostHog event to record the opt-in action */
     captureEventName?: string /** event name to be used for capturing the opt-in action */
     captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
-    persistenceType?: string /** persistence mechanism used - cookie or localStorage */
+    /** persistence mechanism used */
+    persistenceType?: 'cookie' | 'localStorage' | 'localStorage+cookie' | 'sessionStorage'
     persistencePrefix?: string /** [__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name */
     cookieExpiration?: number /** number of days until the opt-in cookie expires */
     crossSubdomainCookie?: boolean /** whether the opt-in cookie is set as cross-subdomain or not */

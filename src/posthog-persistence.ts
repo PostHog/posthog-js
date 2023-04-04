@@ -30,7 +30,7 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
     'cookie',
     'localstorage',
     'localstorage+cookie',
-    'sessionStorage',
+    'sessionstorage',
     'memory',
 ]
 
@@ -75,7 +75,8 @@ export class PostHogPersistence {
             logger.critical('Unknown persistence type ' + config['persistence'] + '; falling back to cookie')
             config['persistence'] = 'cookie'
         }
-        const storage_type = config['persistence'] as Lowercase<PostHogConfig['persistence']>
+        // We handle storage type in a case-insensitive way for backwards compatibility
+        const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
         if (storage_type === 'localstorage' && localStore.is_supported()) {
             this.storage = localStore
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
@@ -217,16 +218,14 @@ export class PostHogPersistence {
         }
     }
 
-    update_search_keyword(referrer: string): void {
-        this.register(_info.searchInfo(referrer))
+    update_search_keyword(): void {
+        this.register(_info.searchInfo())
     }
 
-    // EXPORTED METHOD, we test this directly.
-
-    update_referrer_info(referrer: string): void {
+    update_referrer_info(): void {
         this.register({
-            $referrer: referrer || this.props['$referrer'] || '$direct',
-            $referring_domain: _info.referringDomain(referrer) || this.props['$referring_domain'] || '$direct',
+            $referrer: this.props['$referrer'] || _info.referrer(),
+            $referring_domain: this.props['$referring_domain'] || _info.referringDomain(),
         })
     }
 

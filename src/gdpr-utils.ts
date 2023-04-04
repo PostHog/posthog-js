@@ -118,6 +118,9 @@ function _getStorage(options: GDPROptions): PersistentStore {
     if (options.persistenceType === 'localStorage+cookie') {
         return localPlusCookieStore
     }
+    if (options.persistenceType === 'sessionStorage') {
+        return localPlusCookieStore
+    }
     return cookieStore
 }
 
