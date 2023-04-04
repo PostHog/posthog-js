@@ -7,27 +7,38 @@ function forPersistenceTypes(runTests) {
         describe(persistenceType, runTests.bind(null, persistenceType))
     })
 }
+
+let referrer = '' // No referrer by default
+Object.defineProperty(document, 'referrer', { get: () => referrer })
+
 describe('persistence', () => {
     afterEach(() => {
         given.lib.clear()
+        referrer = ''
     })
 
-    it('should set referrer', () => {
-        // Initial visit
-        given.lib.update_referrer_info('https://www.google.com')
+    it('should set direct referrer', () => {
+        referrer = ''
+        given.lib.update_referrer_info()
+
+        expect(given.lib.props['$referring_domain']).toBe('$direct')
+        expect(given.lib.props['$referrer']).toBe('$direct')
+    })
+
+    it('should set external referrer', () => {
+        referrer = 'https://www.google.com'
+        given.lib.update_referrer_info()
+
         expect(given.lib.props['$referring_domain']).toBe('www.google.com')
         expect(given.lib.props['$referrer']).toBe('https://www.google.com')
+    })
 
-        //subsequent visit
-        given.lib.update_referrer_info('https://www.facebook.com')
-        expect(given.lib.props['$referring_domain']).toBe('www.facebook.com')
-        expect(given.lib.props['$referrer']).toBe('https://www.facebook.com')
+    it('should set internal referrer', () => {
+        referrer = 'https://hedgebox.net/files/abc.png'
+        given.lib.update_referrer_info()
 
-        // page visit that doesn't have direct referrer
-        given.lib.update_referrer_info('')
-        // last touch should still be set to facebook
-        expect(given.lib.props['$referring_domain']).toBe('www.facebook.com')
-        expect(given.lib.props['$referrer']).toBe('https://www.facebook.com')
+        expect(given.lib.props['$referring_domain']).toBe('hedgebox.net')
+        expect(given.lib.props['$referrer']).toBe('https://hedgebox.net/files/abc.png')
     })
 
     it('extracts enabled feature flags', () => {

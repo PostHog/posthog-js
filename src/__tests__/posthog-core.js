@@ -232,7 +232,7 @@ describe('capture()', () => {
         expect(hook).toHaveBeenCalledWith('$event')
     })
 
-    it('calls update_campaign_params on sessionPersistence', () => {
+    it('calls update_campaign_params and update_referrer_info on sessionPersistence', () => {
         given('config', () => ({
             property_blacklist: [],
             _onCapture: jest.fn(),
@@ -243,6 +243,7 @@ describe('capture()', () => {
         given.subject()
 
         expect(given.lib.sessionPersistence.update_campaign_params).toHaveBeenCalled()
+        expect(given.lib.sessionPersistence.update_referrer_info).toHaveBeenCalled()
     })
 
     it('errors with undefined event name', () => {

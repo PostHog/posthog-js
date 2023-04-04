@@ -865,10 +865,7 @@ export const _info = {
     },
 
     referringDomain: function (): string {
-        if (!document.referrer) {
-            return '$direct'
-        }
-        return document.referrer ? new URL(document.referrer).origin : '$direct'
+        return document.referrer ? new URL(document.referrer).host : '$direct'
     },
 
     properties: function (): Properties {
