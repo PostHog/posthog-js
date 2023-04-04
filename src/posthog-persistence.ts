@@ -26,6 +26,15 @@ export const RESERVED_PROPERTIES = [
     ENABLED_FEATURE_FLAGS,
 ]
 
+const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[]
+= [
+    'cookie',
+    'localstorage',
+    'localstorage+cookie',
+    'session',
+    'memory',
+]
+
 /**
  * PostHog Persistence Object
  * @constructor
@@ -61,10 +70,7 @@ export class PostHogPersistence {
 
         let storage_type = config['persistence'].toLowerCase()
         if (
-            storage_type !== 'cookie' &&
-            storage_type.indexOf('localstorage') === -1 &&
-            storage_type !== 'memory' &&
-            storage_type !== 'session'
+            CASE_INSENSITIVE_PERSISTENCE_TYPES.indexOf(storage_type as Lowercase<PostHogConfig['persistence']>) === -1
         ) {
             logger.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
             storage_type = config['persistence'] = 'cookie'
