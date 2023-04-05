@@ -33,8 +33,12 @@ describe('capture()', () => {
         config: given.config,
         persistence: {
             remove_event_timer: jest.fn(),
+            properties: jest.fn(),
+        },
+        sessionPersistence: {
             update_search_keyword: jest.fn(),
             update_campaign_params: jest.fn(),
+            update_referrer_info: jest.fn(),
             properties: jest.fn(),
         },
         compression: {},
@@ -60,6 +64,20 @@ describe('capture()', () => {
         given.subject()
 
         expect(hook).toHaveBeenCalledWith('$event')
+    })
+
+    it('calls update_campaign_params and update_referrer_info on sessionPersistence', () => {
+        given('config', () => ({
+            property_blacklist: [],
+            _onCapture: jest.fn(),
+            store_google: true,
+            save_referrer: true,
+        }))
+
+        given.subject()
+
+        expect(given.lib.sessionPersistence.update_campaign_params).toHaveBeenCalled()
+        expect(given.lib.sessionPersistence.update_referrer_info).toHaveBeenCalled()
     })
 
     it('errors with undefined event name', () => {
@@ -128,6 +146,9 @@ describe('_calculate_event_properties()', () => {
         persistence: {
             properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
             remove_event_timer: jest.fn(),
+        },
+        sessionPersistence: {
+            properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
         },
         sessionManager: {
             checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
@@ -695,6 +716,7 @@ describe('group()', () => {
             __loaded: true,
             config: given.config,
             persistence: new PostHogPersistence(given.config),
+            sessionPersistence: new PostHogPersistence(given.config),
             _requestQueue: {
                 enqueue: given.captureQueue,
             },
