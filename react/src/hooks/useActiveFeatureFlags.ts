@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { usePostHog } from './usePostHog'
 
-export function useActiveFeatureFlags(flag: string): string[] | undefined {
+export function useActiveFeatureFlags(): string[] | undefined {
     const client = usePostHog()
 
     const [featureFlags, setFeatureFlags] = useState<string[] | undefined>()
@@ -15,7 +15,7 @@ export function useActiveFeatureFlags(flag: string): string[] | undefined {
         return client.onFeatureFlags((flags) => {
             setFeatureFlags(flags)
         })
-    }, [client, flag])
+    }, [client])
 
     return featureFlags
 }
