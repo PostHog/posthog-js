@@ -863,7 +863,12 @@ export const _info = {
     },
 
     referringDomain: function (): string {
-        return document.referrer ? new URL(document.referrer).host : '$direct'
+        if (!document.referrer) {
+            return '$direct'
+        }
+        const parser = document.createElement('a') // Unfortunately we cannot use new URL due to IE11
+        parser.href = document.referrer
+        return parser.host
     },
 
     properties: function (): Properties {
