@@ -1,3 +1,9 @@
+## 1.52.0 - 2023-04-05
+
+- fix: Track referrer/search params per browser session (#496)
+- ci: Point out and close stale issues/PRs (#602)
+- docs(testcafe): update docs removing posthog server requirements (#594)
+
 ## 1.51.5 - 2023-03-23
 
 - fix(segment): handle race condition on loading segment integration (#586)
