@@ -46,14 +46,14 @@ class PostHogPeople {
             }
             // make sure that the referrer info has been updated and saved
             if (this._get_config('save_referrer')) {
-                this._posthog.persistence.update_referrer_info(document.referrer)
+                this._posthog.sessionPersistence.update_referrer_info()
             }
 
             // update $set object with default people properties
             data[SET_ACTION] = _extend(
                 {},
                 _info.people_properties(),
-                this._posthog.persistence.get_referrer_info(),
+                this._posthog.sessionPersistence.get_referrer_info(),
                 data[SET_ACTION]
             )
             return this._send_request(data, callback)

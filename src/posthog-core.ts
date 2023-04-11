@@ -172,14 +172,14 @@ const defaultConfig = (): PostHogConfig => ({
 })
 
 /**
- * create_mplib(token:string, config:object, name:string)
+ * create_phlib(token:string, config:object, name:string)
  *
  * This function is used by the init method of PostHogLib objects
  * as well as the main initializer at the end of the JSLib (that
  * initializes document.posthog as well as any additional instances
  * declared before this file has loaded).
  */
-const create_mplib = function (
+const create_phlib = function (
     token: string,
     config?: Partial<PostHogConfig>,
     name?: string,
@@ -267,6 +267,7 @@ export class PostHog {
     config: PostHogConfig
 
     persistence: PostHogPersistence
+    sessionPersistence: PostHogPersistence
     sessionManager: SessionIdManager
     pageViewIdManager: PageViewIdManager
     people: PostHogPeople
@@ -314,6 +315,7 @@ export class PostHog {
         this._requestQueue = undefined as any
         this._retryQueue = undefined as any
         this.persistence = undefined as any
+        this.sessionPersistence = undefined as any
         this.sessionManager = undefined as any
     }
 
@@ -345,7 +347,7 @@ export class PostHog {
             return
         }
 
-        const instance: PostHog = create_mplib(token, config, name, (instance: PostHog) => {
+        const instance: PostHog = create_phlib(token, config, name, (instance: PostHog) => {
             posthog_master[name] = instance
             instance._loaded()
         })
@@ -422,6 +424,10 @@ export class PostHog {
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionPersistence =
+            this.config.persistence === 'sessionStorage'
+                ? this.persistence
+                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
         this._gdpr_init()
 
@@ -825,13 +831,13 @@ export class PostHog {
         }
 
         // update persistence
-        this.persistence.update_search_keyword(document.referrer)
+        this.sessionPersistence.update_search_keyword()
 
         if (this.get_config('store_google')) {
-            this.persistence.update_campaign_params()
+            this.sessionPersistence.update_campaign_params()
         }
         if (this.get_config('save_referrer')) {
-            this.persistence.update_referrer_info(document.referrer)
+            this.sessionPersistence.update_referrer_info()
         }
 
         let data: CaptureResult = {
@@ -889,7 +895,7 @@ export class PostHog {
         properties['token'] = this.get_config('token')
 
         if (event_name === '$snapshot') {
-            const persistenceProps = this.persistence.properties()
+            const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
             properties['distinct_id'] = persistenceProps.distinct_id
             return properties
         }
@@ -928,7 +934,13 @@ export class PostHog {
         // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
-        properties = _extend({}, infoProperties, this.persistence.properties(), properties)
+        properties = _extend(
+            {},
+            _info.properties(),
+            this.persistence.properties(),
+            this.sessionPersistence.properties(),
+            properties
+        )
 
         const property_blacklist = this.get_config('property_blacklist')
         if (_isArray(property_blacklist)) {
@@ -949,7 +961,8 @@ export class PostHog {
 
     /**
      * Register a set of super properties, which are included with all
-     * events. This will overwrite previous super property values.
+     * events. This will overwrite previous super property values, except
+     * for session properties (see `register_for_session(properties)`).
      *
      * ### Usage:
      *
@@ -962,6 +975,9 @@ export class PostHog {
      *         'Account Type': 'Free'
      *     });
      *
+     *     // Display the properties
+     *     console.log(posthog.persistence.properties())
+     *
      * @param {Object} properties An associative array of properties to store about the user
      * @param {Number} [days] How many days since the user's last visit to store the super properties
      */
@@ -970,7 +986,7 @@ export class PostHog {
     }
 
     /**
-     * Register a set of super properties only once. This will not
+     * Register a set of super properties only once. These will not
      * overwrite previous super property values, unlike register().
      *
      * ### Usage:
@@ -979,6 +995,9 @@ export class PostHog {
      *     posthog.register_once({
      *         'First Login Date': new Date().toISOString()
      *     });
+     *
+     *     // Display the properties
+     *     console.log(posthog.persistence.properties())
      *
      * ### Notes:
      *
@@ -994,12 +1013,48 @@ export class PostHog {
     }
 
     /**
+     * Register a set of super properties, which are included with all events, but only
+     * for THIS SESSION. These will overwrite all other super property values.
+     *
+     * Unlike regular super properties, which last in LocalStorage for a long time,
+     * session super properties get cleared after a session ends.
+     *
+     * ### Usage:
+     *
+     *     // register on all events this session
+     *     posthog.register_for_session({'referer': customGetReferer()});
+     *
+     *     // register several session super properties when a user signs up
+     *     posthog.register_for_session({
+     *         'selectedPlan': 'pro',
+     *         'completedSteps': 4,
+     *     });
+     *
+     *     // Display the properties
+     *     console.log(posthog.sessionPersistence.properties())
+     *
+     * @param {Object} properties An associative array of properties to store about the user
+     */
+    register_for_session(properties: Properties): void {
+        this.sessionPersistence.register(properties)
+    }
+
+    /**
      * Delete a super property stored with the current user.
      *
      * @param {String} property The name of the super property to remove
      */
     unregister(property: string): void {
         this.persistence.unregister(property)
+    }
+
+    /**
+     * Delete a session super property stored with the current user.
+     *
+     * @param {String} property The name of the session super property to remove
+     */
+    unregister_for_session(property: string): void {
+        this.sessionPersistence.unregister(property)
     }
 
     _register_single(prop: string, value: Property) {
@@ -1247,6 +1302,7 @@ export class PostHog {
     reset(reset_device_id?: boolean): void {
         const device_id = this.get_property('$device_id')
         this.persistence.clear()
+        this.sessionPersistence.clear()
         this.persistence.set_user_state('anonymous')
         this.sessionManager.resetSessionId()
         const uuid = this.get_config('get_device_id')(_UUID())
@@ -1474,7 +1530,9 @@ export class PostHog {
             if (this.persistence) {
                 this.persistence.update_config(this.config)
             }
-
+            if (this.sessionPersistence) {
+                this.sessionPersistence.update_config(this.config)
+            }
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true
             }
@@ -1543,10 +1601,10 @@ export class PostHog {
      * get_property() can only be called after the PostHog library has finished loading.
      * init() has a loaded function available to handle this automatically. For example:
      *
-     *     // grab value for 'user_id' after the posthog library has loaded
+     *     // grab value for '$user_id' after the posthog library has loaded
      *     posthog.init('YOUR PROJECT TOKEN', {
      *         loaded: function(posthog) {
-     *             user_id = posthog.get_property('user_id');
+     *             user_id = posthog.get_property('$user_id');
      *         }
      *     });
      *
@@ -1554,6 +1612,29 @@ export class PostHog {
      */
     get_property(property_name: string): Property | undefined {
         return this.persistence['props'][property_name]
+    }
+
+    /**
+     * Returns the value of the session super property named property_name. If no such
+     * property is set, getSessionProperty() will return the undefined value.
+     *
+     * ### Notes:
+     *
+     * This is based on browser-level `sessionStorage`, NOT the PostHog session.
+     * getSessionProperty() can only be called after the PostHog library has finished loading.
+     * init() has a loaded function available to handle this automatically. For example:
+     *
+     *     // grab value for 'user_id' after the posthog library has loaded
+     *     posthog.init('YOUR PROJECT TOKEN', {
+     *         loaded: function(posthog) {
+     *             user_id = posthog.getSessionProperty('user_id');
+     *         }
+     *     });
+     *
+     * @param {String} property_name The name of the session super property you want to retrieve
+     */
+    getSessionProperty(property_name: string): Property | undefined {
+        return this.sessionPersistence['props'][property_name]
     }
 
     toString(): string {
@@ -1618,6 +1699,9 @@ export class PostHog {
 
         if (!this.get_config('disable_persistence') && this.persistence.disabled !== disabled) {
             this.persistence.set_disabled(disabled)
+        }
+        if (!this.get_config('disable_persistence') && this.sessionPersistence.disabled !== disabled) {
+            this.sessionPersistence.set_disabled(disabled)
         }
     }
 
@@ -1836,7 +1920,7 @@ const override_ph_init_func = function () {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_mplib(
+                posthog_master[name] = instances[name] = create_phlib(
                     token || '',
                     config || {},
                     name,
@@ -1855,7 +1939,7 @@ const override_ph_init_func = function () {
                 instance = instances[PRIMARY_INSTANCE_NAME]
             } else if (token) {
                 // intialize the main posthog lib
-                instance = create_mplib(token, config || {}, PRIMARY_INSTANCE_NAME, (instance: PostHog) => {
+                instance = create_phlib(token, config || {}, PRIMARY_INSTANCE_NAME, (instance: PostHog) => {
                     instances[PRIMARY_INSTANCE_NAME] = instance
                     instance._loaded()
                 })
@@ -1920,7 +2004,7 @@ export function init_from_snippet(): void {
     // Load instances of the PostHog Library
     _each(posthog_master['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
         if (item && _isArray(item)) {
-            instances[item[2]] = create_mplib(...item)
+            instances[item[2]] = create_phlib(...item)
         }
     })
 

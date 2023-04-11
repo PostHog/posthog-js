@@ -1,3 +1,10 @@
+## 1.52.0 - 2023-04-05
+
+- fix: Track referrer/search params per browser session (#496)  
+  _**Note:** This change improves the accuracy of properties `$referrer` and `$referring_domain` in a major way. Previously, the values of these properties often represented pure backlinks in non-SPAs (non-single-page applications). Now those values will represent the true referrer for the current browser-level session (effectively: for the tab). Due to this, referrer data after this update _may_ look different. It will be significantly more accurate though._
+- ci: Point out and close stale issues/PRs (#602)
+- docs(testcafe): update docs removing posthog server requirements (#594)
+
 ## 1.51.5 - 2023-03-23
 
 - fix(segment): handle race condition on loading segment integration (#586)

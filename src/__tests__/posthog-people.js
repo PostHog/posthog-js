@@ -11,7 +11,7 @@ given('people', () =>
 given('overrides', () => ({
     get_config: () => ({}),
     get_property: () => 'something',
-    persistence: {
+    sessionPersistence: {
         get_referrer_info: jest.fn().mockReturnValue(''),
         update_referrer_info: jest.fn(),
     },

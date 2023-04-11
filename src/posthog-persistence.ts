@@ -1,19 +1,12 @@
 /* eslint camelcase: "off" */
 
 import { _each, _extend, _include, _info, _isObject, _isUndefined, _strip_empty_properties, logger } from './utils'
-import { cookieStore, localStore, localPlusCookieStore, memoryStore } from './storage'
+import { cookieStore, localStore, localPlusCookieStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 
 /*
  * Constants
  */
-export const SET_QUEUE_KEY = '__mps'
-export const SET_ONCE_QUEUE_KEY = '__mpso'
-export const UNSET_QUEUE_KEY = '__mpus'
-export const ADD_QUEUE_KEY = '__mpa'
-export const APPEND_QUEUE_KEY = '__mpap'
-export const REMOVE_QUEUE_KEY = '__mpr'
-export const UNION_QUEUE_KEY = '__mpu'
 // This key is deprecated, but we want to check for it to see whether aliasing is allowed.
 export const PEOPLE_DISTINCT_ID_KEY = '$people_distinct_id'
 export const ALIAS_ID_KEY = '__alias'
@@ -28,13 +21,6 @@ export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 const USER_STATE = '$user_state'
 
 export const RESERVED_PROPERTIES = [
-    SET_QUEUE_KEY,
-    SET_ONCE_QUEUE_KEY,
-    UNSET_QUEUE_KEY,
-    ADD_QUEUE_KEY,
-    APPEND_QUEUE_KEY,
-    REMOVE_QUEUE_KEY,
-    UNION_QUEUE_KEY,
     PEOPLE_DISTINCT_ID_KEY,
     ALIAS_ID_KEY,
     CAMPAIGN_IDS_KEY,
@@ -43,6 +29,14 @@ export const RESERVED_PROPERTIES = [
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
     USER_STATE,
+]
+
+const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
+    'cookie',
+    'localstorage',
+    'localstorage+cookie',
+    'sessionstorage',
+    'memory',
 ]
 
 /**
@@ -79,15 +73,22 @@ export class PostHogPersistence {
             this.name = 'ph_' + token + '_posthog'
         }
 
-        let storage_type = config['persistence'].toLowerCase()
-        if (storage_type !== 'cookie' && storage_type.indexOf('localstorage') === -1 && storage_type !== 'memory') {
-            logger.critical('Unknown persistence type ' + storage_type + '; falling back to cookie')
-            storage_type = config['persistence'] = 'cookie'
+        if (
+            CASE_INSENSITIVE_PERSISTENCE_TYPES.indexOf(
+                config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
+            ) === -1
+        ) {
+            logger.critical('Unknown persistence type ' + config['persistence'] + '; falling back to cookie')
+            config['persistence'] = 'cookie'
         }
+        // We handle storage type in a case-insensitive way for backwards compatibility
+        const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
         if (storage_type === 'localstorage' && localStore.is_supported()) {
             this.storage = localStore
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
             this.storage = localPlusCookieStore
+        } else if (storage_type === 'sessionstorage' && sessionStore.is_supported()) {
+            this.storage = sessionStore
         } else if (storage_type === 'memory') {
             this.storage = memoryStore
         } else {
@@ -225,16 +226,14 @@ export class PostHogPersistence {
         }
     }
 
-    update_search_keyword(referrer: string): void {
-        this.register(_info.searchInfo(referrer))
+    update_search_keyword(): void {
+        this.register(_info.searchInfo())
     }
 
-    // EXPORTED METHOD, we test this directly.
-
-    update_referrer_info(referrer: string): void {
+    update_referrer_info(): void {
         this.register({
-            $referrer: referrer || this.props['$referrer'] || '$direct',
-            $referring_domain: _info.referringDomain(referrer) || this.props['$referring_domain'] || '$direct',
+            $referrer: this.props['$referrer'] || _info.referrer(),
+            $referring_domain: this.props['$referring_domain'] || _info.referringDomain(),
         })
     }
 

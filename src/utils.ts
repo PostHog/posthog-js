@@ -675,8 +675,11 @@ export const _info = {
         return params
     },
 
-    searchEngine: function (referrer: string): string | null {
-        if (referrer.search('https?://(.*)google.([^/?]*)') === 0) {
+    searchEngine: function (): string | null {
+        const referrer = document.referrer
+        if (!referrer) {
+            return null
+        } else if (referrer.search('https?://(.*)google.([^/?]*)') === 0) {
             return 'google'
         } else if (referrer.search('https?://(.*)bing.com') === 0) {
             return 'bing'
@@ -689,15 +692,15 @@ export const _info = {
         }
     },
 
-    searchInfo: function (referrer: string): Record<string, any> {
-        const search = _info.searchEngine(referrer),
+    searchInfo: function (): Record<string, any> {
+        const search = _info.searchEngine(),
             param = search != 'yahoo' ? 'q' : 'p',
             ret: Record<string, any> = {}
 
         if (search !== null) {
             ret['$search_engine'] = search
 
-            const keyword = _getQueryParam(referrer, param)
+            const keyword = _getQueryParam(document.referrer, param)
             if (keyword.length) {
                 ret['ph_keyword'] = keyword
             }
@@ -855,12 +858,17 @@ export const _info = {
         }
     },
 
-    referringDomain: function (referrer: string): string {
-        const split = referrer.split('/')
-        if (split.length >= 3) {
-            return split[2]
+    referrer: function (): string {
+        return document.referrer || '$direct'
+    },
+
+    referringDomain: function (): string {
+        if (!document.referrer) {
+            return '$direct'
         }
-        return ''
+        const parser = document.createElement('a') // Unfortunately we cannot use new URL due to IE11
+        parser.href = document.referrer
+        return parser.host
     },
 
     properties: function (): Properties {
