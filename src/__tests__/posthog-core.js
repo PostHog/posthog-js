@@ -70,7 +70,7 @@ describe('capture()', () => {
         given('config', () => ({
             property_blacklist: [],
             _onCapture: jest.fn(),
-            store_google: true,
+            store_utm_params: true,
             save_referrer: true,
         }))
 

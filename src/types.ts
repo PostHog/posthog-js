@@ -58,7 +58,13 @@ export interface PostHogConfig {
     persistence_name: string
     cookie_name: string
     loaded: (posthog_instance: PostHog) => void
+    /**
+     * @deprecated
+     * use store_utm_params instead
+     */
     store_google: boolean
+    store_utm_params: boolean
+    custom_utm_params: string[]
     save_referrer: boolean
     test: boolean
     verbose: boolean

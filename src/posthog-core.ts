@@ -110,6 +110,8 @@ const defaultConfig = (): PostHogConfig => ({
     cookie_name: '',
     loaded: __NOOP,
     store_google: true,
+    store_utm_params: true,
+    custom_utm_params: [],
     save_referrer: true,
     test: false,
     verbose: false,
@@ -832,7 +834,8 @@ export class PostHog {
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
-        if (this.get_config('store_google')) {
+        // Deprecated config option. Only proceed if both are true
+        if (this.get_config('store_utm_params') && this.get_config('store_google')) {
             this.sessionPersistence.update_campaign_params()
         }
         if (this.get_config('save_referrer')) {
