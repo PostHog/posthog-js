@@ -1,5 +1,4 @@
-// Creates a buffer which has a max size, a flush interval, and a flush callback.
-
+// Creates a buffer which has a max size, a flush interval, and a flush callback. Useful for batching things.
 export interface EventBuffer<T> {
     push: (data: T) => void
     flush: () => void
