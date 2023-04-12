@@ -1,3 +1,5 @@
+import { createEventBuffer } from '../buffer'
+import { EventBuffer } from '../buffer'
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
 
@@ -80,8 +82,17 @@ export class WebPerformanceObserver {
     remoteEnabled: boolean | undefined
     observer: PerformanceObserver | undefined
 
+    emitBuffer: EventBuffer<any>
+
     constructor(instance: PostHog) {
         this.instance = instance
+        this.emitBuffer = createEventBuffer({
+            maxDepth: 200,
+            flushInterval: 2000,
+            callback: (data) => {
+                this.captureBatchedPerformanceEvents(data)
+            },
+        })
     }
 
     startObservingIfEnabled() {
@@ -186,13 +197,31 @@ export class WebPerformanceObserver {
      * :TRICKY: Make sure we batch these requests, and don't truncate the strings.
      */
     private capturePerformanceEvent(properties: { [key: number]: any }) {
-        this.instance.capture('$performance_event', properties, {
-            transport: 'XHR',
-            method: 'POST',
-            endpoint: PERFORMANCE_INGESTION_ENDPOINT,
-            _noTruncate: true,
-            _batchKey: 'performanceEvent',
-        })
+        this.emitBuffer.push(properties)
+        // this.instance.capture('$performance_event', properties, {
+        //     transport: 'XHR',
+        //     method: 'POST',
+        //     endpoint: PERFORMANCE_INGESTION_ENDPOINT,
+        //     _noTruncate: true,
+        //     _batchKey: 'performanceEvent',
+        // })
+    }
+
+    private captureBatchedPerformanceEvents(entries: any[]) {
+        console.log('captureBatchedPerformanceEvents', entries.length)
+        this.instance.capture(
+            '$performance_event',
+            {
+                entries,
+            },
+            {
+                transport: 'XHR',
+                method: 'POST',
+                endpoint: PERFORMANCE_INGESTION_ENDPOINT,
+                _noTruncate: true,
+                _batchKey: 'performanceEvent',
+            }
+        )
     }
 }
 
