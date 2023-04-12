@@ -219,7 +219,7 @@ const create_phlib = function (
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance.webPerformance = new WebPerformanceObserver(instance, instance.sessionRecording)
+    instance.webPerformance = new WebPerformanceObserver(instance)
     instance.webPerformance.startObservingIfEnabled()
 
     instance.__autocapture = instance.get_config('autocapture')
