@@ -110,6 +110,7 @@ const defaultConfig = (): PostHogConfig => ({
     cookie_name: '',
     loaded: __NOOP,
     store_google: true,
+    custom_campaign_params: [],
     save_referrer: true,
     test: false,
     verbose: false,

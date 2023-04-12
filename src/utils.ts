@@ -660,10 +660,18 @@ export const _register_event = (function () {
 })()
 
 export const _info = {
-    campaignParams: function (): Record<string, any> {
-        const campaign_keywords = 'utm_source utm_medium utm_campaign utm_content utm_term gclid fbclid msclkid'.split(
-            ' '
-        )
+    campaignParams: function (customParams?: string[]): Record<string, any> {
+        const campaign_keywords = [
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'utm_content',
+            'utm_term',
+            'gclid',
+            'fbclid',
+            'msclkid',
+        ].concat(customParams || [])
+
         const params: Record<string, any> = {}
         _each(campaign_keywords, function (kwkey) {
             const kw = _getQueryParam(document.URL, kwkey)
