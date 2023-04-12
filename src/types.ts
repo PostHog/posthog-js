@@ -59,7 +59,7 @@ export interface PostHogConfig {
     cookie_name: string
     loaded: (posthog_instance: PostHog) => void
     store_google: boolean
-    custom_utm_params: string[]
+    custom_campaign_params: string[]
     save_referrer: boolean
     test: boolean
     verbose: boolean
