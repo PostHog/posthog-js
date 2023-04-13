@@ -14,6 +14,7 @@ const win: Window & typeof globalThis = typeof window !== 'undefined' ? window :
 const navigator = win.navigator || { userAgent: '' }
 const document = win.document || {}
 const userAgent = navigator.userAgent
+const localDomains = ['localhost', '127.0.0.1']
 
 const nativeForEach = ArrayProto.forEach,
     nativeIndexOf = ArrayProto.indexOf,
@@ -658,6 +659,10 @@ export const _register_event = (function () {
 
     return register_event
 })()
+
+export const isLocalhost = (): boolean => {
+    return localDomains.includes(location.hostname)
+}
 
 export const _info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {
