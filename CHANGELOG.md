@@ -1,3 +1,30 @@
+## 1.53.0 - 2023-04-12
+
+- feat: Custom campaign param support (#603)
+- chore(deps): Bump http-cache-semantics from 4.1.0 to 4.1.1 (#528)
+- fix: change user_id -> $user_id in docstring (#525)
+- Remove flag param from useActiveFeatureFlags (#599)
+
+## 1.52.0 - 2023-04-05
+
+- fix: Track referrer/search params per browser session (#496)  
+  _**Note:** This change improves the accuracy of properties `$referrer` and `$referring_domain` in a major way. Previously, the values of these properties often represented pure backlinks in non-SPAs (non-single-page applications). Now those values will represent the true referrer for the current browser-level session (effectively: for the tab). Due to this, referrer data after this update _may_ look different. It will be significantly more accurate though._
+- ci: Point out and close stale issues/PRs (#602)
+- docs(testcafe): update docs removing posthog server requirements (#594)
+
+## 1.51.5 - 2023-03-23
+
+- fix(segment): handle race condition on loading segment integration (#586)
+
+## 1.51.4 - 2023-03-20
+
+- fix: fewer moving parts more like safe text (#590)
+
+## 1.51.3 - 2023-03-17
+
+- try/catch the bit that fails so we don't just eject the element (#585)
+- fix(persistence): set SameSite=None explicitly (#578)
+
 ## 1.51.2 - 2023-03-15
 
 - fix: Catch fullsnapshot error (#583)
