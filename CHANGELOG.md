@@ -1,3 +1,8 @@
+## 1.53.1 - 2023-04-13
+
+- chore: bump version (#607)
+- feat: Swap over to storing network events in recordings (#606)
+
 ## 1.53.0 - 2023-04-12
 
 - feat: Custom campaign param support (#603)
