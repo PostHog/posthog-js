@@ -1243,14 +1243,8 @@ export class PostHog {
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
-            // If the distinct_id is not changing, but we have user properties to set, send an $identify event
-            this.capture(
-                '$identify',
-                {
-                    distinct_id: new_distinct_id,
-                },
-                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
-            )
+            // If the distinct_id is not changing, but we have user properties to set, we can go for a $set event
+            this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
         }
 
         // Reload active feature flags if the user identity changes.

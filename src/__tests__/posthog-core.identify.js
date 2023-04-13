@@ -203,19 +203,16 @@ describe('identify()', () => {
             expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
         })
 
-        it('calls identify when user properties passed with same ID', () => {
+        it('calls $set when user properties passed with same ID', () => {
             given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
             given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
 
             given.subject()
 
-            expect(given.overrides.capture).toHaveBeenCalledWith(
-                '$identify',
-                {
-                    distinct_id: 'a-new-id',
-                },
-                { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } }
-            )
+            expect(given.overrides.capture).toHaveBeenCalledWith('$set', {
+                $set: { email: 'john@example.com' },
+                $set_once: { howOftenAmISet: 'once!' },
+            })
             expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
         })
     })
