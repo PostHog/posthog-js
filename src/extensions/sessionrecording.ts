@@ -216,26 +216,7 @@ export class SessionRecording {
 
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
-                event = truncateLargeConsoleLogs(
-                    filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
-                ) as eventWithTime
-
-                this._updateWindowAndSessionIds(event)
-
-                const properties = {
-                    $snapshot_data: event,
-                    $session_id: this.sessionId,
-                    $window_id: this.windowId,
-                }
-
-                this.instance._captureMetrics.incr('rrweb-record')
-                this.instance._captureMetrics.incr(`rrweb-record-${event.type}`)
-
-                if (this.emit) {
-                    this._captureSnapshot(properties)
-                } else {
-                    this.snapshots.push(properties)
-                }
+                this.onRRwebEmit(event)
             },
             plugins:
                 (window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled()
@@ -256,6 +237,29 @@ export class SessionRecording {
                 logger.error('Could not add $pageview to rrweb session', e)
             }
         })
+    }
+
+    onRRwebEmit(event: eventWithTime) {
+        event = truncateLargeConsoleLogs(
+            filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
+        ) as eventWithTime
+
+        this._updateWindowAndSessionIds(event)
+
+        const properties = {
+            $snapshot_data: event,
+            $session_id: this.sessionId,
+            $window_id: this.windowId,
+        }
+
+        this.instance._captureMetrics.incr('rrweb-record')
+        this.instance._captureMetrics.incr(`rrweb-record-${event.type}`)
+
+        if (this.emit) {
+            this._captureSnapshot(properties)
+        } else {
+            this.snapshots.push(properties)
+        }
     }
 
     _captureSnapshot(properties: Properties) {

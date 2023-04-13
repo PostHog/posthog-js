@@ -186,13 +186,23 @@ export class WebPerformanceObserver {
      * :TRICKY: Make sure we batch these requests, and don't truncate the strings.
      */
     private capturePerformanceEvent(properties: { [key: number]: any }) {
-        this.instance.capture('$performance_event', properties, {
-            transport: 'XHR',
-            method: 'POST',
-            endpoint: PERFORMANCE_INGESTION_ENDPOINT,
-            _noTruncate: true,
-            _batchKey: 'performanceEvent',
+        const timestamp = properties[PERFORMANCE_EVENTS_MAPPING['timestamp']]
+
+        this.instance.sessionRecording?.onRRwebEmit({
+            type: 6, // EventType.Plugin,
+            data: {
+                plugin: 'posthog/network@1',
+                payload: properties,
+            },
+            timestamp,
         })
+        // this.instance.capture('$performance_event', properties, {
+        //     transport: 'XHR',
+        //     method: 'POST',
+        //     endpoint: PERFORMANCE_INGESTION_ENDPOINT,
+        //     _noTruncate: true,
+        //     _batchKey: 'performanceEvent',
+        // })
     }
 }
 
