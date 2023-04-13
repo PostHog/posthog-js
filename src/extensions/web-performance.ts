@@ -196,6 +196,7 @@ export class WebPerformanceObserver {
             },
             timestamp,
         })
+
         // this.instance.capture('$performance_event', properties, {
         //     transport: 'XHR',
         //     method: 'POST',
