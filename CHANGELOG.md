@@ -1,3 +1,10 @@
+## 1.53.0 - 2023-04-12
+
+- feat: Custom campaign param support (#603)
+- chore(deps): Bump http-cache-semantics from 4.1.0 to 4.1.1 (#528)
+- fix: change user_id -> $user_id in docstring (#525)
+- Remove flag param from useActiveFeatureFlags (#599)
+
 ## 1.52.0 - 2023-04-05
 
 - fix: Track referrer/search params per browser session (#496)  

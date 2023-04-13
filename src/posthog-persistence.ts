@@ -47,6 +47,7 @@ export class PostHogPersistence {
     props: Properties
     storage: PersistentStore
     campaign_params_saved: boolean
+    custom_campaign_params: string[]
     name: string
     disabled: boolean | undefined
     secure: boolean | undefined
@@ -66,6 +67,7 @@ export class PostHogPersistence {
 
         this.props = {}
         this.campaign_params_saved = false
+        this.custom_campaign_params = config['custom_campaign_params'] || []
 
         if (config['persistence_name']) {
             this.name = 'ph_' + config['persistence_name']
@@ -221,7 +223,7 @@ export class PostHogPersistence {
 
     update_campaign_params(): void {
         if (!this.campaign_params_saved) {
-            this.register(_info.campaignParams())
+            this.register(_info.campaignParams(this.custom_campaign_params))
             this.campaign_params_saved = true
         }
     }
