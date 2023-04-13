@@ -1,4 +1,4 @@
-import { isLocalhost, logger } from 'utils'
+import { isLocalhost, logger } from '../utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
 
