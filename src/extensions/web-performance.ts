@@ -1,6 +1,5 @@
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
-import { SessionRecording } from './sessionrecording'
 
 const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     // BASE_PERFORMANCE_EVENT_COLUMNS
