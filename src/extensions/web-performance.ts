@@ -1,3 +1,4 @@
+import { isLocalhost, logger } from '../utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
 
@@ -80,6 +81,9 @@ export class WebPerformanceObserver {
     remoteEnabled: boolean | undefined
     observer: PerformanceObserver | undefined
 
+    // Util to help developers working on this feature manually override
+    _forceAllowLocalhost = false
+
     constructor(instance: PostHog) {
         this.instance = instance
     }
@@ -96,6 +100,12 @@ export class WebPerformanceObserver {
         if (this.observer) {
             return
         }
+
+        if (isLocalhost() && !this._forceAllowLocalhost) {
+            logger.log('PostHog Peformance observer not started because we are on localhost.')
+            return
+        }
+
         try {
             this.observer = new PerformanceObserver((list) => {
                 list.getEntries().forEach((entry) => {
