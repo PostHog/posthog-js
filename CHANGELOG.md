@@ -1,3 +1,7 @@
+## 1.53.2 - 2023-04-14
+
+- fix: Don't enable web perf by default for localhost (#608)
+
 ## 1.53.1 - 2023-04-13
 
 - chore: bump version (#607)
