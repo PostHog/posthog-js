@@ -134,7 +134,7 @@ export interface SessionRecordingOptions {
     ignoreClass?: string
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
-    maskInputFn?: ((text: string) => string) | null
+    maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
