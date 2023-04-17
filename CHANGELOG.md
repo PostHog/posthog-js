@@ -1,3 +1,7 @@
+## 1.53.3 - 2023-04-17
+
+- fix: Usage of sessionStorage even if memory persistence (#609)
+
 ## 1.53.2 - 2023-04-14
 
 - fix: Don't enable web perf by default for localhost (#608)
