@@ -1272,8 +1272,7 @@ export class PostHog {
                 $group_key: groupKey,
                 $group_set: groupPropertiesToSet,
             })
-            console.log('calling group properties for flags')
-            this.groupPropertiesForFlags({[groupType]: groupPropertiesToSet})
+            this.groupPropertiesForFlags({ [groupType]: groupPropertiesToSet })
         }
 
         // If groups change and no properties change, reload feature flags.
