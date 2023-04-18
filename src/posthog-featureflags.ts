@@ -315,15 +315,15 @@ export class PostHogFeatureFlags {
      * This is used when dealing with new persons / where you don't want to wait for ingestion
      * to update user properties.
      */
-    personPropertiesForFlags(properties: Properties, reloadFeatureFlags: boolean = true): void {
+    personPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
         // Get persisted person properties
         const existingProperties = this.instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}
 
         this.instance.register({
             [STORED_PERSON_PROPERTIES_KEY]: {
                 ...existingProperties,
-                ...properties
-            }
+                ...properties,
+            },
         })
 
         if (reloadFeatureFlags) {
@@ -343,15 +343,15 @@ export class PostHogFeatureFlags {
      * For example:
      *     groupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
-    groupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags: boolean = true): void {
+    groupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
         // Get persisted group properties
         const existingProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY) || {}
 
         if (Object.keys(existingProperties).length !== 0) {
             Object.keys(existingProperties).forEach((groupType) => {
                 existingProperties[groupType] = {
-                ...existingProperties[groupType],
-                ...properties[groupType],
+                    ...existingProperties[groupType],
+                    ...properties[groupType],
                 }
                 delete properties[groupType]
             })
@@ -360,8 +360,8 @@ export class PostHogFeatureFlags {
         this.instance.register({
             [STORED_GROUP_PROPERTIES_KEY]: {
                 ...existingProperties,
-                ...properties
-            }
+                ...properties,
+            },
         })
 
         if (reloadFeatureFlags) {
@@ -373,9 +373,8 @@ export class PostHogFeatureFlags {
         if (group_type) {
             const existingProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY) || {}
             this.instance.register({
-                [STORED_GROUP_PROPERTIES_KEY]: {...existingProperties, [group_type]: {}}
+                [STORED_GROUP_PROPERTIES_KEY]: { ...existingProperties, [group_type]: {} },
             })
-
         } else {
             this.instance.unregister(STORED_GROUP_PROPERTIES_KEY)
         }

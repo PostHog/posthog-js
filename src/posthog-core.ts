@@ -21,7 +21,13 @@ import {
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence, STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './posthog-persistence'
+import {
+    ALIAS_ID_KEY,
+    PEOPLE_DISTINCT_ID_KEY,
+    PostHogPersistence,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
+} from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
@@ -1298,7 +1304,7 @@ export class PostHog {
      * This is used when dealing with new persons / where you don't want to wait for ingestion
      * to update user properties.
      */
-    personPropertiesForFlags(properties: Properties, reloadFeatureFlags: boolean = true): void {
+    personPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
         this.featureFlags.personPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
@@ -1314,7 +1320,7 @@ export class PostHog {
      * For example:
      *     groupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
-    groupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags: boolean = true): void {
+    groupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
         this.featureFlags.groupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
