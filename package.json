@@ -78,7 +78,7 @@
         "rollup": "^2.77.0",
         "rollup-plugin-dts": "^4.2.2",
         "rrweb": "^1.1.3",
-        "rrweb2": "npm:rrweb@2.0.0-alpha.6",
+        "rrweb2": "npm:rrweb@2.0.0-alpha.8",
         "sinon": "9.0.2",
         "testcafe": "^1.19.0",
         "testcafe-browser-provider-browserstack": "^1.14.0",
