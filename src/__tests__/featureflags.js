@@ -7,23 +7,25 @@ jest.spyOn(global, 'setTimeout')
 describe('featureflags', () => {
     given('decideEndpointWasHit', () => false)
     given('config', () => ({
-        'token': 'testtoken',
-        'persistence': 'memory',
+        token: 'testtoken',
+        persistence: 'memory',
     })),
-    given('instance', () => ({
-        get_config: jest.fn().mockImplementation((key) => given.config[key]),
-        get_distinct_id: () => 'blah id',
-        getGroups: () => {},
-        _prepare_callback: (callback) => callback,
-        persistence: new PostHogPersistence(given.config),
-        register: (props) => given.instance.persistence.register(props),
-        unregister: (key) => given.instance.persistence.unregister(key),
-        get_property: (key) => given.instance.persistence.props[key],
-        capture: () => {},
-        decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
-        reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
-    }))
+        given('instance', () => ({
+            get_config: jest.fn().mockImplementation((key) => given.config[key]),
+            get_distinct_id: () => 'blah id',
+            getGroups: () => {},
+            _prepare_callback: (callback) => callback,
+            persistence: new PostHogPersistence(given.config),
+            register: (props) => given.instance.persistence.register(props),
+            unregister: (key) => given.instance.persistence.unregister(key),
+            get_property: (key) => given.instance.persistence.props[key],
+            capture: () => {},
+            decideEndpointWasHit: given.decideEndpointWasHit,
+            _send_request: jest
+                .fn()
+                .mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+            reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
+        }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
 
@@ -279,7 +281,7 @@ describe('featureflags', () => {
         })
 
         it('on providing personProperties runs reload automatically', () => {
-            given.featureFlags.personPropertiesForFlags({'a': 'b', c: 'd'})
+            given.featureFlags.personPropertiesForFlags({ a: 'b', c: 'd' })
 
             jest.runAllTimers()
 
@@ -294,7 +296,7 @@ describe('featureflags', () => {
             ).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
-                person_properties: {'a': 'b', c: 'd'},
+                person_properties: { a: 'b', c: 'd' },
             })
         })
     })
@@ -313,8 +315,8 @@ describe('featureflags', () => {
         }))
 
         it('on providing personProperties updates properties successively', () => {
-            given.featureFlags.personPropertiesForFlags({'a': 'b', c: 'd'})
-            given.featureFlags.personPropertiesForFlags({'x': 'y', c: 'e'})
+            given.featureFlags.personPropertiesForFlags({ a: 'b', c: 'd' })
+            given.featureFlags.personPropertiesForFlags({ x: 'y', c: 'e' })
 
             jest.runAllTimers()
 
@@ -329,32 +331,32 @@ describe('featureflags', () => {
             ).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
-                person_properties: {'a': 'b', c: 'e', x: 'y'},
+                person_properties: { a: 'b', c: 'e', x: 'y' },
             })
         })
 
         it('doesnt reload flags if explicitly asked not to', () => {
-            given.featureFlags.personPropertiesForFlags({'a': 'b', c: 'd'}, false)
+            given.featureFlags.personPropertiesForFlags({ a: 'b', c: 'd' }, false)
 
             jest.runAllTimers()
 
             // still old flags
             expect(given.featureFlags.getFlagVariants()).toEqual({
-                "alpha-feature-2": true,
-                "beta-feature": true,
-                "disabled-flag": false,
-                "multivariate-flag": "variant-1",
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
             })
 
             expect(given.instance._send_request).not.toHaveBeenCalled()
         })
 
         it('resetPersonProperties resets all properties', () => {
-            given.featureFlags.personPropertiesForFlags({'a': 'b', c: 'd'}, false)
-            given.featureFlags.personPropertiesForFlags({'x': 'y', c: 'e'}, false)
+            given.featureFlags.personPropertiesForFlags({ a: 'b', c: 'd' }, false)
+            given.featureFlags.personPropertiesForFlags({ x: 'y', c: 'e' }, false)
             jest.runAllTimers()
 
-            expect(given.instance.persistence.props.$stored_person_properties).toEqual({'a': 'b', c: 'e', x: 'y'})
+            expect(given.instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'e', x: 'y' })
 
             given.featureFlags.resetPersonPropertiesForFlags()
             given.featureFlags.reloadFeatureFlags()
@@ -370,11 +372,11 @@ describe('featureflags', () => {
         })
 
         it('on providing groupProperties updates properties successively', () => {
-            given.featureFlags.groupPropertiesForFlags({'orgs': {'a': 'b', c: 'd'}, 'projects': {'x': 'y', c: 'e'}})
+            given.featureFlags.groupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
 
             expect(given.instance.persistence.props.$stored_group_properties).toEqual({
-                orgs: {'a': 'b', c: 'd'},
-                projects: {'x': 'y', c: 'e'},
+                orgs: { a: 'b', c: 'd' },
+                projects: { x: 'y', c: 'e' },
             })
 
             jest.runAllTimers()
@@ -390,32 +392,32 @@ describe('featureflags', () => {
             ).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
-                group_properties: {'orgs': {'a': 'b', c: 'd'}, 'projects': {'x': 'y', c: 'e'}},
+                group_properties: { orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } },
             })
         })
 
         it('handles groupProperties updates', () => {
-            given.featureFlags.groupPropertiesForFlags({'orgs': {'a': 'b', c: 'd'}, 'projects': {'x': 'y', c: 'e'}})
+            given.featureFlags.groupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
 
             expect(given.instance.persistence.props.$stored_group_properties).toEqual({
-                orgs: {'a': 'b', c: 'd'},
-                projects: {'x': 'y', c: 'e'},
+                orgs: { a: 'b', c: 'd' },
+                projects: { x: 'y', c: 'e' },
             })
 
-            given.featureFlags.groupPropertiesForFlags({'orgs': {'w': '1'}, 'other': {'z': '2'}})
+            given.featureFlags.groupPropertiesForFlags({ orgs: { w: '1' }, other: { z: '2' } })
 
             expect(given.instance.persistence.props.$stored_group_properties).toEqual({
-                orgs: {'a': 'b', c: 'd', w: '1'},
-                projects: {'x': 'y', c: 'e'},
-                other: {'z': '2'},
+                orgs: { a: 'b', c: 'd', w: '1' },
+                projects: { x: 'y', c: 'e' },
+                other: { z: '2' },
             })
 
             given.featureFlags.resetGroupPropertiesForFlags('orgs')
 
             expect(given.instance.persistence.props.$stored_group_properties).toEqual({
                 orgs: {},
-                projects: {'x': 'y', c: 'e'},
-                other: {'z': '2'},
+                projects: { x: 'y', c: 'e' },
+                other: { z: '2' },
             })
 
             given.featureFlags.resetGroupPropertiesForFlags()
@@ -423,20 +425,19 @@ describe('featureflags', () => {
             expect(given.instance.persistence.props.$stored_group_properties).toEqual(undefined)
 
             jest.runAllTimers()
-
         })
 
         it('doesnt reload group flags if explicitly asked not to', () => {
-            given.featureFlags.groupPropertiesForFlags({'orgs': {'a': 'b', c: 'd'}}, false)
+            given.featureFlags.groupPropertiesForFlags({ orgs: { a: 'b', c: 'd' } }, false)
 
             jest.runAllTimers()
 
             // still old flags
             expect(given.featureFlags.getFlagVariants()).toEqual({
-                "alpha-feature-2": true,
-                "beta-feature": true,
-                "disabled-flag": false,
-                "multivariate-flag": "variant-1",
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
             })
 
             expect(given.instance._send_request).not.toHaveBeenCalled()

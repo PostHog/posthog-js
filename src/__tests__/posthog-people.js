@@ -21,8 +21,7 @@ given('overrides', () => ({
         update_referrer_info: jest.fn(),
     },
     persistence: {
-        props: {
-        },
+        props: {},
         register: (dict) => {
             given.overrides.persistence.props = { ...given.overrides.persistence.props, ...dict }
         },

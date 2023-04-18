@@ -688,7 +688,7 @@ describe('group()', () => {
         given.lib.group('organization', 'org::5', { name: 'PostHog' })
         expect(given.lib.getGroups()).toEqual({ organization: 'org::5' })
 
-        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: { name: 'PostHog'} })
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: { name: 'PostHog' } })
 
         given.lib.group('organization', 'org::6')
         expect(given.lib.getGroups()).toEqual({ organization: 'org::6' })
@@ -701,17 +701,20 @@ describe('group()', () => {
         // now add properties to the group
         given.lib.group('organization', 'org::7', { name: 'PostHog2' })
         expect(given.lib.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
-        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: { name: 'PostHog2'}, instance: {} })
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+            organization: { name: 'PostHog2' },
+            instance: {},
+        })
 
-
-        given.lib.group('instance', 'app.posthog.com', { 'a': 'b' })
+        given.lib.group('instance', 'app.posthog.com', { a: 'b' })
         expect(given.lib.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
-        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: { name: 'PostHog2'}, instance: {'a': 'b'} })
-
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+            organization: { name: 'PostHog2' },
+            instance: { a: 'b' },
+        })
 
         given.lib.resetGroupPropertiesForFlags()
         expect(given.lib.persistence.props['$stored_group_properties']).toEqual(undefined)
-
     })
 
     it('does not result in a capture call', () => {
