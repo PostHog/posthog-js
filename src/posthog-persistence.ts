@@ -18,6 +18,9 @@ export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording
 export const SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE = '$session_recording_recorder_version_server_side' // follows rrweb versioning
 export const SESSION_ID = '$sesid'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
+export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
+export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
+
 const USER_STATE = '$user_state'
 
 export const RESERVED_PROPERTIES = [
@@ -29,6 +32,8 @@ export const RESERVED_PROPERTIES = [
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
     USER_STATE,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
 ]
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [

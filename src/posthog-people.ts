@@ -41,6 +41,10 @@ class PostHogPeople {
          */
         this.set = addOptOutCheck(posthog, (prop: string | Properties, to?: string, callback?: RequestCallback) => {
             const data = this.set_action(prop, to)
+
+            // Update current user properties
+            this._posthog.personPropertiesForFlags(data['$set'] || {})
+
             if (_isObject(prop)) {
                 callback = to as any
             }

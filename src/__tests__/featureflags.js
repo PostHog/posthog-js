@@ -1,39 +1,28 @@
 import { PostHogFeatureFlags, parseFeatureFlagDecideResponse } from '../posthog-featureflags'
+import { PostHogPersistence } from '../posthog-persistence'
+
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
 
 describe('featureflags', () => {
     given('decideEndpointWasHit', () => false)
+    given('config', () => ({
+        'token': 'testtoken',
+        'persistence': 'memory',
+    })),
     given('instance', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         get_distinct_id: () => 'blah id',
         getGroups: () => {},
         _prepare_callback: (callback) => callback,
-        persistence: {
-            props: {
-                $feature_flag_payloads: {
-                    'beta-feature': {
-                        some: 'payload',
-                    },
-                    'alpha-feature-2': 200,
-                },
-                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
-                $enabled_feature_flags: {
-                    'beta-feature': true,
-                    'alpha-feature-2': true,
-                    'multivariate-flag': 'variant-1',
-                    'disabled-flag': false,
-                },
-                $override_feature_flags: false,
-            },
-            register: (dict) => {
-                given.instance.persistence.props = { ...given.instance.persistence.props, ...dict }
-            },
-        },
+        persistence: new PostHogPersistence(given.config),
+        register: (props) => given.instance.persistence.register(props),
+        unregister: (key) => given.instance.persistence.unregister(key),
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
         _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+        reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
     }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
@@ -41,6 +30,23 @@ describe('featureflags', () => {
     beforeEach(() => {
         jest.spyOn(given.instance, 'capture').mockReturnValue()
         jest.spyOn(window.console, 'warn').mockImplementation()
+
+        given.instance.persistence.register({
+            $feature_flag_payloads: {
+                'beta-feature': {
+                    some: 'payload',
+                },
+                'alpha-feature-2': 200,
+            },
+            $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+            $enabled_feature_flags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+                'disabled-flag': false,
+            },
+            $override_feature_flags: false,
+        })
     })
 
     it('should return the right feature flag and call capture', () => {
@@ -113,6 +119,7 @@ describe('featureflags', () => {
 
         given('config', () => ({
             token: 'random fake token',
+            persistence: 'memory',
         }))
 
         it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
@@ -200,6 +207,7 @@ describe('featureflags', () => {
 
         given('config', () => ({
             token: 'random fake token',
+            persistence: 'memory',
         }))
 
         it('on providing anonDistinctId', () => {
@@ -269,6 +277,170 @@ describe('featureflags', () => {
                 // $anon_distinct_id: "rando_id"
             })
         })
+
+        it('on providing personProperties runs reload automatically', () => {
+            given.featureFlags.personPropertiesForFlags({'a': 'b', c: 'd'})
+
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                first: 'variant-1',
+                second: true,
+            })
+
+            // check the request sent person properties
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: {'a': 'b', c: 'd'},
+            })
+        })
+    })
+
+    describe('override person and group properties', () => {
+        given('decideResponse', () => ({
+            featureFlags: {
+                first: 'variant-1',
+                second: true,
+            },
+        }))
+
+        given('config', () => ({
+            token: 'random fake token',
+            persistence: 'memory',
+        }))
+
+        it('on providing personProperties updates properties successively', () => {
+            given.featureFlags.personPropertiesForFlags({'a': 'b', c: 'd'})
+            given.featureFlags.personPropertiesForFlags({'x': 'y', c: 'e'})
+
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                first: 'variant-1',
+                second: true,
+            })
+
+            // check the request sent person properties
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: {'a': 'b', c: 'e', x: 'y'},
+            })
+        })
+
+        it('doesnt reload flags if explicitly asked not to', () => {
+            given.featureFlags.personPropertiesForFlags({'a': 'b', c: 'd'}, false)
+
+            jest.runAllTimers()
+
+            // still old flags
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                "alpha-feature-2": true,
+                "beta-feature": true,
+                "disabled-flag": false,
+                "multivariate-flag": "variant-1",
+            })
+
+            expect(given.instance._send_request).not.toHaveBeenCalled()
+        })
+
+        it('resetPersonProperties resets all properties', () => {
+            given.featureFlags.personPropertiesForFlags({'a': 'b', c: 'd'}, false)
+            given.featureFlags.personPropertiesForFlags({'x': 'y', c: 'e'}, false)
+            jest.runAllTimers()
+
+            expect(given.instance.persistence.props.$stored_person_properties).toEqual({'a': 'b', c: 'e', x: 'y'})
+
+            given.featureFlags.resetPersonPropertiesForFlags()
+            given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            // check the request did not send person properties
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+            })
+        })
+
+        it('on providing groupProperties updates properties successively', () => {
+            given.featureFlags.groupPropertiesForFlags({'orgs': {'a': 'b', c: 'd'}, 'projects': {'x': 'y', c: 'e'}})
+
+            expect(given.instance.persistence.props.$stored_group_properties).toEqual({
+                orgs: {'a': 'b', c: 'd'},
+                projects: {'x': 'y', c: 'e'},
+            })
+
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                first: 'variant-1',
+                second: true,
+            })
+
+            // check the request sent person properties
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                group_properties: {'orgs': {'a': 'b', c: 'd'}, 'projects': {'x': 'y', c: 'e'}},
+            })
+        })
+
+        it('handles groupProperties updates', () => {
+            given.featureFlags.groupPropertiesForFlags({'orgs': {'a': 'b', c: 'd'}, 'projects': {'x': 'y', c: 'e'}})
+
+            expect(given.instance.persistence.props.$stored_group_properties).toEqual({
+                orgs: {'a': 'b', c: 'd'},
+                projects: {'x': 'y', c: 'e'},
+            })
+
+            given.featureFlags.groupPropertiesForFlags({'orgs': {'w': '1'}, 'other': {'z': '2'}})
+
+            expect(given.instance.persistence.props.$stored_group_properties).toEqual({
+                orgs: {'a': 'b', c: 'd', w: '1'},
+                projects: {'x': 'y', c: 'e'},
+                other: {'z': '2'},
+            })
+
+            given.featureFlags.resetGroupPropertiesForFlags('orgs')
+
+            expect(given.instance.persistence.props.$stored_group_properties).toEqual({
+                orgs: {},
+                projects: {'x': 'y', c: 'e'},
+                other: {'z': '2'},
+            })
+
+            given.featureFlags.resetGroupPropertiesForFlags()
+
+            expect(given.instance.persistence.props.$stored_group_properties).toEqual(undefined)
+
+            jest.runAllTimers()
+
+        })
+
+        it('doesnt reload group flags if explicitly asked not to', () => {
+            given.featureFlags.groupPropertiesForFlags({'orgs': {'a': 'b', c: 'd'}}, false)
+
+            jest.runAllTimers()
+
+            // still old flags
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                "alpha-feature-2": true,
+                "beta-feature": true,
+                "disabled-flag": false,
+                "multivariate-flag": "variant-1",
+            })
+
+            expect(given.instance._send_request).not.toHaveBeenCalled()
+        })
     })
 
     describe('when subsequent decide calls return partial results', () => {
@@ -279,6 +451,7 @@ describe('featureflags', () => {
 
         given('config', () => ({
             token: 'random fake token',
+            persistence: 'memory',
         }))
 
         it('should return combined results', () => {
@@ -305,6 +478,7 @@ describe('featureflags', () => {
 
         given('config', () => ({
             token: 'random fake token',
+            persistence: 'memory',
         }))
 
         it('should return combined results', () => {

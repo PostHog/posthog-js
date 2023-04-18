@@ -1,7 +1,7 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse, FeatureFlagsCallback, JsonType, RequestCallback } from './types'
-import { PostHogPersistence } from './posthog-persistence'
+import { DecideResponse, FeatureFlagsCallback, JsonType, Properties, RequestCallback } from './types'
+import { PostHogPersistence, STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './posthog-persistence'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
@@ -152,11 +152,15 @@ export class PostHogFeatureFlags {
     _reloadFeatureFlagsRequest(): void {
         this.setReloadingPaused(true)
         const token = this.instance.get_config('token')
+        const personProperties = this.instance.get_property(STORED_PERSON_PROPERTIES_KEY)
+        const groupProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY)
         const json_data = JSON.stringify({
             token: token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
+            person_properties: personProperties,
+            group_properties: groupProperties,
         })
 
         const encoded_data = _base64Encode(json_data)
@@ -303,6 +307,77 @@ export class PostHogFeatureFlags {
         return {
             flags: truthyFlags,
             flagVariants: truthyFlagVariants,
+        }
+    }
+
+    /**
+     * Set override person properties for feature flags.
+     * This is used when dealing with new persons / where you don't want to wait for ingestion
+     * to update user properties.
+     */
+    personPropertiesForFlags(properties: Properties, reloadFeatureFlags: boolean = true): void {
+        // Get persisted person properties
+        const existingProperties = this.instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}
+
+        this.instance.register({
+            [STORED_PERSON_PROPERTIES_KEY]: {
+                ...existingProperties,
+                ...properties
+            }
+        })
+
+        if (reloadFeatureFlags) {
+            this.instance.reloadFeatureFlags()
+        }
+    }
+
+    resetPersonPropertiesForFlags(): void {
+        this.instance.unregister(STORED_PERSON_PROPERTIES_KEY)
+    }
+
+    /**
+     * Set override group properties for feature flags.
+     * This is used when dealing with new groups / where you don't want to wait for ingestion
+     * to update properties.
+     * Takes in an object, the key of which is the group type.
+     * For example:
+     *     groupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
+     */
+    groupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags: boolean = true): void {
+        // Get persisted group properties
+        const existingProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY) || {}
+
+        if (Object.keys(existingProperties).length !== 0) {
+            Object.keys(existingProperties).forEach((groupType) => {
+                existingProperties[groupType] = {
+                ...existingProperties[groupType],
+                ...properties[groupType],
+                }
+                delete properties[groupType]
+            })
+        }
+
+        this.instance.register({
+            [STORED_GROUP_PROPERTIES_KEY]: {
+                ...existingProperties,
+                ...properties
+            }
+        })
+
+        if (reloadFeatureFlags) {
+            this.instance.reloadFeatureFlags()
+        }
+    }
+
+    resetGroupPropertiesForFlags(group_type?: string): void {
+        if (group_type) {
+            const existingProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY) || {}
+            this.instance.register({
+                [STORED_GROUP_PROPERTIES_KEY]: {...existingProperties, [group_type]: {}}
+            })
+
+        } else {
+            this.instance.unregister(STORED_GROUP_PROPERTIES_KEY)
         }
     }
 }

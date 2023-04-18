@@ -21,7 +21,7 @@ import {
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
+import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence, STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
@@ -1259,6 +1259,11 @@ export class PostHog {
 
         const existingGroups = this.getGroups()
 
+        // if group key changes, remove stored group properties
+        if (existingGroups[groupType] !== groupKey) {
+            this.resetGroupPropertiesForFlags(groupType)
+        }
+
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
         if (groupPropertiesToSet) {
@@ -1267,10 +1272,13 @@ export class PostHog {
                 $group_key: groupKey,
                 $group_set: groupPropertiesToSet,
             })
+            console.log('calling group properties for flags')
+            this.groupPropertiesForFlags({[groupType]: groupPropertiesToSet})
         }
 
-        // If groups change, reload feature flags.
-        if (existingGroups[groupType] !== groupKey) {
+        // If groups change and no properties change, reload feature flags.
+        // The property change reload case is handled in groupPropertiesForFlags.
+        if (existingGroups[groupType] !== groupKey && !groupPropertiesToSet) {
             this.reloadFeatureFlags()
         }
     }
@@ -1280,9 +1288,39 @@ export class PostHog {
      */
     resetGroups(): void {
         this.register({ $groups: {} })
+        this.resetGroupPropertiesForFlags()
 
         // If groups changed, reload feature flags.
         this.reloadFeatureFlags()
+    }
+
+    /**
+     * Set override person properties for feature flags.
+     * This is used when dealing with new persons / where you don't want to wait for ingestion
+     * to update user properties.
+     */
+    personPropertiesForFlags(properties: Properties, reloadFeatureFlags: boolean = true): void {
+        this.featureFlags.personPropertiesForFlags(properties, reloadFeatureFlags)
+    }
+
+    resetPersonPropertiesForFlags(): void {
+        this.featureFlags.resetPersonPropertiesForFlags()
+    }
+
+    /**
+     * Set override group properties for feature flags.
+     * This is used when dealing with new groups / where you don't want to wait for ingestion
+     * to update properties.
+     * Takes in an object, the key of which is the group type.
+     * For example:
+     *     groupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
+     */
+    groupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags: boolean = true): void {
+        this.featureFlags.groupPropertiesForFlags(properties, reloadFeatureFlags)
+    }
+
+    resetGroupPropertiesForFlags(group_type?: string): void {
+        this.featureFlags.resetGroupPropertiesForFlags(group_type)
     }
 
     /**
