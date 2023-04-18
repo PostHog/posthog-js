@@ -25,8 +25,6 @@ import {
     ALIAS_ID_KEY,
     PEOPLE_DISTINCT_ID_KEY,
     PostHogPersistence,
-    STORED_GROUP_PROPERTIES_KEY,
-    STORED_PERSON_PROPERTIES_KEY,
 } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
