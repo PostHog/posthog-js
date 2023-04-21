@@ -21,11 +21,7 @@ import {
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import {
-    ALIAS_ID_KEY,
-    PEOPLE_DISTINCT_ID_KEY,
-    PostHogPersistence,
-} from './posthog-persistence'
+import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
