@@ -18,6 +18,7 @@ export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording
 export const SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE = '$session_recording_recorder_version_server_side' // follows rrweb versioning
 export const SESSION_ID = '$sesid'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
+export const PERSISTENCE_FEATURE_PREVIEWS = '$feature_previews'
 const USER_STATE = '$user_state'
 
 export const RESERVED_PROPERTIES = [
@@ -29,6 +30,7 @@ export const RESERVED_PROPERTIES = [
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
     USER_STATE,
+    PERSISTENCE_FEATURE_PREVIEWS,
 ]
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [

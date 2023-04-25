@@ -1,7 +1,7 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse, FeatureFlagsCallback, JsonType, RequestCallback } from './types'
-import { PostHogPersistence } from './posthog-persistence'
+import { DecideResponse, FeatureFlagsCallback, FeaturePreview, FeaturePreviewResponse, JsonType, RequestCallback } from './types'
+import { PERSISTENCE_FEATURE_PREVIEWS, PostHogPersistence } from './posthog-persistence'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
@@ -236,8 +236,7 @@ export class PostHogFeatureFlags {
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
-        const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
-        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
+        this._fireFeatureFlagsCallbacks()
     }
 
     /*
@@ -287,6 +286,43 @@ export class PostHogFeatureFlags {
         return () => this.removeFeatureFlagsHandler(callback)
     }
 
+    updateFeaturePreviewEnrollment(key: string, isEnrolled: boolean): void {
+        this.instance.capture('$feature_enrollment_update', {
+            $feature_flag: key,
+            $feature_enrollment: isEnrolled,
+            $set: {
+                [`$feature_enrollment/${key}`]: isEnrolled,
+            },
+        })
+        const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
+        this.instance.persistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(newFlags),
+            [PERSISTENCE_ENABLED_FEATURE_FLAGS]: newFlags,
+        })
+        this._fireFeatureFlagsCallbacks()
+    }
+
+    getFeaturePreviews(force_reload: boolean = false): Promise<FeaturePreview[]> {
+        return new Promise((resolve) => {
+            const existing_previews = this.instance.get_property(PERSISTENCE_FEATURE_PREVIEWS)
+
+            if (!existing_previews || force_reload) {
+                this.instance._send_request(
+                    `${this.instance.get_config('api_host')}/feature_previews/?token=${this.instance.get_config('token')}`,
+                    {},
+                    { method: 'GET' },
+                    (response) => {
+                        const previews = (response as FeaturePreviewResponse).featurePreviews
+                        this.instance.persistence.register({ [PERSISTENCE_FEATURE_PREVIEWS]: previews })
+                        return resolve(previews)
+                    }
+                )
+            } else {
+                return resolve(existing_previews)
+            }
+        })
+    }
+
     _prepareFeatureFlagsForCallbacks(): { flags: string[]; flagVariants: Record<string, string | boolean> } {
         const flags = this.getFlags()
         const flagVariants = this.getFlagVariants()
@@ -304,5 +340,10 @@ export class PostHogFeatureFlags {
             flags: truthyFlags,
             flagVariants: truthyFlagVariants,
         }
+    }
+
+    _fireFeatureFlagsCallbacks(): void {
+        const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
     }
 }

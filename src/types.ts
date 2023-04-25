@@ -293,3 +293,19 @@ export interface JSC {
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
 export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
+
+/** A feature that isn't publicly available yet.*/
+export interface FeaturePreview {
+    // Sync this with the backend's FeaturePreviewSerializer!
+    name: string
+    description: string
+    stage: 'concept' | 'alpha' | 'beta'
+    imageUrl: string | null
+    documentationUrl: string | null
+    flagKey: string | null
+}
+
+export interface FeaturePreviewResponse {
+    // Sync this with the backend's FeaturePreviewResponseSerializer!
+    featurePreviews: FeaturePreview[]
+}
