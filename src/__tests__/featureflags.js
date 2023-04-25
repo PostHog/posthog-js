@@ -190,6 +190,126 @@ describe('featureflags', () => {
         })
     })
 
+    describe('featurePreviews', () => {
+        // actually feature preview response
+        const FEATURE_PREVIEW_FIRST = {
+            name: 'first',
+            description: 'first description',
+            stage: 'alpha',
+            imageUrl: null,
+            documentationUrl: 'http://example.com',
+            flagKey: 'first-flag',
+        }
+
+        const FEATURE_PREVIEW_SECOND = {
+            name: 'second',
+            description: 'second description',
+            stage: 'alpha',
+            imageUrl: null,
+            documentationUrl: 'http://example.com',
+            flagKey: 'second-flag',
+        }
+
+        given('decideResponse', () => ({
+            featurePreviews: [FEATURE_PREVIEW_FIRST],
+        }))
+
+        given('config', () => ({
+            token: 'random fake token',
+            api_host: 'https://decide.com/',
+        }))
+
+        it('getFeaturePreviews requests previews if not present', () => {
+            given.featureFlags.getFeaturePreviews().then((data) => {
+                expect(data).toEqual([FEATURE_PREVIEW_FIRST])
+            })
+
+            expect(given.instance._send_request).toHaveBeenCalledWith("https://decide.com//feature_previews/?token=random fake token", {}, {"method": "GET"}, expect.any(Function))
+            expect(given.instance._send_request).toHaveBeenCalledTimes(1)
+
+            expect(given.instance.persistence.props.$feature_previews).toEqual(
+                [FEATURE_PREVIEW_FIRST]
+            )
+
+            given('decideResponse', () => ({
+                featurePreviews: [FEATURE_PREVIEW_SECOND],
+            }))
+
+            // request again, shouldn't call _send_request again
+            given.featureFlags.getFeaturePreviews().then((data) => {
+                expect(data).toEqual([FEATURE_PREVIEW_FIRST])
+            })
+            expect(given.instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('getFeaturePreviews force reloads previews when asked to', () => {
+            given.featureFlags.getFeaturePreviews().then((data) => {
+                expect(data).toEqual([FEATURE_PREVIEW_FIRST])
+            })
+
+            expect(given.instance._send_request).toHaveBeenCalledWith("https://decide.com//feature_previews/?token=random fake token", {}, {"method": "GET"}, expect.any(Function))
+            expect(given.instance._send_request).toHaveBeenCalledTimes(1)
+
+            expect(given.instance.persistence.props.$feature_previews).toEqual(
+                [FEATURE_PREVIEW_FIRST]
+            )
+
+            given('decideResponse', () => ({
+                featurePreviews: [FEATURE_PREVIEW_SECOND],
+            }))
+
+            // request again, should call _send_request because we're forcing a reload
+            given.featureFlags.getFeaturePreviews(true).then((data) => {
+                expect(data).toEqual([FEATURE_PREVIEW_SECOND])
+            })
+            expect(given.instance._send_request).toHaveBeenCalledTimes(2)
+
+        })
+
+        it('update enrollment should update the feature preview enrollment', () => {
+            given.featureFlags.updateFeaturePreviewEnrollment('first-flag', true)
+
+            expect(given.instance.capture).toHaveBeenCalledTimes(1)
+            expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: true,
+                $feature_flag: 'first-flag',
+                $set: {
+                    "$feature_enrollment/first-flag": true,
+                }
+            })
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                "alpha-feature-2": true,
+                "beta-feature": true,
+                "disabled-flag": false,
+                "multivariate-flag": "variant-1",
+                // feature preview flag is added to list of flags
+                'first-flag': true,
+            })
+
+            // now enrollment is turned off
+            given.featureFlags.updateFeaturePreviewEnrollment('first-flag', false)
+
+            expect(given.instance.capture).toHaveBeenCalledTimes(2)
+            expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: false,
+                $feature_flag: 'first-flag',
+                $set: {
+                    "$feature_enrollment/first-flag": false,
+                }
+            })
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                "alpha-feature-2": true,
+                "beta-feature": true,
+                "disabled-flag": false,
+                "multivariate-flag": "variant-1",
+                // feature preview flag is added to list of flags
+                'first-flag': false,
+            })
+        })
+    })
+
     describe('reloadFeatureFlags', () => {
         given('decideResponse', () => ({
             featureFlags: {

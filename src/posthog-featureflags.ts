@@ -8,12 +8,21 @@ import {
     JsonType,
     RequestCallback,
 } from './types'
-import { PERSISTENCE_FEATURE_PREVIEWS, PostHogPersistence } from './posthog-persistence'
+import { PERSISTENCE_FEATURE_PREVIEWS, PostHogPersistence, ENABLED_FEATURE_FLAGS } from './posthog-persistence'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
-const PERSISTENCE_ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+
+const filterActiveFeatureFlags = (featureFlags: Record<string, string | boolean>) => {
+    const activeFeatureFlags: Record<string, string | boolean> = {}
+    for (const [key, value] of Object.entries(featureFlags)) {
+        if (value) {
+            activeFeatureFlags[key] = value
+        }
+    }
+    return activeFeatureFlags
+}
 
 export const parseFeatureFlagDecideResponse = (
     response: Partial<DecideResponse>,
@@ -35,7 +44,7 @@ export const parseFeatureFlagDecideResponse = (
             persistence &&
                 persistence.register({
                     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
-                    [PERSISTENCE_ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+                    [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
                 })
         } else {
             // using the v2+ api
@@ -48,15 +57,15 @@ export const parseFeatureFlagDecideResponse = (
             }
             persistence &&
                 persistence.register({
-                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(newFeatureFlags || {}),
-                    [PERSISTENCE_ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
+                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags || {})),
+                    [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
                     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
                 })
         }
     } else {
         if (persistence) {
             persistence.unregister(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
-            persistence.unregister(PERSISTENCE_ENABLED_FEATURE_FLAGS)
+            persistence.unregister(ENABLED_FEATURE_FLAGS)
             persistence.unregister(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
         }
     }
@@ -86,7 +95,7 @@ export class PostHogFeatureFlags {
     }
 
     getFlagVariants(): Record<string, string | boolean> {
-        const enabledFlags = this.instance.get_property(PERSISTENCE_ENABLED_FEATURE_FLAGS)
+        const enabledFlags = this.instance.get_property(ENABLED_FEATURE_FLAGS)
         const overriddenFlags = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         if (!overriddenFlags) {
             return enabledFlags || {}
@@ -304,8 +313,8 @@ export class PostHogFeatureFlags {
         // TODO: register in setPersonPropertiesForFlags
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
         this.instance.persistence.register({
-            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(newFlags),
-            [PERSISTENCE_ENABLED_FEATURE_FLAGS]: newFlags,
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
+            [ENABLED_FEATURE_FLAGS]: newFlags,
         })
         this._fireFeatureFlagsCallbacks()
     }
