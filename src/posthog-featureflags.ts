@@ -1,4 +1,4 @@
-import { _base64Encode, _extend } from './utils'
+import { _base64Encode, _entries, _extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
     DecideResponse,
@@ -16,7 +16,7 @@ const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
-    for (const [key, value] of Object.entries(featureFlags || {})) {
+    for (const [key, value] of _entries(featureFlags || {})) {
         if (value) {
             activeFeatureFlags[key] = value
         }

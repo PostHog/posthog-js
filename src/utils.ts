@@ -191,6 +191,21 @@ export function _includes<T = any>(str: T[] | string, needle: T): boolean {
     return (str as any).indexOf(needle) !== -1
 }
 
+/**
+ * Object.entries() polyfill
+ * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries
+ */
+export function _entries<T = any>(obj: Record<string, T>): [string, T][] {
+    const ownProps = Object.keys(obj)
+    let i = ownProps.length
+    const resArray = new Array(i) // preallocate the Array
+
+    while (i--) {
+        resArray[i] = [ownProps[i], obj[ownProps[i]]]
+    }
+    return resArray
+}
+
 // Underscore Addons
 export const _isObject = function (obj: any): obj is Record<string, any> {
     return obj === Object(obj) && !_isArray(obj)
