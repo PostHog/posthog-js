@@ -224,12 +224,15 @@ describe('featureflags', () => {
                 expect(data).toEqual([FEATURE_PREVIEW_FIRST])
             })
 
-            expect(given.instance._send_request).toHaveBeenCalledWith("https://decide.com//feature_previews/?token=random fake token", {}, {"method": "GET"}, expect.any(Function))
+            expect(given.instance._send_request).toHaveBeenCalledWith(
+                'https://decide.com//feature_previews/?token=random fake token',
+                {},
+                { method: 'GET' },
+                expect.any(Function)
+            )
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
-            expect(given.instance.persistence.props.$feature_previews).toEqual(
-                [FEATURE_PREVIEW_FIRST]
-            )
+            expect(given.instance.persistence.props.$feature_previews).toEqual([FEATURE_PREVIEW_FIRST])
 
             given('decideResponse', () => ({
                 featurePreviews: [FEATURE_PREVIEW_SECOND],
@@ -247,12 +250,15 @@ describe('featureflags', () => {
                 expect(data).toEqual([FEATURE_PREVIEW_FIRST])
             })
 
-            expect(given.instance._send_request).toHaveBeenCalledWith("https://decide.com//feature_previews/?token=random fake token", {}, {"method": "GET"}, expect.any(Function))
+            expect(given.instance._send_request).toHaveBeenCalledWith(
+                'https://decide.com//feature_previews/?token=random fake token',
+                {},
+                { method: 'GET' },
+                expect.any(Function)
+            )
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
-            expect(given.instance.persistence.props.$feature_previews).toEqual(
-                [FEATURE_PREVIEW_FIRST]
-            )
+            expect(given.instance.persistence.props.$feature_previews).toEqual([FEATURE_PREVIEW_FIRST])
 
             given('decideResponse', () => ({
                 featurePreviews: [FEATURE_PREVIEW_SECOND],
@@ -263,7 +269,6 @@ describe('featureflags', () => {
                 expect(data).toEqual([FEATURE_PREVIEW_SECOND])
             })
             expect(given.instance._send_request).toHaveBeenCalledTimes(2)
-
         })
 
         it('update enrollment should update the feature preview enrollment', () => {
@@ -274,15 +279,15 @@ describe('featureflags', () => {
                 $feature_enrollment: true,
                 $feature_flag: 'first-flag',
                 $set: {
-                    "$feature_enrollment/first-flag": true,
-                }
+                    '$feature_enrollment/first-flag': true,
+                },
             })
 
             expect(given.featureFlags.getFlagVariants()).toEqual({
-                "alpha-feature-2": true,
-                "beta-feature": true,
-                "disabled-flag": false,
-                "multivariate-flag": "variant-1",
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
                 // feature preview flag is added to list of flags
                 'first-flag': true,
             })
@@ -295,15 +300,15 @@ describe('featureflags', () => {
                 $feature_enrollment: false,
                 $feature_flag: 'first-flag',
                 $set: {
-                    "$feature_enrollment/first-flag": false,
-                }
+                    '$feature_enrollment/first-flag': false,
+                },
             })
 
             expect(given.featureFlags.getFlagVariants()).toEqual({
-                "alpha-feature-2": true,
-                "beta-feature": true,
-                "disabled-flag": false,
-                "multivariate-flag": "variant-1",
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
                 // feature preview flag is added to list of flags
                 'first-flag': false,
             })
