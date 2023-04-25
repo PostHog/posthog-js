@@ -4,6 +4,7 @@ import {
     DecideResponse,
     FeatureFlagsCallback,
     FeaturePreview,
+    FeaturePreviewCallback,
     FeaturePreviewResponse,
     JsonType,
     RequestCallback,
@@ -319,27 +320,25 @@ export class PostHogFeatureFlags {
         this._fireFeatureFlagsCallbacks()
     }
 
-    getFeaturePreviews(force_reload = false): Promise<FeaturePreview[]> {
-        return new Promise((resolve) => {
-            const existing_previews = this.instance.get_property(PERSISTENCE_FEATURE_PREVIEWS)
+    getFeaturePreviews(callback: FeaturePreviewCallback, force_reload = false): void {
+        const existing_previews = this.instance.get_property(PERSISTENCE_FEATURE_PREVIEWS)
 
-            if (!existing_previews || force_reload) {
-                this.instance._send_request(
-                    `${this.instance.get_config('api_host')}/feature_previews/?token=${this.instance.get_config(
-                        'token'
-                    )}`,
-                    {},
-                    { method: 'GET' },
-                    (response) => {
-                        const previews = (response as FeaturePreviewResponse).featurePreviews
-                        this.instance.persistence.register({ [PERSISTENCE_FEATURE_PREVIEWS]: previews })
-                        return resolve(previews)
-                    }
-                )
-            } else {
-                return resolve(existing_previews)
-            }
-        })
+        if (!existing_previews || force_reload) {
+            this.instance._send_request(
+                `${this.instance.get_config('api_host')}/feature_previews/?token=${this.instance.get_config(
+                    'token'
+                )}`,
+                {},
+                { method: 'GET' },
+                (response) => {
+                    const previews = (response as FeaturePreviewResponse).featurePreviews
+                    this.instance.persistence.register({ [PERSISTENCE_FEATURE_PREVIEWS]: previews })
+                    return callback(previews)
+                }
+            )
+        } else {
+            return callback(existing_previews)
+        }
     }
 
     _prepareFeatureFlagsForCallbacks(): { flags: string[]; flagVariants: Record<string, string | boolean> } {

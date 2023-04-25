@@ -305,6 +305,8 @@ export interface FeaturePreview {
     flagKey: string | null
 }
 
+export type FeaturePreviewCallback = (featurePreviews: FeaturePreview[]) => void
+
 export interface FeaturePreviewResponse {
     featurePreviews: FeaturePreview[]
 }

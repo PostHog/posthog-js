@@ -220,7 +220,7 @@ describe('featureflags', () => {
         }))
 
         it('getFeaturePreviews requests previews if not present', () => {
-            given.featureFlags.getFeaturePreviews().then((data) => {
+            given.featureFlags.getFeaturePreviews((data) => {
                 expect(data).toEqual([FEATURE_PREVIEW_FIRST])
             })
 
@@ -239,14 +239,14 @@ describe('featureflags', () => {
             }))
 
             // request again, shouldn't call _send_request again
-            given.featureFlags.getFeaturePreviews().then((data) => {
+            given.featureFlags.getFeaturePreviews((data) => {
                 expect(data).toEqual([FEATURE_PREVIEW_FIRST])
             })
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
         })
 
         it('getFeaturePreviews force reloads previews when asked to', () => {
-            given.featureFlags.getFeaturePreviews().then((data) => {
+            given.featureFlags.getFeaturePreviews((data) => {
                 expect(data).toEqual([FEATURE_PREVIEW_FIRST])
             })
 
@@ -265,9 +265,9 @@ describe('featureflags', () => {
             }))
 
             // request again, should call _send_request because we're forcing a reload
-            given.featureFlags.getFeaturePreviews(true).then((data) => {
+            given.featureFlags.getFeaturePreviews((data) => {
                 expect(data).toEqual([FEATURE_PREVIEW_SECOND])
-            })
+            }, true)
             expect(given.instance._send_request).toHaveBeenCalledTimes(2)
         })
 

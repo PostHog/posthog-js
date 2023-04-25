@@ -52,6 +52,7 @@ import {
     AutocaptureConfig,
     JsonType,
     FeaturePreview,
+    FeaturePreviewCallback,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -1121,8 +1122,8 @@ export class PostHog {
     }
 
     /** EXPERIMENTAL: Get the list of feature previews. To check enrollment status, use `isFeatureEnabled`. */
-    getFeaturePreviews(force_reload = false): Promise<FeaturePreview[]> {
-        return this.featureFlags.getFeaturePreviews(force_reload)
+    getFeaturePreviews(callback: FeaturePreviewCallback, force_reload = false): void {
+        return this.featureFlags.getFeaturePreviews(callback, force_reload)
     }
 
     /*
