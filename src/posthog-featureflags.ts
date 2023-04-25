@@ -294,6 +294,7 @@ export class PostHogFeatureFlags {
                 [`$feature_enrollment/${key}`]: isEnrolled,
             },
         })
+        // TODO: register in setPersonPropertiesForFlags
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
         this.instance.persistence.register({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(newFlags),

@@ -306,6 +306,5 @@ export interface FeaturePreview {
 }
 
 export interface FeaturePreviewResponse {
-    // Sync this with the backend's FeaturePreviewResponseSerializer!
     featurePreviews: FeaturePreview[]
 }
