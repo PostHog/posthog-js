@@ -14,9 +14,9 @@ const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 
-const filterActiveFeatureFlags = (featureFlags: Record<string, string | boolean>) => {
+export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
-    for (const [key, value] of Object.entries(featureFlags)) {
+    for (const [key, value] of Object.entries(featureFlags || {})) {
         if (value) {
             activeFeatureFlags[key] = value
         }
@@ -57,7 +57,7 @@ export const parseFeatureFlagDecideResponse = (
             }
             persistence &&
                 persistence.register({
-                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags || {})),
+                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
                     [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
                     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
                 })

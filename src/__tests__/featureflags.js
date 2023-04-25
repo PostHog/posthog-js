@@ -1,4 +1,4 @@
-import { PostHogFeatureFlags, parseFeatureFlagDecideResponse } from '../posthog-featureflags'
+import { PostHogFeatureFlags, parseFeatureFlagDecideResponse, filterActiveFeatureFlags } from '../posthog-featureflags'
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
 
@@ -486,6 +486,29 @@ describe('parseFeatureFlagDecideResponse', () => {
         expect(given.persistence.register).toHaveBeenLastCalledWith({
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
+        })
+    })
+})
+
+describe('filterActiveFeatureFlags', () => {
+    it('should return empty if no flags are passed', () => {
+        expect(filterActiveFeatureFlags({})).toEqual({})
+    })
+
+    it('should return empty if nothing is passed', () => {
+        expect(filterActiveFeatureFlags()).toEqual({})
+    })
+
+    it('should filter flags', () => {
+        expect(
+            filterActiveFeatureFlags({
+                'flag-1': true,
+                'flag-2': false,
+                'flag-3': 'variant-1',
+            })
+        ).toEqual({
+            'flag-1': true,
+            'flag-3': 'variant-1',
         })
     })
 })
