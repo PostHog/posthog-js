@@ -1121,7 +1121,7 @@ export class PostHog {
     }
 
     /** EXPERIMENTAL: Get the list of feature previews. To check enrollment status, use `isFeatureEnabled`. */
-    getFeaturePreviews(force_reload: boolean = false): Promise<FeaturePreview[]> {
+    getFeaturePreviews(force_reload = false): Promise<FeaturePreview[]> {
         return this.featureFlags.getFeaturePreviews(force_reload)
     }
 

@@ -1,6 +1,13 @@
 import { _base64Encode, _extend } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse, FeatureFlagsCallback, FeaturePreview, FeaturePreviewResponse, JsonType, RequestCallback } from './types'
+import {
+    DecideResponse,
+    FeatureFlagsCallback,
+    FeaturePreview,
+    FeaturePreviewResponse,
+    JsonType,
+    RequestCallback,
+} from './types'
 import { PERSISTENCE_FEATURE_PREVIEWS, PostHogPersistence } from './posthog-persistence'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
@@ -303,13 +310,15 @@ export class PostHogFeatureFlags {
         this._fireFeatureFlagsCallbacks()
     }
 
-    getFeaturePreviews(force_reload: boolean = false): Promise<FeaturePreview[]> {
+    getFeaturePreviews(force_reload = false): Promise<FeaturePreview[]> {
         return new Promise((resolve) => {
             const existing_previews = this.instance.get_property(PERSISTENCE_FEATURE_PREVIEWS)
 
             if (!existing_previews || force_reload) {
                 this.instance._send_request(
-                    `${this.instance.get_config('api_host')}/feature_previews/?token=${this.instance.get_config('token')}`,
+                    `${this.instance.get_config('api_host')}/feature_previews/?token=${this.instance.get_config(
+                        'token'
+                    )}`,
                     {},
                     { method: 'GET' },
                     (response) => {
