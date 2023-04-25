@@ -51,7 +51,6 @@ import {
     XHROptions,
     AutocaptureConfig,
     JsonType,
-    FeaturePreview,
     FeaturePreviewCallback,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
