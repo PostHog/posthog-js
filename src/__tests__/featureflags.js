@@ -200,7 +200,6 @@ describe('featureflags', () => {
     })
 
     describe('featurePreviews', () => {
-
         afterEach(() => {
             given.instance.persistence.clear()
         })
@@ -358,7 +357,7 @@ describe('featureflags', () => {
                 distinct_id: 'blah id',
                 person_properties: {
                     '$feature_enrollment/x-flag': true,
-                }
+                },
             })
         })
     })
