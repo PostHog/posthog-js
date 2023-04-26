@@ -43,7 +43,7 @@ class PostHogPeople {
             const data = this.set_action(prop, to)
 
             // Update current user properties
-            this._posthog.personPropertiesForFlags(data['$set'] || {})
+            this._posthog.setPersonPropertiesForFlags(data['$set'] || {})
 
             if (_isObject(prop)) {
                 callback = to as any

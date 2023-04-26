@@ -315,7 +315,7 @@ export class PostHogFeatureFlags {
      * This is used when dealing with new persons / where you don't want to wait for ingestion
      * to update user properties.
      */
-    personPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
+    setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
         // Get persisted person properties
         const existingProperties = this.instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}
 
@@ -341,9 +341,9 @@ export class PostHogFeatureFlags {
      * to update properties.
      * Takes in an object, the key of which is the group type.
      * For example:
-     *     groupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
+     *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
-    groupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
+    setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
         // Get persisted group properties
         const existingProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY) || {}
 

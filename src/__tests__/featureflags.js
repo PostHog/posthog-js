@@ -281,7 +281,7 @@ describe('featureflags', () => {
         })
 
         it('on providing personProperties runs reload automatically', () => {
-            given.featureFlags.personPropertiesForFlags({ a: 'b', c: 'd' })
+            given.featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
 
             jest.runAllTimers()
 
@@ -315,8 +315,8 @@ describe('featureflags', () => {
         }))
 
         it('on providing personProperties updates properties successively', () => {
-            given.featureFlags.personPropertiesForFlags({ a: 'b', c: 'd' })
-            given.featureFlags.personPropertiesForFlags({ x: 'y', c: 'e' })
+            given.featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
+            given.featureFlags.setPersonPropertiesForFlags({ x: 'y', c: 'e' })
 
             jest.runAllTimers()
 
@@ -336,7 +336,7 @@ describe('featureflags', () => {
         })
 
         it('doesnt reload flags if explicitly asked not to', () => {
-            given.featureFlags.personPropertiesForFlags({ a: 'b', c: 'd' }, false)
+            given.featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
 
             jest.runAllTimers()
 
@@ -352,13 +352,13 @@ describe('featureflags', () => {
         })
 
         it('resetPersonProperties resets all properties', () => {
-            given.featureFlags.personPropertiesForFlags({ a: 'b', c: 'd' }, false)
-            given.featureFlags.personPropertiesForFlags({ x: 'y', c: 'e' }, false)
+            given.featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' }, false)
+            given.featureFlags.setPersonPropertiesForFlags({ x: 'y', c: 'e' }, false)
             jest.runAllTimers()
 
             expect(given.instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'e', x: 'y' })
 
-            given.featureFlags.resetPersonPropertiesForFlags()
+            given.featureFlags.resetsetPersonPropertiesForFlags()
             given.featureFlags.reloadFeatureFlags()
             jest.runAllTimers()
 
@@ -372,7 +372,7 @@ describe('featureflags', () => {
         })
 
         it('on providing groupProperties updates properties successively', () => {
-            given.featureFlags.groupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
+            given.featureFlags.setGroupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
 
             expect(given.instance.persistence.props.$stored_group_properties).toEqual({
                 orgs: { a: 'b', c: 'd' },
@@ -397,14 +397,14 @@ describe('featureflags', () => {
         })
 
         it('handles groupProperties updates', () => {
-            given.featureFlags.groupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
+            given.featureFlags.setGroupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
 
             expect(given.instance.persistence.props.$stored_group_properties).toEqual({
                 orgs: { a: 'b', c: 'd' },
                 projects: { x: 'y', c: 'e' },
             })
 
-            given.featureFlags.groupPropertiesForFlags({ orgs: { w: '1' }, other: { z: '2' } })
+            given.featureFlags.setGroupPropertiesForFlags({ orgs: { w: '1' }, other: { z: '2' } })
 
             expect(given.instance.persistence.props.$stored_group_properties).toEqual({
                 orgs: { a: 'b', c: 'd', w: '1' },
@@ -428,7 +428,7 @@ describe('featureflags', () => {
         })
 
         it('doesnt reload group flags if explicitly asked not to', () => {
-            given.featureFlags.groupPropertiesForFlags({ orgs: { a: 'b', c: 'd' } }, false)
+            given.featureFlags.setGroupPropertiesForFlags({ orgs: { a: 'b', c: 'd' } }, false)
 
             jest.runAllTimers()
 

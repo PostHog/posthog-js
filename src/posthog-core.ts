@@ -1272,11 +1272,11 @@ export class PostHog {
                 $group_key: groupKey,
                 $group_set: groupPropertiesToSet,
             })
-            this.groupPropertiesForFlags({ [groupType]: groupPropertiesToSet })
+            this.setGroupPropertiesForFlags({ [groupType]: groupPropertiesToSet })
         }
 
         // If groups change and no properties change, reload feature flags.
-        // The property change reload case is handled in groupPropertiesForFlags.
+        // The property change reload case is handled in setGroupPropertiesForFlags.
         if (existingGroups[groupType] !== groupKey && !groupPropertiesToSet) {
             this.reloadFeatureFlags()
         }
@@ -1298,8 +1298,8 @@ export class PostHog {
      * This is used when dealing with new persons / where you don't want to wait for ingestion
      * to update user properties.
      */
-    personPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        this.featureFlags.personPropertiesForFlags(properties, reloadFeatureFlags)
+    setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
+        this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
     resetPersonPropertiesForFlags(): void {
@@ -1312,10 +1312,10 @@ export class PostHog {
      * to update properties.
      * Takes in an object, the key of which is the group type.
      * For example:
-     *     groupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
+     *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
-    groupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
-        this.featureFlags.groupPropertiesForFlags(properties, reloadFeatureFlags)
+    setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
+        this.featureFlags.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
     resetGroupPropertiesForFlags(group_type?: string): void {
