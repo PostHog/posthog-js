@@ -111,6 +111,7 @@ We tend to follow the following steps:
     - `git push --tags`
 6. Create a PR linking to this version in the [main PostHog repo](https://github.com/posthog/posthog).
 
+
 ## Questions?
 
 ### [Join our Slack community.](https://posthog.com/slack)
