@@ -1,3 +1,8 @@
+## 1.54.0 - 2023-04-26
+
+- release new version (#617)
+- feat(flags): Allow adding person and group property overrides for flags (#613)
+
 ## 1.53.4 - 2023-04-18
 
 - feat: Allow masking of input by referencing the element (#611)

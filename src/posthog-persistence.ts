@@ -19,6 +19,9 @@ export const SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE = '$session_recordin
 export const SESSION_ID = '$sesid'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const PERSISTENCE_FEATURE_PREVIEWS = '$feature_previews'
+export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
+export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
+
 const USER_STATE = '$user_state'
 
 export const RESERVED_PROPERTIES = [
@@ -31,6 +34,8 @@ export const RESERVED_PROPERTIES = [
     ENABLED_FEATURE_FLAGS,
     USER_STATE,
     PERSISTENCE_FEATURE_PREVIEWS,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
 ]
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
