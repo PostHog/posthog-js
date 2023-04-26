@@ -200,6 +200,10 @@ describe('featureflags', () => {
     })
 
     describe('featurePreviews', () => {
+
+        afterEach(() => {
+            given.instance.persistence.clear()
+        })
         // actually feature preview response
         const FEATURE_PREVIEW_FIRST = {
             name: 'first',
@@ -320,6 +324,41 @@ describe('featureflags', () => {
                 'multivariate-flag': 'variant-1',
                 // feature preview flag is added to list of flags
                 'first-flag': false,
+            })
+        })
+
+        it('reloading flags after update enrollment should send properties', () => {
+            given.featureFlags.updateFeaturePreviewEnrollment('x-flag', true)
+
+            expect(given.instance.capture).toHaveBeenCalledTimes(1)
+            expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: true,
+                $feature_flag: 'x-flag',
+                $set: {
+                    '$feature_enrollment/x-flag': true,
+                },
+            })
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
+                // feature preview flag is added to list of flags
+                'x-flag': true,
+            })
+
+            given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+            // check the request sent person properties
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: {
+                    '$feature_enrollment/x-flag': true,
+                }
             })
         })
     })
