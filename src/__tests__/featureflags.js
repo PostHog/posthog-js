@@ -358,7 +358,7 @@ describe('featureflags', () => {
 
             expect(given.instance.persistence.props.$stored_person_properties).toEqual({ a: 'b', c: 'e', x: 'y' })
 
-            given.featureFlags.resetsetPersonPropertiesForFlags()
+            given.featureFlags.resetPersonPropertiesForFlags()
             given.featureFlags.reloadFeatureFlags()
             jest.runAllTimers()
 
