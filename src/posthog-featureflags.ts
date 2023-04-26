@@ -9,7 +9,13 @@ import {
     JsonType,
     RequestCallback,
 } from './types'
-import { PERSISTENCE_FEATURE_PREVIEWS, PostHogPersistence, ENABLED_FEATURE_FLAGS, STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './posthog-persistence'
+import {
+    PERSISTENCE_FEATURE_PREVIEWS,
+    PostHogPersistence,
+    ENABLED_FEATURE_FLAGS,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
+} from './posthog-persistence'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -368,7 +374,7 @@ export class PostHogFeatureFlags {
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
         this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
     }
-    
+
     /**
      * Set override person properties for feature flags.
      * This is used when dealing with new persons / where you don't want to wait for ingestion
