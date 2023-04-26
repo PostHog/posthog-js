@@ -308,14 +308,16 @@ export class PostHogFeatureFlags {
     }
 
     updateFeaturePreviewEnrollment(key: string, isEnrolled: boolean): void {
+        const enrollmentPersonProp = {
+            [`$feature_enrollment/${key}`]: isEnrolled,
+        }
         this.instance.capture('$feature_enrollment_update', {
             $feature_flag: key,
             $feature_enrollment: isEnrolled,
-            $set: {
-                [`$feature_enrollment/${key}`]: isEnrolled,
-            },
+            $set: enrollmentPersonProp,
         })
-        // TODO: register in setPersonPropertiesForFlags
+        this.setPersonPropertiesForFlags(enrollmentPersonProp, false)
+
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
         this.instance.persistence.register({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),

@@ -1115,12 +1115,12 @@ export class PostHog {
         this.featureFlags.reloadFeatureFlags()
     }
 
-    /** EXPERIMENTAL: Opt the user in or out of a feature preview. */
+    /** Opt the user in or out of a feature preview. */
     updateFeaturePreviewEnrollment(key: string, isEnrolled: boolean): void {
         this.featureFlags.updateFeaturePreviewEnrollment(key, isEnrolled)
     }
 
-    /** EXPERIMENTAL: Get the list of feature previews. To check enrollment status, use `isFeatureEnabled`. */
+    /** Get the list of feature previews. To check enrollment status, use `isFeatureEnabled`. */
     getFeaturePreviews(callback: FeaturePreviewCallback, force_reload = false): void {
         return this.featureFlags.getFeaturePreviews(callback, force_reload)
     }
