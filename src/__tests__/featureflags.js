@@ -231,8 +231,8 @@ describe('featureflags', () => {
             api_host: 'https://decide.com',
         }))
 
-        it('getFeaturePreviews requests previews if not present', () => {
-            given.featureFlags.getFeaturePreviews((data) => {
+        it('getEarlyAccessFeatures requests previews if not present', () => {
+            given.featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([FEATURE_PREVIEW_FIRST])
             })
 
@@ -251,14 +251,14 @@ describe('featureflags', () => {
             }))
 
             // request again, shouldn't call _send_request again
-            given.featureFlags.getFeaturePreviews((data) => {
+            given.featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([FEATURE_PREVIEW_FIRST])
             })
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
         })
 
-        it('getFeaturePreviews force reloads previews when asked to', () => {
-            given.featureFlags.getFeaturePreviews((data) => {
+        it('getEarlyAccessFeatures force reloads previews when asked to', () => {
+            given.featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([FEATURE_PREVIEW_FIRST])
             })
 
@@ -277,14 +277,14 @@ describe('featureflags', () => {
             }))
 
             // request again, should call _send_request because we're forcing a reload
-            given.featureFlags.getFeaturePreviews((data) => {
+            given.featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([FEATURE_PREVIEW_SECOND])
             }, true)
             expect(given.instance._send_request).toHaveBeenCalledTimes(2)
         })
 
         it('update enrollment should update the feature preview enrollment', () => {
-            given.featureFlags.updateFeaturePreviewEnrollment('first-flag', true)
+            given.featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', true)
 
             expect(given.instance.capture).toHaveBeenCalledTimes(1)
             expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
@@ -305,7 +305,7 @@ describe('featureflags', () => {
             })
 
             // now enrollment is turned off
-            given.featureFlags.updateFeaturePreviewEnrollment('first-flag', false)
+            given.featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', false)
 
             expect(given.instance.capture).toHaveBeenCalledTimes(2)
             expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
@@ -327,7 +327,7 @@ describe('featureflags', () => {
         })
 
         it('reloading flags after update enrollment should send properties', () => {
-            given.featureFlags.updateFeaturePreviewEnrollment('x-flag', true)
+            given.featureFlags.updateEarlyAccessFeatureEnrollment('x-flag', true)
 
             expect(given.instance.capture).toHaveBeenCalledTimes(1)
             expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {

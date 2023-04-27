@@ -313,7 +313,7 @@ export class PostHogFeatureFlags {
         return () => this.removeFeatureFlagsHandler(callback)
     }
 
-    updateFeaturePreviewEnrollment(key: string, isEnrolled: boolean): void {
+    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
         const enrollmentPersonProp = {
             [`$feature_enrollment/${key}`]: isEnrolled,
         }
@@ -332,7 +332,7 @@ export class PostHogFeatureFlags {
         this._fireFeatureFlagsCallbacks()
     }
 
-    getFeaturePreviews(callback: FeaturePreviewCallback, force_reload = false): void {
+    getEarlyAccessFeatures(callback: FeaturePreviewCallback, force_reload = false): void {
         const existing_previews = this.instance.get_property(PERSISTENCE_FEATURE_PREVIEWS)
 
         if (!existing_previews || force_reload) {
