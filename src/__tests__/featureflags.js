@@ -203,8 +203,8 @@ describe('featureflags', () => {
         afterEach(() => {
             given.instance.persistence.clear()
         })
-        // actually feature preview response
-        const FEATURE_PREVIEW_FIRST = {
+        // actually early access feature response
+        const EARLY_ACCESS_FEATURE_FIRST = {
             name: 'first',
             description: 'first description',
             stage: 'alpha',
@@ -213,7 +213,7 @@ describe('featureflags', () => {
             flagKey: 'first-flag',
         }
 
-        const FEATURE_PREVIEW_SECOND = {
+        const EARLY_ACCESS_FEATURE_SECOND = {
             name: 'second',
             description: 'second description',
             stage: 'alpha',
@@ -223,7 +223,7 @@ describe('featureflags', () => {
         }
 
         given('decideResponse', () => ({
-            earlyAccessFeatures: [FEATURE_PREVIEW_FIRST],
+            earlyAccessFeatures: [EARLY_ACCESS_FEATURE_FIRST],
         }))
 
         given('config', () => ({
@@ -231,59 +231,59 @@ describe('featureflags', () => {
             api_host: 'https://decide.com',
         }))
 
-        it('getEarlyAccessFeatures requests previews if not present', () => {
+        it('getEarlyAccessFeatures requests early access features if not present', () => {
             given.featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([FEATURE_PREVIEW_FIRST])
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
 
             expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://decide.com/api/feature_previews/?token=random fake token',
+                'https://decide.com/api/early_access_features/?token=random fake token',
                 {},
                 { method: 'GET' },
                 expect.any(Function)
             )
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
-            expect(given.instance.persistence.props.$feature_previews).toEqual([FEATURE_PREVIEW_FIRST])
+            expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
 
             given('decideResponse', () => ({
-                earlyAccessFeatures: [FEATURE_PREVIEW_SECOND],
+                earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
             }))
 
             // request again, shouldn't call _send_request again
             given.featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([FEATURE_PREVIEW_FIRST])
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
         })
 
-        it('getEarlyAccessFeatures force reloads previews when asked to', () => {
+        it('getEarlyAccessFeatures force reloads early access features when asked to', () => {
             given.featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([FEATURE_PREVIEW_FIRST])
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
 
             expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://decide.com/api/feature_previews/?token=random fake token',
+                'https://decide.com/api/early_access_features/?token=random fake token',
                 {},
                 { method: 'GET' },
                 expect.any(Function)
             )
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
-            expect(given.instance.persistence.props.$feature_previews).toEqual([FEATURE_PREVIEW_FIRST])
+            expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
 
             given('decideResponse', () => ({
-                earlyAccessFeatures: [FEATURE_PREVIEW_SECOND],
+                earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
             }))
 
             // request again, should call _send_request because we're forcing a reload
             given.featureFlags.getEarlyAccessFeatures((data) => {
-                expect(data).toEqual([FEATURE_PREVIEW_SECOND])
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_SECOND])
             }, true)
             expect(given.instance._send_request).toHaveBeenCalledTimes(2)
         })
 
-        it('update enrollment should update the feature preview enrollment', () => {
+        it('update enrollment should update the early access feature enrollment', () => {
             given.featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', true)
 
             expect(given.instance.capture).toHaveBeenCalledTimes(1)
@@ -300,7 +300,7 @@ describe('featureflags', () => {
                 'beta-feature': true,
                 'disabled-flag': false,
                 'multivariate-flag': 'variant-1',
-                // feature preview flag is added to list of flags
+                // early access feature flag is added to list of flags
                 'first-flag': true,
             })
 
@@ -321,7 +321,7 @@ describe('featureflags', () => {
                 'beta-feature': true,
                 'disabled-flag': false,
                 'multivariate-flag': 'variant-1',
-                // feature preview flag is added to list of flags
+                // early access feature flag is added to list of flags
                 'first-flag': false,
             })
         })
@@ -343,7 +343,7 @@ describe('featureflags', () => {
                 'beta-feature': true,
                 'disabled-flag': false,
                 'multivariate-flag': 'variant-1',
-                // feature preview flag is added to list of flags
+                // early access feature flag is added to list of flags
                 'x-flag': true,
             })
 

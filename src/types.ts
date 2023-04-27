@@ -296,7 +296,7 @@ export type JsonType = string | number | boolean | null | { [key: string]: JsonT
 
 /** A feature that isn't publicly available yet.*/
 export interface EarlyAccessFeature {
-    // Sync this with the backend's BetaManagementPreviewSerializer!
+    // Sync this with the backend's EarlyAccessFeatureSerializer!
     name: string
     description: string
     stage: 'concept' | 'alpha' | 'beta'

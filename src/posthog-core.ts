@@ -1115,12 +1115,12 @@ export class PostHog {
         this.featureFlags.reloadFeatureFlags()
     }
 
-    /** Opt the user in or out of a feature preview. */
+    /** Opt the user in or out of an early access feature. */
     updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
         this.featureFlags.updateEarlyAccessFeatureEnrollment(key, isEnrolled)
     }
 
-    /** Get the list of feature previews. To check enrollment status, use `isFeatureEnabled`. */
+    /** Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. */
     getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
         return this.featureFlags.getEarlyAccessFeatures(callback, force_reload)
     }
