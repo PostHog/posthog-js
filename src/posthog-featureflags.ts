@@ -337,7 +337,9 @@ export class PostHogFeatureFlags {
 
         if (!existing_previews || force_reload) {
             this.instance._send_request(
-                `${this.instance.get_config('api_host')}/feature_previews/?token=${this.instance.get_config('token')}`,
+                `${this.instance.get_config('api_host')}/api/feature_previews/?token=${this.instance.get_config(
+                    'token'
+                )}`,
                 {},
                 { method: 'GET' },
                 (response) => {

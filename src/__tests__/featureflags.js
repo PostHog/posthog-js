@@ -228,7 +228,7 @@ describe('featureflags', () => {
 
         given('config', () => ({
             token: 'random fake token',
-            api_host: 'https://decide.com/',
+            api_host: 'https://decide.com',
         }))
 
         it('getFeaturePreviews requests previews if not present', () => {
@@ -237,7 +237,7 @@ describe('featureflags', () => {
             })
 
             expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://decide.com//feature_previews/?token=random fake token',
+                'https://decide.com/api/feature_previews/?token=random fake token',
                 {},
                 { method: 'GET' },
                 expect.any(Function)
@@ -263,7 +263,7 @@ describe('featureflags', () => {
             })
 
             expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://decide.com//feature_previews/?token=random fake token',
+                'https://decide.com/api/feature_previews/?token=random fake token',
                 {},
                 { method: 'GET' },
                 expect.any(Function)
