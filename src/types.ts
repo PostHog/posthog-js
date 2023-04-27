@@ -295,7 +295,7 @@ export type SnippetArrayItem = [method: string, ...args: any[]]
 export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
 
 /** A feature that isn't publicly available yet.*/
-export interface FeaturePreview {
+export interface EarlyAccessFeature {
     // Sync this with the backend's BetaManagementPreviewSerializer!
     name: string
     description: string
@@ -304,8 +304,8 @@ export interface FeaturePreview {
     flagKey: string | null
 }
 
-export type FeaturePreviewCallback = (featurePreviews: FeaturePreview[]) => void
+export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeature[]) => void
 
-export interface FeaturePreviewResponse {
-    featurePreviews: FeaturePreview[]
+export interface EarlyAccessFeatureResponse {
+    earlyAccessFeatures: EarlyAccessFeature[]
 }

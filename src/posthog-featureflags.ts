@@ -3,14 +3,14 @@ import { PostHog } from './posthog-core'
 import {
     DecideResponse,
     FeatureFlagsCallback,
-    FeaturePreviewCallback,
-    FeaturePreviewResponse,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureResponse,
     Properties,
     JsonType,
     RequestCallback,
 } from './types'
 import {
-    PERSISTENCE_FEATURE_PREVIEWS,
+    PERSISTENCE_EARLY_ACCESS_FEATURES,
     PostHogPersistence,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
@@ -332,24 +332,24 @@ export class PostHogFeatureFlags {
         this._fireFeatureFlagsCallbacks()
     }
 
-    getEarlyAccessFeatures(callback: FeaturePreviewCallback, force_reload = false): void {
-        const existing_previews = this.instance.get_property(PERSISTENCE_FEATURE_PREVIEWS)
+    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
+        const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
 
-        if (!existing_previews || force_reload) {
+        if (!existing_early_access_features || force_reload) {
             this.instance._send_request(
-                `${this.instance.get_config('api_host')}/api/feature_previews/?token=${this.instance.get_config(
+                `${this.instance.get_config('api_host')}/api/early_access_features/?token=${this.instance.get_config(
                     'token'
                 )}`,
                 {},
                 { method: 'GET' },
                 (response) => {
-                    const previews = (response as FeaturePreviewResponse).featurePreviews
-                    this.instance.persistence.register({ [PERSISTENCE_FEATURE_PREVIEWS]: previews })
-                    return callback(previews)
+                    const earlyAccessFeatures = (response as EarlyAccessFeatureResponse).earlyAccessFeatures
+                    this.instance.persistence.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
+                    return callback(earlyAccessFeatures)
                 }
             )
         } else {
-            return callback(existing_previews)
+            return callback(existing_early_access_features)
         }
     }
 

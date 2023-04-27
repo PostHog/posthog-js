@@ -199,7 +199,7 @@ describe('featureflags', () => {
         })
     })
 
-    describe('featurePreviews', () => {
+    describe('earlyAccessFeatures', () => {
         afterEach(() => {
             given.instance.persistence.clear()
         })
@@ -223,7 +223,7 @@ describe('featureflags', () => {
         }
 
         given('decideResponse', () => ({
-            featurePreviews: [FEATURE_PREVIEW_FIRST],
+            earlyAccessFeatures: [FEATURE_PREVIEW_FIRST],
         }))
 
         given('config', () => ({
@@ -247,7 +247,7 @@ describe('featureflags', () => {
             expect(given.instance.persistence.props.$feature_previews).toEqual([FEATURE_PREVIEW_FIRST])
 
             given('decideResponse', () => ({
-                featurePreviews: [FEATURE_PREVIEW_SECOND],
+                earlyAccessFeatures: [FEATURE_PREVIEW_SECOND],
             }))
 
             // request again, shouldn't call _send_request again
@@ -273,7 +273,7 @@ describe('featureflags', () => {
             expect(given.instance.persistence.props.$feature_previews).toEqual([FEATURE_PREVIEW_FIRST])
 
             given('decideResponse', () => ({
-                featurePreviews: [FEATURE_PREVIEW_SECOND],
+                earlyAccessFeatures: [FEATURE_PREVIEW_SECOND],
             }))
 
             // request again, should call _send_request because we're forcing a reload
