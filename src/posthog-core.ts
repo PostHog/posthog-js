@@ -51,6 +51,7 @@ import {
     XHROptions,
     AutocaptureConfig,
     JsonType,
+    EarlyAccessFeatureCallback,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -1112,6 +1113,16 @@ export class PostHog {
 
     reloadFeatureFlags(): void {
         this.featureFlags.reloadFeatureFlags()
+    }
+
+    /** Opt the user in or out of an early access feature. */
+    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
+        this.featureFlags.updateEarlyAccessFeatureEnrollment(key, isEnrolled)
+    }
+
+    /** Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. */
+    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
+        return this.featureFlags.getEarlyAccessFeatures(callback, force_reload)
     }
 
     /*

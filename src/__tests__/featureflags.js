@@ -1,4 +1,4 @@
-import { PostHogFeatureFlags, parseFeatureFlagDecideResponse } from '../posthog-featureflags'
+import { PostHogFeatureFlags, parseFeatureFlagDecideResponse, filterActiveFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 
 jest.useFakeTimers()
@@ -196,6 +196,169 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             expect(called).toEqual(false)
+        })
+    })
+
+    describe('earlyAccessFeatures', () => {
+        afterEach(() => {
+            given.instance.persistence.clear()
+        })
+        // actually early access feature response
+        const EARLY_ACCESS_FEATURE_FIRST = {
+            name: 'first',
+            description: 'first description',
+            stage: 'alpha',
+            imageUrl: null,
+            documentationUrl: 'http://example.com',
+            flagKey: 'first-flag',
+        }
+
+        const EARLY_ACCESS_FEATURE_SECOND = {
+            name: 'second',
+            description: 'second description',
+            stage: 'alpha',
+            imageUrl: null,
+            documentationUrl: 'http://example.com',
+            flagKey: 'second-flag',
+        }
+
+        given('decideResponse', () => ({
+            earlyAccessFeatures: [EARLY_ACCESS_FEATURE_FIRST],
+        }))
+
+        given('config', () => ({
+            token: 'random fake token',
+            api_host: 'https://decide.com',
+        }))
+
+        it('getEarlyAccessFeatures requests early access features if not present', () => {
+            given.featureFlags.getEarlyAccessFeatures((data) => {
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+            })
+
+            expect(given.instance._send_request).toHaveBeenCalledWith(
+                'https://decide.com/api/early_access_features/?token=random fake token',
+                {},
+                { method: 'GET' },
+                expect.any(Function)
+            )
+            expect(given.instance._send_request).toHaveBeenCalledTimes(1)
+
+            expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+
+            given('decideResponse', () => ({
+                earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
+            }))
+
+            // request again, shouldn't call _send_request again
+            given.featureFlags.getEarlyAccessFeatures((data) => {
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+            })
+            expect(given.instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('getEarlyAccessFeatures force reloads early access features when asked to', () => {
+            given.featureFlags.getEarlyAccessFeatures((data) => {
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+            })
+
+            expect(given.instance._send_request).toHaveBeenCalledWith(
+                'https://decide.com/api/early_access_features/?token=random fake token',
+                {},
+                { method: 'GET' },
+                expect.any(Function)
+            )
+            expect(given.instance._send_request).toHaveBeenCalledTimes(1)
+
+            expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+
+            given('decideResponse', () => ({
+                earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
+            }))
+
+            // request again, should call _send_request because we're forcing a reload
+            given.featureFlags.getEarlyAccessFeatures((data) => {
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_SECOND])
+            }, true)
+            expect(given.instance._send_request).toHaveBeenCalledTimes(2)
+        })
+
+        it('update enrollment should update the early access feature enrollment', () => {
+            given.featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', true)
+
+            expect(given.instance.capture).toHaveBeenCalledTimes(1)
+            expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: true,
+                $feature_flag: 'first-flag',
+                $set: {
+                    '$feature_enrollment/first-flag': true,
+                },
+            })
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
+                // early access feature flag is added to list of flags
+                'first-flag': true,
+            })
+
+            // now enrollment is turned off
+            given.featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', false)
+
+            expect(given.instance.capture).toHaveBeenCalledTimes(2)
+            expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: false,
+                $feature_flag: 'first-flag',
+                $set: {
+                    '$feature_enrollment/first-flag': false,
+                },
+            })
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
+                // early access feature flag is added to list of flags
+                'first-flag': false,
+            })
+        })
+
+        it('reloading flags after update enrollment should send properties', () => {
+            given.featureFlags.updateEarlyAccessFeatureEnrollment('x-flag', true)
+
+            expect(given.instance.capture).toHaveBeenCalledTimes(1)
+            expect(given.instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: true,
+                $feature_flag: 'x-flag',
+                $set: {
+                    '$feature_enrollment/x-flag': true,
+                },
+            })
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'multivariate-flag': 'variant-1',
+                // early access feature flag is added to list of flags
+                'x-flag': true,
+            })
+
+            given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+            // check the request sent person properties
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: {
+                    '$feature_enrollment/x-flag': true,
+                },
+            })
         })
     })
 
@@ -536,6 +699,29 @@ describe('parseFeatureFlagDecideResponse', () => {
         expect(given.persistence.register).toHaveBeenLastCalledWith({
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
+        })
+    })
+})
+
+describe('filterActiveFeatureFlags', () => {
+    it('should return empty if no flags are passed', () => {
+        expect(filterActiveFeatureFlags({})).toEqual({})
+    })
+
+    it('should return empty if nothing is passed', () => {
+        expect(filterActiveFeatureFlags()).toEqual({})
+    })
+
+    it('should filter flags', () => {
+        expect(
+            filterActiveFeatureFlags({
+                'flag-1': true,
+                'flag-2': false,
+                'flag-3': 'variant-1',
+            })
+        ).toEqual({
+            'flag-1': true,
+            'flag-3': 'variant-1',
         })
     })
 })

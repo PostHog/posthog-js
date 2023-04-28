@@ -293,3 +293,19 @@ export interface JSC {
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
 export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
+
+/** A feature that isn't publicly available yet.*/
+export interface EarlyAccessFeature {
+    // Sync this with the backend's EarlyAccessFeatureSerializer!
+    name: string
+    description: string
+    stage: 'concept' | 'alpha' | 'beta'
+    documentationUrl: string | null
+    flagKey: string | null
+}
+
+export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeature[]) => void
+
+export interface EarlyAccessFeatureResponse {
+    earlyAccessFeatures: EarlyAccessFeature[]
+}

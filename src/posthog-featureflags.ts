@@ -1,12 +1,35 @@
-import { _base64Encode, _extend } from './utils'
+import { _base64Encode, _entries, _extend } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse, FeatureFlagsCallback, JsonType, Properties, RequestCallback } from './types'
-import { PostHogPersistence, STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './posthog-persistence'
+import {
+    DecideResponse,
+    FeatureFlagsCallback,
+    EarlyAccessFeatureCallback,
+    EarlyAccessFeatureResponse,
+    Properties,
+    JsonType,
+    RequestCallback,
+} from './types'
+import {
+    PERSISTENCE_EARLY_ACCESS_FEATURES,
+    PostHogPersistence,
+    ENABLED_FEATURE_FLAGS,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
+} from './posthog-persistence'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
-const PERSISTENCE_ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+
+export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
+    const activeFeatureFlags: Record<string, string | boolean> = {}
+    for (const [key, value] of _entries(featureFlags || {})) {
+        if (value) {
+            activeFeatureFlags[key] = value
+        }
+    }
+    return activeFeatureFlags
+}
 
 export const parseFeatureFlagDecideResponse = (
     response: Partial<DecideResponse>,
@@ -28,7 +51,7 @@ export const parseFeatureFlagDecideResponse = (
             persistence &&
                 persistence.register({
                     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
-                    [PERSISTENCE_ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+                    [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
                 })
         } else {
             // using the v2+ api
@@ -41,15 +64,15 @@ export const parseFeatureFlagDecideResponse = (
             }
             persistence &&
                 persistence.register({
-                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(newFeatureFlags || {}),
-                    [PERSISTENCE_ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
+                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
+                    [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
                     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
                 })
         }
     } else {
         if (persistence) {
             persistence.unregister(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
-            persistence.unregister(PERSISTENCE_ENABLED_FEATURE_FLAGS)
+            persistence.unregister(ENABLED_FEATURE_FLAGS)
             persistence.unregister(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
         }
     }
@@ -79,7 +102,7 @@ export class PostHogFeatureFlags {
     }
 
     getFlagVariants(): Record<string, string | boolean> {
-        const enabledFlags = this.instance.get_property(PERSISTENCE_ENABLED_FEATURE_FLAGS)
+        const enabledFlags = this.instance.get_property(ENABLED_FEATURE_FLAGS)
         const overriddenFlags = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         if (!overriddenFlags) {
             return enabledFlags || {}
@@ -240,8 +263,7 @@ export class PostHogFeatureFlags {
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
-        const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
-        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
+        this._fireFeatureFlagsCallbacks()
     }
 
     /*
@@ -291,6 +313,46 @@ export class PostHogFeatureFlags {
         return () => this.removeFeatureFlagsHandler(callback)
     }
 
+    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
+        const enrollmentPersonProp = {
+            [`$feature_enrollment/${key}`]: isEnrolled,
+        }
+        this.instance.capture('$feature_enrollment_update', {
+            $feature_flag: key,
+            $feature_enrollment: isEnrolled,
+            $set: enrollmentPersonProp,
+        })
+        this.setPersonPropertiesForFlags(enrollmentPersonProp, false)
+
+        const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
+        this.instance.persistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
+            [ENABLED_FEATURE_FLAGS]: newFlags,
+        })
+        this._fireFeatureFlagsCallbacks()
+    }
+
+    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
+        const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
+
+        if (!existing_early_access_features || force_reload) {
+            this.instance._send_request(
+                `${this.instance.get_config('api_host')}/api/early_access_features/?token=${this.instance.get_config(
+                    'token'
+                )}`,
+                {},
+                { method: 'GET' },
+                (response) => {
+                    const earlyAccessFeatures = (response as EarlyAccessFeatureResponse).earlyAccessFeatures
+                    this.instance.persistence.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
+                    return callback(earlyAccessFeatures)
+                }
+            )
+        } else {
+            return callback(existing_early_access_features)
+        }
+    }
+
     _prepareFeatureFlagsForCallbacks(): { flags: string[]; flagVariants: Record<string, string | boolean> } {
         const flags = this.getFlags()
         const flagVariants = this.getFlagVariants()
@@ -308,6 +370,11 @@ export class PostHogFeatureFlags {
             flags: truthyFlags,
             flagVariants: truthyFlagVariants,
         }
+    }
+
+    _fireFeatureFlagsCallbacks(): void {
+        const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
     }
 
     /**

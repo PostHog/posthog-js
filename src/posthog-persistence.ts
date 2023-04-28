@@ -18,6 +18,7 @@ export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording
 export const SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE = '$session_recording_recorder_version_server_side' // follows rrweb versioning
 export const SESSION_ID = '$sesid'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
+export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 
@@ -32,6 +33,7 @@ export const RESERVED_PROPERTIES = [
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
     USER_STATE,
+    PERSISTENCE_EARLY_ACCESS_FEATURES,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
 ]
