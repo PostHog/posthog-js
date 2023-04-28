@@ -1,3 +1,7 @@
+## 1.55.0 - 2023-04-28
+
+- feat(beta-management): Add opt-in and out functions (#616)
+
 ## 1.54.0 - 2023-04-26
 
 - release new version (#617)
