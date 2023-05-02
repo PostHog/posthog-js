@@ -132,6 +132,8 @@ export interface SessionRecordingOptions {
     blockClass?: string | RegExp
     blockSelector?: string | null
     ignoreClass?: string
+    maskTextClass?: string | RegExp
+    maskTextSelector?: string | null
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null

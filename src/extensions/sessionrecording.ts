@@ -184,6 +184,8 @@ export class SessionRecording {
             blockClass: 'ph-no-capture',
             blockSelector: undefined,
             ignoreClass: 'ph-ignore-input',
+            maskTextClass: 'ph-mask',
+            maskTextSelector: undefined,
             maskAllInputs: true,
             maskInputOptions: {},
             maskInputFn: undefined,
