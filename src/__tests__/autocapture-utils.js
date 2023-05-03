@@ -6,7 +6,6 @@ import {
     shouldCaptureElement,
     isSensitiveElement,
     shouldCaptureValue,
-    loadScript,
     isAngularStyleAttr,
     getNestedSpanText,
     getDirectAndNestedSpanText,
