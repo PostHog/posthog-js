@@ -1,3 +1,8 @@
+## 1.55.1 - 2023-05-03
+
+- fix: Script loading before DOM is ready (#618)
+- Expose options to mask text in session recording (#595)
+
 ## 1.55.0 - 2023-04-28
 
 - feat(beta-management): Add opt-in and out functions (#616)
