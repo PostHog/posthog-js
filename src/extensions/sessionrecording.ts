@@ -15,9 +15,8 @@ import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
 import type { record } from 'rrweb/typings'
 import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
-import { loadScript } from '../autocapture-utils'
 import Config from '../config'
-import { logger } from '../utils'
+import { logger, loadScript } from '../utils'
 
 const BASE_ENDPOINT = '/e/'
 
@@ -140,7 +139,13 @@ export class SessionRecording {
         if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
             loadScript(
                 this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
-                this._onScriptLoaded.bind(this)
+                (err) => {
+                    if (err) {
+                        return logger.error(`Could not load ${recorderJS}`, err)
+                    }
+
+                    this._onScriptLoaded()
+                }
             )
         } else {
             this._onScriptLoaded()
