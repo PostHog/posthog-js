@@ -15,7 +15,10 @@ import {
 // Type and source defined here designate a non-user-generated recording event
 const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
 
-jest.mock('../../utils')
+jest.mock('../../utils', () => ({
+    ...jest.requireActual('../../utils'),
+    loadScript: jest.fn((path, callback) => callback()),
+}))
 jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
 
 describe('SessionRecording', () => {

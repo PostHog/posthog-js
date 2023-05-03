@@ -1,7 +1,10 @@
 import { Toolbar } from '../../extensions/toolbar'
 import { loadScript } from '../../utils'
 
-jest.mock('../../utils')
+jest.mock('../../utils', () => ({
+    ...jest.requireActual('../../utils'),
+    loadScript: jest.fn((path, callback) => callback()),
+}))
 
 describe('Toolbar', () => {
     given('toolbar', () => new Toolbar(given.lib))
