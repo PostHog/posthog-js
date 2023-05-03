@@ -1,5 +1,4 @@
-import { loadScript } from '../autocapture-utils'
-import { _getHashParam, _register_event } from '../utils'
+import { _getHashParam, _register_event, loadScript, logger } from '../utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, ToolbarParams } from '../types'
 import { POSTHOG_MANAGED_HOSTS } from './cloud'
@@ -126,7 +125,11 @@ export class Toolbar {
         const { source: _discard, ...paramsToPersist } = toolbarParams // eslint-disable-line
         window.localStorage.setItem('_postHogToolbarParams', JSON.stringify(paramsToPersist))
 
-        loadScript(toolbarUrl, () => {
+        loadScript(toolbarUrl, (err) => {
+            if (err) {
+                logger.error('Failed to load toolbar', err)
+                return
+            }
             ;((window as any)['ph_load_toolbar'] || (window as any)['ph_load_editor'])(toolbarParams, this.instance)
         })
         // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.

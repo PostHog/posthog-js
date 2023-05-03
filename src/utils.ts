@@ -679,6 +679,26 @@ export const isLocalhost = (): boolean => {
     return localDomains.includes(location.hostname)
 }
 
+export function loadScript(scriptUrlToLoad: string, callback: (error?: string | Event, event?: Event) => void): void {
+    const scriptTag = document.createElement('script')
+    scriptTag.type = 'text/javascript'
+    scriptTag.src = scriptUrlToLoad
+    scriptTag.onload = (event) => callback(undefined, event)
+    scriptTag.onerror = (error) => callback(error)
+
+    const scripts = document.querySelectorAll('body > script')
+    if (scripts.length > 0) {
+        scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
+    } else if (document.body) {
+        // In exceptional situations this call might load before the DOM is fully ready.
+        document.body.appendChild(scriptTag)
+    } else {
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.appendChild(scriptTag)
+        })
+    }
+}
+
 export const _info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {
         const campaign_keywords = [

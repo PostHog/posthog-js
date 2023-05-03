@@ -1,7 +1,7 @@
 import { Toolbar } from '../../extensions/toolbar'
-import { loadScript } from '../../autocapture-utils'
+import { loadScript } from '../../utils'
 
-jest.mock('../../autocapture-utils')
+jest.mock('../../utils')
 
 describe('Toolbar', () => {
     given('toolbar', () => new Toolbar(given.lib))

@@ -303,20 +303,6 @@ export function isAngularStyleAttr(attributeName: string): boolean {
     return false
 }
 
-export function loadScript(scriptUrlToLoad: string, callback: (event: Event) => void): void {
-    const scriptTag = document.createElement('script')
-    scriptTag.type = 'text/javascript'
-    scriptTag.src = scriptUrlToLoad
-    scriptTag.onload = callback
-
-    const scripts = document.querySelectorAll('body > script')
-    if (scripts.length > 0) {
-        scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
-    } else {
-        document.body.appendChild(scriptTag)
-    }
-}
-
 /*
  * Iterate through children of a target element looking for span tags
  * and return the text content of the span tags, separated by spaces,

@@ -1,4 +1,4 @@
-import { loadScript } from '../../autocapture-utils'
+import { loadScript } from '../../utils'
 import { SessionRecording } from '../../extensions/sessionrecording'
 import {
     PostHogPersistence,
@@ -15,7 +15,7 @@ import {
 // Type and source defined here designate a non-user-generated recording event
 const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
 
-jest.mock('../../autocapture-utils')
+jest.mock('../../utils')
 jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
 
 describe('SessionRecording', () => {
