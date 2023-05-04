@@ -332,7 +332,13 @@ export class PostHogFeatureFlags {
         this._fireFeatureFlagsCallbacks()
     }
 
-    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
+    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = true): void {
+        if (force_reload) {
+            this.resetPersonPropertiesForFlags()
+            this.resetGroupPropertiesForFlags()
+            this.reloadFeatureFlags()
+        }
+
         const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
 
         if (!existing_early_access_features || force_reload) {
