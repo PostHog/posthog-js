@@ -80,7 +80,7 @@ Run `npm install -g yalc`
 
 -   In the posthog repo
     -   run `yalc remove posthog-js`
-    -   run `yarn install`
+    -   run `pnpm install`
 
 ## Releasing a new version
 
