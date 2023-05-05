@@ -137,6 +137,7 @@ export interface SessionRecordingOptions {
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
+    maskNetworkRequestFn?: ((url: NetworkRequest) => NetworkRequest | null | undefined) | null
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
@@ -310,4 +311,8 @@ export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeatur
 
 export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
+}
+
+export type NetworkRequest = {
+    url: string
 }
