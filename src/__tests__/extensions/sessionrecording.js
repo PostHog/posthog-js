@@ -440,6 +440,9 @@ describe('SessionRecording', () => {
                 _emit({
                     event: 123,
                     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    data: {
+                        source: 1,
+                    },
                 })
                 expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(
                     false,
@@ -457,8 +460,15 @@ describe('SessionRecording', () => {
                 given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
             })
 
-            const emitAtDateTime = (date) =>
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: date.getTime() })
+            const emitAtDateTime = (date, source = 1) =>
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    timestamp: date.getTime(),
+                    data: {
+                        source,
+                    },
+                })
 
             it('takes a full snapshot for the first _emit', () => {
                 emitAtDateTime(startingDate)

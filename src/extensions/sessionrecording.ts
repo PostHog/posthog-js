@@ -185,7 +185,7 @@ export class SessionRecording {
     }
 
     _isInteractiveEvent(event: eventWithTime) {
-        return event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && ACTIVE_SOURCES.indexOf(event.data.source) !== -1
+        return event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && ACTIVE_SOURCES.indexOf(event.data?.source) !== -1
     }
 
     _updateWindowAndSessionIds(event: eventWithTime) {
