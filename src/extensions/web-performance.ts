@@ -1,6 +1,6 @@
 import { isLocalhost, logger } from '../utils'
 import { PostHog } from '../posthog-core'
-import { DecideResponse } from '../types'
+import { DecideResponse, NetworkRequest } from '../types'
 
 const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     // BASE_PERFORMANCE_EVENT_COLUMNS
@@ -157,7 +157,24 @@ export class WebPerformanceObserver {
             }
         }
 
+        // NOTE: This is minimal atm but will include more options when we move to the
+        // built in rrweb network recorder
+        let networkRequest: NetworkRequest | null | undefined = {
+            url: event.name,
+        }
+
+        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+
+        if (userSessionRecordingOptions.maskNetworkRequestFn) {
+            networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
+        }
+
+        if (!networkRequest) {
+            return
+        }
+
         const eventJson = event.toJSON()
+        eventJson.name = networkRequest.url
         const properties: { [key: number]: any } = {}
         // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
         // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70

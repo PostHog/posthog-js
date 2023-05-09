@@ -52,6 +52,7 @@
         "@rollup/plugin-terser": "^0.4.0",
         "@rollup/plugin-typescript": "^8.3.3",
         "@sentry/types": "7.37.2",
+        "@types/jest": "^29.5.1",
         "@types/react-dom": "^18.0.10",
         "@typescript-eslint/eslint-plugin": "^5.30.7",
         "@typescript-eslint/parser": "^5.30.7",
