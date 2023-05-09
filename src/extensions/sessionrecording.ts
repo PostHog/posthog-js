@@ -19,7 +19,7 @@ import { logger, loadScript } from '../utils'
 
 const BASE_ENDPOINT = '/e/'
 
-const IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
 // Copied from rrweb typings to avoid import
 enum IncrementalSource {
@@ -192,11 +192,12 @@ export class SessionRecording {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
+
         const isUserInteraction = this._isInteractiveEvent(event)
 
         if (!isUserInteraction && !this.isIdle) {
             // We check if the lastActivityTimestamp is old enough to go idle
-            if (event.timestamp - this.lastActivityTimestamp > IDLE_ACTIVITY_TIMEOUT_MS) {
+            if (event.timestamp - this.lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
             }
         }
