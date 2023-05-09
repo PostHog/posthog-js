@@ -1,3 +1,7 @@
+## 1.56.0 - 2023-05-09
+
+- feat: Allow custom masking of network events (#620)
+
 ## 1.55.2 - 2023-05-09
 
 - feat: Added idle timer to recordings (#626)
