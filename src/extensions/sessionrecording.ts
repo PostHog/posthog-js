@@ -8,13 +8,12 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-    MUTATION_SOURCE_TYPE,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
 import type { record } from 'rrweb/typings'
-import type { eventWithTime, listenerHandler, pluginEvent, recordOptions, EventType } from 'rrweb/typings/types'
+import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
 import Config from '../config'
 import { logger, loadScript } from '../utils'
 
@@ -63,7 +62,7 @@ export class SessionRecording {
     receivedDecide: boolean
     rrwebRecord: typeof record | undefined
     recorderVersion?: string
-    lastActivityTimestamp?: number
+    lastActivityTimestamp: number = Date.now()
     isIdle = false
 
     constructor(instance: PostHog) {
@@ -197,15 +196,15 @@ export class SessionRecording {
 
         if (!isUserInteraction && !this.isIdle) {
             // We check if the lastActivityTimestamp is old enough to go idle
-            if (event.timestamp - (this.lastActivityTimestamp || Date.now()) > IDLE_ACTIVITY_TIMEOUT_MS) {
+            if (event.timestamp - this.lastActivityTimestamp > IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
             }
         }
 
         if (isUserInteraction) {
-            // Remove the idle state
             this.lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
+                // Remove the idle state if set and trigger a full snapshot as we will have ingored previous mutations
                 this.isIdle = false
                 this._tryTakeFullSnapshot()
             }
