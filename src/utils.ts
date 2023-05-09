@@ -855,44 +855,43 @@ export const _info = {
         )
     },
 
-    os: function (): { os_name: string; os_version: string } {
-        const a = userAgent
-        if (/Windows/i.test(a)) {
-            if (/Phone/.test(a) || /WPDesktop/.test(a)) {
+    os: function (user_agent: string): { os_name: string; os_version: string } {
+        if (/Windows/i.test(user_agent)) {
+            if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
                 return { os_name: 'Windows Phone', os_version: '' }
             }
-            const match = /Windows NT ([0-9.]+)/i.exec(a)
+            const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
             if (match && match[1]) {
                 const version = match[1]
                 return { os_name: 'Windows', os_version: version }
             }
             return { os_name: 'Windows', os_version: '' }
-        } else if (/(iPhone|iPad|iPod)/.test(a)) {
-            const match = /OS (\d+)_(\d+)_?(\d+)?/i.exec(a)
+        } else if (/(iPhone|iPad|iPod)/.test(user_agent)) {
+            const match = /OS (\d+)_(\d+)_?(\d+)?/i.exec(user_agent)
             if (match && match[1]) {
                 const versionParts = [match[1], match[2], match[3] || '0']
                 return { os_name: 'iOS', os_version: versionParts.join('.') }
             }
             return { os_name: 'iOS', os_version: '' }
-        } else if (/Android/.test(a)) {
-            const match = /Android (\d+)\.(\d+)\.?(\d+)?/i.exec(a)
+        } else if (/Android/.test(user_agent)) {
+            const match = /Android (\d+)\.(\d+)\.?(\d+)?/i.exec(user_agent)
             if (match && match[1]) {
                 const versionParts = [match[1], match[2], match[3] || '0']
                 return { os_name: 'Android', os_version: versionParts.join('.') }
             }
             return { os_name: 'Android', os_version: '' }
-        } else if (/(BlackBerry|PlayBook|BB10)/i.test(a)) {
+        } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
             return { os_name: 'BlackBerry', os_version: '' }
-        } else if (/Mac/i.test(a)) {
-            const match = /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i.exec(a)
+        } else if (/Mac/i.test(user_agent)) {
+            const match = /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i.exec(user_agent)
             if (match && match[1]) {
                 const versionParts = [match[1], match[2], match[3] || '0']
                 return { os_name: 'Mac OS X', os_version: versionParts.join('.') }
             }
             return { os_name: 'Mac OS X', os_version: '' }
-        } else if (/Linux/.test(a)) {
+        } else if (/Linux/.test(user_agent)) {
             return { os_name: 'Linux', os_version: '' }
-        } else if (/CrOS/.test(a)) {
+        } else if (/CrOS/.test(user_agent)) {
             return { os_name: 'Chrome OS', os_version: '' }
         } else {
             return { os_name: '', os_version: '' }
@@ -944,7 +943,7 @@ export const _info = {
     },
 
     properties: function (): Properties {
-        const { os_name, os_version } = _info.os()
+        const { os_name, os_version } = _info.os(userAgent)
         return _extend(
             _strip_empty_properties({
                 $os: os_name,
@@ -972,7 +971,7 @@ export const _info = {
     },
 
     people_properties: function (): Properties {
-        const { os_name, os_version } = _info.os()
+        const { os_name, os_version } = _info.os(userAgent)
         return _extend(
             _strip_empty_properties({
                 $os: os_name,
