@@ -1,3 +1,8 @@
+## 1.55.2 - 2023-05-09
+
+- feat: Added idle timer to recordings (#626)
+- docs: Add Nuxt 3 demo  (#623)
+
 ## 1.55.1 - 2023-05-03
 
 - fix: Script loading before DOM is ready (#618)
