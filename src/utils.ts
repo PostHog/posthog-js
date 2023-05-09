@@ -861,14 +861,34 @@ export const _info = {
             if (/Phone/.test(a) || /WPDesktop/.test(a)) {
                 return 'Windows Phone'
             }
+            const match = /Windows NT ([0-9.]+)/i.exec(a)
+            if (match && match[1]) {
+                const version = match[1]
+                return `Windows NT ${version}`
+            }
             return 'Windows'
         } else if (/(iPhone|iPad|iPod)/.test(a)) {
+            const match = /OS (\d+)_(\d+)_?(\d+)?/i.exec(a)
+            if (match && match[1]) {
+                const versionParts = [match[1], match[2], match[3] || '0']
+                return `iOS ${versionParts.join('.')}`
+            }
             return 'iOS'
         } else if (/Android/.test(a)) {
+            const match = /Android (\d+)\.(\d+)\.?(\d+)?/i.exec(a)
+            if (match && match[1]) {
+                const versionParts = [match[1], match[2], match[3] || '0']
+                return `Android ${versionParts.join('.')}`
+            }
             return 'Android'
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(a)) {
             return 'BlackBerry'
         } else if (/Mac/i.test(a)) {
+            const match = /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i.exec(a)
+            if (match && match[1]) {
+                const versionParts = [match[1], match[2], match[3] || '0']
+                return `Mac OS X ${versionParts.join('.')}`
+            }
             return 'Mac OS X'
         } else if (/Linux/.test(a)) {
             return 'Linux'
