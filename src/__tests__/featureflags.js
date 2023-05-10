@@ -75,6 +75,8 @@ describe('featureflags', () => {
         expect(given.instance.capture).toHaveBeenCalledTimes(3)
     })
 
+    
+
     it('should return the right feature flag and not call capture', () => {
         expect(given.featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
         expect(given.instance.capture).not.toHaveBeenCalled()
@@ -700,6 +702,14 @@ describe('parseFeatureFlagDecideResponse', () => {
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
         })
+    })
+
+    it('doesnt remove existing feature flags when no flags are returned', () => {
+        given('decideResponse', () => ({status: 0}))
+        given.subject()
+
+        expect(given.persistence.register).not.toHaveBeenCalled()
+        expect(given.persistence.unregister).not.toHaveBeenCalled()
     })
 })
 
