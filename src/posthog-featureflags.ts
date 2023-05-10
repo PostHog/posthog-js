@@ -69,12 +69,6 @@ export const parseFeatureFlagDecideResponse = (
                     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
                 })
         }
-    } else {
-        if (persistence) {
-            persistence.unregister(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
-            persistence.unregister(ENABLED_FEATURE_FLAGS)
-            persistence.unregister(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
-        }
     }
 }
 
