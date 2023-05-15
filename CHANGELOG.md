@@ -1,3 +1,8 @@
+## 1.57.0 - 2023-05-15
+
+- feat: Added OS version to the OS details (#624)
+- fix: Don't delete existing flags on decide errors (#621)
+
 ## 1.56.0 - 2023-05-09
 
 - feat: Allow custom masking of network events (#620)
