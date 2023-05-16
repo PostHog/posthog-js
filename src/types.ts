@@ -9,6 +9,7 @@ export interface CaptureResult {
     event: string
     properties: Properties
     $set?: Properties
+    $set_once?: Properties
     timestamp?: Date
 }
 export type CaptureCallback = (response: any, data: any) => void
