@@ -56,7 +56,7 @@ The `posthog-js` snippet for a website loads static js from the main `PostHog/po
 1. Run `PostHog/posthog` locally
 2. Link the `posthog-js` dependency to your local version (see below)
 3. Run `yarn start` in `posthog-js`. (This ensures `dist/array.js` is being generated)
-4. In your locally running `PostHog/posthog` build, run `yarn copy-scripts`. (This copies the scripts generated in step 3 to the static assets folder for `PostHog/posthog`)
+4. In your locally running `PostHog/posthog` build, run `pnpm copy-scripts`. (This copies the scripts generated in step 3 to the static assets folder for `PostHog/posthog`)
 
 Further, it's a good idea to modify `start-http` script to add development mode: `webpack serve --mode development`, which doesn't minify the resulting js (which you can then read in your browser).
 
