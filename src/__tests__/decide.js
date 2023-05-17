@@ -1,11 +1,16 @@
 import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
 import { _base64Encode } from '../utils'
+import { PostHogPersistence } from '../posthog-persistence'
 
 describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))
     given('posthog', () => ({
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
+        persistence: new PostHogPersistence(given.config),
+        register: (props) => given.posthog.persistence.register(props),
+        unregister: (key) => given.posthog.persistence.unregister(key),
+        get_property: (key) => given.posthog.persistence.props[key],
         capture: jest.fn(),
         _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
@@ -30,7 +35,7 @@ describe('Decide', () => {
 
     given('decideResponse', () => ({ enable_collect_everything: true }))
 
-    given('config', () => ({ api_host: 'https://test.com' }))
+    given('config', () => ({ api_host: 'https://test.com', persistence: 'memory' }))
 
     beforeEach(() => {
         jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
@@ -42,6 +47,7 @@ describe('Decide', () => {
         given('config', () => ({
             api_host: 'https://test.com',
             token: 'testtoken',
+            persistence: 'memory',
         }))
 
         it('should call instance._send_request on constructor', () => {
@@ -55,6 +61,32 @@ describe('Decide', () => {
                             token: 'testtoken',
                             distinct_id: 'distinctid',
                             groups: { organization: '5' },
+                        })
+                    ),
+                    verbose: true,
+                },
+                { method: 'POST' },
+                expect.any(Function)
+            )
+        })
+
+        it('should send all stored properties with decide request', () => {
+            given.posthog.register({
+                $stored_person_properties: { key: 'value' },
+                $stored_group_properties: { organization: { orgName: 'orgValue' } },
+            })
+            given.subject()
+
+            expect(given.posthog._send_request).toHaveBeenCalledWith(
+                'https://test.com/decide/?v=3',
+                {
+                    data: _base64Encode(
+                        JSON.stringify({
+                            token: 'testtoken',
+                            distinct_id: 'distinctid',
+                            groups: { organization: '5' },
+                            person_properties: { key: 'value' },
+                            group_properties: { organization: { orgName: 'orgValue' } },
                         })
                     ),
                     verbose: true,
@@ -97,7 +129,7 @@ describe('Decide', () => {
         })
 
         it('does not enable compression from decide response if compression is disabled', () => {
-            given('config', () => ({ disable_compression: true }))
+            given('config', () => ({ disable_compression: true, persistence: 'memory' }))
             given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
             given.subject()
 
@@ -115,7 +147,7 @@ describe('Decide', () => {
         })
 
         it('runs site apps if opted in', () => {
-            given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: true }))
+            given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: true, persistence: 'memory' }))
             given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             given.subject()
             const element = window.document.body.children[0]
@@ -123,7 +155,7 @@ describe('Decide', () => {
         })
 
         it('does not run site apps code if not opted in', () => {
-            given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: false }))
+            given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: false, persistence: 'memory' }))
             given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             expect(() => {
                 given.subject()

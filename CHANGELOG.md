@@ -1,3 +1,8 @@
+## 1.57.1 - 2023-05-17
+
+- fix(decide): Make sure all stored properties are sent on first decide request (#633)
+- fix(identify): actually send $set_once on identify calls (#629)
+
 ## 1.57.0 - 2023-05-15
 
 - feat: Added OS version to the OS details (#624)

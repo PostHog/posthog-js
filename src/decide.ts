@@ -2,6 +2,7 @@ import { autocapture } from './autocapture'
 import { _base64Encode, loadScript } from './utils'
 import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
+import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './posthog-persistence'
 
 export class Decide {
     instance: PostHog
@@ -20,6 +21,8 @@ export class Decide {
             token: this.instance.get_config('token'),
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
+            person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
+            group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
         })
 
         const encoded_data = _base64Encode(json_data)
