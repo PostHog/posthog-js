@@ -39,7 +39,9 @@ test('identify sends a identify event', async () => {
     let posthog = new PostHog()
     posthog = await new Promise((resolve) => posthog.init('testtoken', { request_batching: false, api_host: 'http://localhost', loaded: (p) => resolve(p) }, 'test'))
 
+    const anonymousId = posthog.get_distinct_id()
+
     posthog.identify('test-id')
 
-    await waitFor(() => expect(capturedRequests).toContainEqual(expect.objectContaining({ event: '$identify', properties: expect.objectContaining({ distinct_id: 'test-id' }) })))
+    await waitFor(() => expect(capturedRequests).toContainEqual(expect.objectContaining({ event: '$identify', properties: expect.objectContaining({ distinct_id: 'test-id', $anon_distinct_id: anonymousId }) })))
 })
