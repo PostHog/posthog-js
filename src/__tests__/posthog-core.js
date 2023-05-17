@@ -129,6 +129,28 @@ describe('capture()', () => {
         const event = given.subject()
         expect(event.properties.key.length).toBe(50000)
     })
+
+    it('passes through $set and $set_once into the request, if the event is an $identify event', () => {
+        // NOTE: this is slightly unusual to test capture for this specific case
+        // of being called with $identify as the event name. It might be that we
+        // decide that this shouldn't be a special case of capture in this case,
+        // but I'll add the case to capture current functionality.
+        //
+        // We check that if identify is called with user $set and $set_once
+        // properties, we also want to ensure capture does the expected thing
+        // with them.
+        const captureResult = given.lib.capture(
+            '$identify',
+            { distinct_id: 'some-distinct-id' },
+            { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } }
+        )
+
+        // We assume that the returned result is the object we would send to the
+        // server.
+        expect(captureResult).toEqual(
+            expect.objectContaining({ $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } })
+        )
+    })
 })
 
 describe('_calculate_event_properties()', () => {
