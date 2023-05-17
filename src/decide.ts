@@ -23,7 +23,6 @@ export class Decide {
             groups: this.instance.getGroups(),
             person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
-
         })
 
         const encoded_data = _base64Encode(json_data)

@@ -3,7 +3,6 @@ import { Decide } from '../decide'
 import { _base64Encode } from '../utils'
 import { PostHogPersistence } from '../posthog-persistence'
 
-
 describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))
     given('posthog', () => ({
@@ -72,7 +71,10 @@ describe('Decide', () => {
         })
 
         it('should send all stored properties with decide request', () => {
-            given.posthog.register({'$stored_person_properties': { 'key': 'value' }, '$stored_group_properties': { 'organization': { 'orgName': 'orgValue' }}})
+            given.posthog.register({
+                $stored_person_properties: { key: 'value' },
+                $stored_group_properties: { organization: { orgName: 'orgValue' } },
+            })
             given.subject()
 
             expect(given.posthog._send_request).toHaveBeenCalledWith(
@@ -83,8 +85,8 @@ describe('Decide', () => {
                             token: 'testtoken',
                             distinct_id: 'distinctid',
                             groups: { organization: '5' },
-                            person_properties: { 'key': 'value' },
-                            group_properties: { 'organization': { 'orgName': 'orgValue' } },
+                            person_properties: { key: 'value' },
+                            group_properties: { organization: { orgName: 'orgValue' } },
                         })
                     ),
                     verbose: true,
