@@ -1,3 +1,7 @@
+## 1.57.2 - 2023-05-17
+
+
+
 ## 1.57.1 - 2023-05-17
 
 - fix(decide): Make sure all stored properties are sent on first decide request (#633)
