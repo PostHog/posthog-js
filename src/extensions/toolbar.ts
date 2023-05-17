@@ -21,7 +21,6 @@ export class Toolbar {
         ) {
             this.loadToolbar({
                 ...toolbarParams,
-                apiURL: this.instance.get_config('api_host'),
             })
         }
     }
@@ -80,10 +79,6 @@ export class Toolbar {
                 delete toolbarParams.userIntent
             }
 
-            if (!toolbarParams.apiURL) {
-                toolbarParams.apiURL = this.instance.get_config('api_host')
-            }
-
             if (toolbarParams['token'] && this.instance.get_config('token') === toolbarParams['token']) {
                 this.loadToolbar(toolbarParams)
                 return true
@@ -102,10 +97,9 @@ export class Toolbar {
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         ;(window as any)['_postHogToolbarLoaded'] = true
 
-        // the toolbar does not use the `jsURL` as that route is cached for 24 hours.
         // By design array.js, recorder.js, and toolbar.js are served from Django with no or limited caching, not from our CDN
         // Django respects the query params for caching, returning a 304 if appropriate
-        const host = params?.['apiURL'] || this.instance.get_config('api_host')
+        const host = this.instance.get_config('api_host')
         const timestampToNearestThirtySeconds = Math.floor(Date.now() / 30000) * 30000
         const toolbarUrl = `${host}${
             host.endsWith('/') ? '' : '/'
@@ -115,10 +109,9 @@ export class Toolbar {
             this.instance.get_config('advanced_disable_toolbar_metrics')
 
         const toolbarParams = {
-            apiURL: host, // defaults to api_host from the instance config if nothing else set
-            jsURL: host, // defaults to api_host from the instance config if nothing else set
             token: this.instance.get_config('token'),
             ...params,
+            apiURL: host, // defaults to api_host from the instance config if nothing else set
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
 
