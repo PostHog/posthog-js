@@ -9,11 +9,6 @@ test('person properties set in identify() with new distinct_id are sent to decid
 
     const anonymousId = posthog.get_distinct_id()
 
-    // Person properties set here should also be sent to the decide endpoint.
-    posthog.identify('test-id', {
-        email: 'test@email.com',
-    })
-
     await waitFor(() => {
         expect(getRequests(token)['/decide/']).toEqual([
             // This is the initial call to the decide endpoint on PostHog init.
@@ -22,6 +17,18 @@ test('person properties set in identify() with new distinct_id are sent to decid
                 groups: {},
                 token,
             },
+        ])
+    })
+
+    resetRequests(token)
+
+    // Person properties set here should also be sent to the decide endpoint.
+    posthog.identify('test-id', {
+        email: 'test@email.com',
+    })
+
+    await waitFor(() => {
+        expect(getRequests(token)['/decide/']).toEqual([
             // Then we have another decide call triggered by the call to
             // `identify()`.
             {
@@ -43,10 +50,6 @@ test('person properties set in identify() with the same distinct_id are sent to 
 
     const anonymousId = posthog.get_distinct_id()
 
-    // First we identify with a new distinct_id but with no properties set
-    posthog.identify('test-id')
-
-    // By this point we should have already called `/decide/` twice.
     await waitFor(() => {
         expect(getRequests(token)['/decide/']).toEqual([
             // This is the initial call to the decide endpoint on PostHog init.
@@ -55,6 +58,17 @@ test('person properties set in identify() with the same distinct_id are sent to 
                 groups: {},
                 token,
             },
+        ])
+    })
+
+    resetRequests(token)
+
+    // First we identify with a new distinct_id but with no properties set
+    posthog.identify('test-id')
+
+    // By this point we should have already called `/decide/` twice.
+    await waitFor(() => {
+        expect(getRequests(token)['/decide/']).toEqual([
             // Then we have another decide call triggered by the first call to
             // `identify()`.
             {
