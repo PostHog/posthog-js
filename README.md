@@ -47,6 +47,26 @@ You can use the create react app setup in `playground/nextjs` to test posthog-js
 2. Cypress tests - integrates with a real chrome browser and is capable of testing timing, browser requests, etc. Useful for testing high-level library behavior, ordering and verifying requests. We shouldn't aim for 100% coverage here as it's impossible to test all possible combinations.
 3. TestCafe E2E tests - integrates with a real posthog instance sends data to it. Hardest to write and maintain - keep these very high level
 
+## Developing together with another project
+
+Install Yalc to link a local version of `posthog-js` in another JS project: `npm install -g yalc` 
+
+#### Run this to link the local version
+
+- In the `posthog-js` directory: `yalc publish`
+- In the other directory: `yalc add posthog-js`, then install dependencies  
+  (for `posthog` this means: `yalc add posthog-js && pnpm i && pnpm copy-scripts`)
+
+#### Run this to update the linked local version
+
+- In the other directory: `yalc update`, then install dependencies  
+  (for `posthog` this means: `yalc update && pnpm i && pnpm copy-scripts`)
+
+#### Run this to unlink the local version
+
+- In the other directory: `yalc remove posthog-js`, then install dependencies  
+  (for `posthog` this means: `yalc remove posthog-js && pnpm i && pnpm copy-scripts`)
+
 ## Releasing a new version
 
 Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) – automatically.
