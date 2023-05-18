@@ -1278,6 +1278,10 @@ export class PostHog {
         if (!userPropertiesToSet && !userPropertiesToSetOnce) {
             return
         }
+
+        // Update current user properties
+        this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
     }
 
