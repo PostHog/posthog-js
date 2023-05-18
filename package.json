@@ -21,7 +21,7 @@
         "build:prepare-types:rename-4": "cd lib/rrweb/typings && sed 's/rrweb-snapshot/..\\/..\\/rrweb-snapshot/g' utils.d.ts > x && mv x utils.d.ts",
         "build:prepare-types:rename-5": "cd lib/src/extensions && sed 's/rrweb\\/typings/..\\/..\\/rrweb\\/typings/g' sessionrecording.d.ts > x && mv x sessionrecording.d.ts",
         "build:prepare-types:rename-6": "cd lib/src && sed 's/rrweb-snapshot/..\\/rrweb-snapshot/g' types.d.ts > x && mv x types.d.ts",
-        "prettier": "prettier --write src/**/*",
+        "prettier": "prettier --write src/**/* functional_tests/",
         "prepublishOnly": "yarn lint && yarn test && yarn build && yarn test-react",
         "test": "jest src",
         "test-react": "cd react; yarn test",
@@ -90,7 +90,7 @@
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",
-        "*.js": "eslint src --fix",
+        "*.js": "eslint --cache --fix",
         "*.{ts,tsx}": [
             "eslint src --fix"
         ]
