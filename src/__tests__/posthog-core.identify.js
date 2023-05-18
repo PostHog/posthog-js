@@ -38,6 +38,7 @@ describe('identify()', () => {
             setAnonymousDistinctId: jest.fn(),
         },
         reloadFeatureFlags: jest.fn(),
+        setPersonPropertiesForFlags: jest.fn(),
         persistence: new PostHogPersistence(given.config),
     }))
 
