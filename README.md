@@ -3,8 +3,8 @@
 [![npm package](https://img.shields.io/npm/v/posthog-js?style=flat-square)](https://www.npmjs.com/package/posthog-js)
 [![MIT License](https://img.shields.io/badge/License-MIT-red.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-Please see [PostHog Docs](https://posthog.com/docs).
-Specifically, [browser JS library details](https://posthog.com/docs/libraries/js).
+For information on using this library in your app, [see PostHog Docs](https://posthog.com/docs/libraries/js).  
+This README is intended for developing the library itself.
 
 ## Testing
 
@@ -47,71 +47,43 @@ You can use the create react app setup in `playground/nextjs` to test posthog-js
 2. Cypress tests - integrates with a real chrome browser and is capable of testing timing, browser requests, etc. Useful for testing high-level library behavior, ordering and verifying requests. We shouldn't aim for 100% coverage here as it's impossible to test all possible combinations.
 3. TestCafe E2E tests - integrates with a real posthog instance sends data to it. Hardest to write and maintain - keep these very high level
 
-## Developing together with another repo
+## Developing together with another project
 
-#### Developing with main PostHog repo
+Install Yalc to link a local version of `posthog-js` in another JS project: `npm install -g yalc` 
 
-The `posthog-js` snippet for a website loads static js from the main `PostHog/posthog` repo. Which means, when testing the snippet with a website, there's a bit of extra setup required:
+#### Run this to link the local version
 
-1. Run `PostHog/posthog` locally
-2. Link the `posthog-js` dependency to your local version (see below)
-3. Run `yarn start` in `posthog-js`. (This ensures `dist/array.js` is being generated)
-4. In your locally running `PostHog/posthog` build, run `yarn copy-scripts`. (This copies the scripts generated in step 3 to the static assets folder for `PostHog/posthog`)
+- In the `posthog-js` directory: `yalc publish`
+- In the other directory: `yalc add posthog-js`, then install dependencies  
+  (for `posthog` this means: `yalc add posthog-js && pnpm i && pnpm copy-scripts`)
 
-Further, it's a good idea to modify `start-http` script to add development mode: `webpack serve --mode development`, which doesn't minify the resulting js (which you can then read in your browser).
+#### Run this to update the linked local version
 
-### Using Yalc to link local packages
+- In the other directory: `yalc update`, then install dependencies  
+  (for `posthog` this means: `yalc update && pnpm i && pnpm copy-scripts`)
 
-Run `npm install -g yalc`
+#### Run this to unlink the local version
 
--   In the posthog-js repo
-    -   Run `yalc publish`
--   In the posthog repo
-    -   Run `yalc add posthog-js && pnpm i && pnpm copy-scripts`
-
-#### When making changes
-
--   In the posthog-js repo
-    -   Run `yalc publish`
--   In the posthog repo
-    -   Run `yalc update && pnpm i && pnpm copy-scripts`
-
-#### To remove the local package
-
--   In the posthog repo
-    -   run `yalc remove posthog-js`
-    -   run `yarn install`
+- In the other directory: `yalc remove posthog-js`, then install dependencies  
+  (for `posthog` this means: `yalc remove posthog-js && pnpm i && pnpm copy-scripts`)
 
 ## Releasing a new version
 
-Just bump up `version` in `package.json` on the main branch and the new version will be published automatically,
-with a matching PR in the [main PostHog repo](https://github.com/posthog/posthog) created.
+Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) – automatically.
+ 
+If you want to release a new version without a PR (e.g. because you forgot to use the label), check out the `master` branch and run `npm version [major | minor | patch] && git push --tags` - this will trigger the automated release process just like the label.
 
-It's advised to use `bump patch/minor/major` label on PRs - that way the above will be done automatically
-when the PR is merged.
+### Prereleases
 
-Courtesy of GitHub Actions.
+To release an alpha or beta version, you'll need to use the CLI locally:
 
-### Manual steps
-
-To release a new version, make sure you're logged into npm (`npm login`).
-
-We tend to follow the following steps:
-
-1. Merge your changes into master.
-2. Release changes as a beta version:
-    - `npm version 1.x.x-beta.0`
-    - `npm publish --tag beta`
-    - `git push --tags`
-3. Create a PR linking to this version in the [main PostHog repo](https://github.com/posthog/posthog).
-4. Once deployed and tested, write up CHANGELOG.md, and commit.
-5. Release a new version:
-    - `npm version 1.x.x`
-    - `npm publish`
-    - `git push --tags`
-6. Create a PR linking to this version in the [main PostHog repo](https://github.com/posthog/posthog).
-
-
-## Questions?
-
-### [Join our Slack community.](https://posthog.com/slack)
+1. Make sure you're a collaborator on `posthog-js` in npm ([check here](https://www.npmjs.com/package/posthog-js)).
+2. Make sure you're logged into the npm CLI (`npm login`).
+3. Check out your work-in-progress branch (do not release an alpha/beta from `master`).
+4. Run the following commands, using the same bump level (major/minor/patch) as your PR:
+    ```bash
+    npm version [premajor | preminor | prepatch] --preid=beta
+    npm publish --tag beta
+    git push --tags
+    ```
+5. Enjoy the new prerelease version. You can now use it locally, in a dummy app, or in the [main repo](https://github.com/posthog/PostHog).
