@@ -8,18 +8,47 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-    MUTATION_SOURCE_TYPE,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
 import type { record } from 'rrweb/typings'
 import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
-import { loadScript } from '../autocapture-utils'
 import Config from '../config'
-import { logger } from '../utils'
+import { logger, loadScript } from '../utils'
 
 const BASE_ENDPOINT = '/e/'
+
+export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+
+// Copied from rrweb typings to avoid import
+enum IncrementalSource {
+    Mutation = 0,
+    MouseMove = 1,
+    MouseInteraction = 2,
+    Scroll = 3,
+    ViewportResize = 4,
+    Input = 5,
+    TouchMove = 6,
+    MediaInteraction = 7,
+    StyleSheetRule = 8,
+    CanvasMutation = 9,
+    Font = 10,
+    Log = 11,
+    Drag = 12,
+    StyleDeclaration = 13,
+}
+
+const ACTIVE_SOURCES = [
+    IncrementalSource.MouseMove,
+    IncrementalSource.MouseInteraction,
+    IncrementalSource.Scroll,
+    IncrementalSource.ViewportResize,
+    IncrementalSource.Input,
+    IncrementalSource.TouchMove,
+    IncrementalSource.MediaInteraction,
+    IncrementalSource.Drag,
+]
 
 export class SessionRecording {
     instance: PostHog
@@ -33,6 +62,8 @@ export class SessionRecording {
     receivedDecide: boolean
     rrwebRecord: typeof record | undefined
     recorderVersion?: string
+    lastActivityTimestamp: number = Date.now()
+    isIdle = false
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -140,40 +171,77 @@ export class SessionRecording {
         if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
             loadScript(
                 this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
-                this._onScriptLoaded.bind(this)
+                (err) => {
+                    if (err) {
+                        return logger.error(`Could not load ${recorderJS}`, err)
+                    }
+
+                    this._onScriptLoaded()
+                }
             )
         } else {
             this._onScriptLoaded()
         }
     }
 
+    _isInteractiveEvent(event: eventWithTime) {
+        return event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && ACTIVE_SOURCES.indexOf(event.data?.source) !== -1
+    }
+
     _updateWindowAndSessionIds(event: eventWithTime) {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
-        const isNotUserInteraction =
-            event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && event.data?.source === MUTATION_SOURCE_TYPE
+
+        const isUserInteraction = this._isInteractiveEvent(event)
+
+        if (!isUserInteraction && !this.isIdle) {
+            // We check if the lastActivityTimestamp is old enough to go idle
+            if (event.timestamp - this.lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
+                this.isIdle = true
+            }
+        }
+
+        if (isUserInteraction) {
+            this.lastActivityTimestamp = event.timestamp
+            if (this.isIdle) {
+                // Remove the idle state if set and trigger a full snapshot as we will have ingored previous mutations
+                this.isIdle = false
+                this._tryTakeFullSnapshot()
+            }
+        }
+
+        if (this.isIdle) {
+            return
+        }
 
         const { windowId, sessionId } = this.instance.sessionManager.checkAndGetSessionAndWindowId(
-            isNotUserInteraction,
+            !isUserInteraction, // readonly if it isn't a user interaction
             event.timestamp
         )
 
-        // Event types FullSnapshot and Meta mean we're already in the process of sending a full snapshot
         if (
-            this.captureStarted &&
-            (this.windowId !== windowId || this.sessionId !== sessionId) &&
-            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1
+            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
+            (this.windowId !== windowId || this.sessionId !== sessionId)
         ) {
-            try {
-                this.rrwebRecord?.takeFullSnapshot()
-            } catch (e) {
-                // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
-                logger.error('Error taking full snapshot.', e)
-            }
+            this._tryTakeFullSnapshot()
         }
         this.windowId = windowId
         this.sessionId = sessionId
+    }
+
+    _tryTakeFullSnapshot(): boolean {
+        if (!this.captureStarted) {
+            return false
+        }
+        try {
+            this.rrwebRecord?.takeFullSnapshot()
+            return true
+        } catch (e) {
+            // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
+            logger.error('Error taking full snapshot.', e)
+            return false
+        }
     }
 
     _onScriptLoaded() {
@@ -184,6 +252,8 @@ export class SessionRecording {
             blockClass: 'ph-no-capture',
             blockSelector: undefined,
             ignoreClass: 'ph-ignore-input',
+            maskTextClass: 'ph-mask',
+            maskTextSelector: undefined,
             maskAllInputs: true,
             maskInputOptions: {},
             maskInputFn: undefined,
@@ -216,26 +286,7 @@ export class SessionRecording {
 
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
-                event = truncateLargeConsoleLogs(
-                    filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
-                ) as eventWithTime
-
-                this._updateWindowAndSessionIds(event)
-
-                const properties = {
-                    $snapshot_data: event,
-                    $session_id: this.sessionId,
-                    $window_id: this.windowId,
-                }
-
-                this.instance._captureMetrics.incr('rrweb-record')
-                this.instance._captureMetrics.incr(`rrweb-record-${event.type}`)
-
-                if (this.emit) {
-                    this._captureSnapshot(properties)
-                } else {
-                    this.snapshots.push(properties)
-                }
+                this.onRRwebEmit(event)
             },
             plugins:
                 (window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled()
@@ -256,6 +307,38 @@ export class SessionRecording {
                 logger.error('Could not add $pageview to rrweb session', e)
             }
         })
+
+        // We reset the last activity timestamp, resetting the idle timer
+        this.lastActivityTimestamp = Date.now()
+        this.isIdle = false
+    }
+
+    onRRwebEmit(event: eventWithTime) {
+        event = truncateLargeConsoleLogs(
+            filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
+        ) as eventWithTime
+
+        this._updateWindowAndSessionIds(event)
+
+        if (this.isIdle) {
+            // When in an idle state we keep recording, but don't capture the events
+            return
+        }
+
+        const properties = {
+            $snapshot_data: event,
+            $session_id: this.sessionId,
+            $window_id: this.windowId,
+        }
+
+        this.instance._captureMetrics.incr('rrweb-record')
+        this.instance._captureMetrics.incr(`rrweb-record-${event.type}`)
+
+        if (this.emit) {
+            this._captureSnapshot(properties)
+        } else {
+            this.snapshots.push(properties)
+        }
     }
 
     _captureSnapshot(properties: Properties) {

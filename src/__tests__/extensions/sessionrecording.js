@@ -1,5 +1,5 @@
-import { loadScript } from '../../autocapture-utils'
-import { SessionRecording } from '../../extensions/sessionrecording'
+import { loadScript } from '../../utils'
+import { SessionRecording, RECORDING_IDLE_ACTIVITY_TIMEOUT_MS } from '../../extensions/sessionrecording'
 import {
     PostHogPersistence,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
@@ -15,7 +15,10 @@ import {
 // Type and source defined here designate a non-user-generated recording event
 const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
 
-jest.mock('../../autocapture-utils')
+jest.mock('../../utils', () => ({
+    ...jest.requireActual('../../utils'),
+    loadScript: jest.fn((path, callback) => callback()),
+}))
 jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
 
 describe('SessionRecording', () => {
@@ -230,6 +233,8 @@ describe('SessionRecording', () => {
                 blockClass: 'ph-no-capture',
                 blockSelector: undefined,
                 ignoreClass: 'ph-ignore-input',
+                maskTextClass: 'ph-mask',
+                maskTextSelector: undefined,
                 maskInputOptions: {},
                 maskInputFn: undefined,
                 slimDOMOptions: {},
@@ -435,6 +440,9 @@ describe('SessionRecording', () => {
                 _emit({
                     event: 123,
                     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    data: {
+                        source: 1,
+                    },
                 })
                 expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(
                     false,
@@ -452,8 +460,15 @@ describe('SessionRecording', () => {
                 given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
             })
 
-            const emitAtDateTime = (date) =>
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, timestamp: date.getTime() })
+            const emitAtDateTime = (date, source = 1) =>
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    timestamp: date.getTime(),
+                    data: {
+                        source,
+                    },
+                })
 
             it('takes a full snapshot for the first _emit', () => {
                 emitAtDateTime(startingDate)
@@ -564,6 +579,66 @@ describe('SessionRecording', () => {
                 emitAtDateTime(moreThanADayLater)
 
                 expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+            })
+        })
+
+        describe('idle timeouts', () => {
+            it("enters idle state if the activity is non-user generated and there's no activity for 5 seconds", () => {
+                given.sessionRecording.startRecordingIfEnabled()
+                const lastActivityTimestamp = given.sessionRecording.lastActivityTimestamp
+                expect(lastActivityTimestamp).toBeGreaterThan(0)
+
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
+
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    data: {
+                        source: 1,
+                    },
+                    timestamp: lastActivityTimestamp + 100,
+                })
+                expect(given.sessionRecording.isIdle).toEqual(false)
+                expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
+
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    data: {
+                        source: 0,
+                    },
+                    timestamp: lastActivityTimestamp + 200,
+                })
+                expect(given.sessionRecording.isIdle).toEqual(false)
+                expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
+
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    data: {
+                        source: 0,
+                    },
+                    timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000,
+                })
+                expect(given.sessionRecording.isIdle).toEqual(true)
+                expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
+                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+                _emit({
+                    event: 123,
+                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    data: {
+                        source: 1,
+                    },
+                    timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000,
+                })
+                expect(given.sessionRecording.isIdle).toEqual(false)
+                expect(given.sessionRecording.lastActivityTimestamp).toEqual(
+                    lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
+                )
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
             })
         })

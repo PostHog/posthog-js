@@ -9,6 +9,7 @@ export interface CaptureResult {
     event: string
     properties: Properties
     $set?: Properties
+    $set_once?: Properties
     timestamp?: Date
 }
 export type CaptureCallback = (response: any, data: any) => void
@@ -132,9 +133,13 @@ export interface SessionRecordingOptions {
     blockClass?: string | RegExp
     blockSelector?: string | null
     ignoreClass?: string
+    maskTextClass?: string | RegExp
+    maskTextSelector?: string | null
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
-    maskInputFn?: ((text: string) => string) | null
+    maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
+    /** Modify the network request before it is captured. Returning null stops it being captured */
+    maskNetworkRequestFn?: ((url: NetworkRequest) => NetworkRequest | null | undefined) | null
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
@@ -264,8 +269,6 @@ export type ToolbarVersion = 'toolbar'
 
 /* sync with posthog */
 export interface ToolbarParams {
-    apiURL?: string
-    jsURL?: string
     token?: string /** public posthog-js token */
     temporaryToken?: string /** private temporary user token */
     actionId?: number
@@ -293,3 +296,23 @@ export interface JSC {
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
 export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
+
+/** A feature that isn't publicly available yet.*/
+export interface EarlyAccessFeature {
+    // Sync this with the backend's EarlyAccessFeatureSerializer!
+    name: string
+    description: string
+    stage: 'concept' | 'alpha' | 'beta'
+    documentationUrl: string | null
+    flagKey: string | null
+}
+
+export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeature[]) => void
+
+export interface EarlyAccessFeatureResponse {
+    earlyAccessFeatures: EarlyAccessFeature[]
+}
+
+export type NetworkRequest = {
+    url: string
+}

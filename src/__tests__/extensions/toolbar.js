@@ -1,7 +1,10 @@
 import { Toolbar } from '../../extensions/toolbar'
-import { loadScript } from '../../autocapture-utils'
+import { loadScript } from '../../utils'
 
-jest.mock('../../autocapture-utils')
+jest.mock('../../utils', () => ({
+    ...jest.requireActual('../../utils'),
+    loadScript: jest.fn((path, callback) => callback()),
+}))
 
 describe('Toolbar', () => {
     given('toolbar', () => new Toolbar(given.lib))
@@ -75,7 +78,6 @@ describe('Toolbar', () => {
                 flag_2: 1,
             },
             userId: 12345,
-            apiURL: given.config.api_host,
             ...given.toolbarParamsOverrides,
         }))
 
@@ -89,14 +91,20 @@ describe('Toolbar', () => {
             }))
 
             given.subject()
-            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, source: 'url' })
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({
+                ...given.toolbarParams,
+                source: 'url',
+            })
         })
 
         it('should initialize the toolbar when there are editor params in the session', () => {
             given('storedEditorParams', () => JSON.stringify(toolbarParams))
 
             given.subject()
-            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({ ...given.toolbarParams, source: 'url' })
+            expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({
+                ...given.toolbarParams,
+                source: 'url',
+            })
         })
 
         it('should NOT initialize the toolbar when the activation query param does not exist', () => {
@@ -149,18 +157,22 @@ describe('Toolbar', () => {
             token: 'public_token',
             expiresAt: 'expiresAt',
             apiKey: 'apiKey',
-            apiURL: 'http://localhost:8000',
-            jsURL: 'http://localhost:8000',
         }))
 
         it('should persist for next time', () => {
             expect(given.subject()).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogToolbarParams'))).toEqual(given.toolbarParams)
+            expect(JSON.parse(window.localStorage.getItem('_postHogToolbarParams'))).toEqual({
+                ...given.toolbarParams,
+                apiURL: 'http://api.example.com',
+            })
         })
 
         it('should load if not previously loaded', () => {
             expect(given.subject()).toBe(true)
-            expect(window.ph_load_toolbar).toHaveBeenCalledWith(given.toolbarParams, given.lib)
+            expect(window.ph_load_toolbar).toHaveBeenCalledWith(
+                { ...given.toolbarParams, apiURL: 'http://api.example.com' },
+                given.lib
+            )
         })
 
         it('should NOT load if previously loaded', () => {
@@ -181,7 +193,6 @@ describe('Toolbar', () => {
             expect(window.ph_load_toolbar).toHaveBeenCalledWith(
                 {
                     ...given.toolbarParams,
-                    jsURL: 'http://api.example.com',
                     apiURL: 'http://api.example.com',
                     token: 'test_token',
                 },

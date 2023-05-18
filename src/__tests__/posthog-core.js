@@ -129,6 +129,28 @@ describe('capture()', () => {
         const event = given.subject()
         expect(event.properties.key.length).toBe(50000)
     })
+
+    it('passes through $set and $set_once into the request, if the event is an $identify event', () => {
+        // NOTE: this is slightly unusual to test capture for this specific case
+        // of being called with $identify as the event name. It might be that we
+        // decide that this shouldn't be a special case of capture in this case,
+        // but I'll add the case to capture current functionality.
+        //
+        // We check that if identify is called with user $set and $set_once
+        // properties, we also want to ensure capture does the expected thing
+        // with them.
+        const captureResult = given.lib.capture(
+            '$identify',
+            { distinct_id: 'some-distinct-id' },
+            { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } }
+        )
+
+        // We assume that the returned result is the object we would send to the
+        // server.
+        expect(captureResult).toEqual(
+            expect.objectContaining({ $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } })
+        )
+    })
 })
 
 describe('_calculate_event_properties()', () => {
@@ -684,6 +706,39 @@ describe('group()', () => {
         expect(given.lib.getGroups()).toEqual({ organization: 'org::6', instance: 'app.posthog.com' })
     })
 
+    it('records info on groupProperties for groups', () => {
+        given.lib.group('organization', 'org::5', { name: 'PostHog' })
+        expect(given.lib.getGroups()).toEqual({ organization: 'org::5' })
+
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: { name: 'PostHog' } })
+
+        given.lib.group('organization', 'org::6')
+        expect(given.lib.getGroups()).toEqual({ organization: 'org::6' })
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: {} })
+
+        given.lib.group('instance', 'app.posthog.com')
+        expect(given.lib.getGroups()).toEqual({ organization: 'org::6', instance: 'app.posthog.com' })
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: {}, instance: {} })
+
+        // now add properties to the group
+        given.lib.group('organization', 'org::7', { name: 'PostHog2' })
+        expect(given.lib.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+            organization: { name: 'PostHog2' },
+            instance: {},
+        })
+
+        given.lib.group('instance', 'app.posthog.com', { a: 'b' })
+        expect(given.lib.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+            organization: { name: 'PostHog2' },
+            instance: { a: 'b' },
+        })
+
+        given.lib.resetGroupPropertiesForFlags()
+        expect(given.lib.persistence.props['$stored_group_properties']).toEqual(undefined)
+    })
+
     it('does not result in a capture call', () => {
         given.lib.group('organization', 'org::5')
 
@@ -691,11 +746,20 @@ describe('group()', () => {
     })
 
     it('results in a reloadFeatureFlags call if group changes', () => {
-        given.lib.group('organization', 'org::5')
+        given.lib.group('organization', 'org::5', { name: 'PostHog' })
         given.lib.group('instance', 'app.posthog.com')
         given.lib.group('organization', 'org::5')
 
         expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(2)
+    })
+
+    it('results in a reloadFeatureFlags call if group properties change', () => {
+        given.lib.group('organization', 'org::5')
+        given.lib.group('instance', 'app.posthog.com')
+        given.lib.group('organization', 'org::5', { name: 'PostHog' })
+        given.lib.group('instance', 'app.posthog.com')
+
+        expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(3)
     })
 
     it('captures $groupidentify event', () => {
@@ -764,16 +828,25 @@ describe('group()', () => {
     describe('reset group', () => {
         it('groups property is empty and reloads feature flags', () => {
             given.lib.group('organization', 'org::5')
-            given.lib.group('instance', 'app.posthog.com')
+            given.lib.group('instance', 'app.posthog.com', { group: 'property', foo: 5 })
 
             expect(given.lib.persistence.props['$groups']).toEqual({
                 organization: 'org::5',
                 instance: 'app.posthog.com',
             })
 
+            expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+                organization: {},
+                instance: {
+                    group: 'property',
+                    foo: 5,
+                },
+            })
+
             given.lib.resetGroups()
 
             expect(given.lib.persistence.props['$groups']).toEqual({})
+            expect(given.lib.persistence.props['$stored_group_properties']).toEqual(undefined)
 
             expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(3)
         })

@@ -448,6 +448,10 @@ describe('Event capture', () => {
                         company: 'id:5',
                         playlist: 'id:77',
                     },
+                    group_properties: {
+                        company: { id: 5, company_name: 'Awesome Inc' },
+                        playlist: { length: 8 },
+                    },
                 })
             })
         })

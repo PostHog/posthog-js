@@ -14,6 +14,7 @@ const win: Window & typeof globalThis = typeof window !== 'undefined' ? window :
 const navigator = win.navigator || { userAgent: '' }
 const document = win.document || {}
 const userAgent = navigator.userAgent
+const localDomains = ['localhost', '127.0.0.1']
 
 const nativeForEach = ArrayProto.forEach,
     nativeIndexOf = ArrayProto.indexOf,
@@ -188,6 +189,21 @@ export const _include = function (
 
 export function _includes<T = any>(str: T[] | string, needle: T): boolean {
     return (str as any).indexOf(needle) !== -1
+}
+
+/**
+ * Object.entries() polyfill
+ * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries
+ */
+export function _entries<T = any>(obj: Record<string, T>): [string, T][] {
+    const ownProps = Object.keys(obj)
+    let i = ownProps.length
+    const resArray = new Array(i) // preallocate the Array
+
+    while (i--) {
+        resArray[i] = [ownProps[i], obj[ownProps[i]]]
+    }
+    return resArray
 }
 
 // Underscore Addons
@@ -659,6 +675,34 @@ export const _register_event = (function () {
     return register_event
 })()
 
+export const isLocalhost = (): boolean => {
+    return localDomains.includes(location.hostname)
+}
+
+export function loadScript(scriptUrlToLoad: string, callback: (error?: string | Event, event?: Event) => void): void {
+    const addScript = () => {
+        const scriptTag = document.createElement('script')
+        scriptTag.type = 'text/javascript'
+        scriptTag.src = scriptUrlToLoad
+        scriptTag.onload = (event) => callback(undefined, event)
+        scriptTag.onerror = (error) => callback(error)
+
+        const scripts = document.querySelectorAll('body > script')
+        if (scripts.length > 0) {
+            scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
+        } else {
+            // In exceptional situations this call might load before the DOM is fully ready.
+            document.body.appendChild(scriptTag)
+        }
+    }
+
+    if (document.body) {
+        addScript()
+    } else {
+        document.addEventListener('DOMContentLoaded', addScript)
+    }
+}
+
 export const _info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {
         const campaign_keywords = [
@@ -811,27 +855,46 @@ export const _info = {
         )
     },
 
-    os: function (): string {
-        const a = userAgent
-        if (/Windows/i.test(a)) {
-            if (/Phone/.test(a) || /WPDesktop/.test(a)) {
-                return 'Windows Phone'
+    os: function (user_agent: string): { os_name: string; os_version: string } {
+        if (/Windows/i.test(user_agent)) {
+            if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
+                return { os_name: 'Windows Phone', os_version: '' }
             }
-            return 'Windows'
-        } else if (/(iPhone|iPad|iPod)/.test(a)) {
-            return 'iOS'
-        } else if (/Android/.test(a)) {
-            return 'Android'
-        } else if (/(BlackBerry|PlayBook|BB10)/i.test(a)) {
-            return 'BlackBerry'
-        } else if (/Mac/i.test(a)) {
-            return 'Mac OS X'
-        } else if (/Linux/.test(a)) {
-            return 'Linux'
-        } else if (/CrOS/.test(a)) {
-            return 'Chrome OS'
+            const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
+            if (match && match[1]) {
+                const version = match[1]
+                return { os_name: 'Windows', os_version: version }
+            }
+            return { os_name: 'Windows', os_version: '' }
+        } else if (/(iPhone|iPad|iPod)/.test(user_agent)) {
+            const match = /OS (\d+)_(\d+)_?(\d+)?/i.exec(user_agent)
+            if (match && match[1]) {
+                const versionParts = [match[1], match[2], match[3] || '0']
+                return { os_name: 'iOS', os_version: versionParts.join('.') }
+            }
+            return { os_name: 'iOS', os_version: '' }
+        } else if (/Android/.test(user_agent)) {
+            const match = /Android (\d+)\.(\d+)\.?(\d+)?/i.exec(user_agent)
+            if (match && match[1]) {
+                const versionParts = [match[1], match[2], match[3] || '0']
+                return { os_name: 'Android', os_version: versionParts.join('.') }
+            }
+            return { os_name: 'Android', os_version: '' }
+        } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
+            return { os_name: 'BlackBerry', os_version: '' }
+        } else if (/Mac/i.test(user_agent)) {
+            const match = /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i.exec(user_agent)
+            if (match && match[1]) {
+                const versionParts = [match[1], match[2], match[3] || '0']
+                return { os_name: 'Mac OS X', os_version: versionParts.join('.') }
+            }
+            return { os_name: 'Mac OS X', os_version: '' }
+        } else if (/Linux/.test(user_agent)) {
+            return { os_name: 'Linux', os_version: '' }
+        } else if (/CrOS/.test(user_agent)) {
+            return { os_name: 'Chrome OS', os_version: '' }
         } else {
-            return ''
+            return { os_name: '', os_version: '' }
         }
     },
 
@@ -880,9 +943,11 @@ export const _info = {
     },
 
     properties: function (): Properties {
+        const { os_name, os_version } = _info.os(userAgent)
         return _extend(
             _strip_empty_properties({
-                $os: _info.os(),
+                $os: os_name,
+                $os_version: os_version,
                 $browser: _info.browser(userAgent, navigator.vendor, (win as any).opera),
                 $device: _info.device(userAgent),
                 $device_type: _info.deviceType(userAgent),
@@ -906,9 +971,11 @@ export const _info = {
     },
 
     people_properties: function (): Properties {
+        const { os_name, os_version } = _info.os(userAgent)
         return _extend(
             _strip_empty_properties({
-                $os: _info.os(),
+                $os: os_name,
+                $os_version: os_version,
                 $browser: _info.browser(userAgent, navigator.vendor, (win as any).opera),
             }),
             {

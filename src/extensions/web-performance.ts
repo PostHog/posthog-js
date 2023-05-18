@@ -1,5 +1,6 @@
+import { isLocalhost, logger } from '../utils'
 import { PostHog } from '../posthog-core'
-import { DecideResponse } from '../types'
+import { DecideResponse, NetworkRequest } from '../types'
 
 const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     // BASE_PERFORMANCE_EVENT_COLUMNS
@@ -80,6 +81,9 @@ export class WebPerformanceObserver {
     remoteEnabled: boolean | undefined
     observer: PerformanceObserver | undefined
 
+    // Util to help developers working on this feature manually override
+    _forceAllowLocalhost = false
+
     constructor(instance: PostHog) {
         this.instance = instance
     }
@@ -96,6 +100,12 @@ export class WebPerformanceObserver {
         if (this.observer) {
             return
         }
+
+        if (isLocalhost() && !this._forceAllowLocalhost) {
+            logger.log('PostHog Peformance observer not started because we are on localhost.')
+            return
+        }
+
         try {
             this.observer = new PerformanceObserver((list) => {
                 list.getEntries().forEach((entry) => {
@@ -147,7 +157,24 @@ export class WebPerformanceObserver {
             }
         }
 
+        // NOTE: This is minimal atm but will include more options when we move to the
+        // built in rrweb network recorder
+        let networkRequest: NetworkRequest | null | undefined = {
+            url: event.name,
+        }
+
+        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+
+        if (userSessionRecordingOptions.maskNetworkRequestFn) {
+            networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
+        }
+
+        if (!networkRequest) {
+            return
+        }
+
         const eventJson = event.toJSON()
+        eventJson.name = networkRequest.url
         const properties: { [key: number]: any } = {}
         // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
         // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
@@ -186,13 +213,24 @@ export class WebPerformanceObserver {
      * :TRICKY: Make sure we batch these requests, and don't truncate the strings.
      */
     private capturePerformanceEvent(properties: { [key: number]: any }) {
-        this.instance.capture('$performance_event', properties, {
-            transport: 'XHR',
-            method: 'POST',
-            endpoint: PERFORMANCE_INGESTION_ENDPOINT,
-            _noTruncate: true,
-            _batchKey: 'performanceEvent',
+        const timestamp = properties[PERFORMANCE_EVENTS_MAPPING['timestamp']]
+
+        this.instance.sessionRecording?.onRRwebEmit({
+            type: 6, // EventType.Plugin,
+            data: {
+                plugin: 'posthog/network@1',
+                payload: properties,
+            },
+            timestamp,
         })
+
+        // this.instance.capture('$performance_event', properties, {
+        //     transport: 'XHR',
+        //     method: 'POST',
+        //     endpoint: PERFORMANCE_INGESTION_ENDPOINT,
+        //     _noTruncate: true,
+        //     _batchKey: 'performanceEvent',
+        // })
     }
 }
 

@@ -7,6 +7,7 @@ const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
+    config: Partial<PostHogConfig>
     persistence: PostHogPersistence
     _windowId: string | null | undefined
     _sessionId: string | null | undefined
@@ -16,6 +17,7 @@ export class SessionIdManager {
     _sessionActivityTimestamp: number | null
 
     constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence) {
+        this.config = config
         this.persistence = persistence
         this._windowId = undefined
         this._sessionId = undefined
@@ -29,7 +31,7 @@ export class SessionIdManager {
 
         // primary_window_exists is set when the DOM has been loaded and is cleared on unload
         // if it exists here it means there was no unload which suggests this window is opened as a tab duplication, window.open, etc.
-        if (!this.persistence.disabled && sessionStore.is_supported()) {
+        if (this._canUseSessionStorage()) {
             const lastWindowId = sessionStore.parse(this.window_id_storage_key)
 
             const primaryWindowExists = sessionStore.parse(this.primary_window_exists_storage_key)
@@ -47,6 +49,11 @@ export class SessionIdManager {
         this._listenToReloadWindow()
     }
 
+    _canUseSessionStorage(): boolean {
+        // We only want to use sessionStorage if persistence is enabled and not memory storage
+        return this.config.persistence !== 'memory' && !this.persistence.disabled && sessionStore.is_supported()
+    }
+
     // Note: this tries to store the windowId in sessionStorage. SessionStorage is unique to the current window/tab,
     // and persists page loads/reloads. So it's uniquely suited for storing the windowId. This function also respects
     // when persistence is disabled (by user config) and when sessionStorage is not supported (it *should* be supported on all browsers),
@@ -54,7 +61,7 @@ export class SessionIdManager {
     _setWindowId(windowId: string): void {
         if (windowId !== this._windowId) {
             this._windowId = windowId
-            if (!this.persistence.disabled && sessionStore.is_supported()) {
+            if (this._canUseSessionStorage()) {
                 sessionStore.set(this.window_id_storage_key, windowId)
             }
         }
@@ -64,7 +71,7 @@ export class SessionIdManager {
         if (this._windowId) {
             return this._windowId
         }
-        if (!this.persistence.disabled && sessionStore.is_supported()) {
+        if (this._canUseSessionStorage()) {
             return sessionStore.parse(this.window_id_storage_key)
         }
         // New window id will be generated
@@ -120,7 +127,7 @@ export class SessionIdManager {
      */
     _listenToReloadWindow(): void {
         window.addEventListener('beforeunload', () => {
-            if (!this.persistence.disabled && sessionStore.is_supported()) {
+            if (this._canUseSessionStorage()) {
                 sessionStore.remove(this.primary_window_exists_storage_key)
             }
         })
