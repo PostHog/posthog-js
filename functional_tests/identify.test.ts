@@ -33,7 +33,8 @@ test('identify sends a identify event', async () => {
 test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {
     // The intention here is to reduce the number of unncecessary $identify
     // requests to process.
-    const posthog = await createPosthogInstance()
+    const token = v4()
+    const posthog = await createPosthogInstance(token)
 
     const anonymousId = posthog.get_distinct_id()
 
@@ -41,7 +42,7 @@ test('identify sends an engage request if identify called twice with the same di
     posthog.identify('test-id', { email: 'first@email.com' }, { location: 'first' })
 
     await waitFor(() =>
-        expect(capturedRequests['/e/']).toContainEqual(
+        expect(getRequests(token)['/e/']).toContainEqual(
             expect.objectContaining({
                 event: '$identify',
                 $set: { email: 'first@email.com' },
@@ -49,38 +50,28 @@ test('identify sends an engage request if identify called twice with the same di
                 properties: expect.objectContaining({
                     distinct_id: 'test-id',
                     $anon_distinct_id: anonymousId,
-                    token: posthog.config.token,
                 }),
             })
         )
     )
 
-    // The second time we identify, it calls the /engage/ endpoint with the $set
-    // / $set_once properties, in two separate requests.
+    // The second time we identify, it instead sents an event of type "$set".
     posthog.identify('test-id', { email: 'test@email.com' }, { location: 'second' })
 
     await waitFor(() =>
-        expect(capturedRequests['/engage/']).toContainEqual(
+        expect(getRequests(token)['/e/']).toContainEqual(
             expect.objectContaining({
-                $distinct_id: 'test-id',
-                $set: {
+                event: '$set',
+                properties: expect.objectContaining({
                     $browser: 'Safari',
                     $browser_version: null,
                     $referrer: '$direct',
                     $referring_domain: '$direct',
-                    email: 'test@email.com',
-                },
-                $token: posthog.config.token,
-            })
-        )
-    )
-
-    await waitFor(() =>
-        expect(capturedRequests['/engage/']).toContainEqual(
-            expect.objectContaining({
-                $distinct_id: 'test-id',
-                $set_once: { location: 'second' },
-                $token: posthog.config.token,
+                    $set: { email: 'test@email.com' },
+                    $set_once: { location: 'second' },
+                    distinct_id: 'test-id',
+                    token: posthog.config.token,
+                }),
             })
         )
     )
@@ -88,7 +79,8 @@ test('identify sends an engage request if identify called twice with the same di
 
 test('identify sends an engage request if identify called twice with a different distinct_id', async () => {
     // This is due to $identify only being called for anonymous users.
-    const posthog = await createPosthogInstance()
+    const token = v4()
+    const posthog = await createPosthogInstance(token)
 
     const anonymousId = posthog.get_distinct_id()
 
@@ -96,7 +88,7 @@ test('identify sends an engage request if identify called twice with a different
     posthog.identify('test-id', { email: 'first@email.com' }, { location: 'first' })
 
     await waitFor(() =>
-        expect(capturedRequests['/e/']).toContainEqual(
+        expect(getRequests(token)['/e/']).toContainEqual(
             expect.objectContaining({
                 event: '$identify',
                 $set: { email: 'first@email.com' },
@@ -104,38 +96,28 @@ test('identify sends an engage request if identify called twice with a different
                 properties: expect.objectContaining({
                     distinct_id: 'test-id',
                     $anon_distinct_id: anonymousId,
-                    token: posthog.config.token,
                 }),
             })
         )
     )
 
-    // The second time we identify, it calls the /engage/ endpoint with the $set
-    // / $set_once properties, in two separate requests.
+    // The second time we identify, it sends a $set event instead, with no
+    // reference to the anonymous id(?)
     posthog.identify('another-test-id', { email: 'test@email.com' }, { location: 'second' })
 
     await waitFor(() =>
-        expect(capturedRequests['/engage/']).toContainEqual(
+        expect(getRequests(token)['/e/']).toContainEqual(
             expect.objectContaining({
-                $distinct_id: 'another-test-id',
-                $set: {
+                event: '$set',
+                properties: expect.objectContaining({
                     $browser: 'Safari',
                     $browser_version: null,
                     $referrer: '$direct',
                     $referring_domain: '$direct',
-                    email: 'test@email.com',
-                },
-                $token: posthog.config.token,
-            })
-        )
-    )
-
-    await waitFor(() =>
-        expect(capturedRequests['/engage/']).toContainEqual(
-            expect.objectContaining({
-                $distinct_id: 'another-test-id',
-                $set_once: { location: 'second' },
-                $token: posthog.config.token,
+                    $set: { email: 'test@email.com' },
+                    $set_once: { location: 'second' },
+                    distinct_id: 'another-test-id',
+                }),
             })
         )
     )
@@ -192,7 +174,7 @@ afterAll(() => server.close())
 // It sets a global variable that is set and used to initialize subsequent libaries.
 beforeAll(() => init_as_module())
 
-const createPosthogInstance = async () => {
+const createPosthogInstance = async (token: string = v4()) => {
     // We need to create a new instance of the library for each test, to ensure
     // that they are isolated from each other. The way the library is currently
     // written, we first create an instance, then call init on it which then
@@ -202,9 +184,17 @@ const createPosthogInstance = async () => {
         posthog.init(
             // Use a random UUID for the token, such that we don't have to worry
             // about collisions between test cases.
-            v4(),
+            token,
             { request_batching: false, api_host: 'http://localhost', loaded: (p) => resolve(p) },
             'test'
         )
     )
+}
+
+const getRequests = (token: string) => {
+    // Filter the captured requests by the given token.
+    return {
+        '/e/': capturedRequests['/e/'].filter((request) => request.properties.token === token),
+        '/engage/': capturedRequests['/engage/'].filter((request) => request.properties.token === token),
+    }
 }
