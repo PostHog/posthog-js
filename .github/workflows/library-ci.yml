@@ -32,13 +32,13 @@ jobs:
             - uses: actions/checkout@v3
 
             - uses: actions/setup-node@v3
-                with:
-                node-version: 16
+              with:
+                  node-version: 16
 
             - run: yarn install && yarn build
 
             - name: Cypress run
-                uses: cypress-io/github-action@v4
+              uses: cypress-io/github-action@v4
 
     functional:
         name: Functional tests
@@ -75,6 +75,6 @@ jobs:
             - run: yarn install
 
             - run: |
-                yarn prettier --check
-                yarn eslint
-                yarn tsc -b
+                  yarn prettier --check
+                  yarn eslint
+                  yarn tsc -b
