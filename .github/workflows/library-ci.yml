@@ -1,0 +1,80 @@
+name: Library checks
+
+on:
+    pull_request:
+    push:
+        branches:
+            - master
+
+jobs:
+    unit:
+        name: Unit tests
+        runs-on: ubuntu-latest
+        steps:
+            # Check out the repository
+            - uses: actions/checkout@v3
+
+            # Install Node.js
+            - uses: actions/setup-node@v3
+              with:
+                  node-version: 14
+                  cache: 'yarn'
+
+            # Install your dependencies
+            - run: yarn install
+
+            - run: yarn test
+
+    integration:
+        name: Cypress
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v3
+
+            - uses: actions/setup-node@v3
+              with:
+                  node-version: 16
+
+            - run: yarn install && yarn build
+
+            - name: Cypress run
+              uses: cypress-io/github-action@v4
+
+    functional:
+        name: Functional tests
+        runs-on: ubuntu-latest
+        steps:
+            # Check out the repository
+            - uses: actions/checkout@v3
+
+            # Install Node.js
+            - uses: actions/setup-node@v3
+              with:
+                  node-version: 14
+                  cache: 'yarn'
+
+            # Install your dependencies
+            - run: yarn install
+
+            - run: yarn jest functional_tests/
+
+    lint:
+        name: Lint
+        runs-on: ubuntu-latest
+        steps:
+            # Check out the repository
+            - uses: actions/checkout@v3
+
+            # Install Node.js
+            - uses: actions/setup-node@v3
+              with:
+                  node-version: 14
+                  cache: 'yarn'
+
+            # Install your dependencies
+            - run: yarn install
+
+            - run: |
+                  yarn prettier --check
+                  yarn eslint
+                  yarn tsc -b
