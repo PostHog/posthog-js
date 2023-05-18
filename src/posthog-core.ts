@@ -1243,6 +1243,10 @@ export class PostHog {
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
             this.persistence.set_user_state('identified')
+
+            // Update current user properties
+            this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+
             this.capture(
                 '$identify',
                 {

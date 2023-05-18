@@ -81,3 +81,17 @@ export const getRequests = (token: string) => {
         '/decide/': capturedRequests['/decide/'].filter((request) => request.token === token),
     }
 }
+
+export const resetRequests = (token: string) => {
+    Object.assign(capturedRequests, {
+        '/e/': (capturedRequests['/e/'] = capturedRequests['/e/'].filter(
+            (request) => request.properties.token !== token
+        )),
+        '/engage/': (capturedRequests['/engage/'] = capturedRequests['/engage/'].filter(
+            (request) => request.properties.token !== token
+        )),
+        '/decide/': (capturedRequests['/decide/'] = capturedRequests['/decide/'].filter(
+            (request) => request.token !== token
+        )),
+    })
+}
