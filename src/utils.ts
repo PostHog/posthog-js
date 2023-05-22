@@ -103,7 +103,7 @@ export function _each(obj: any, iterator: (value: any, key: any) => void | Break
         return
     }
     if (Array.isArray(obj)) {
-        if (nativeForEach && Array.isArray(obj) && obj.forEach === nativeForEach) {
+        if (nativeForEach && obj.forEach === nativeForEach) {
             obj.forEach(iterator, thisArg)
         } else {
             for (let i = 0, l = obj.length; i < l; i++) {
