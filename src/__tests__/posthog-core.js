@@ -151,6 +151,11 @@ describe('capture()', () => {
             expect.objectContaining({ $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } })
         )
     })
+
+    it('correctly handles the "length" property', () => {
+        const captureResult = given.lib.capture('event-name', { foo: 'bar', length: 0 })
+        expect(captureResult.properties).toEqual(expect.objectContaining({ foo: 'bar', length: 0 }))
+    })
 })
 
 describe('_calculate_event_properties()', () => {

@@ -93,34 +93,6 @@ export const _bind_instance_methods = function (obj: Record<string, any>): void 
     }
 }
 
-/**
- * @param {*=} obj
- * @param {function(...*)=} iterator
- * @param {Object=} thisArg
- */
-export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
-    if (obj === null || obj === undefined) {
-        return
-    }
-    if (nativeForEach && Array.isArray(obj) && obj.forEach === nativeForEach) {
-        obj.forEach(iterator, thisArg)
-    } else if ('length' in obj && obj.length === +obj.length) {
-        for (let i = 0, l = obj.length; i < l; i++) {
-            if (i in obj && iterator.call(thisArg, obj[i], i) === breaker) {
-                return
-            }
-        }
-    } else {
-        for (const key in obj) {
-            if (hasOwnProperty.call(obj, key)) {
-                if (iterator.call(thisArg, obj[key], key) === breaker) {
-                    return
-                }
-            }
-        }
-    }
-}
-
 export function _eachArray<E = any>(
     obj: E[] | null | undefined,
     iterator: (value: E, key: number) => void | Breaker,
@@ -134,6 +106,27 @@ export function _eachArray<E = any>(
                 if (i in obj && iterator.call(thisArg, obj[i], i) === breaker) {
                     return
                 }
+            }
+        }
+    }
+}
+
+/**
+ * @param {*=} obj
+ * @param {function(...*)=} iterator
+ * @param {Object=} thisArg
+ */
+export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
+    if (obj === null || obj === undefined) {
+        return
+    }
+    if (Array.isArray(obj)) {
+        return _eachArray(obj, iterator, thisArg)
+    }
+    for (const key in obj) {
+        if (hasOwnProperty.call(obj, key)) {
+            if (iterator.call(thisArg, obj[key], key) === breaker) {
+                return
             }
         }
     }

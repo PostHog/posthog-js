@@ -149,10 +149,10 @@ export class WebPerformanceObserver {
     _capturePerformanceEvent(event: PerformanceEntry) {
         // NOTE: We don't want to capture our own request events.
 
-        if (event.name.startsWith(this.instance.get_config('api_host'))) {
+        if (event.name.indexOf(this.instance.get_config('api_host')) === 0) {
             const path = event.name.replace(this.instance.get_config('api_host'), '')
 
-            if (POSTHOG_PATHS_TO_IGNORE.find((x) => path.startsWith(x))) {
+            if (POSTHOG_PATHS_TO_IGNORE.find((x) => path.indexOf(x) === 0)) {
                 return
             }
         }
