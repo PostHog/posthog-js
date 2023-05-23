@@ -1,3 +1,13 @@
+## 1.57.3 - 2023-05-23
+
+- fix: properties with "length" value (#640)
+- docs: Update README around releasing and development (#634)
+- chore: add test for $identify events count optimization (#639)
+- ci: consolidate library checks into one workflow (#638)
+- ci: add prettier and eslint linting stage (#637)
+- chore: add pre-commit to run lint staged. (#636)
+- chore: add functional tests (#635)
+
 ## 1.57.2 - 2023-05-17
 
 
