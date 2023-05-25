@@ -8,6 +8,10 @@ import {
     isPlainObject,
 } from './type-checking'
 
+/**
+ * based on the very wonderful MIT licensed Sentry SDK
+ */
+
 const ERROR_TYPES_PATTERN =
     /^(?:[Uu]ncaught (?:exception: )?)?(?:((?:Eval|Internal|Range|Reference|Syntax|Type|URI|)Error): )?(.*)$/i
 
@@ -22,6 +26,8 @@ export interface ErrorProperties {
 }
 
 function errorPropertiesFromError(error: Error): ErrorProperties {
+    // TODO stack parsing such as https://github.com/getsentry/sentry-javascript/blob/41fef4b10f3a644179b77985f00f8696c908539f/packages/browser/src/stack-parsers.ts
+
     return {
         $exception_type: error.name,
         $exception_message: error.message,
@@ -76,8 +82,6 @@ export function toErrorProperties([event, source, lineno, colno, error]: [
     colno?: number | undefined,
     error?: Error | undefined
 ]): ErrorProperties | null {
-    // TODO need to parse the stack frames somehow
-
     let errorProperties: ErrorProperties = {}
 
     if (error === undefined && typeof event === 'string') {
