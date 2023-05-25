@@ -1,3 +1,7 @@
+## 1.57.4 - 2023-05-25
+
+- fix: Session timeout overridden on reload (#645)
+
 ## 1.57.3 - 2023-05-23
 
 - fix: properties with "length" value (#640)
