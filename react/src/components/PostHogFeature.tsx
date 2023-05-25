@@ -5,21 +5,27 @@ import { PostHog } from '../context'
 
 export type PostHogFeatureProps = {
     flag: string
-    match?: string | boolean
     children: React.ReactNode | ((payload: any) => React.ReactNode)
+    match?: string | boolean
+    visibilityObserverOptions?: IntersectionObserverInit
 }
 
-export function PostHogFeature({ flag, match, children }: PostHogFeatureProps): JSX.Element | null {
+export function PostHogFeature({ flag, match, children, visibilityObserverOptions }: PostHogFeatureProps): JSX.Element | null {
     const posthog = usePostHog()
     const payload = useFeatureFlagPayload(flag)
     const variant = useFeatureFlagVariantKey(flag)
-
+    const [clickTracked, setclickTracked] = useState(false)
 
     if (match === undefined || variant === match) {
         const childNode: React.ReactNode = typeof children === 'function' ? children(payload) : children
         return (
-            <div onClick={() => trackClicks(flag, posthog)}>
-                <VisibilityTracker flag={flag}>{childNode}</VisibilityTracker>
+            <div onClick={() => {
+              if (!clickTracked) {
+                trackClicks(flag, posthog)
+                setclickTracked(true)
+              }
+            }}>
+                <VisibilityTracker flag={flag} options={visibilityObserverOptions}>{childNode}</VisibilityTracker>
             </div>
         )
     }
@@ -28,32 +34,30 @@ export function PostHogFeature({ flag, match, children }: PostHogFeatureProps): 
 }
 
 function trackClicks(flag: string, posthog?: PostHog) {
-    console.log('posthog in clicks is: ', posthog)
-    posthog?.capture('$feature_flag_clicked', { feature_flag: flag })
+    posthog?.capture('$feature_flag_clicked', { feature_flag: flag, $set: { [`$feature_interaction/${flag}`]: true } })
 }
 
 function trackVisibility(flag: string, posthog?: PostHog) {
-    console.log('posthog in visibility is: ', posthog)
     posthog?.capture('$feature_flag_viewed', { feature_flag: flag })
 }
 
-function VisibilityTracker({flag, children}: {flag: string, children: React.ReactNode}): JSX.Element {
+function VisibilityTracker({flag, children, options}: {flag: string, children: React.ReactNode, options?: IntersectionObserverInit}): JSX.Element {
     const ref = useRef<HTMLDivElement>(null);
     const posthog = usePostHog()
+    const [tracked, setTracked] = useState(false)
 
     const isIntersecting = useVisibleOnScreen(ref, {
-    //   rootMargin: '-200px',
-      threshold: 0.1,
+        threshold: 0.1,
+        ...options
     });
 
-    console.log(isIntersecting)
-    if (isIntersecting) {
+    if (isIntersecting && !tracked) {
         trackVisibility(flag, posthog)
+        setTracked(true)
     }
   
     return (
       <div ref={ref}>
-        {isIntersecting ? 'Visible!' : 'Not Visible'}
         {children}
       </div>
     );
