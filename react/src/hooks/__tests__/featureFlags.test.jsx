@@ -46,7 +46,7 @@ describe('useFeatureFlagPayload hook', () => {
         ['example_feature_false', false],
         ['missing', false],
         ['multivariate_feature', true],
-        ['example_feature_payload', true]
+        ['example_feature_payload', true],
     ])('should get the boolean feature flag', (flag, expected) => {
         let { result } = renderHook(() => useFeatureFlagEnabled(flag), {
             wrapper: given.renderProvider,
