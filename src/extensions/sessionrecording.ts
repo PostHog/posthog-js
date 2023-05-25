@@ -162,6 +162,8 @@ export class SessionRecording {
         }
 
         this.captureStarted = true
+        // We want to ensure the sessionManager is reset if necessary on load of the recorder
+        this.instance.sessionManager.checkAndGetSessionAndWindowId()
 
         const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
@@ -215,8 +217,9 @@ export class SessionRecording {
             return
         }
 
+        // We only want to extend the session if it is an interactive event.
         const { windowId, sessionId } = this.instance.sessionManager.checkAndGetSessionAndWindowId(
-            !isUserInteraction, // readonly if it isn't a user interaction
+            !isUserInteraction,
             event.timestamp
         )
 
