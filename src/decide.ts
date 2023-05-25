@@ -1,7 +1,8 @@
 import { autocapture } from './autocapture'
-import { _base64Encode } from './utils'
+import { _base64Encode, loadScript } from './utils'
 import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
+import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './posthog-persistence'
 
 export class Decide {
     instance: PostHog
@@ -20,6 +21,8 @@ export class Decide {
             token: this.instance.get_config('token'),
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
+            person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
+            group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
         })
 
         const encoded_data = _base64Encode(json_data)
@@ -65,16 +68,18 @@ export class Decide {
             if (this.instance.get_config('opt_in_site_apps')) {
                 const apiHost = this.instance.get_config('api_host')
                 for (const { id, url } of response['siteApps']) {
-                    const script = document.createElement('script')
-                    script.src = [
+                    const scriptUrl = [
                         apiHost,
                         apiHost[apiHost.length - 1] === '/' && url[0] === '/' ? url.substring(1) : url,
                     ].join('')
-                    script.onerror = (e) => {
-                        console.error(`Error while initializing PostHog app with config id ${id}`, e)
-                    }
+
                     ;(window as any)[`__$$ph_site_app_${id}`] = this.instance
-                    document.body.appendChild(script)
+
+                    loadScript(scriptUrl, (err) => {
+                        if (err) {
+                            console.error(`Error while initializing PostHog app with config id ${id}`, err)
+                        }
+                    })
                 }
             } else if (response['siteApps'].length > 0) {
                 console.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')

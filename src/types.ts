@@ -9,6 +9,7 @@ export interface CaptureResult {
     event: string
     properties: Properties
     $set?: Properties
+    $set_once?: Properties
     timestamp?: Date
 }
 export type CaptureCallback = (response: any, data: any) => void
@@ -137,6 +138,8 @@ export interface SessionRecordingOptions {
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
+    /** Modify the network request before it is captured. Returning null stops it being captured */
+    maskNetworkRequestFn?: ((url: NetworkRequest) => NetworkRequest | null | undefined) | null
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
@@ -266,8 +269,6 @@ export type ToolbarVersion = 'toolbar'
 
 /* sync with posthog */
 export interface ToolbarParams {
-    apiURL?: string
-    jsURL?: string
     token?: string /** public posthog-js token */
     temporaryToken?: string /** private temporary user token */
     actionId?: number
@@ -310,4 +311,8 @@ export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeatur
 
 export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
+}
+
+export type NetworkRequest = {
+    url: string
 }

@@ -846,8 +846,9 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
-        if (event_name === '$identify' && options.$set) {
+        if (event_name === '$identify') {
             data['$set'] = options['$set']
+            data['$set_once'] = options['$set_once']
         }
 
         data = _copyAndTruncateStrings(

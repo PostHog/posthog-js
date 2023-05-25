@@ -701,6 +701,14 @@ describe('parseFeatureFlagDecideResponse', () => {
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
         })
     })
+
+    it('doesnt remove existing feature flags when no flags are returned', () => {
+        given('decideResponse', () => ({ status: 0 }))
+        given.subject()
+
+        expect(given.persistence.register).not.toHaveBeenCalled()
+        expect(given.persistence.unregister).not.toHaveBeenCalled()
+    })
 })
 
 describe('filterActiveFeatureFlags', () => {

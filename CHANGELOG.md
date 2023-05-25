@@ -1,3 +1,45 @@
+## 1.57.4 - 2023-05-25
+
+- fix: Session timeout overridden on reload (#645)
+
+## 1.57.3 - 2023-05-23
+
+- fix: properties with "length" value (#640)
+- docs: Update README around releasing and development (#634)
+- chore: add test for $identify events count optimization (#639)
+- ci: consolidate library checks into one workflow (#638)
+- ci: add prettier and eslint linting stage (#637)
+- chore: add pre-commit to run lint staged. (#636)
+- chore: add functional tests (#635)
+
+## 1.57.2 - 2023-05-17
+
+
+
+## 1.57.1 - 2023-05-17
+
+- fix(decide): Make sure all stored properties are sent on first decide request (#633)
+- fix(identify): actually send $set_once on identify calls (#629)
+
+## 1.57.0 - 2023-05-15
+
+- feat: Added OS version to the OS details (#624)
+- fix: Don't delete existing flags on decide errors (#621)
+
+## 1.56.0 - 2023-05-09
+
+- feat: Allow custom masking of network events (#620)
+
+## 1.55.2 - 2023-05-09
+
+- feat: Added idle timer to recordings (#626)
+- docs: Add Nuxt 3 demo  (#623)
+
+## 1.55.1 - 2023-05-03
+
+- fix: Script loading before DOM is ready (#618)
+- Expose options to mask text in session recording (#595)
+
 ## 1.55.0 - 2023-04-28
 
 - feat(beta-management): Add opt-in and out functions (#616)
