@@ -56,6 +56,7 @@ import {
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
+import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -104,6 +105,7 @@ const defaultConfig = (): PostHogConfig => ({
     ui_host: null,
     token: '',
     autocapture: true,
+    exception_autocapture: false,
     rageclick: true,
     cross_subdomain_cookie: document?.location?.hostname?.indexOf('herokuapp.com') === -1,
     persistence: 'cookie',
@@ -224,6 +226,9 @@ const create_phlib = function (
     instance.webPerformance = new WebPerformanceObserver(instance)
     instance.webPerformance.startObservingIfEnabled()
 
+    instance.exceptionAutocapture = new ExceptionObserver(instance)
+    instance.exceptionAutocapture.startObservingIfEnabled()
+
     instance.__autocapture = instance.get_config('autocapture')
     autocapture._setIsAutocaptureEnabled(instance)
     if (autocapture._isAutocaptureEnabled) {
@@ -277,6 +282,7 @@ export class PostHog {
     toolbar: Toolbar
     sessionRecording: SessionRecording | undefined
     webPerformance: WebPerformanceObserver | undefined
+    exceptionAutocapture: ExceptionObserver | undefined
 
     _captureMetrics: CaptureMetrics
     _requestQueue: RequestQueue

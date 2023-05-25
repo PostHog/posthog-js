@@ -53,6 +53,7 @@ export interface PostHogConfig {
     ui_host: string | null
     token: string
     autocapture: boolean | AutocaptureConfig
+    exception_autocapture: boolean
     rageclick: boolean
     cross_subdomain_cookie: boolean
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
@@ -204,6 +205,7 @@ export interface DecideResponse {
     errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
     capturePerformance?: boolean
+    autocaptureExceptions?: boolean
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
