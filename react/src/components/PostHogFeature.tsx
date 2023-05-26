@@ -1,5 +1,5 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React, { RefObject, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { PostHog } from '../context'
 
 export type PostHogFeatureProps = {
@@ -16,6 +16,7 @@ export function PostHogFeature({
     children,
     fallback,
     visibilityObserverOptions,
+    ...props
 }: PostHogFeatureProps): JSX.Element | null {
     const payload = useFeatureFlagPayload(flag)
     const variant = useFeatureFlagVariantKey(flag)
@@ -23,11 +24,9 @@ export function PostHogFeature({
     if (match === undefined || variant === match) {
         const childNode: React.ReactNode = typeof children === 'function' ? children(payload) : children
         return (
-            <div>
-                <VisibilityAndClickTracker flag={flag} options={visibilityObserverOptions}>
-                    {childNode}
-                </VisibilityAndClickTracker>
-            </div>
+            <VisibilityAndClickTracker flag={flag} options={visibilityObserverOptions} {...props}>
+                {childNode}
+            </VisibilityAndClickTracker>
         )
     }
     return <>{fallback}</>
@@ -45,6 +44,7 @@ function VisibilityAndClickTracker({
     flag,
     children,
     options,
+    ...props
 }: {
     flag: string
     children: React.ReactNode
@@ -52,48 +52,39 @@ function VisibilityAndClickTracker({
 }): JSX.Element {
     const ref = useRef<HTMLDivElement>(null)
     const posthog = usePostHog()
-    const [visibilityTracked, setVisibilityTracked] = useState(false)
-    const [clickTracked, setClickTracked] = useState(false)
+    const visibilityTrackedRef = useRef(false)
+    const clickTrackedRef = useRef(false)
 
-    const isIntersecting = useVisibleOnScreen(ref, {
-        threshold: 0.1,
-        ...options,
-    })
+    useEffect(() => {
+        if (ref.current === null) return
 
-    if (isIntersecting && !visibilityTracked) {
-        trackVisibility(flag, posthog)
-        setVisibilityTracked(true)
-    }
+        const onIntersect = (entry: IntersectionObserverEntry) => {
+            if (!visibilityTrackedRef.current && entry.isIntersecting) {
+                trackVisibility(flag, posthog)
+                visibilityTrackedRef.current = true
+            }
+        }
+
+        const observer = new IntersectionObserver(([entry]) => onIntersect(entry), {
+            threshold: 0.1,
+            ...options,
+        })
+        observer.observe(ref.current)
+        return () => observer.disconnect()
+    }, [flag, options, posthog, ref])
 
     return (
         <div
             ref={ref}
+            {...props}
             onClick={() => {
-                if (!clickTracked) {
+                if (!clickTrackedRef.current) {
                     trackClicks(flag, posthog)
-                    setClickTracked(true)
+                    clickTrackedRef.current = true
                 }
             }}
         >
             {children}
         </div>
     )
-}
-
-const useVisibleOnScreen = (ref: RefObject<HTMLElement>, options?: IntersectionObserverInit) => {
-    const [isIntersecting, setIntersecting] = useState(false)
-
-    const observer = useMemo(
-        () => new IntersectionObserver(([entry]) => setIntersecting(entry.isIntersecting), options),
-        [ref, options]
-    )
-
-    useEffect(() => {
-        if (ref.current === null) return
-
-        observer.observe(ref.current)
-        return () => observer.disconnect()
-    }, [ref])
-
-    return isIntersecting
 }
