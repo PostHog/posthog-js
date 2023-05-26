@@ -58,8 +58,7 @@ export class SentryIntegration implements _SentryIntegration {
                 const host = _posthog.config.ui_host || _posthog.config.api_host
                 event.tags['PostHog Person URL'] = host + '/person/' + _posthog.get_distinct_id()
                 if (_posthog.sessionRecordingStarted()) {
-                    event.tags['PostHog Recording URL'] =
-                        host + '/recordings/' + _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
+                    event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
                 }
                 const exceptions = event.exception?.values || []
                 const data: Properties = {
