@@ -1,3 +1,7 @@
+## 1.58.0 - 2023-05-26
+
+- Add get_session_id and get_session_replay_url functions  (#647)
+
 ## 1.57.4 - 2023-05-25
 
 - fix: Session timeout overridden on reload (#645)
