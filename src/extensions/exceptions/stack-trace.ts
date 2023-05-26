@@ -179,33 +179,14 @@ export const opera11StackLineParser: StackLineParser = [OPERA11_PRIORITY, opera1
 
 export const defaultStackLineParsers = [chromeStackLineParser, geckoStackLineParser, winjsStackLineParser]
 
-/**
- * Removes Sentry frames from the top and bottom of the stack if present and enforces a limit of max number of frames.
- * Assumes stack input is ordered from top to bottom and returns the reverse representation so call site of the
- * function that caused the crash is the last frame in the array.
- * @hidden
- */
-export function stripSentryFramesAndReverse(stack: ReadonlyArray<StackFrame>): StackFrame[] {
+export function reverse(stack: ReadonlyArray<StackFrame>): StackFrame[] {
     if (!stack.length) {
         return []
     }
 
     const localStack = stack.slice(0, STACKTRACE_FRAME_LIMIT)
 
-    const lastFrameFunction = localStack[localStack.length - 1].function
-    // If stack starts with one of our API calls, remove it (starts, meaning it's the top of the stack - aka last call)
-    if (lastFrameFunction && /sentryWrapped/.test(lastFrameFunction)) {
-        localStack.pop()
-    }
-
-    // Reversing in the middle of the procedure allows us to just pop the values off the stack
     localStack.reverse()
-
-    const firstFrameFunction = localStack[localStack.length - 1].function
-    // If stack ends with one of our internal API calls, remove it (ends, meaning it's the bottom of the stack - aka top-most call)
-    if (firstFrameFunction && /captureMessage|captureException/.test(firstFrameFunction)) {
-        localStack.pop()
-    }
 
     return localStack.map((frame) => ({
         ...frame,
@@ -214,13 +195,6 @@ export function stripSentryFramesAndReverse(stack: ReadonlyArray<StackFrame>): S
     }))
 }
 
-/**
- * Creates a stack parser with the supplied line parsers
- *
- * StackFrames are returned in the correct order for Sentry Exception
- * frames and with Sentry SDK internal frames removed from the top and bottom
- *
- */
 export function createStackParser(...parsers: StackLineParser[]): StackParser {
     const sortedParsers = parsers.sort((a, b) => a[0] - b[0]).map((p) => p[1])
 
@@ -262,7 +236,7 @@ export function createStackParser(...parsers: StackLineParser[]): StackParser {
             }
         }
 
-        return stripSentryFramesAndReverse(frames)
+        return reverse(frames)
     }
 }
 
