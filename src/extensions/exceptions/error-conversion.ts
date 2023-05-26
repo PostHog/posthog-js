@@ -7,6 +7,7 @@ import {
     isEvent,
     isPlainObject,
 } from './type-checking'
+import { defaultStackParser, StackFrame, StackParser } from './stack-trace'
 
 /**
  * based on the very wonderful MIT licensed Sentry SDK
@@ -23,14 +24,49 @@ export interface ErrorProperties {
     $exception_colno?: number
     $exception_DOMException_code?: string
     $exception_is_synthetic?: boolean
+    $exception_stack_trace_raw?: string
+}
+
+const reactMinifiedRegexp = /Minified React error #\d+;/i
+
+function getPopSize(ex: Error & { framesToPop?: number }): number {
+    if (ex) {
+        if (typeof ex.framesToPop === 'number') {
+            return ex.framesToPop
+        }
+
+        if (reactMinifiedRegexp.test(ex.message)) {
+            return 1
+        }
+    }
+
+    return 0
+}
+
+export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?: string }): StackFrame[] {
+    // Access and store the stacktrace property before doing ANYTHING
+    // else to it because Opera is not very good at providing it
+    // reliably in other circumstances.
+    const stacktrace = ex.stacktrace || ex.stack || ''
+
+    const popSize = getPopSize(ex)
+
+    try {
+        return defaultStackParser(stacktrace, popSize)
+    } catch (e) {
+        // no-empty
+    }
+
+    return []
 }
 
 function errorPropertiesFromError(error: Error): ErrorProperties {
-    // TODO stack parsing such as https://github.com/getsentry/sentry-javascript/blob/41fef4b10f3a644179b77985f00f8696c908539f/packages/browser/src/stack-parsers.ts
+    const frames = parseStackFrames(error)
 
     return {
         $exception_type: error.name,
         $exception_message: error.message,
+        $exception_stack_trace_raw: JSON.stringify(frames),
     }
 }
 
