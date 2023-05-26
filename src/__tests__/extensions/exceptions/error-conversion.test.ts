@@ -30,12 +30,19 @@ describe('Error conversion', () => {
     })
 
     it('should convert a plain Error to an error', () => {
-        const expected: ErrorProperties = {
-            $exception_type: 'Error',
-            $exception_message: 'oh no an error has happened',
-        }
         const error = new Error('oh no an error has happened')
-        expect(toErrorProperties(['something', undefined, undefined, undefined, error])).toEqual(expected)
+
+        const errorProperties = toErrorProperties(['something', undefined, undefined, undefined, error])
+        if (errorProperties === null) {
+            throw new Error("this mustn't be null")
+        }
+
+        expect(Object.keys(errorProperties)).toHaveLength(3)
+        expect(errorProperties.$exception_type).toEqual('Error')
+        expect(errorProperties.$exception_message).toEqual('oh no an error has happened')
+        // the stack trace changes between runs, so we just check that it's there
+        expect(errorProperties.$exception_stack_trace_raw).toBeDefined()
+        expect(errorProperties.$exception_stack_trace_raw).toContain('{"filename')
     })
 
     class FakeDomError {
@@ -53,22 +60,35 @@ describe('Error conversion', () => {
     })
 
     it('should convert a DOM Exception to an error', () => {
-        const expected: ErrorProperties = {
-            $exception_type: 'dom-exception',
-            $exception_message: 'oh no disaster',
-            $exception_DOMException_code: '0',
-        }
         const event = new DOMException('oh no disaster', 'dom-exception')
-        expect(toErrorProperties([event as unknown as Event])).toEqual(expected)
+        const errorProperties = toErrorProperties([event as unknown as Event])
+
+        if (errorProperties === null) {
+            throw new Error("this mustn't be null")
+        }
+
+        expect(Object.keys(errorProperties)).toHaveLength(4)
+        expect(errorProperties.$exception_type).toEqual('dom-exception')
+        expect(errorProperties.$exception_message).toEqual('oh no disaster')
+        // the stack trace changes between runs, so we just check that it's there
+        expect(errorProperties.$exception_stack_trace_raw).toBeDefined()
+        expect(errorProperties.$exception_stack_trace_raw).toContain('{"filename')
     })
 
     it('should convert an error event to an error', () => {
-        const expected: ErrorProperties = {
-            $exception_type: 'Error',
-            $exception_message: 'the real error is hidden inside',
-        }
         const event = new ErrorEvent('oh no an error event', { error: new Error('the real error is hidden inside') })
-        expect(toErrorProperties([event as unknown as Event])).toEqual(expected)
+
+        const errorProperties = toErrorProperties([event as unknown as Event])
+        if (errorProperties === null) {
+            throw new Error("this mustn't be null")
+        }
+
+        expect(Object.keys(errorProperties)).toHaveLength(3)
+        expect(errorProperties.$exception_type).toEqual('Error')
+        expect(errorProperties.$exception_message).toEqual('the real error is hidden inside')
+        // the stack trace changes between runs, so we just check that it's there
+        expect(errorProperties.$exception_stack_trace_raw).toBeDefined()
+        expect(errorProperties.$exception_stack_trace_raw).toContain('{"filename')
     })
 
     it('can convert source, lineno, colno', () => {
