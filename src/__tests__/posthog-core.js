@@ -947,3 +947,32 @@ describe('_loaded()', () => {
         expect(given.overrides.featureFlags.resetRequestQueue).toHaveBeenCalled()
     })
 })
+
+describe('session_id', () => {
+    given('overrides', () => ({
+        sessionManager: {
+            checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
+                windowId: 'windowId',
+                sessionId: 'sessionId',
+            }),
+            _sessionStartTimestamp: new Date().getTime() - 30000,
+        },
+    }))
+    it('returns the session_id', () => {
+        expect(given.lib.get_session_id()).toEqual('sessionId')
+    })
+
+    it('returns the replay URL', () => {
+        expect(given.lib.get_session_replay_url()).toEqual('https://app.posthog.com/replay/sessionId')
+    })
+
+    it('returns the replay URL including timestamp', () => {
+        expect(given.lib.get_session_replay_url({ withTimestamp: true })).toEqual(
+            'https://app.posthog.com/replay/sessionId?t=20' // default lookback is 10 seconds
+        )
+
+        expect(given.lib.get_session_replay_url({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
+            'https://app.posthog.com/replay/sessionId?t=30'
+        )
+    })
+})

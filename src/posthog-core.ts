@@ -1379,6 +1379,43 @@ export class PostHog {
     }
 
     /**
+     * Returns the current session_id.
+     *
+     * NOTE: This should only be used for informative purposes.
+     * Any actual internal use case for the session_id should be handled by the sessionManager.
+     */
+
+    get_session_id(): string {
+        return this.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
+    }
+
+    /**
+     * Returns the Replay url for the current session.
+     *
+     * @param options Options for the url
+     * @param options.withTimestamp Whether to include the timestamp in the url (defaults to false)
+     * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
+     */
+    get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
+        const host = this.config.ui_host || this.config.api_host
+        let url = host + '/replay/' + this.get_session_id()
+        if (options?.withTimestamp && this.sessionManager._sessionStartTimestamp) {
+            const LOOK_BACK = options.timestampLookBack ?? 10
+            if (!this.sessionManager._sessionStartTimestamp) {
+                return url
+            }
+            const recordingStartTime = Math.max(
+                Math.floor((new Date().getTime() - (this.sessionManager._sessionStartTimestamp || 0)) / 1000) -
+                    LOOK_BACK,
+                0
+            )
+            url += `?t=${recordingStartTime}`
+        }
+
+        return url
+    }
+
+    /**
      * Create an alias, which PostHog will use to link two distinct_ids going forward (not retroactively).
      * Multiple aliases can map to the same original ID, but not vice-versa. Aliases can also be chained - the
      * following is a valid scenario:
