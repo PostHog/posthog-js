@@ -1,5 +1,5 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React, { useEffect, useRef } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 import { PostHog } from '../context'
 
 export type PostHogFeatureProps = {
@@ -55,6 +55,13 @@ function VisibilityAndClickTracker({
     const visibilityTrackedRef = useRef(false)
     const clickTrackedRef = useRef(false)
 
+    const cachedOnClick = useCallback(() => {
+        if (!clickTrackedRef.current) {
+            trackClicks(flag, posthog)
+            clickTrackedRef.current = true
+        }
+    }, [flag, posthog])
+
     useEffect(() => {
         if (ref.current === null) return
 
@@ -74,16 +81,7 @@ function VisibilityAndClickTracker({
     }, [flag, options, posthog, ref])
 
     return (
-        <div
-            ref={ref}
-            {...props}
-            onClick={() => {
-                if (!clickTrackedRef.current) {
-                    trackClicks(flag, posthog)
-                    clickTrackedRef.current = true
-                }
-            }}
-        >
+        <div ref={ref} {...props} onClick={cachedOnClick}>
             {children}
         </div>
     )
