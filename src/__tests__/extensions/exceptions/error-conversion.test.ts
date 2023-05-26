@@ -1,4 +1,30 @@
-import { toErrorProperties, ErrorProperties } from '../../../extensions/exceptions/error-conversion'
+import {
+    errorToProperties,
+    ErrorProperties,
+    unhandledRejectionToProperties,
+} from '../../../extensions/exceptions/error-conversion'
+
+// ugh, jest
+// can't reference PromiseRejectionEvent to construct it 🤷
+export type PromiseRejectionEventTypes = 'rejectionhandled' | 'unhandledrejection'
+
+export type PromiseRejectionEventInit = {
+    promise: Promise<any>
+    reason: any
+}
+
+export class PromiseRejectionEvent extends Event {
+    public readonly promise: Promise<any>
+    public readonly reason: any
+
+    public constructor(type: PromiseRejectionEventTypes, options: PromiseRejectionEventInit) {
+        super(type)
+
+        this.promise = options.promise
+        this.reason = options.reason
+    }
+}
+// ugh, jest
 
 describe('Error conversion', () => {
     it('should convert a string to an error', () => {
@@ -7,7 +33,7 @@ describe('Error conversion', () => {
             $exception_message: 'but somehow still a string',
             $exception_is_synthetic: true,
         }
-        expect(toErrorProperties(['Uncaught exception: InternalError: but somehow still a string'])).toEqual(expected)
+        expect(errorToProperties(['Uncaught exception: InternalError: but somehow still a string'])).toEqual(expected)
     })
 
     it('should convert a plain object to an error', () => {
@@ -16,7 +42,7 @@ describe('Error conversion', () => {
             $exception_message: 'Non-Error exception captured with keys: foo, string',
             $exception_is_synthetic: true,
         }
-        expect(toErrorProperties([{ string: 'candidate', foo: 'bar' } as unknown as Event])).toEqual(expected)
+        expect(errorToProperties([{ string: 'candidate', foo: 'bar' } as unknown as Event])).toEqual(expected)
     })
 
     it('should convert a plain Event to an error', () => {
@@ -26,13 +52,13 @@ describe('Error conversion', () => {
             $exception_is_synthetic: true,
         }
         const event = new MouseEvent('click', { bubbles: true, cancelable: true, composed: true })
-        expect(toErrorProperties([event])).toEqual(expected)
+        expect(errorToProperties([event])).toEqual(expected)
     })
 
     it('should convert a plain Error to an error', () => {
         const error = new Error('oh no an error has happened')
 
-        const errorProperties = toErrorProperties(['something', undefined, undefined, undefined, error])
+        const errorProperties = errorToProperties(['something', undefined, undefined, undefined, error])
         if (errorProperties === null) {
             throw new Error("this mustn't be null")
         }
@@ -56,12 +82,12 @@ describe('Error conversion', () => {
             $exception_message: 'click: foo',
         }
         const event = new FakeDomError('click', 'foo')
-        expect(toErrorProperties([event as unknown as Event])).toEqual(expected)
+        expect(errorToProperties([event as unknown as Event])).toEqual(expected)
     })
 
     it('should convert a DOM Exception to an error', () => {
         const event = new DOMException('oh no disaster', 'dom-exception')
-        const errorProperties = toErrorProperties([event as unknown as Event])
+        const errorProperties = errorToProperties([event as unknown as Event])
 
         if (errorProperties === null) {
             throw new Error("this mustn't be null")
@@ -78,7 +104,7 @@ describe('Error conversion', () => {
     it('should convert an error event to an error', () => {
         const event = new ErrorEvent('oh no an error event', { error: new Error('the real error is hidden inside') })
 
-        const errorProperties = toErrorProperties([event as unknown as Event])
+        const errorProperties = errorToProperties([event as unknown as Event])
         if (errorProperties === null) {
             throw new Error("this mustn't be null")
         }
@@ -100,6 +126,41 @@ describe('Error conversion', () => {
             $exception_source: 'a source',
             $exception_type: 'Error',
         }
-        expect(toErrorProperties(['string candidate', 'a source', 12, 200])).toEqual(expected)
+        expect(errorToProperties(['string candidate', 'a source', 12, 200])).toEqual(expected)
+    })
+
+    it('should convert unhandled promise rejection that the browser has messed around with', () => {
+        const ce = new CustomEvent('unhandledrejection', {
+            detail: {
+                promise: {},
+                reason: new Error('a wrapped rejection event'),
+            },
+        })
+        const errorProperties: ErrorProperties = unhandledRejectionToProperties([
+            ce as unknown as PromiseRejectionEvent,
+        ])
+        expect(Object.keys(errorProperties)).toHaveLength(4)
+        expect(errorProperties.$exception_type).toEqual('UnhandledRejection')
+        expect(errorProperties.$exception_message).toEqual('a wrapped rejection event')
+        expect(errorProperties.$exception_handled).toEqual(false)
+        // the stack trace changes between runs, so we just check that it's there
+        expect(errorProperties.$exception_stack_trace_raw).toBeDefined()
+        expect(errorProperties.$exception_stack_trace_raw).toContain('{"filename')
+    })
+
+    it('should convert unhandled promise rejection', () => {
+        const pre = new PromiseRejectionEvent('unhandledrejection', {
+            promise: Promise.resolve('wat'),
+            reason: 'My house is on fire',
+        })
+        const errorProperties: ErrorProperties = unhandledRejectionToProperties([
+            pre as unknown as PromiseRejectionEvent,
+        ])
+        expect(Object.keys(errorProperties)).toHaveLength(3)
+        expect(errorProperties.$exception_type).toEqual('UnhandledRejection')
+        expect(errorProperties.$exception_message).toEqual(
+            'Non-Error promise rejection captured with value: My house is on fire'
+        )
+        expect(errorProperties.$exception_handled).toEqual(false)
     })
 })

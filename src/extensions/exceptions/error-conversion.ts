@@ -6,8 +6,9 @@ import {
     isErrorWithStack,
     isEvent,
     isPlainObject,
+    isPrimitive,
 } from './type-checking'
-import { defaultStackParser, StackFrame, StackParser } from './stack-trace'
+import { defaultStackParser, StackFrame } from './stack-trace'
 
 /**
  * based on the very wonderful MIT licensed Sentry SDK
@@ -25,6 +26,7 @@ export interface ErrorProperties {
     $exception_DOMException_code?: string
     $exception_is_synthetic?: boolean
     $exception_stack_trace_raw?: string
+    $exception_handled?: boolean
 }
 
 const reactMinifiedRegexp = /Minified React error #\d+;/i
@@ -111,13 +113,13 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>): ErrorPro
     }
 }
 
-export function toErrorProperties([event, source, lineno, colno, error]: [
+export function errorToProperties([event, source, lineno, colno, error]: [
     event: string | Event,
     source?: string | undefined,
     lineno?: number | undefined,
     colno?: number | undefined,
     error?: Error | undefined
-]): ErrorProperties | null {
+]): ErrorProperties {
     let errorProperties: ErrorProperties = {}
 
     if (error === undefined && typeof event === 'string') {
@@ -180,4 +182,39 @@ export function toErrorProperties([event, source, lineno, colno, error]: [
         ...(lineno ? { $exception_lineno: lineno } : {}),
         ...(colno ? { $exception_colno: colno } : {}),
     }
+}
+
+export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]): ErrorProperties {
+    // dig the object of the rejection out of known event types
+    let error: unknown = ev
+    try {
+        // PromiseRejectionEvents store the object of the rejection under 'reason'
+        // see https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent
+        if ('reason' in ev) {
+            error = ev.reason
+        }
+        // something, somewhere, (likely a browser extension) effectively casts PromiseRejectionEvents
+        // to CustomEvents, moving the `promise` and `reason` attributes of the PRE into
+        // the CustomEvent's `detail` attribute, since they're not part of CustomEvent's spec
+        // see https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent and
+        // https://github.com/getsentry/sentry-javascript/issues/2380
+        else if ('detail' in ev && 'reason' in (ev as any).detail) {
+            error = (ev as any).detail.reason
+        }
+    } catch (_oO) {
+        // no-empty
+    }
+
+    let errorProperties: ErrorProperties = {}
+    if (isPrimitive(error)) {
+        errorProperties = {
+            $exception_message: `Non-Error promise rejection captured with value: ${String(error)}`,
+        }
+    } else {
+        errorProperties = errorToProperties([error as string | Event])
+    }
+    errorProperties.$exception_handled = false
+    errorProperties.$exception_type = 'UnhandledRejection'
+
+    return errorProperties
 }

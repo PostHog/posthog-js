@@ -14,6 +14,12 @@ export function isInstanceOf(candidate: unknown, base: any): boolean {
     }
 }
 
+export function isPrimitive(
+    candidate: unknown
+): candidate is number | string | boolean | bigint | symbol | null | undefined {
+    return candidate === null || (typeof candidate !== 'object' && typeof candidate !== 'function')
+}
+
 export function isError(candidate: unknown): candidate is Error {
     switch (Object.prototype.toString.call(candidate)) {
         case '[object Error]':

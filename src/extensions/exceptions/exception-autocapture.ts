@@ -1,7 +1,8 @@
 import { window } from '../../utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
-import { toErrorProperties } from './error-conversion'
+import { ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
+import { isPrimitive } from './type-checking'
 
 const EXCEPTION_INGESTION_ENDPOINT = '/e/'
 
@@ -17,13 +18,13 @@ export class ExceptionObserver {
 
     startObservingIfEnabled() {
         if (this.isEnabled()) {
-            this.startObserving()
+            this.startCapturing()
         } else {
             this.stopCapturing()
         }
     }
 
-    startObserving() {
+    startCapturing() {
         if ((window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
             return
         }
@@ -41,11 +42,8 @@ export class ExceptionObserver {
                     error?: Error | undefined
                 ]
             ): boolean {
-                const errorProperties = toErrorProperties(args)
-                if (errorProperties) {
-                    this.captureExceptionEvent(errorProperties)
-                }
-                // TODO: what do we do if we couldn't capture the error?
+                const errorProperties = errorToProperties(args)
+                this.captureExceptionEvent(errorProperties)
 
                 if (this.originalOnErrorHandler) {
                     // eslint-disable-next-line prefer-rest-params
@@ -62,7 +60,8 @@ export class ExceptionObserver {
                 this: ExceptionObserver,
                 ...args: [ev: PromiseRejectionEvent]
             ): boolean {
-                this.captureExceptionEvent({ wat: 'unhandledrejection', e: args[0] })
+                const errorProperties: ErrorProperties = unhandledRejectionToProperties(args)
+                this.captureExceptionEvent(errorProperties)
 
                 if (this.originalOnUnhandledRejectionHandler) {
                     // eslint-disable-next-line prefer-rest-params
@@ -82,18 +81,18 @@ export class ExceptionObserver {
         if (this.originalOnErrorHandler !== undefined) {
             window.onerror = this.originalOnErrorHandler
             this.originalOnErrorHandler = null
-            delete (window.onerror as any).__POSTHOG_INSTRUMENTED__
         }
+        delete (window.onerror as any)?.__POSTHOG_INSTRUMENTED__
 
         if (this.originalOnUnhandledRejectionHandler !== undefined) {
             window.onunhandledrejection = this.originalOnUnhandledRejectionHandler
             this.originalOnUnhandledRejectionHandler = null
-            delete (window.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__
         }
+        delete (window.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__
     }
 
     isCapturing() {
-        return !!(window.onerror as any).__POSTHOG_INSTRUMENTED__
+        return !!(window.onerror as any)?.__POSTHOG_INSTRUMENTED__
     }
 
     isEnabled() {
@@ -103,7 +102,7 @@ export class ExceptionObserver {
     afterDecideResponse(response: DecideResponse) {
         this.remoteEnabled = response.autocaptureExceptions || false
         if (this.isEnabled()) {
-            this.startObserving()
+            this.startCapturing()
         }
     }
 
