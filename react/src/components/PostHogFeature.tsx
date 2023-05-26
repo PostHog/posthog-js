@@ -2,7 +2,7 @@ import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../
 import React, { useCallback, useEffect, useRef } from 'react'
 import { PostHog } from '../context'
 
-export type PostHogFeatureProps = {
+export type PostHogFeatureProps = React.HTMLProps<HTMLDivElement> & {
     flag: string
     children: React.ReactNode | ((payload: any) => React.ReactNode)
     fallback: React.ReactNode
