@@ -55,6 +55,18 @@ describe('Event capture', () => {
         cy.phCaptures().should('include', 'custom-event')
     })
 
+    it('captures exceptions', () => {
+        given('options', () => ({
+            exception_autocapture: true,
+        }))
+
+        start()
+
+        cy.get('[data-cy-exception-button]').click()
+        cy.phCaptures().should('have.length', 3)
+        cy.phCaptures().should('include', '$exception')
+    })
+
     describe('autocapture config', () => {
         it('dont capture click when configured not to', () => {
             given('options', () => ({
