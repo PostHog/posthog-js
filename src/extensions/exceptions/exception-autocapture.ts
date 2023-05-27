@@ -1,8 +1,7 @@
 import { window } from '../../utils'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse } from '../../types'
-import { ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
-import { isPrimitive } from './type-checking'
+import { DecideResponse, Properties } from '../../types'
+import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
 
 const EXCEPTION_INGESTION_ENDPOINT = '/e/'
 
@@ -32,18 +31,8 @@ export class ExceptionObserver {
         try {
             this.originalOnErrorHandler = window.onerror
 
-            window.onerror = function (
-                this: ExceptionObserver,
-                ...args: [
-                    event: string | Event,
-                    source?: string | undefined,
-                    lineno?: number | undefined,
-                    colno?: number | undefined,
-                    error?: Error | undefined
-                ]
-            ): boolean {
-                const errorProperties = errorToProperties(args)
-                this.captureExceptionEvent(errorProperties)
+            window.onerror = function (this: ExceptionObserver, ...args: ErrorEventArgs): boolean {
+                this.captureException(args)
 
                 if (this.originalOnErrorHandler) {
                     // eslint-disable-next-line prefer-rest-params
@@ -61,7 +50,7 @@ export class ExceptionObserver {
                 ...args: [ev: PromiseRejectionEvent]
             ): boolean {
                 const errorProperties: ErrorProperties = unhandledRejectionToProperties(args)
-                this.captureExceptionEvent(errorProperties)
+                this.sendExceptionEvent(errorProperties)
 
                 if (this.originalOnUnhandledRejectionHandler) {
                     // eslint-disable-next-line prefer-rest-params
@@ -109,7 +98,7 @@ export class ExceptionObserver {
     /**
      * :TRICKY: Make sure we batch these requests
      */
-    captureExceptionEvent(properties: { [key: string]: any }) {
+    sendExceptionEvent(properties: { [key: string]: any }) {
         this.instance.capture('$exception', properties, {
             transport: 'XHR',
             method: 'POST',
@@ -117,5 +106,14 @@ export class ExceptionObserver {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })
+    }
+
+    captureException(args: ErrorEventArgs, properties?: Properties) {
+        if (this.isCapturing()) {
+            const errorProperties = errorToProperties(args)
+            this.sendExceptionEvent({ ...properties, ...errorProperties })
+        } else {
+            console.warn('PostHog exception autocapture is not enabled')
+        }
     }
 }

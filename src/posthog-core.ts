@@ -57,6 +57,7 @@ import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
+import { ErrorEventArgs } from './extensions/exceptions/error-conversion'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -781,6 +782,26 @@ export class PostHog {
      */
     push(item: SnippetArrayItem): void {
         this._execute_array([item])
+    }
+
+    /*
+     * PostHog supports exception autocapture.
+     *
+     * This function is used to manually capture an exception
+     * and can be used to add more context to the exception
+     *
+     * Properties passed as the second option will be merged with the properties
+     * of the exception event.
+     * Where there is a key in both generated exception and passed properties,
+     * the generated exception property takes precedence.
+     *
+     * exception autocapture must be enabled before calling this method
+     */
+    captureException(exception: Error, properties?: Properties): void {
+        this.exceptionAutocapture?.captureException(
+            [exception.name, undefined, undefined, undefined, exception],
+            properties
+        )
     }
 
     /**

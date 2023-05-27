@@ -18,6 +18,7 @@
 
 import { Properties } from '../types'
 import { PostHog } from '../posthog-core'
+import { ErrorProperties } from './exceptions/error-conversion'
 
 // NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
 // We only use a small subset of the types, so we can just define the integration overall and use any for the rest
@@ -38,6 +39,15 @@ type _SentryHub = any
 interface _SentryIntegration {
     name: string
     setupOnce(addGlobalEventProcessor: (callback: _SentryEventProcessor) => void, getCurrentHub: () => _SentryHub): void
+}
+
+interface SentryExceptionProperties {
+    $sentry_event_id: any
+    $sentry_exception: any
+    $sentry_exception_message: any
+    $sentry_exception_type: any
+    $sentry_tags: any
+    $sentry_url?: string
 }
 
 export class SentryIntegration implements _SentryIntegration {
@@ -62,7 +72,11 @@ export class SentryIntegration implements _SentryIntegration {
                         host + '/recordings/' + _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
                 }
                 const exceptions = event.exception?.values || []
-                const data: Properties = {
+                const data: SentryExceptionProperties & ErrorProperties = {
+                    // PostHog Exception Properties,
+                    $exception_message: exceptions[0]?.value,
+                    $exception_type: exceptions[0]?.type,
+                    // Sentry Exception Properties
                     $sentry_event_id: event.event_id,
                     $sentry_exception: event.exception,
                     $sentry_exception_message: exceptions[0]?.value,

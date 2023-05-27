@@ -17,6 +17,14 @@ import { defaultStackParser, StackFrame } from './stack-trace'
 const ERROR_TYPES_PATTERN =
     /^(?:[Uu]ncaught (?:exception: )?)?(?:((?:Eval|Internal|Range|Reference|Syntax|Type|URI|)Error): )?(.*)$/i
 
+export type ErrorEventArgs = [
+    event: string | Event,
+    source?: string | undefined,
+    lineno?: number | undefined,
+    colno?: number | undefined,
+    error?: Error | undefined
+]
+
 export interface ErrorProperties {
     $exception_type?: string
     $exception_message?: string
@@ -113,13 +121,7 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>): ErrorPro
     }
 }
 
-export function errorToProperties([event, source, lineno, colno, error]: [
-    event: string | Event,
-    source?: string | undefined,
-    lineno?: number | undefined,
-    colno?: number | undefined,
-    error?: Error | undefined
-]): ErrorProperties {
+export function errorToProperties([event, source, lineno, colno, error]: ErrorEventArgs): ErrorProperties {
     let errorProperties: ErrorProperties = {}
 
     if (error === undefined && typeof event === 'string') {
