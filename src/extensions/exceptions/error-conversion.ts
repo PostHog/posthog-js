@@ -35,6 +35,8 @@ export interface ErrorProperties {
     $exception_is_synthetic?: boolean
     $exception_stack_trace_raw?: string
     $exception_handled?: boolean
+    $exception_sessionRecordingURL?: string
+    $exception_personURL?: string
 }
 
 const reactMinifiedRegexp = /Minified React error #\d+;/i

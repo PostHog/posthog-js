@@ -111,7 +111,19 @@ export class ExceptionObserver {
     captureException(args: ErrorEventArgs, properties?: Properties) {
         if (this.isCapturing()) {
             const errorProperties = errorToProperties(args)
-            this.sendExceptionEvent({ ...properties, ...errorProperties })
+            const propertiesToSend = { ...properties, ...errorProperties }
+
+            const posthogHost = this.instance.config.ui_host || this.instance.config.api_host
+            if (this.instance.sessionRecordingStarted()) {
+                errorProperties.$exception_sessionRecordingURL =
+                    posthogHost +
+                    '/recordings/' +
+                    this.instance.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
+            }
+
+            errorProperties.$exception_personURL = posthogHost + '/person/' + this.instance.get_distinct_id()
+
+            this.sendExceptionEvent(propertiesToSend)
         } else {
             console.warn('PostHog exception autocapture is not enabled')
         }

@@ -65,17 +65,21 @@ export class SentryIntegration implements _SentryIntegration {
             addGlobalEventProcessor((event: _SentryEvent) => {
                 if (event.level !== 'error' || !_posthog.__loaded) return event
                 if (!event.tags) event.tags = {}
+
                 const host = _posthog.config.ui_host || _posthog.config.api_host
                 event.tags['PostHog Person URL'] = host + '/person/' + _posthog.get_distinct_id()
                 if (_posthog.sessionRecordingStarted()) {
                     event.tags['PostHog Recording URL'] =
                         host + '/recordings/' + _posthog.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
                 }
+
                 const exceptions = event.exception?.values || []
+
                 const data: SentryExceptionProperties & ErrorProperties = {
                     // PostHog Exception Properties,
                     $exception_message: exceptions[0]?.value,
                     $exception_type: exceptions[0]?.type,
+                    $exception_personURL: host + '/person/' + _posthog.get_distinct_id(),
                     // Sentry Exception Properties
                     $sentry_event_id: event.event_id,
                     $sentry_exception: event.exception,
@@ -83,6 +87,11 @@ export class SentryIntegration implements _SentryIntegration {
                     $sentry_exception_type: exceptions[0]?.type,
                     $sentry_tags: event.tags,
                 }
+
+                if (_posthog.sessionRecordingStarted()) {
+                    data.$exception_sessionRecordingURL = event.tags['PostHog Recording URL']
+                }
+
                 if (organization && projectId)
                     data['$sentry_url'] =
                         (prefix || 'https://sentry.io/organizations/') +
