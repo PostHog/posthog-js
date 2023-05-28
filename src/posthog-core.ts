@@ -106,6 +106,7 @@ const defaultConfig = (): PostHogConfig => ({
     ui_host: null,
     token: '',
     autocapture: true,
+    // TODO: change to undefined when we release this so that remote config can turn it on even if unconfigured by the user
     exception_autocapture: false,
     rageclick: true,
     cross_subdomain_cookie: document?.location?.hostname?.indexOf('herokuapp.com') === -1,
