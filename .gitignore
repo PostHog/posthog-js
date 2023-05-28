@@ -26,3 +26,4 @@ coverage
 react/dist
 test-result.json
 yarn-error.log
+/.eslintcache

@@ -26,8 +26,8 @@ export type ErrorEventArgs = [
 ]
 
 export interface ErrorProperties {
-    $exception_type?: string
-    $exception_message?: string
+    $exception_type: string
+    $exception_message: string
     $exception_source?: string
     $exception_lineno?: number
     $exception_colno?: number
@@ -122,7 +122,11 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>): ErrorPro
 }
 
 export function errorToProperties([event, source, lineno, colno, error]: ErrorEventArgs): ErrorProperties {
-    let errorProperties: ErrorProperties = {}
+    // exception type and message are not optional but, it's useful to start off without them enforced
+    let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message'> & {
+        $exception_type?: string
+        $exception_message?: string
+    } = {}
 
     if (error === undefined && typeof event === 'string') {
         let name = 'Error'
@@ -176,6 +180,9 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
 
     return {
         ...errorProperties,
+        // now we make sure the mandatory fields that were made optional are present
+        $exception_type: errorProperties.$exception_type || 'UnknownErrorType',
+        $exception_message: errorProperties.$exception_message || '',
         ...(source
             ? {
                   $exception_source: source, // TODO get this from URL if not present
@@ -207,7 +214,11 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
         // no-empty
     }
 
-    let errorProperties: ErrorProperties = {}
+    // exception type and message are not optional but, it's useful to start off without them enforced
+    let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message'> & {
+        $exception_type?: string
+        $exception_message?: string
+    } = {}
     if (isPrimitive(error)) {
         errorProperties = {
             $exception_message: `Non-Error promise rejection captured with value: ${String(error)}`,
@@ -216,7 +227,12 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
         errorProperties = errorToProperties([error as string | Event])
     }
     errorProperties.$exception_handled = false
-    errorProperties.$exception_type = 'UnhandledRejection'
 
-    return errorProperties
+    return {
+        ...errorProperties,
+        // now we make sure the mandatory fields that were made optional are present
+        $exception_type: (errorProperties.$exception_type = 'UnhandledRejection'),
+        $exception_message: (errorProperties.$exception_message =
+            errorProperties.$exception_message || (ev as any).reason || String(error)),
+    }
 }
