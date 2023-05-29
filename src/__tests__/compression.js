@@ -13,15 +13,9 @@ describe('decideCompression()', () => {
     })
 
     it('returns gzip-js if all compressions supported', () => {
-        given('compressionSupport', () => ({ lz64: true, 'gzip-js': true }))
+        given('compressionSupport', () => ({ 'gzip-js': true }))
 
         expect(given.subject).toEqual('gzip-js')
-    })
-
-    it('returns lz64 if supported', () => {
-        given('compressionSupport', () => ({ lz64: true, 'gzip-js': false }))
-
-        expect(given.subject).toEqual('lz64')
     })
 })
 
@@ -33,12 +27,6 @@ describe('compressData()', () => {
 
     it('handles base64', () => {
         given('compression', () => 'base64')
-
-        expect(given.subject).toMatchSnapshot()
-    })
-
-    it('handles lz64', () => {
-        given('compression', () => 'lz64')
 
         expect(given.subject).toMatchSnapshot()
     })
@@ -67,7 +55,7 @@ describe('Payload Compression', () => {
                 _prepare_callback: sandbox.spy((callback) => callback),
                 _send_request: sandbox.spy((url, params, options, callback) => {
                     if (url === 'https://test.com/decide/?v=3') {
-                        callback({ config: { enable_collect_everything: true }, supportedCompression: ['lz64'] })
+                        callback({ config: { enable_collect_everything: true }, supportedCompression: ['gzip-js'] })
                     } else {
                         throw new Error('Should not get here')
                     }
@@ -112,7 +100,7 @@ describe('Payload Compression', () => {
         it('should save supported compression in instance', () => {
             new Decide(lib).call()
             autocapture.init(lib)
-            expect(lib.compression).toEqual({ lz64: true })
+            expect(lib.compression).toEqual({ 'gzip-js': true })
         })
     })
 })

@@ -8,7 +8,7 @@ const urlWithVersion = new RegExp(`&ver=${version}`)
 describe('Event capture', () => {
     given('options', () => ({}))
     given('sessionRecording', () => false)
-    given('supportedCompression', () => ['gzip'])
+    given('supportedCompression', () => ['gzip-js'])
 
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     const start = ({ waitForDecide = true } = {}) => {
@@ -320,44 +320,6 @@ describe('Event capture', () => {
     })
 
     describe('decoding the payload', () => {
-        it('contains the correct headers and payload after an event', () => {
-            start()
-
-            // Pageview will be sent immediately
-            cy.wait('@capture').should(({ request, url }) => {
-                expect(request.headers).to.eql({
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                })
-
-                expect(url).to.match(urlWithVersion)
-                const captures = getBase64EncodedPayload(request)
-
-                expect(captures['event']).to.equal('$pageview')
-            })
-
-            cy.get('[data-cy-custom-event-button]').click()
-            cy.get('[data-cy-custom-event-button]').click()
-            cy.phCaptures().should('have.length', 5)
-            cy.phCaptures().should('include', '$autocapture')
-            cy.phCaptures().should('include', 'custom-event')
-
-            cy.wait('@capture').should(({ request, url }) => {
-                expect(request.headers).to.eql({
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                })
-
-                expect(url).to.match(urlWithVersion)
-                const captures = getGzipEncodedPayload(request)
-
-                expect(captures.map(({ event }) => event)).to.deep.equal([
-                    '$autocapture',
-                    'custom-event',
-                    '$autocapture',
-                    'custom-event',
-                ])
-            })
-        })
-
         describe('gzip-js supported', () => {
             it('contains the correct payload after an event', () => {
                 start()
