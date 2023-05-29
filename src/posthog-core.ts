@@ -1,4 +1,3 @@
-import { LZString } from './lz-string'
 import Config from './config'
 import {
     logger,
@@ -1970,10 +1969,6 @@ export class PostHog {
             localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
         }
-    }
-
-    decodeLZ64(input: string | null | undefined): string | null {
-        return LZString.decompressFromBase64(input || null)
     }
 }
 

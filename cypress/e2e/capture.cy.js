@@ -1,14 +1,14 @@
 /// <reference types="cypress" />
 import { version } from '../../package.json'
 
-import { getBase64EncodedPayload, getGzipEncodedPayload, getLZStringEncodedPayload } from '../support/compression'
+import { getBase64EncodedPayload, getGzipEncodedPayload } from '../support/compression'
 
 const urlWithVersion = new RegExp(`&ver=${version}`)
 
 describe('Event capture', () => {
     given('options', () => ({}))
     given('sessionRecording', () => false)
-    given('supportedCompression', () => ['gzip', 'lz64'])
+    given('supportedCompression', () => ['gzip'])
 
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     const start = ({ waitForDecide = true } = {}) => {
@@ -347,7 +347,7 @@ describe('Event capture', () => {
                 })
 
                 expect(url).to.match(urlWithVersion)
-                const captures = getLZStringEncodedPayload(request)
+                const captures = getGzipEncodedPayload(request)
 
                 expect(captures.map(({ event }) => event)).to.deep.equal([
                     '$autocapture',
@@ -359,8 +359,6 @@ describe('Event capture', () => {
         })
 
         describe('gzip-js supported', () => {
-            given('supportedCompression', () => ['gzip-js'])
-
             it('contains the correct payload after an event', () => {
                 start()
                 // Pageview will be sent immediately
