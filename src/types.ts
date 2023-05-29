@@ -64,7 +64,6 @@ export interface PostHogConfig {
     save_referrer: boolean
     test: boolean
     verbose: boolean
-    img: boolean
     capture_pageview: boolean
     capture_pageleave: boolean
     debug: boolean

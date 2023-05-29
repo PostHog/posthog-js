@@ -115,7 +115,6 @@ const defaultConfig = (): PostHogConfig => ({
     save_referrer: true,
     test: false,
     verbose: false,
-    img: false,
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
     debug: false,
@@ -648,11 +647,7 @@ export class PostHog {
             ip: this.get_config('ip'),
         })
 
-        if (_isObject(data) && this.get_config('img')) {
-            const img = document.createElement('img')
-            img.src = url
-            document.body.appendChild(img)
-        } else if (useSendBeacon) {
+        if (useSendBeacon) {
             // beacon documentation https://w3c.github.io/beacon/
             // beacons format the message and use the type property
             // also no need to try catch as sendBeacon does not report errors
