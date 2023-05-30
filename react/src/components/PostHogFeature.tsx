@@ -5,7 +5,7 @@ import { PostHog } from '../context'
 export type PostHogFeatureProps = React.HTMLProps<HTMLDivElement> & {
     flag: string
     children: React.ReactNode | ((payload: any) => React.ReactNode)
-    fallback: React.ReactNode
+    fallback?: React.ReactNode
     match?: string | boolean
     visibilityObserverOptions?: IntersectionObserverInit
 }
