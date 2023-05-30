@@ -85,7 +85,7 @@ export class ExceptionObserver {
     }
 
     isEnabled() {
-        return this.instance.get_config('exception_autocapture') ?? this.remoteEnabled ?? false
+        return this.instance.get_config('autocapture_exceptions') ?? this.remoteEnabled ?? false
     }
 
     afterDecideResponse(response: DecideResponse) {

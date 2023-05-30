@@ -57,7 +57,7 @@ describe('Event capture', () => {
 
     it('captures exceptions', () => {
         given('options', () => ({
-            exception_autocapture: true,
+            autocapture_exceptions: true,
         }))
 
         start()
