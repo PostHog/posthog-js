@@ -12,8 +12,9 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
-import type { record } from 'rrweb/typings'
-import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
+import type { record } from 'rrweb2/typings'
+import type { recordOptions } from 'rrweb2/typings/types'
+import type { eventWithTime, listenerHandler, pluginEvent } from '@rrweb/types'
 import Config from '../config'
 import { logger, loadScript } from '../utils'
 
@@ -37,6 +38,8 @@ enum IncrementalSource {
     Log = 11,
     Drag = 12,
     StyleDeclaration = 13,
+    Selection = 14,
+    AdoptedStyleSheet = 15,
 }
 
 const ACTIVE_SOURCES = [
@@ -263,6 +266,7 @@ export class SessionRecording {
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
+            recordCrossOriginIframes: false,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog

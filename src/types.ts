@@ -143,6 +143,7 @@ export interface SessionRecordingOptions {
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recorderVersion?: 'v1' | 'v2'
+    recordCrossOriginIframes?: boolean
 }
 
 export enum Compression {
