@@ -1,3 +1,7 @@
+## 1.60.0 - 2023-05-30
+
+- feat: Added support for cross origin iframe recording (#655)
+
 ## 1.59.0 - 2023-05-30
 
 - feat: remove broken capture using img support (#651)
