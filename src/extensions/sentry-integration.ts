@@ -88,10 +88,6 @@ export class SentryIntegration implements _SentryIntegration {
                     $sentry_tags: event.tags,
                 }
 
-                if (_posthog.sessionRecordingStarted()) {
-                    data.$exception_sessionRecordingURL = event.tags['PostHog Recording URL']
-                }
-
                 if (organization && projectId)
                     data['$sentry_url'] =
                         (prefix || 'https://sentry.io/organizations/') +
