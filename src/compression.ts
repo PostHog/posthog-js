@@ -15,7 +15,7 @@ export function compressData(
     jsonData: string,
     options: XHROptions
 ): [CompressionData | Uint8Array, XHROptions] {
-    if (compression === Compression.GZipJS) {
+    if (compression === Compression.GZipJS || compression === Compression.LZ64) {
         // :TRICKY: This returns an UInt8Array. We don't encode this to a string - returning a blob will do this for us.
         return [
             gzipSync(strToU8(jsonData), { mtime: 0 }),

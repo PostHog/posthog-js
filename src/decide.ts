@@ -59,6 +59,9 @@ export class Decide {
         if (response['supportedCompression'] && !this.instance.get_config('disable_compression')) {
             const compression: Partial<Record<Compression, boolean>> = {}
             for (const method of response['supportedCompression']) {
+                if (method === 'lz64') {
+                    console.warn('lz64 compression is deprecated. Falling back to gzip-js.')
+                }
                 compression[method] = true
             }
             this.instance['compression'] = compression

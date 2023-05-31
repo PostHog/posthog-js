@@ -36,6 +36,12 @@ describe('compressData()', () => {
 
         expect(given.subject).toMatchSnapshot()
     })
+
+    it('handles lz64 as gzip-js', () => {
+        given('compression', () => 'lz64')
+
+        expect(given.subject).toMatchSnapshot()
+    })
 })
 
 describe('Payload Compression', () => {
