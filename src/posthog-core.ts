@@ -225,7 +225,6 @@ const create_phlib = function (
     instance.webPerformance.startObservingIfEnabled()
 
     instance.exceptionAutocapture = new ExceptionObserver(instance)
-    instance.exceptionAutocapture.startObservingIfEnabled()
 
     instance.__autocapture = instance.get_config('autocapture')
     autocapture._setIsAutocaptureEnabled(instance)
