@@ -1,3 +1,7 @@
+## 1.63.0 - 2023-05-31
+
+- feat: remove lz compression (#654)
+
 ## 1.62.0 - 2023-05-31
 
 - feat: Exception Autocapture (#649)
