@@ -148,7 +148,6 @@ export interface SessionRecordingOptions {
 
 export enum Compression {
     GZipJS = 'gzip-js',
-    LZ64 = 'lz64',
     Base64 = 'base64',
 }
 
