@@ -46,9 +46,9 @@ describe('WebPerformance', () => {
     })
 
     describe('when the browser does not support performance observer', () => {
-        beforeAll(() => {
-            const OriginalPerformanceObserver = window.PerformanceObserver
+        const OriginalPerformanceObserver = window.PerformanceObserver
 
+        beforeAll(() => {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             window.PerformanceObserver = undefined
