@@ -102,7 +102,9 @@ export class WebPerformanceObserver {
         }
 
         if (window?.PerformanceObserver?.supportedEntryTypes === undefined) {
-            logger.log('PostHog Peformance observer not started because PerformanceObserver is not supported.')
+            logger.log(
+                'PostHog Peformance observer not started because PerformanceObserver is not supported by this browser.'
+            )
             return
         }
 
