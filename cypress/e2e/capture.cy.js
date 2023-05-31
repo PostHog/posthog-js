@@ -9,6 +9,7 @@ describe('Event capture', () => {
     given('options', () => ({}))
     given('sessionRecording', () => false)
     given('supportedCompression', () => ['gzip', 'lz64'])
+    given('autocaptureException', () => false)
 
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     const start = ({ waitForDecide = true } = {}) => {
@@ -24,6 +25,8 @@ describe('Event capture', () => {
                 isAuthenticated: false,
                 sessionRecording: given.sessionRecording,
                 supportedCompression: given.supportedCompression,
+                excludedDomains: [],
+                autocaptureExceptions: true,
             },
         }).as('decide')
 
@@ -56,9 +59,7 @@ describe('Event capture', () => {
     })
 
     it('captures exceptions', () => {
-        given('options', () => ({
-            autocapture_exceptions: true,
-        }))
+        given('autocaptureException', () => true)
 
         start()
 
