@@ -1,3 +1,8 @@
+## 1.63.1 - 2023-05-31
+
+- fix: performance observer is not always available (#663)
+- chore: correct pnpm version (#662)
+
 ## 1.63.0 - 2023-05-31
 
 - feat: remove lz compression (#654)
