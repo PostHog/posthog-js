@@ -148,8 +148,6 @@ export interface SessionRecordingOptions {
 export enum Compression {
     GZipJS = 'gzip-js',
     Base64 = 'base64',
-    // LZ64 is deprecated and if specified will be treated as gzip-js
-    LZ64 = 'lz64',
 }
 
 export interface XHROptions {
