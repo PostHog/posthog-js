@@ -1,3 +1,7 @@
+## 1.62.0 - 2023-05-31
+
+- feat: Exception Autocapture (#649)
+
 ## 1.61.0 - 2023-05-30
 
 - feat(react): Flag autocapture component (#622)
