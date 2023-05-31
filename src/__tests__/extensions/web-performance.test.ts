@@ -45,6 +45,28 @@ describe('WebPerformance', () => {
         performance.now = jest.fn(() => Date.now())
     })
 
+    describe('when the browser does not support performance observer', () => {
+        const OriginalPerformanceObserver = window.PerformanceObserver
+
+        beforeAll(() => {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            window.PerformanceObserver = undefined
+        })
+
+        afterAll(() => {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            window.PerformanceObserver = OriginalPerformanceObserver
+        })
+
+        it('should not start the observer', () => {
+            const webPerformance = new WebPerformanceObserver(mockPostHogInstance as PostHog)
+            webPerformance.startObserving()
+            expect(webPerformance.isObserving()).toBe(false)
+        })
+    })
+
     describe('_capturePerformanceEvent', () => {
         it('should capture and save a standard perf event', () => {
             webPerformance._capturePerformanceEvent(
