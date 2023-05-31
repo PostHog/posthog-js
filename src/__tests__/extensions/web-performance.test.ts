@@ -52,12 +52,12 @@ describe('WebPerformance', () => {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             window.PerformanceObserver = undefined
+        })
 
-            afterAll(() => {
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                window.PerformanceObserver = OriginalPerformanceObserver
-            })
+        afterAll(() => {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            window.PerformanceObserver = OriginalPerformanceObserver
         })
 
         it('should not start the observer', () => {
