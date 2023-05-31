@@ -241,6 +241,7 @@ describe('SessionRecording', () => {
                 collectFonts: false,
                 plugins: [],
                 inlineStylesheet: true,
+                recordCrossOriginIframes: false,
             })
         })
 
