@@ -786,17 +786,14 @@ export class PostHog {
     }
 
     /*
-     * PostHog supports exception autocapture.
-     *
-     * However, this function is used to manually capture an exception
+     * PostHog supports exception autocapture, however, this function
+     * is used to manually capture an exception
      * and can be used to add more context to that exception
      *
      * Properties passed as the second option will be merged with the properties
      * of the exception event.
      * Where there is a key in both generated exception and passed properties,
      * the generated exception property takes precedence.
-     *
-     * If exception autocapture is not enabled this method is a no-op
      */
     captureException(exception: Error, properties?: Properties): void {
         this.exceptionAutocapture?.captureException(
