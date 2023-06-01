@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { PostHog } from '../../../posthog-core'
-import { PostHogConfig } from '../../../types'
+import { DecideResponse, PostHogConfig } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exceptions/exception-autocapture'
 
 describe('Exception Observer', () => {
@@ -15,12 +15,16 @@ describe('Exception Observer', () => {
             get_config: jest.fn((key: string) => mockConfig[key as keyof PostHogConfig]),
         }
         exceptionObserver = new ExceptionObserver(mockPostHogInstance as PostHog)
-        jest.clearAllMocks()
     })
 
-    describe('catch exceptions', () => {
+    describe('when enabled', () => {
+        beforeEach(() => {
+            exceptionObserver.afterDecideResponse({ autocaptureExceptions: true } as DecideResponse)
+        })
+
         it('should instrument handlers when started', () => {
-            exceptionObserver.startCapturing()
+            expect(exceptionObserver.isCapturing()).toBe(true)
+            expect(exceptionObserver.isEnabled()).toBe(true)
 
             expect((window.onerror as any).__POSTHOG_INSTRUMENTED__).toBe(true)
             expect((window.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__).toBe(true)
@@ -31,12 +35,30 @@ describe('Exception Observer', () => {
 
             expect((window.onerror as any)?.__POSTHOG_INSTRUMENTED__).not.toBeDefined()
             expect((window.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__).not.toBeDefined()
-        })
 
-        it('can report that it has started', () => {
+            expect(exceptionObserver.isCapturing()).toBe(false)
+        })
+    })
+
+    describe('when no decide response', () => {
+        it('cannot be started', () => {
+            expect(exceptionObserver.isEnabled()).toBe(false)
             expect(exceptionObserver.isCapturing()).toBe(false)
             exceptionObserver.startCapturing()
-            expect(exceptionObserver.isCapturing()).toBe(true)
+            expect(exceptionObserver.isCapturing()).toBe(false)
+        })
+    })
+
+    describe('when disabled', () => {
+        beforeEach(() => {
+            exceptionObserver.afterDecideResponse({ autocaptureExceptions: false } as DecideResponse)
+        })
+
+        it('cannot be started', () => {
+            expect(exceptionObserver.isEnabled()).toBe(false)
+            expect(exceptionObserver.isCapturing()).toBe(false)
+            exceptionObserver.startCapturing()
+            expect(exceptionObserver.isCapturing()).toBe(false)
         })
     })
 })

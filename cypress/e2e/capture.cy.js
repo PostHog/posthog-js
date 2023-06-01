@@ -24,6 +24,8 @@ describe('Event capture', () => {
                 isAuthenticated: false,
                 sessionRecording: given.sessionRecording,
                 supportedCompression: given.supportedCompression,
+                excludedDomains: [],
+                autocaptureExceptions: true,
             },
         }).as('decide')
 
@@ -56,10 +58,6 @@ describe('Event capture', () => {
     })
 
     it('captures exceptions', () => {
-        given('options', () => ({
-            autocapture_exceptions: true,
-        }))
-
         start()
 
         cy.get('[data-cy-exception-button]').click()
