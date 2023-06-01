@@ -1,3 +1,7 @@
+## 1.63.2 - 2023-06-01
+
+- fix: only allow exception capture on remote enabled (#659)
+
 ## 1.63.1 - 2023-05-31
 
 - fix: performance observer is not always available (#663)
