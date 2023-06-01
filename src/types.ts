@@ -319,3 +319,15 @@ export interface EarlyAccessFeatureResponse {
 export type NetworkRequest = {
     url: string
 }
+
+export interface Survey {
+    // Sync this with the backend's SurveySerializer!
+    name: string
+    description: string
+}
+
+export type SurveyCallback = (surveys: Survey[]) => void
+
+export interface SurveyResponse {
+    surveys: Survey[]
+}

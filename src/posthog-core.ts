@@ -51,12 +51,14 @@ import {
     AutocaptureConfig,
     JsonType,
     EarlyAccessFeatureCallback,
+    SurveyCallback,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { ErrorEventArgs } from './extensions/exceptions/error-conversion'
+import { PostHogSurveys } from 'posthog-surveys'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -279,6 +281,7 @@ export class PostHog {
     people: PostHogPeople
     featureFlags: PostHogFeatureFlags
     feature_flags: PostHogFeatureFlags
+    surveys: PostHogSurveys
     toolbar: Toolbar
     sessionRecording: SessionRecording | undefined
     webPerformance: WebPerformanceObserver | undefined
@@ -316,6 +319,7 @@ export class PostHog {
         this.feature_flags = this.featureFlags
         this.toolbar = new Toolbar(this)
         this.pageViewIdManager = new PageViewIdManager()
+        this.surveys = new PostHogSurveys(this)
 
         // these are created in _init() after we have the config
         this._captureMetrics = undefined as any
@@ -1159,6 +1163,11 @@ export class PostHog {
      */
     onFeatureFlags(callback: (flags: string[], variants: Record<string, string | boolean>) => void): () => void {
         return this.featureFlags.onFeatureFlags(callback)
+    }
+
+    /** Get list of surveys */
+    getSurveys(callback: SurveyCallback, forceReload = false): void {
+        this.surveys.getSurveys(callback, forceReload)
     }
 
     /**
