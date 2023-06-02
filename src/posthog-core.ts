@@ -1165,7 +1165,7 @@ export class PostHog {
         return this.featureFlags.onFeatureFlags(callback)
     }
 
-    /** Get list of surveys */
+    /** Get list of surveys. */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getSurveys(callback, forceReload)
     }

@@ -1,5 +1,6 @@
 import { PostHog } from "posthog-core";
 import { SURVEYS } from "posthog-persistence";
+import { SurveyCallback } from "types";
 
 
 export class PostHogSurveys {
@@ -9,7 +10,7 @@ export class PostHogSurveys {
         this.instance = instance
     }
 
-    getSurveys(callback, forceReload: boolean = false) {
+    getSurveys(callback: SurveyCallback, forceReload: boolean = false) {
         const existingSurveys = this.instance.get_property('$surveys')
         if (!existingSurveys || forceReload) {
             this.instance._send_request(
