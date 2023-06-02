@@ -1,3 +1,7 @@
+## 1.63.3 - 2023-06-02
+
+- fix: Typescript import issue with rrweb (#670)
+
 ## 1.63.2 - 2023-06-01
 
 - fix: only allow exception capture on remote enabled (#659)
