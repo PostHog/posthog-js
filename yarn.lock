@@ -10279,12 +10279,24 @@ rrweb-snapshot@^1.1.14:
   resolved "https://registry.yarnpkg.com/rrweb-snapshot/-/rrweb-snapshot-1.1.14.tgz#9d4d9be54a28a893373428ee4393ec7e5bd83fcc"
   integrity sha512-eP5pirNjP5+GewQfcOQY4uBiDnpqxNRc65yKPW0eSoU1XamDfc4M8oqpXGMyUyvLyxFDB0q0+DChuxxiU2FXBQ==
 
-rrweb-snapshot@^2.0.0-alpha.8:
+rrweb-snapshot@^2.0.0-alpha.8, "rrweb-snapshot@npm:rrweb-snapshot@2.0.0-alpha.8":
   version "2.0.0-alpha.8"
   resolved "https://registry.yarnpkg.com/rrweb-snapshot/-/rrweb-snapshot-2.0.0-alpha.8.tgz#5f93f8ab7d78b3de26f6a64e993ff68edd54e0cf"
   integrity sha512-3Rb7c+mnDEADQ8N9qn9SDH5PzCyHlZ1cwZC932qRyt9O8kJWLM11JLYqqEyQCa2FZVQbzH2iAaCgnyM7A32p7A==
 
-"rrweb2@npm:rrweb@2.0.0-alpha.8":
+"rrweb-v1@npm:rrweb@1.1.3":
+  version "1.1.3"
+  resolved "https://registry.yarnpkg.com/rrweb/-/rrweb-1.1.3.tgz#4fbb3d473d71c79b6c30a54e585e5a01c8ac08bb"
+  integrity sha512-F2qp8LteJLyycsv+lCVJqtVpery63L3U+/ogqMA0da8R7Jx57o6gT+HpjrzdeeGMIBZR7kKNaKyJwDupTTu5KA==
+  dependencies:
+    "@types/css-font-loading-module" "0.0.7"
+    "@xstate/fsm" "^1.4.0"
+    base64-arraybuffer "^1.0.1"
+    fflate "^0.4.4"
+    mitt "^1.1.3"
+    rrweb-snapshot "^1.1.14"
+
+rrweb@2.0.0-alpha.8:
   version "2.0.0-alpha.8"
   resolved "https://registry.yarnpkg.com/rrweb/-/rrweb-2.0.0-alpha.8.tgz#5cd21510fa011dcb21284a43f3f3d467e2985590"
   integrity sha512-JtJCeUjZ91/qJ6gvLmZw/1Bxuddt06pD887shIYzGhKuOgjtvkUdhBtB5uXrV7Bvi3WELYGZr1stqBugWa9MXg==
@@ -10297,18 +10309,6 @@ rrweb-snapshot@^2.0.0-alpha.8:
     mitt "^3.0.0"
     rrdom "^2.0.0-alpha.8"
     rrweb-snapshot "^2.0.0-alpha.8"
-
-rrweb@^1.1.3:
-  version "1.1.3"
-  resolved "https://registry.yarnpkg.com/rrweb/-/rrweb-1.1.3.tgz#4fbb3d473d71c79b6c30a54e585e5a01c8ac08bb"
-  integrity sha512-F2qp8LteJLyycsv+lCVJqtVpery63L3U+/ogqMA0da8R7Jx57o6gT+HpjrzdeeGMIBZR7kKNaKyJwDupTTu5KA==
-  dependencies:
-    "@types/css-font-loading-module" "0.0.7"
-    "@xstate/fsm" "^1.4.0"
-    base64-arraybuffer "^1.0.1"
-    fflate "^0.4.4"
-    mitt "^1.1.3"
-    rrweb-snapshot "^1.1.14"
 
 rsvp@^4.8.4:
   version "4.8.5"

@@ -90,6 +90,10 @@ export default [
     {
         input: './lib/src/loader-module.d.ts',
         output: [{ file: pkg.types, format: 'es' }],
-        plugins: [dts()],
+        plugins: [
+            dts({
+                respectExternal: true,
+            }),
+        ],
     },
 ]
