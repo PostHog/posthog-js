@@ -8,6 +8,12 @@
  * from https://github.com/LiosK/uuidv7/blob/e501462ea3d23241de13192ceae726956f9b3b7d/src/index.ts
  */
 
+if (!Math.trunc) {
+    Math.trunc = function (v) {
+        return v < 0 ? Math.ceil(v) : Math.floor(v)
+    }
+}
+
 const DIGITS = '0123456789abcdef'
 
 /** Represents a UUID as a 16-byte byte array. */
