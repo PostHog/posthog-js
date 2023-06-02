@@ -1,3 +1,5 @@
+/* eslint-disable compat/compat */
+
 import { CaptureMetrics } from '../capture-metrics'
 import { RetryQueue } from '../retry-queue'
 import * as SendRequest from '../send-request'

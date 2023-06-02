@@ -103,7 +103,7 @@ export class WebPerformanceObserver {
 
         if (window?.PerformanceObserver?.supportedEntryTypes === undefined) {
             logger.log(
-                'PostHog Peformance observer not started because PerformanceObserver is not supported by this browser.'
+                'PostHog Performance observer not started because PerformanceObserver is not supported by this browser.'
             )
             return
         }
@@ -114,12 +114,16 @@ export class WebPerformanceObserver {
         }
 
         try {
+            // compat checked above with early return
+            // eslint-disable-next-line compat/compat
             this.observer = new PerformanceObserver((list) => {
                 list.getEntries().forEach((entry) => {
                     this._capturePerformanceEvent(entry)
                 })
             })
 
+            // compat checked above with early return
+            // eslint-disable-next-line compat/compat
             const entryTypes = PerformanceObserver.supportedEntryTypes.filter((x) => ENTRY_TYPES_TO_OBSERVE.includes(x))
 
             entryTypes.forEach((entryType) => {
@@ -165,7 +169,7 @@ export class WebPerformanceObserver {
         }
 
         // NOTE: This is minimal atm but will include more options when we move to the
-        // built in rrweb network recorder
+        // built-in rrweb network recorder
         let networkRequest: NetworkRequest | null | undefined = {
             url: event.name,
         }
@@ -185,6 +189,8 @@ export class WebPerformanceObserver {
         const properties: { [key: number]: any } = {}
         // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
         // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
+        // can't start observer if performance.now() is not available
+        // eslint-disable-next-line compat/compat
         const timeOrigin = Math.floor(Date.now() - performance.now())
         properties[PERFORMANCE_EVENTS_MAPPING['timeOrigin']] = timeOrigin
         // clickhouse can't ingest timestamps that are floats

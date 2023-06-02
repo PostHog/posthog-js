@@ -45,6 +45,10 @@ interface SegmentPlugin {
 }
 
 export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
+    if (!Promise || !Promise.resolve) {
+        console.warn('This browser does not have Promise support, and can not use the segment integration')
+    }
+
     const enrichEvent = (ctx: SegmentPluginContext, eventName: string) => {
         if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
             // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
@@ -67,6 +71,8 @@ export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         type: 'enrichment',
         version: '1.0.0',
         isLoaded: () => true,
+        // check and early return above
+        // eslint-disable-next-line compat/compat
         load: () => Promise.resolve(),
         track: (ctx) => enrichEvent(ctx, ctx.event.event),
         page: (ctx) => enrichEvent(ctx, '$pageview'),

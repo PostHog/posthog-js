@@ -1,3 +1,4 @@
+/* eslint-disable compat/compat */
 import sinon from 'sinon'
 
 import { autocapture } from '../autocapture'
