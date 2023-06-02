@@ -46,6 +46,11 @@ describe('capture()', () => {
         __captureHooks: [],
     }))
 
+    it('adds a UUID to each message', () => {
+        const captureData = given.subject()
+        expect(captureData).toHaveProperty('uuid')
+    })
+
     it('handles recursive objects', () => {
         given('eventProperties', () => {
             const props = {}

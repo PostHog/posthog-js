@@ -6,6 +6,7 @@ import { RetryQueue } from './retry-queue'
 export type Property = any
 export type Properties = Record<string, Property>
 export interface CaptureResult {
+    uuid: string
     event: string
     properties: Properties
     $set?: Properties
