@@ -8,9 +8,17 @@
  * from https://github.com/LiosK/uuidv7/blob/e501462ea3d23241de13192ceae726956f9b3b7d/src/index.ts
  */
 
+// polyfill for IE11
 if (!Math.trunc) {
     Math.trunc = function (v) {
         return v < 0 ? Math.ceil(v) : Math.floor(v)
+    }
+}
+
+// polyfill for IE11
+if (!Number.isInteger) {
+    Number.isInteger = function (value) {
+        return typeof value === 'number' && isFinite(value) && Math.floor(value) === value
     }
 }
 
@@ -132,7 +140,11 @@ class V7Generator {
         } else {
             // reset state and resume
             this.timestamp = 0
-            return this.generateOrAbort()!
+            const valueAfterReset = this.generateOrAbort()
+            if (valueAfterReset === undefined) {
+                throw new Error('Could not generate UUID after timestamp reset')
+            }
+            return valueAfterReset
         }
     }
 
