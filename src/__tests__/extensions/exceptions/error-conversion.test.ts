@@ -78,7 +78,7 @@ describe('Error conversion', () => {
 
     it('should convert a DOM Error to an error', () => {
         const expected: ErrorProperties = {
-            $exception_type: 'Error',
+            $exception_type: 'DOMError',
             $exception_message: 'click: foo',
         }
         const event = new FakeDomError('click', 'foo')

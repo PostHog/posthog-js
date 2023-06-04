@@ -145,9 +145,7 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
 
     const candidate = error || event
 
-    if (isErrorEvent(candidate as ErrorEvent) && (candidate as ErrorEvent).error) {
-        errorProperties = errorPropertiesFromError((candidate as ErrorEvent).error as Error)
-    } else if (isDOMError(candidate) || isDOMException(candidate)) {
+    if (isDOMError(candidate) || isDOMException(candidate)) {
         // https://developer.mozilla.org/en-US/docs/Web/API/DOMError
         // https://developer.mozilla.org/en-US/docs/Web/API/DOMException
 
@@ -159,12 +157,14 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
             const name = domException.name || (isDOMError(domException) ? 'DOMError' : 'DOMException')
             const message = domException.message ? `${name}: ${domException.message}` : name
             errorProperties = errorPropertiesFromString(message)
-            errorProperties.$exception_type = errorProperties.$exception_type || 'Error'
+            errorProperties.$exception_type = isDOMError(domException) ? 'DOMError' : 'DOMException'
             errorProperties.$exception_message = errorProperties.$exception_message || message
         }
         if ('code' in domException) {
             errorProperties['$exception_DOMException_code'] = `${domException.code}`
         }
+    } else if (isErrorEvent(candidate as ErrorEvent) && (candidate as ErrorEvent).error) {
+        errorProperties = errorPropertiesFromError((candidate as ErrorEvent).error as Error)
     } else if (isError(candidate)) {
         errorProperties = errorPropertiesFromError(candidate)
     } else if (isPlainObject(candidate) || isEvent(candidate)) {
