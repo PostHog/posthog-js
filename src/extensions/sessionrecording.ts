@@ -27,11 +27,11 @@ import Config from '../config'
 import { logger, loadScript } from '../utils'
 import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, SlimDOMOptions } from 'rrweb-snapshot'
 
-const BASE_ENDPOINT = '/e/'
+const BASE_ENDPOINT = '/s/'
 
 export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
-// NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so instead we redefine.
+// NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
 // import type { record } from 'rrweb2/typings'
 // import type { recordOptions } from 'rrweb/typings/types'
 
