@@ -1,3 +1,7 @@
+## 1.63.4 - 2023-06-05
+
+- feat: default endpoint for session recordings is /s/ (#674)
+
 ## 1.63.3 - 2023-06-02
 
 - fix: Typescript import issue with rrweb (#670)
