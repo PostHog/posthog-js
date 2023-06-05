@@ -57,7 +57,7 @@ import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
-import { PostHogSurveys } from 'posthog-surveys'
+import { PostHogSurveys } from './posthog-surveys'
 
 /*
 SIMPLE STYLE GUIDE:
