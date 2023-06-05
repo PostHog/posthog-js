@@ -38,7 +38,7 @@ describe('surveys', () => {
     ]
     // possibly compute whether the survey is active or not for the user since we already have feature flags available here.. with linked/targeting flags
 
-    given('surveysResponse', () => ({ surveys: firstSurveysResponse }))
+    given('surveysResponse', () => ({ surveys: firstSurveys }))
 
     it('getSurveys gets a list of surveys if not present already', () => {
         given.surveys.getSurveys((data) => {
@@ -79,6 +79,7 @@ describe('surveys', () => {
         given.surveys.getSurveys((data) => {
             expect(data).toEqual(secondSurveysResponse)
         }, true)
+        expect(given.instance.persistence.props.$surveys).toEqual(secondSurveys)
         expect(given.instance._send_request).toHaveBeenCalledTimes(2)
     })
 })
