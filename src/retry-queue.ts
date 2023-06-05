@@ -4,6 +4,27 @@ import { CaptureMetrics } from './capture-metrics'
 import { QueuedRequestData, RetryQueueElement } from './types'
 import Config from './config'
 
+const thirtyMinutes = 30 * 60 * 1000
+
+/**
+ * Generates a jitter-ed exponential backoff delay in milliseconds
+ *
+ * The base value is 6 seconds, which is doubled with each retry
+ * up to the maximum of 30 minutes
+ *
+ * Each value then has +/- 50% jitter
+ *
+ * Giving a range of 6 seconds up to 45 minutes
+ */
+export function pickNextRetryDelay(retriesPerformedSoFar: number): number {
+    const rawBackoffTime = 3000 * 2 ** retriesPerformedSoFar
+    const minBackoff = rawBackoffTime / 2
+    const cappedBackoffTime = Math.min(thirtyMinutes, rawBackoffTime)
+    const jitterFraction = Math.random() - 0.5 // A random number between -0.5 and 0.5
+    const jitter = jitterFraction * (cappedBackoffTime - minBackoff)
+    return Math.ceil(cappedBackoffTime + jitter)
+}
+
 export class RetryQueue extends RequestQueueScaffold {
     captureMetrics: CaptureMetrics
     queue: RetryQueueElement[]
@@ -35,10 +56,11 @@ export class RetryQueue extends RequestQueueScaffold {
         if (retriesPerformedSoFar >= 10) {
             return
         }
-        const msToNextRetry = 3000 * 2 ** retriesPerformedSoFar
+        const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)
         const retryAt = new Date(Date.now() + msToNextRetry)
-        console.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
+
         this.queue.push({ retryAt, requestData })
+        console.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
         if (!this.isPolling) {
             this.isPolling = true
             this.poll()
