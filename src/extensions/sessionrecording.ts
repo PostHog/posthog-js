@@ -12,15 +12,66 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
-import type { record } from 'rrweb2/typings'
-import type { recordOptions } from 'rrweb2/typings/types'
-import type { eventWithTime, listenerHandler, pluginEvent } from '@rrweb/types'
+import type {
+    KeepIframeSrcFn,
+    RecordPlugin,
+    SamplingStrategy,
+    blockClass,
+    eventWithTime,
+    hooksParam,
+    listenerHandler,
+    maskTextClass,
+    pluginEvent,
+} from '@rrweb/types'
 import Config from '../config'
 import { logger, loadScript } from '../utils'
+import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, SlimDOMOptions } from 'rrweb-snapshot'
 
-const BASE_ENDPOINT = '/e/'
+const BASE_ENDPOINT = '/s/'
 
 export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+
+// NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
+// import type { record } from 'rrweb2/typings'
+// import type { recordOptions } from 'rrweb/typings/types'
+
+export type rrwebRecord = {
+    (options: recordOptions<eventWithTime>): listenerHandler
+    addCustomEvent: (tag: string, payload: any) => void
+    takeFullSnapshot: () => void
+}
+
+export declare type recordOptions<T> = {
+    emit?: (e: T, isCheckout?: boolean) => void
+    checkoutEveryNth?: number
+    checkoutEveryNms?: number
+    blockClass?: blockClass
+    blockSelector?: string
+    ignoreClass?: string
+    maskTextClass?: maskTextClass
+    maskTextSelector?: string
+    maskAllInputs?: boolean
+    maskInputOptions?: MaskInputOptions
+    maskInputFn?: MaskInputFn
+    maskTextFn?: MaskTextFn
+    slimDOMOptions?: SlimDOMOptions | 'all' | true
+    ignoreCSSAttributes?: Set<string>
+    inlineStylesheet?: boolean
+    hooks?: hooksParam
+    // packFn?: PackFn
+    sampling?: SamplingStrategy
+    dataURLOptions?: DataURLOptions
+    recordCanvas?: boolean
+    recordCrossOriginIframes?: boolean
+    recordAfter?: 'DOMContentLoaded' | 'load'
+    userTriggeredOnInput?: boolean
+    collectFonts?: boolean
+    inlineImages?: boolean
+    plugins?: RecordPlugin[]
+    mousemoveWait?: number
+    keepIframeSrcFn?: KeepIframeSrcFn
+    // errorHandler?: ErrorHandler
+}
 
 // Copied from rrweb typings to avoid import
 enum IncrementalSource {
@@ -63,7 +114,7 @@ export class SessionRecording {
     windowId: string | null
     sessionId: string | null
     receivedDecide: boolean
-    rrwebRecord: typeof record | undefined
+    rrwebRecord: rrwebRecord | undefined
     recorderVersion?: string
     lastActivityTimestamp: number = Date.now()
     isIdle = false

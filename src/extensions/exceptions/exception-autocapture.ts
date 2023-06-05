@@ -15,16 +15,8 @@ export class ExceptionObserver {
         this.instance = instance
     }
 
-    startObservingIfEnabled() {
-        if (this.isEnabled()) {
-            this.startCapturing()
-        } else {
-            this.stopCapturing()
-        }
-    }
-
     startCapturing() {
-        if ((window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
+        if (!this.isEnabled() || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
             return
         }
 
@@ -85,7 +77,7 @@ export class ExceptionObserver {
     }
 
     isEnabled() {
-        return this.instance.get_config('autocapture_exceptions') ?? this.remoteEnabled ?? false
+        return this.remoteEnabled ?? false
     }
 
     afterDecideResponse(response: DecideResponse) {
@@ -93,6 +85,16 @@ export class ExceptionObserver {
         if (this.isEnabled()) {
             this.startCapturing()
         }
+    }
+
+    captureException(args: ErrorEventArgs, properties?: Properties) {
+        const errorProperties = errorToProperties(args)
+        const propertiesToSend = { ...properties, ...errorProperties }
+
+        const posthogHost = this.instance.config.ui_host || this.instance.config.api_host
+        errorProperties.$exception_personURL = posthogHost + '/person/' + this.instance.get_distinct_id()
+
+        this.sendExceptionEvent(propertiesToSend)
     }
 
     /**
@@ -106,15 +108,5 @@ export class ExceptionObserver {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })
-    }
-
-    captureException(args: ErrorEventArgs, properties?: Properties) {
-        const errorProperties = errorToProperties(args)
-        const propertiesToSend = { ...properties, ...errorProperties }
-
-        const posthogHost = this.instance.config.ui_host || this.instance.config.api_host
-        errorProperties.$exception_personURL = posthogHost + '/person/' + this.instance.get_distinct_id()
-
-        this.sendExceptionEvent(propertiesToSend)
     }
 }

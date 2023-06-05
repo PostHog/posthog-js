@@ -1,3 +1,15 @@
+## 1.63.4 - 2023-06-05
+
+- feat: default endpoint for session recordings is /s/ (#674)
+
+## 1.63.3 - 2023-06-02
+
+- fix: Typescript import issue with rrweb (#670)
+
+## 1.63.2 - 2023-06-01
+
+- fix: only allow exception capture on remote enabled (#659)
+
 ## 1.63.1 - 2023-05-31
 
 - fix: performance observer is not always available (#663)
