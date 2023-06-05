@@ -1,5 +1,5 @@
-import { PostHog } from "posthog-core";
-import { SURVEYS } from "posthog-persistence";
+import { PostHog } from "./posthog-core";
+import { SURVEYS } from "./posthog-persistence";
 import { SurveyCallback } from "types";
 
 
