@@ -241,7 +241,7 @@ describe('RetryQueue', () => {
                 .concat(retryDelaysThree)
                 .forEach((delay) => {
                     expect(delay).toBeGreaterThanOrEqual(6000 * 0.5)
-                    expect(delay).toBeLessThanOrEqual(45 * 60 * 1000 * 1.5)
+                    expect(delay).toBeLessThanOrEqual(30 * 60 * 1000 * 1.5)
                 })
         })
     })
