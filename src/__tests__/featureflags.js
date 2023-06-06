@@ -10,22 +10,22 @@ describe('featureflags', () => {
         token: 'testtoken',
         persistence: 'memory',
     })),
-    given('instance', () => ({
-        get_config: jest.fn().mockImplementation((key) => given.config[key]),
-        get_distinct_id: () => 'blah id',
-        getGroups: () => {},
-        _prepare_callback: (callback) => callback,
-        persistence: new PostHogPersistence(given.config),
-        register: (props) => given.instance.persistence.register(props),
-        unregister: (key) => given.instance.persistence.unregister(key),
-        get_property: (key) => given.instance.persistence.props[key],
-        capture: () => {},
-        decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest
-            .fn()
-            .mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
-        reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
-    }))
+        given('instance', () => ({
+            get_config: jest.fn().mockImplementation((key) => given.config[key]),
+            get_distinct_id: () => 'blah id',
+            getGroups: () => {},
+            _prepare_callback: (callback) => callback,
+            persistence: new PostHogPersistence(given.config),
+            register: (props) => given.instance.persistence.register(props),
+            unregister: (key) => given.instance.persistence.unregister(key),
+            get_property: (key) => given.instance.persistence.props[key],
+            capture: () => {},
+            decideEndpointWasHit: given.decideEndpointWasHit,
+            _send_request: jest
+                .fn()
+                .mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+            reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
+        }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
 
