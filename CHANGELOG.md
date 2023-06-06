@@ -1,3 +1,7 @@
+## 1.63.5 - 2023-06-06
+
+- add browserlist and eslint checking compatability using it (#673)
+
 ## 1.63.4 - 2023-06-05
 
 - feat: default endpoint for session recordings is /s/ (#674)
