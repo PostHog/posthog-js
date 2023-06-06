@@ -1,3 +1,5 @@
+/* eslint-disable compat/compat */
+
 import {
     errorToProperties,
     ErrorProperties,

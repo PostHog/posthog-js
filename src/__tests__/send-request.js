@@ -1,3 +1,5 @@
+/* eslint-disable compat/compat */
+
 import { addParamsToURL, encodePostData, xhr } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 
