@@ -311,6 +311,7 @@ export class SessionRecording {
             ignoreClass: 'ph-ignore-input',
             maskTextClass: 'ph-mask',
             maskTextSelector: undefined,
+            maskTextFn: undefined,
             maskAllInputs: true,
             maskInputOptions: {},
             maskInputFn: undefined,
