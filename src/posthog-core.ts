@@ -139,19 +139,7 @@ const defaultConfig = (): PostHogConfig => ({
     inapp_link_new_window: false,
     request_batching: true,
     properties_string_max_length: 65535,
-    session_recording: {
-        // select set of rrweb config options we expose to our users
-        // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-        blockClass: 'ph-no-capture',
-        blockSelector: null,
-        ignoreClass: 'ph-ignore-input',
-        maskAllInputs: true,
-        maskInputOptions: {},
-        maskInputFn: null,
-        slimDOMOptions: {},
-        collectFonts: false,
-        inlineStylesheet: true,
-    },
+    session_recording: {},
     mask_all_element_attributes: false,
     mask_all_text: false,
     advanced_disable_decide: false,
