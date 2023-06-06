@@ -1,3 +1,7 @@
+## 1.64.0 - 2023-06-06
+
+- feat: Add missing maskTextFn for recordings (#679)
+
 ## 1.63.6 - 2023-06-06
 
 
