@@ -1,5 +1,6 @@
 import Config from './config'
 import { Breaker, EventHandler, Properties } from './types'
+import { uuidv7 } from './uuidv7'
 
 /*
  * Saved references to long variable names, so that closure compiler can
@@ -519,7 +520,11 @@ export const _UUID = (function () {
         return ret.toString(16)
     }
 
-    return function () {
+    return function (version?: 'v7') {
+        if (version === 'v7') {
+            return uuidv7()
+        }
+
         const se = typeof window !== 'undefined' ? (window.screen.height * window.screen.width).toString(16) : '0'
         return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
     }

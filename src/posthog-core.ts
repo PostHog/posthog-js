@@ -845,6 +845,7 @@ export class PostHog {
         }
 
         let data: CaptureResult = {
+            uuid: _UUID('v7'),
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
