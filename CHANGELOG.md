@@ -1,3 +1,7 @@
+## 1.65.0 - 2023-06-06
+
+- feat: backoff with jitter (#678)
+
 ## 1.64.0 - 2023-06-06
 
 - feat: Add missing maskTextFn for recordings (#679)
