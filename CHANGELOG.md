@@ -1,3 +1,9 @@
+## 1.66.0 - 2023-06-06
+
+Manual addition of version 1.66.0 because CI failed to automatically bump the version
+
+- feat: send event UUIDs (#672)
+
 ## 1.65.0 - 2023-06-06
 
 - feat: backoff with jitter (#678)
