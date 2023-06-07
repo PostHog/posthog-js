@@ -36,37 +36,25 @@ export class PostHogSurveys {
                 if (!survey.conditions) {
                     return true
                 }
-                if (survey.conditions?.url && !survey.conditions.selector) {
-                    return window.location.href.indexOf(survey.conditions.url) > -1
-                }
-                if (survey.conditions?.selector && !survey.conditions.url) {
-                    return document.querySelector(survey.conditions.selector)
-                }
-                if (survey.conditions?.url && survey.conditions?.selector) {
-                    return (
-                        window.location.href.indexOf(survey.conditions.url) > -1 &&
-                        document.querySelector(survey.conditions.selector)
-                    )
-                }
-                return false
+                const urlCheck = survey.conditions?.url
+                    ? window.location.href.indexOf(survey.conditions.url) > -1
+                    : true
+                const selectorCheck = survey.conditions?.selector
+                    ? document.querySelector(survey.conditions.selector)
+                    : true
+                return urlCheck && selectorCheck
             })
             const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
                 if (!survey.linked_flag_key && !survey.targeting_flag_key) {
                     return true
                 }
-                if (survey.linked_flag_key && !survey.targeting_flag_key) {
-                    return this.instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
-                }
-                if (survey.targeting_flag_key && !survey.linked_flag_key) {
-                    return this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
-                }
-                if (survey.linked_flag_key && survey.targeting_flag_key) {
-                    return (
-                        this.instance.featureFlags.isFeatureEnabled(survey.linked_flag_key) &&
-                        this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
-                    )
-                }
-                return false
+                const linkedFlagCheck = survey.linked_flag_key
+                    ? this.instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
+                    : true
+                const targetingFlagCheck = survey.targeting_flag_key
+                    ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
+                    : true
+                return linkedFlagCheck && targetingFlagCheck
             })
 
             return callback(targetingMatchedSurveys)
