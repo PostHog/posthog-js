@@ -1,3 +1,7 @@
+## 1.66.1 - 2023-06-07
+
+- Update utils.ts (#686)
+
 ## 1.66.0 - 2023-06-06
 
 - chore: manual version bump (#684)
