@@ -200,6 +200,7 @@ describe('surveys', () => {
             given('surveysResponse', () => ({ surveys: [surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector] }))
             const originalWindowLocation = window.location
             delete window.location
+            // eslint-disable-next-line compat/compat
             window.location = new URL('https://posthog.com')
             given.surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithUrl])
@@ -211,6 +212,7 @@ describe('surveys', () => {
             })
             document.body.removeChild(document.querySelector('.test-selector'))
 
+            // eslint-disable-next-line compat/compat
             window.location = new URL('https://posthogapp.com')
             document.body.appendChild(document.createElement('div')).id = 'foo'
 
@@ -246,6 +248,7 @@ describe('surveys', () => {
 
         it('returns surveys that inclusively matches any of the above', () => {
             window.location.delete
+            // eslint-disable-next-line compat/compat
             window.location = new URL('https://posthogapp.com')
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             given('surveysResponse', () => ({ surveys: [activeSurvey, surveyWithSelector, surveyWithEverything] }))
