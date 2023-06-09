@@ -329,7 +329,7 @@ export interface Survey {
     targeting_flag_key?: string | null
     questions: SurveyQuestion[]
     appearance?: SurveyAppearance | null
-    conditions?: { url?: string, selector?: string } | null
+    conditions?: { url?: string; selector?: string } | null
     start_date?: string | null
     end_date?: string | null
 }
