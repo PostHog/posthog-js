@@ -107,19 +107,12 @@ const ACTIVE_SOURCES = [
 
 export class SessionRecording {
     private instance: PostHog
-    captureStarted: boolean
-    snapshots: any[]
     private emit: boolean
     private endpoint: string
-    stopRrweb: listenerHandler | undefined
     private windowId: string | null
     private sessionId: string | null
-    receivedDecide: boolean
-    rrwebRecord: rrwebRecord | undefined
-    recorderVersion?: string
     private lastActivityTimestamp: number = Date.now()
-    isIdle = false
-
+    private flushBufferTimer?: any
     private buffer?: {
         size: number
         data: any[]
@@ -127,7 +120,13 @@ export class SessionRecording {
         windowId: string | null
     }
 
-    private flushBufferTimer?: any
+    captureStarted: boolean
+    snapshots: any[]
+    stopRrweb: listenerHandler | undefined
+    receivedDecide: boolean
+    rrwebRecord: rrwebRecord | undefined
+    recorderVersion?: string
+    isIdle = false
 
     constructor(instance: PostHog) {
         this.instance = instance
