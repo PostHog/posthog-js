@@ -2,6 +2,7 @@ import { window } from '../../utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
+import { isPrimitive } from './type-checking'
 
 const EXCEPTION_INGESTION_ENDPOINT = '/e/'
 
@@ -10,6 +11,8 @@ export class ExceptionObserver {
     remoteEnabled: boolean | undefined
     private originalOnErrorHandler: typeof window['onerror'] | null | undefined = undefined
     private originalOnUnhandledRejectionHandler: typeof window['onunhandledrejection'] | null | undefined = undefined
+
+    private errorsToDrop: RegExp[] = []
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -81,7 +84,21 @@ export class ExceptionObserver {
     }
 
     afterDecideResponse(response: DecideResponse) {
-        this.remoteEnabled = response.autocaptureExceptions || false
+        const autocaptureExceptionsResponse = response.autocaptureExceptions
+        this.remoteEnabled = !!autocaptureExceptionsResponse || false
+
+        if (
+            !isPrimitive(autocaptureExceptionsResponse) &&
+            'errors_to_drop' in autocaptureExceptionsResponse &&
+            Array.isArray(autocaptureExceptionsResponse.errors_to_drop)
+        ) {
+            const dropRules = autocaptureExceptionsResponse.errors_to_drop
+
+            this.errorsToDrop = dropRules.map((rule) => {
+                return new RegExp(rule)
+            })
+        }
+
         if (this.isEnabled()) {
             this.startCapturing()
         }
@@ -89,6 +106,11 @@ export class ExceptionObserver {
 
     captureException(args: ErrorEventArgs, properties?: Properties) {
         const errorProperties = errorToProperties(args)
+
+        if (this.errorsToDrop.some((regex) => regex.test(errorProperties.$exception_message || ''))) {
+            return
+        }
+
         const propertiesToSend = { ...properties, ...errorProperties }
 
         const posthogHost = this.instance.config.ui_host || this.instance.config.api_host

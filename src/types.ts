@@ -206,7 +206,12 @@ export interface DecideResponse {
     autocapture_opt_out?: boolean
     capturePerformance?: boolean
     // this is currently in development and may have breaking changes without a major version bump
-    autocaptureExceptions?: boolean
+    autocaptureExceptions?:
+        | boolean
+        | {
+              endpoint?: string
+              errors_to_drop: string[]
+          }
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
