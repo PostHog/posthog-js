@@ -255,31 +255,16 @@ describe('SessionRecording', () => {
             given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
             _emit({ event: 2 })
 
-            jest.runAllTimers()
+            given.sessionRecording._flushBuffer()
 
-            expect(given.posthog.capture).toHaveBeenCalledTimes(2)
+            expect(given.posthog.capture).toHaveBeenCalledTimes(1)
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
                     $session_id: 'sessionId',
                     $window_id: 'windowId',
-                    $snapshot_data: { event: 1 },
-                },
-                {
-                    method: 'POST',
-                    transport: 'XHR',
-                    endpoint: '/s/',
-                    _noTruncate: true,
-                    _batchKey: 'sessionRecording',
-                    _metrics: expect.anything(),
-                }
-            )
-            expect(given.posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
-                {
-                    $session_id: 'sessionId',
-                    $window_id: 'windowId',
-                    $snapshot_data: { event: 2 },
+                    $snapshot_data: [{ event: 1 }, { event: 2 }],
+                    $snapshot_bytes: 22,
                 },
                 {
                     method: 'POST',
