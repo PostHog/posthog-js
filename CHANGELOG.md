@@ -1,3 +1,8 @@
+## 1.67.2 - 2023-06-12
+
+- feat: allow decide response to configure errors to drop by pattern (#692)
+- chore: no compatability testing for test files (#690)
+
 ## 1.67.1 - 2023-06-09
 
 
