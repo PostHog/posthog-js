@@ -1,4 +1,4 @@
-/*eslint no-empty-function: "off" */
+/*eslint @typescript-eslint/no-empty-function: "off" */
 
 import { PostHogFeatureFlags, parseFeatureFlagDecideResponse, filterActiveFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
