@@ -1,5 +1,5 @@
 import {
-    filterDataURLsFromLargeDataObjects,
+    ensureMaxMessageSize,
     replacementImageURI,
     truncateLargeConsoleLogs,
     CONSOLE_LOG_PLUGIN_NAME,
@@ -11,7 +11,7 @@ import { largeString, threeMBAudioURI, threeMBImageURI } from './test_data/sessi
 describe(`SessionRecording utility functions`, () => {
     describe(`filterLargeDataURLs`, () => {
         it(`should handle null data objects`, () => {
-            expect(filterDataURLsFromLargeDataObjects(null)).toBe(null)
+            expect(ensureMaxMessageSize(null)).toBe(null)
         })
 
         it(`should not touch an object under 5mb`, () => {
@@ -26,7 +26,7 @@ describe(`SessionRecording utility functions`, () => {
                     },
                 ],
             }
-            expect(filterDataURLsFromLargeDataObjects(data)).toEqual(data)
+            expect(ensureMaxMessageSize(data)).toEqual(data)
         })
 
         it(`should replace image data urls if the object is over 5mb`, () => {
@@ -53,7 +53,7 @@ describe(`SessionRecording utility functions`, () => {
                 ],
             }
 
-            expect(filterDataURLsFromLargeDataObjects(data)).toEqual({
+            expect(ensureMaxMessageSize(data)).toEqual({
                 attributes: [
                     {
                         node: {
@@ -97,7 +97,7 @@ describe(`SessionRecording utility functions`, () => {
                 ],
             }
 
-            expect(filterDataURLsFromLargeDataObjects(data)).toEqual({
+            expect(ensureMaxMessageSize(data)).toEqual({
                 attributes: [
                     {
                         node: {
