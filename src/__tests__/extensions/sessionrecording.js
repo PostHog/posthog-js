@@ -255,6 +255,8 @@ describe('SessionRecording', () => {
             given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
             _emit({ event: 2 })
 
+            jest.runAllTimers()
+
             expect(given.posthog.capture).toHaveBeenCalledTimes(2)
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
