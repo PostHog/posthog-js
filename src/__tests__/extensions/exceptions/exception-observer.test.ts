@@ -6,6 +6,7 @@ import { ExceptionObserver } from '../../../extensions/exceptions/exception-auto
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
     let mockPostHogInstance: any
+    const mockCapture = jest.fn()
     const mockConfig: Partial<PostHogConfig> = {
         api_host: 'https://app.posthog.com',
     }
@@ -13,6 +14,8 @@ describe('Exception Observer', () => {
     beforeEach(() => {
         mockPostHogInstance = {
             get_config: jest.fn((key: string) => mockConfig[key as keyof PostHogConfig]),
+            get_distinct_id: jest.fn(() => 'mock-distinct-id'),
+            capture: mockCapture,
         }
         exceptionObserver = new ExceptionObserver(mockPostHogInstance as PostHog)
     })
@@ -59,6 +62,64 @@ describe('Exception Observer', () => {
             expect(exceptionObserver.isCapturing()).toBe(false)
             exceptionObserver.startCapturing()
             expect(exceptionObserver.isCapturing()).toBe(false)
+        })
+    })
+
+    describe('with drop rules', () => {
+        it('drops errors matching rules', () => {
+            exceptionObserver.afterDecideResponse({
+                autocaptureExceptions: {
+                    errors_to_ignore: ['drop me', '.*drop me (too|as well)'],
+                },
+            } as DecideResponse)
+
+            exceptionObserver.captureException(['drop me', undefined, undefined, undefined, new Error('drop me')])
+            expect(mockCapture).not.toHaveBeenCalled()
+
+            exceptionObserver.captureException([
+                'drop me as well',
+                undefined,
+                undefined,
+                undefined,
+                new Error('drop me as well'),
+            ])
+            expect(mockCapture).not.toHaveBeenCalled()
+
+            exceptionObserver.captureException([
+                'drop me too',
+                undefined,
+                undefined,
+                undefined,
+                new Error('drop me too'),
+            ])
+            expect(mockCapture).not.toHaveBeenCalled()
+
+            // matches because first rule has no position anchors
+            exceptionObserver.captureException([
+                'drop me - nah not really',
+                undefined,
+                undefined,
+                undefined,
+                new Error('drop me - nah not really'),
+            ])
+            expect(mockCapture).not.toHaveBeenCalled()
+        })
+
+        it('rules respect anchors', () => {
+            exceptionObserver.afterDecideResponse({
+                autocaptureExceptions: {
+                    errors_to_ignore: ['^drop me$', '.*drop me (too|as well)'],
+                },
+            } as DecideResponse)
+
+            exceptionObserver.captureException([
+                'drop me - nah not really',
+                undefined,
+                undefined,
+                undefined,
+                new Error('drop me - nah not really'),
+            ])
+            expect(mockCapture).toHaveBeenCalled()
         })
     })
 })
