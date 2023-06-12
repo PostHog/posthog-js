@@ -13,7 +13,7 @@ describe('Exception Observer', () => {
 
     beforeEach(() => {
         mockPostHogInstance = {
-            config: jest.fn((key: string) => mockConfig[key as keyof PostHogConfig]),
+            get_config: jest.fn((key: string) => mockConfig[key as keyof PostHogConfig]),
             get_distinct_id: jest.fn(() => 'mock-distinct-id'),
             capture: mockCapture,
         }
@@ -69,7 +69,7 @@ describe('Exception Observer', () => {
         it('drops errors matching rules', () => {
             exceptionObserver.afterDecideResponse({
                 autocaptureExceptions: {
-                    errors_to_drop: ['drop me', '.*drop me (too|as well)'],
+                    errors_to_ignore: ['drop me', '.*drop me (too|as well)'],
                 },
             } as DecideResponse)
 
@@ -108,7 +108,7 @@ describe('Exception Observer', () => {
         it('rules respect anchors', () => {
             exceptionObserver.afterDecideResponse({
                 autocaptureExceptions: {
-                    errors_to_drop: ['^drop me$', '.*drop me (too|as well)'],
+                    errors_to_ignore: ['^drop me$', '.*drop me (too|as well)'],
                 },
             } as DecideResponse)
 

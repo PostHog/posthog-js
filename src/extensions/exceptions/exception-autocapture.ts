@@ -12,10 +12,16 @@ export class ExceptionObserver {
     private originalOnErrorHandler: typeof window['onerror'] | null | undefined = undefined
     private originalOnUnhandledRejectionHandler: typeof window['onunhandledrejection'] | null | undefined = undefined
 
-    private errorsToDrop: RegExp[] = []
+    private errorsToIgnore: RegExp[] = []
 
     constructor(instance: PostHog) {
         this.instance = instance
+    }
+
+    private debugLog(...args: any[]) {
+        if (this.instance.get_config('debug')) {
+            console.log('PostHog.js [PostHog.ExceptionObserver]', ...args)
+        }
     }
 
     startCapturing() {
@@ -86,34 +92,40 @@ export class ExceptionObserver {
     afterDecideResponse(response: DecideResponse) {
         const autocaptureExceptionsResponse = response.autocaptureExceptions
         this.remoteEnabled = !!autocaptureExceptionsResponse || false
-
         if (
             !isPrimitive(autocaptureExceptionsResponse) &&
-            'errors_to_drop' in autocaptureExceptionsResponse &&
-            Array.isArray(autocaptureExceptionsResponse.errors_to_drop)
+            'errors_to_ignore' in autocaptureExceptionsResponse &&
+            Array.isArray(autocaptureExceptionsResponse.errors_to_ignore)
         ) {
-            const dropRules = autocaptureExceptionsResponse.errors_to_drop
+            const dropRules = autocaptureExceptionsResponse.errors_to_ignore
 
-            this.errorsToDrop = dropRules.map((rule) => {
+            this.errorsToIgnore = dropRules.map((rule) => {
                 return new RegExp(rule)
             })
         }
 
         if (this.isEnabled()) {
             this.startCapturing()
+            this.debugLog('Remote config for exception autocapture is enabled, starting', autocaptureExceptionsResponse)
+        } else {
+            this.debugLog(
+                'Remote config for exception autocapture is disabled, not starting',
+                autocaptureExceptionsResponse
+            )
         }
     }
 
     captureException(args: ErrorEventArgs, properties?: Properties) {
         const errorProperties = errorToProperties(args)
 
-        if (this.errorsToDrop.some((regex) => regex.test(errorProperties.$exception_message || ''))) {
+        if (this.errorsToIgnore.some((regex) => regex.test(errorProperties.$exception_message || ''))) {
+            this.debugLog('Ignoring exception based on remote config', errorProperties)
             return
         }
 
         const propertiesToSend = { ...properties, ...errorProperties }
 
-        const posthogHost = this.instance.config.ui_host || this.instance.config.api_host
+        const posthogHost = this.instance.get_config('ui_host') || this.instance.get_config('api_host')
         errorProperties.$exception_personURL = posthogHost + '/person/' + this.instance.get_distinct_id()
 
         this.sendExceptionEvent(propertiesToSend)
