@@ -20,7 +20,7 @@ import {
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
+import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
@@ -264,7 +264,6 @@ export class PostHog {
     pageViewIdManager: PageViewIdManager
     people: PostHogPeople
     featureFlags: PostHogFeatureFlags
-    feature_flags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
     sessionRecording: SessionRecording | undefined
@@ -300,7 +299,6 @@ export class PostHog {
         this._jsc = function () {} as JSC
         this.people = new PostHogPeople(this)
         this.featureFlags = new PostHogFeatureFlags(this)
-        this.feature_flags = this.featureFlags
         this.toolbar = new Toolbar(this)
         this.pageViewIdManager = new PageViewIdManager()
         this.surveys = new PostHogSurveys(this)
@@ -1267,6 +1265,8 @@ export class PostHog {
         // Note we don't reload this on property changes as these get processed async
         if (new_distinct_id !== previous_distinct_id) {
             this.reloadFeatureFlags()
+            // also clear any stored flag calls
+            this.unregister(FLAG_CALL_REPORTED)
         }
     }
 

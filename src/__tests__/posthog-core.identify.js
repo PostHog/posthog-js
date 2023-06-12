@@ -266,6 +266,11 @@ describe('identify()', () => {
             expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
             expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
         })
+
+        it('clears flag calls reported when identity changes', () => {
+            given.subject()
+            expect(given.overrides.unregister).toHaveBeenCalledWith('$flag_call_reported')
+        })
     })
 })
 
