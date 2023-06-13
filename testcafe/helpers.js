@@ -5,9 +5,12 @@ import fetch from 'node-fetch'
 
 // NOTE: These tests are run against a dedicated test project in PostHog cloud
 // but can be overridden to call a local API when running locally
-const { POSTHOG_API_KEY } = process.env
-const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST || 'https://app.posthog.com'
-const POSTHOG_API_PROJECT = process.env.POSTHOG_API_PROJECT || '11213'
+const {
+    POSTHOG_PROJECT_KEY,
+    POSTHOG_API_KEY,
+    POSTHOG_API_HOST = 'https://app.posthog.com',
+    POSTHOG_API_PROJECT = '11213',
+} = process.env
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
@@ -44,8 +47,8 @@ export const initPosthog = (config) => {
         return testSessionId
     })({
         ...config,
-        api_host: process.env.POSTHOG_API_HOST || 'https://app.posthog.com',
-        api_key: process.env.POSTHOG_PROJECT_KEY,
+        api_host: POSTHOG_API_HOST,
+        api_key: POSTHOG_PROJECT_KEY,
         bootstrap: {
             distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
             isIdentifiedID: true,
