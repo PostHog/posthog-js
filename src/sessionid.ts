@@ -27,9 +27,12 @@ export class SessionIdManager {
         this._sessionActivityTimestamp = null
 
         const persistenceName = config['persistence_name'] || config['token']
-        const desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
+        let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
 
-        if (desiredTimeout > MAX_SESSION_IDLE_TIMEOUT) {
+        if (typeof desiredTimeout !== 'number') {
+            console.warn('[PostHog] session_idle_timeout_seconds must be a number. Defaulting to 30 minutes.')
+            desiredTimeout = MAX_SESSION_IDLE_TIMEOUT
+        } else if (desiredTimeout > MAX_SESSION_IDLE_TIMEOUT) {
             console.warn(
                 '[PostHog] session_idle_timeout_seconds cannot be  greater than 30 minutes. Using 30 minutes instead.'
             )

@@ -256,4 +256,31 @@ describe('Session ID manager', () => {
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
         })
     })
+
+    describe('custom session_idle_timeout_seconds', () => {
+        const mockSessionManager = (timeout) =>
+            new SessionIdManager(
+                {
+                    session_idle_timeout_seconds: timeout,
+                },
+                given.persistence
+            )
+
+        beforeEach(() => {
+            console.warn = jest.fn()
+        })
+
+        it('uses the custom session_idle_timeout_seconds if within bounds', () => {
+            expect(mockSessionManager(61)._sessionTimeoutMs).toEqual(61 * 1000)
+            expect(console.warn).toBeCalledTimes(0)
+            expect(mockSessionManager(59)._sessionTimeoutMs).toEqual(60 * 1000)
+            expect(console.warn).toBeCalledTimes(1)
+            expect(mockSessionManager(30 * 60 - 1)._sessionTimeoutMs).toEqual((30 * 60 - 1) * 1000)
+            expect(console.warn).toBeCalledTimes(1)
+            expect(mockSessionManager(30 * 60 + 1)._sessionTimeoutMs).toEqual(30 * 60 * 1000)
+            expect(console.warn).toBeCalledTimes(2)
+            expect(mockSessionManager('foobar')._sessionTimeoutMs).toEqual(30 * 60 * 1000)
+            expect(console.warn).toBeCalledTimes(3)
+        })
+    })
 })
