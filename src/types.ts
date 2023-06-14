@@ -47,70 +47,202 @@ export interface AutocaptureConfig {
     css_selector_allowlist?: string[]
 }
 
+/**
+ * Update the configuration of a posthog library instance.
+ *
+ * The default config is:
+ *
+ *     {
+ *
+ *
+ *       // super properties cookie expiration (in days)
+ *       cookie_expiration: 365
+ *
+ *       // super properties span subdomains
+ *       cross_subdomain_cookie: true
+ *
+ *       // debug mode
+ *       debug: false
+ *
+ *       // if this is true, the posthog cookie or localStorage entry
+ *       // will be deleted, and no user persistence will take place
+ *       disable_persistence: false
+ *
+ *       // if this is true, PostHog will automatically determine
+ *       // City, Region and Country data using the IP address of
+ *       //the client
+ *       ip: true
+ *
+ *       // opt users out of capturing by this PostHog instance by default
+ *       opt_out_capturing_by_default: false
+ *
+ *       // opt users out of browser data storage by this PostHog instance by default
+ *       opt_out_persistence_by_default: false
+ *
+ *       // persistence mechanism used by opt-in/opt-out methods - cookie
+ *       // or localStorage - falls back to cookie if localStorage is unavailable
+ *       opt_out_capturing_persistence_type: 'localStorage'
+ *
+ *       // customize the name of cookie/localStorage set by opt-in/opt-out methods
+ *       opt_out_capturing_cookie_prefix: null
+ *
+ *       // type of persistent store for super properties (cookie/
+ *       // localStorage) if set to 'localStorage', any existing
+ *       // posthog cookie value with the same persistence_name
+ *       // will be transferred to localStorage and deleted
+ *       persistence: 'cookie'
+ *
+ *       // name for super properties persistent store
+ *       persistence_name: ''
+ *
+ *       // names of properties/superproperties which should never
+ *       // be sent with capture() calls
+ *       property_blacklist: []
+ *
+ *       // if this is true, posthog cookies will be marked as
+ *       // secure, meaning they will only be transmitted over https
+ *       secure_cookie: false
+ *
+ *       // should we capture a page view on page load
+ *       capture_pageview: true
+ *
+ *       // if you set upgrade to be true, the library will check for
+ *       // a cookie from our old js library and import super
+ *       // properties from it, then the old cookie is deleted
+ *       // The upgrade config option only works in the initialization,
+ *       // so make sure you set it when you create the library.
+ *       upgrade: false
+ *
+ *       // if this is true, session recording is always disabled.
+ *       disable_session_recording: false,
+ *
+ *       // extra HTTP request headers to set for each API request, in
+ *       // the format {'Header-Name': value}
+ *       xhr_headers: {}
+ *
+ *       // protocol for fetching in-app message resources, e.g.
+ *       // 'https://' or 'http://'; defaults to '//' (which defers to the
+ *       // current page's protocol)
+ *       inapp_protocol: '//'
+ *
+ *       // whether to open in-app message link in new tab/window
+ *       inapp_link_new_window: false
+ *
+ *      // a set of rrweb config options that PostHog users can configure
+ *      // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+ *      session_recording: {
+ *         blockClass: 'ph-no-capture',
+ *         blockSelector: null,
+ *         ignoreClass: 'ph-ignore-input',
+ *         maskAllInputs: true,
+ *         maskInputOptions: {},
+ *         maskInputFn: null,
+ *         slimDOMOptions: {},
+ *         collectFonts: false
+ *      }
+ *
+ *      // prevent autocapture from capturing any attribute names on elements
+ *      mask_all_element_attributes: false
+ *
+ *      // prevent autocapture from capturing textContent on all elements
+ *      mask_all_text: false
+ *
+ *      // Anonymous users get a random UUID as their device by default.
+ *      // This option allows overriding that option.
+ *      get_device_id: (uuid) => uuid
+ *     }
+ *
+ *
+ * @param {Object} config A dictionary of new configuration values to update
+ */
+
 export interface PostHogConfig {
-    api_host: string
-    api_method: string
-    api_transport: string
-    ui_host: string | null
-    token: string
+    /** Automatically capture capture clicks, form submissions and change events (default: true) */
     autocapture: boolean | AutocaptureConfig
-    rageclick: boolean
-    cross_subdomain_cookie: boolean
-    persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
-    persistence_name: string
-    cookie_name: string
-    loaded: (posthog_instance: PostHog) => void
-    store_google: boolean
-    custom_campaign_params: string[]
-    save_referrer: boolean
-    test: boolean
-    verbose: boolean
-    capture_pageview: boolean
-    capture_pageleave: boolean
-    debug: boolean
-    cookie_expiration: number
-    upgrade: boolean
-    disable_session_recording: boolean
-    disable_persistence: boolean
-    disable_cookie: boolean
-    enable_recording_console_log?: boolean
-    secure_cookie: boolean
-    ip: boolean
-    opt_out_capturing_by_default: boolean
-    opt_out_persistence_by_default: boolean
-    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
-    opt_out_capturing_cookie_prefix: string | null
-    opt_in_site_apps: boolean
-    respect_dnt: boolean
-    property_blacklist: string[]
-    xhr_headers: { [header_name: string]: string }
-    on_xhr_error: (failedRequest: XMLHttpRequest) => void
-    inapp_protocol: string
-    inapp_link_new_window: boolean
-    request_batching: boolean
-    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
-    properties_string_max_length: number
-    session_recording: SessionRecordingOptions
-    session_idle_timeout_seconds: number
-    mask_all_element_attributes: boolean
-    mask_all_text: boolean
+    /** PostHog API host (default: 'https://app.posthog.com) */
+    api_host: string
+    /** HTTP method for capturing requests (default: 'POST) */
+    api_method: string
+    /** transport for sending requests ('XHR' or 'sendBeacon')
+     * NB: sendBeacon should only be used for scenarios such as page unload where a "best-effort" attempt to send is
+     * acceptable; the sendBeacon API does not support callbacks or any way to know the result of the request. PostHog
+     * capturing via sendBeacon will not support any event batching or retry mechanisms.
+     */
+    api_transport: string
     advanced_disable_decide: boolean
     advanced_disable_toolbar_metrics: boolean
-    get_device_id: (uuid: string) => string
-    name: string
-    callback_fn: string
-    _onCapture: (eventName: string, eventData: CaptureResult) => void
-    _capture_metrics: boolean
-    capture_performance?: boolean
-    // Should only be used for testing. Could negatively impact performance.
-    disable_compression: boolean
     bootstrap: {
         distinctID?: string
         isIdentifiedID?: boolean
         featureFlags?: Record<string, boolean | string>
         featureFlagPayloads?: Record<string, JsonType>
     }
+    callback_fn: string
+    /** Capture pageleave event when the page unloads (default: true) */
+    capture_pageleave: boolean
+    /** Capture pageview event when the page loads (default: true) */
+    capture_pageview: boolean
+    /** Capture performance (network) information. Typically controlled remotely in the PostHog App */
+    capture_performance?: boolean
+
+    /** super properties cookie expiration in days (default: 365) */
+    cookie_expiration: number
+    cookie_name: string
+    /** super properties span subdomains */
+    cross_subdomain_cookie: boolean
+    /** List of additional query params to be automatically captured */
+    custom_campaign_params: string[]
+    /** Start with debug mode enabled */
+    debug: boolean
+    disable_compression: boolean
+    disable_cookie: boolean
+
+    /** Disable persisting user data across pages. This will disable cookies, session storage and local storage. */
+    disable_persistence: boolean
+    /** Start with session recording disabled. If set this takes priority over the remote setting in the PostHog app */
+    disable_session_recording: boolean
+    /** Enable console log recording. If set this takes priority over the remote setting in the PostHog app */
+    enable_recording_console_log?: boolean
+    get_device_id: (uuid: string) => string
+    ip: boolean
+    inapp_link_new_window: boolean
+    inapp_protocol: string
+    loaded: (posthog_instance: PostHog) => void
+    mask_all_element_attributes: boolean
+    mask_all_text: boolean
+    name: string
+    opt_in_site_apps: boolean
+    opt_out_capturing_by_default: boolean
+    opt_out_capturing_cookie_prefix: string | null
+    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
+    opt_out_persistence_by_default: boolean
+    on_xhr_error: (failedRequest: XMLHttpRequest) => void
+    persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
+    persistence_name: string
+    property_blacklist: string[]
+    properties_string_max_length: number
+    rageclick: boolean
+    request_batching: boolean
+    respect_dnt: boolean
+    save_referrer: boolean
+    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
+    secure_cookie: boolean
     segment?: any
+    session_idle_timeout_seconds: number
+    session_recording: SessionRecordingOptions
+    store_google: boolean
+    test: boolean
+    token: string
+    /**  PostHog web app host, used when links to the PostHog app are generated.
+     * This will only be different from api_host when using a reverse-proxied API host – in that case
+     * the original web app host needs to be passed here so that links to the web app are still convenient.
+     */
+    ui_host: string | null
+    upgrade: boolean
+    verbose: boolean
+    xhr_headers: { [header_name: string]: string }
+    _capture_metrics: boolean
+    _onCapture: (eventName: string, eventData: CaptureResult) => void
 }
 
 export interface OptInOutCapturingOptions {
