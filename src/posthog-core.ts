@@ -1417,15 +1417,15 @@ export class PostHog {
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
         const host = this.config.ui_host || this.config.api_host
-        let url = host + '/replay/' + this.get_session_id()
-        if (options?.withTimestamp && this.sessionManager._sessionStartTimestamp) {
+        const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
+        let url = host + '/replay/' + sessionId
+        if (options?.withTimestamp && sessionStartTimestamp) {
             const LOOK_BACK = options.timestampLookBack ?? 10
-            if (!this.sessionManager._sessionStartTimestamp) {
+            if (!sessionStartTimestamp) {
                 return url
             }
             const recordingStartTime = Math.max(
-                Math.floor((new Date().getTime() - (this.sessionManager._sessionStartTimestamp || 0)) / 1000) -
-                    LOOK_BACK,
+                Math.floor((new Date().getTime() - sessionStartTimestamp) / 1000) - LOOK_BACK,
                 0
             )
             url += `?t=${recordingStartTime}`

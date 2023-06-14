@@ -64,7 +64,7 @@ export class SessionIdManager {
         this._listenToReloadWindow()
     }
 
-    _canUseSessionStorage(): boolean {
+    private _canUseSessionStorage(): boolean {
         // We only want to use sessionStorage if persistence is enabled and not memory storage
         return this.config.persistence !== 'memory' && !this.persistence.disabled && sessionStore.is_supported()
     }
@@ -73,7 +73,7 @@ export class SessionIdManager {
     // and persists page loads/reloads. So it's uniquely suited for storing the windowId. This function also respects
     // when persistence is disabled (by user config) and when sessionStorage is not supported (it *should* be supported on all browsers),
     // and in that case, it falls back to memory (which sadly, won't persist page loads)
-    _setWindowId(windowId: string): void {
+    private _setWindowId(windowId: string): void {
         if (windowId !== this._windowId) {
             this._windowId = windowId
             if (this._canUseSessionStorage()) {
@@ -82,7 +82,7 @@ export class SessionIdManager {
         }
     }
 
-    _getWindowId(): string | null {
+    private _getWindowId(): string | null {
         if (this._windowId) {
             return this._windowId
         }
@@ -95,7 +95,7 @@ export class SessionIdManager {
 
     // Note: 'this.persistence.register' can be disabled in the config.
     // In that case, this works by storing sessionId and the timestamp in memory.
-    _setSessionId(
+    private _setSessionId(
         sessionId: string | null,
         sessionActivityTimestamp: number | null,
         sessionStartTimestamp: number | null
@@ -114,7 +114,7 @@ export class SessionIdManager {
         }
     }
 
-    _getSessionId(): [number, string, number] {
+    private _getSessionId(): [number, string, number] {
         if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
             return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
@@ -140,7 +140,7 @@ export class SessionIdManager {
      * Cloned sessions (new tab, tab duplication, window.open(), ...) WILL have this primaryWindowExists flag in their copied session storage.
      * We conditionally check the primaryWindowExists value in the constructor to decide if the window id in the last session storage should be carried over.
      */
-    _listenToReloadWindow(): void {
+    private _listenToReloadWindow(): void {
         window.addEventListener('beforeunload', () => {
             if (this._canUseSessionStorage()) {
                 sessionStore.remove(this._primary_window_exists_storage_key)
@@ -193,8 +193,9 @@ export class SessionIdManager {
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
 
         return {
-            sessionId: sessionId,
-            windowId: windowId,
+            sessionId,
+            windowId,
+            sessionStartTimestamp,
         }
     }
 }
