@@ -159,6 +159,7 @@ const defaultConfig = (): PostHogConfig => ({
     callback_fn: 'posthog._jsc',
     bootstrap: {},
     disable_compression: false,
+    session_timeout_seconds: 30 * 60, // 30 minutes
 })
 
 /**
