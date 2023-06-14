@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
+/* eslint-disable compat/compat */
+
 import { WebPerformanceObserver } from '../../extensions/web-performance'
 import { PostHog } from '../../posthog-core'
 import { NetworkRequest, PostHogConfig } from '../../types'

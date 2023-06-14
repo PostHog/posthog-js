@@ -1,5 +1,7 @@
+/* eslint-disable compat/compat */
+
 import { CaptureMetrics } from '../capture-metrics'
-import { RetryQueue } from '../retry-queue'
+import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
 import * as SendRequest from '../send-request'
 
 const EPOCH = 1_600_000_000
@@ -183,7 +185,7 @@ describe('RetryQueue', () => {
                     options: defaultRequestOptions,
                     retriesPerformedSoFar: 1,
                 },
-                retryAt: new Date(fixedDate.getTime() + 6000), // 3000 * 2^1
+                retryAt: expect.any(Date),
             },
             {
                 requestData: {
@@ -192,7 +194,7 @@ describe('RetryQueue', () => {
                     options: defaultRequestOptions,
                     retriesPerformedSoFar: 5,
                 },
-                retryAt: new Date(fixedDate.getTime() + 96000), // 3000 * 2^5
+                retryAt: expect.any(Date),
             },
             {
                 requestData: {
@@ -201,7 +203,7 @@ describe('RetryQueue', () => {
                     options: defaultRequestOptions,
                     retriesPerformedSoFar: 9,
                 },
-                retryAt: new Date(fixedDate.getTime() + 1536000), // 3000 * 2^9
+                retryAt: expect.any(Date),
             },
         ])
     })
@@ -215,5 +217,34 @@ describe('RetryQueue', () => {
         })
 
         expect(given.retryQueue.queue.length).toEqual(0)
+    })
+
+    describe('backoff calculation', () => {
+        const retryDelaysOne = Array.from({ length: 10 }, (_, i) => i).map((i) => {
+            return pickNextRetryDelay(i + 1)
+        })
+        const retryDelaysTwo = Array.from({ length: 10 }, (_, i) => i).map((i) => {
+            return pickNextRetryDelay(i + 1)
+        })
+        const retryDelaysThree = Array.from({ length: 10 }, (_, i) => i).map((i) => {
+            return pickNextRetryDelay(i + 1)
+        })
+
+        it('retry times are not identical each time they are generated', () => {
+            retryDelaysOne.forEach((delay, i) => {
+                expect(delay).not.toEqual(retryDelaysTwo[i])
+                expect(delay).not.toEqual(retryDelaysThree[i])
+            })
+        })
+
+        it('retry times are within bounds +/- jitter of 50%', () => {
+            retryDelaysOne
+                .concat(retryDelaysTwo)
+                .concat(retryDelaysThree)
+                .forEach((delay) => {
+                    expect(delay).toBeGreaterThanOrEqual(6000 * 0.5)
+                    expect(delay).toBeLessThanOrEqual(30 * 60 * 1000 * 1.5)
+                })
+        })
     })
 })

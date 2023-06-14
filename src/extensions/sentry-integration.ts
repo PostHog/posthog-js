@@ -16,7 +16,6 @@
  * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  */
 
-import { Properties } from '../types'
 import { PostHog } from '../posthog-core'
 import { ErrorProperties } from './exceptions/error-conversion'
 

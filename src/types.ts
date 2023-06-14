@@ -6,6 +6,7 @@ import { RetryQueue } from './retry-queue'
 export type Property = any
 export type Properties = Record<string, Property>
 export interface CaptureResult {
+    uuid: string
     event: string
     properties: Properties
     $set?: Properties
@@ -90,6 +91,7 @@ export interface PostHogConfig {
     sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
     properties_string_max_length: number
     session_recording: SessionRecordingOptions
+    session_idle_timeout_seconds: number
     mask_all_element_attributes: boolean
     mask_all_text: boolean
     advanced_disable_decide: boolean
@@ -205,7 +207,12 @@ export interface DecideResponse {
     autocapture_opt_out?: boolean
     capturePerformance?: boolean
     // this is currently in development and may have breaking changes without a major version bump
-    autocaptureExceptions?: boolean
+    autocaptureExceptions?:
+        | boolean
+        | {
+              endpoint?: string
+              errors_to_ignore: string[]
+          }
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
@@ -317,4 +324,54 @@ export interface EarlyAccessFeatureResponse {
 
 export type NetworkRequest = {
     url: string
+}
+
+export interface Survey {
+    // Sync this with the backend's SurveySerializer!
+    name: string
+    description: string
+    type: SurveyType
+    linked_flag_key?: string | null
+    targeting_flag_key?: string | null
+    questions: SurveyQuestion[]
+    appearance?: SurveyAppearance | null
+    conditions?: { url?: string; selector?: string } | null
+    start_date?: string | null
+    end_date?: string | null
+}
+
+export interface SurveyAppearance {
+    background_color?: string
+    button_color?: string
+    text_color?: string
+}
+
+export enum SurveyType {
+    Popover = 'Popover',
+    Button = 'Button',
+    Email = 'Email',
+    FullScreen = 'Fullscreen',
+}
+
+export interface SurveyQuestion {
+    type: SurveyQuestionType
+    question: string
+    required?: boolean
+    link?: boolean
+    choices?: string[]
+}
+
+export enum SurveyQuestionType {
+    Open = 'open',
+    MultipleChoiceSingle = 'multiple_single',
+    MultipleChoiceMulti = 'multiple_multi',
+    NPS = 'nps',
+    Rating = 'rating',
+    Link = 'link',
+}
+
+export type SurveyCallback = (surveys: Survey[]) => void
+
+export interface SurveyResponse {
+    surveys: Survey[]
 }

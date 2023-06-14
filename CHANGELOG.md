@@ -1,3 +1,51 @@
+## 1.68.0 - 2023-06-14
+
+
+
+## 1.67.2 - 2023-06-12
+
+- feat: allow decide response to configure errors to drop by pattern (#692)
+- chore: no compatability testing for test files (#690)
+
+## 1.67.1 - 2023-06-09
+
+
+
+## 1.67.0 - 2023-06-07
+
+- feat: get surveys api (#677)
+
+## 1.66.1 - 2023-06-07
+
+- Update utils.ts (#686)
+
+## 1.66.0 - 2023-06-06
+
+- chore: manual version bump (#684)
+- feat: send event UUIDs (#672)
+
+## 1.66.0 - 2023-06-06
+
+Manual addition of version 1.66.0 because CI failed to automatically bump the version
+
+- feat: send event UUIDs (#672)
+
+## 1.65.0 - 2023-06-06
+
+- feat: backoff with jitter (#678)
+
+## 1.64.0 - 2023-06-06
+
+- feat: Add missing maskTextFn for recordings (#679)
+
+## 1.63.6 - 2023-06-06
+
+
+
+## 1.63.5 - 2023-06-06
+
+- add browserlist and eslint checking compatability using it (#673)
+
 ## 1.63.4 - 2023-06-05
 
 - feat: default endpoint for session recordings is /s/ (#674)

@@ -51,11 +51,13 @@ import {
     AutocaptureConfig,
     JsonType,
     EarlyAccessFeatureCallback,
+    SurveyCallback,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
+import { PostHogSurveys } from './posthog-surveys'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -157,6 +159,7 @@ const defaultConfig = (): PostHogConfig => ({
     callback_fn: 'posthog._jsc',
     bootstrap: {},
     disable_compression: false,
+    session_idle_timeout_seconds: 30 * 60, // 30 minutes
 })
 
 /**
@@ -263,6 +266,7 @@ export class PostHog {
     people: PostHogPeople
     featureFlags: PostHogFeatureFlags
     feature_flags: PostHogFeatureFlags
+    surveys: PostHogSurveys
     toolbar: Toolbar
     sessionRecording: SessionRecording | undefined
     webPerformance: WebPerformanceObserver | undefined
@@ -300,6 +304,7 @@ export class PostHog {
         this.feature_flags = this.featureFlags
         this.toolbar = new Toolbar(this)
         this.pageViewIdManager = new PageViewIdManager()
+        this.surveys = new PostHogSurveys(this)
 
         // these are created in _init() after we have the config
         this._captureMetrics = undefined as any
@@ -845,6 +850,7 @@ export class PostHog {
         }
 
         let data: CaptureResult = {
+            uuid: _UUID('v7'),
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
@@ -1145,6 +1151,16 @@ export class PostHog {
         return this.featureFlags.onFeatureFlags(callback)
     }
 
+    /** Get list of all surveys. */
+    getSurveys(callback: SurveyCallback, forceReload = false): void {
+        this.surveys.getSurveys(callback, forceReload)
+    }
+
+    /** Get surveys that should be enabled for the current user. */
+    getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
+        this.surveys.getActiveMatchingSurveys(callback, forceReload)
+    }
+
     /**
      * Identify a user with a unique ID instead of a PostHog
      * randomly generated distinct_id. If the method is never called,
@@ -1401,15 +1417,15 @@ export class PostHog {
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
         const host = this.config.ui_host || this.config.api_host
-        let url = host + '/replay/' + this.get_session_id()
-        if (options?.withTimestamp && this.sessionManager._sessionStartTimestamp) {
+        const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
+        let url = host + '/replay/' + sessionId
+        if (options?.withTimestamp && sessionStartTimestamp) {
             const LOOK_BACK = options.timestampLookBack ?? 10
-            if (!this.sessionManager._sessionStartTimestamp) {
+            if (!sessionStartTimestamp) {
                 return url
             }
             const recordingStartTime = Math.max(
-                Math.floor((new Date().getTime() - (this.sessionManager._sessionStartTimestamp || 0)) / 1000) -
-                    LOOK_BACK,
+                Math.floor((new Date().getTime() - sessionStartTimestamp) / 1000) - LOOK_BACK,
                 0
             )
             url += `?t=${recordingStartTime}`
