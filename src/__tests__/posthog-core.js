@@ -959,8 +959,8 @@ describe('session_id', () => {
             checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
                 windowId: 'windowId',
                 sessionId: 'sessionId',
+                sessionStartTimestamp: new Date().getTime() - 30000,
             }),
-            _sessionStartTimestamp: new Date().getTime() - 30000,
         },
     }))
     it('returns the session_id', () => {
