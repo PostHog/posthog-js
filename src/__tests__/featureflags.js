@@ -1,3 +1,5 @@
+/*eslint @typescript-eslint/no-empty-function: "off" */
+
 import { PostHogFeatureFlags, parseFeatureFlagDecideResponse, filterActiveFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 
@@ -49,6 +51,8 @@ describe('featureflags', () => {
             },
             $override_feature_flags: false,
         })
+
+        given.instance.persistence.unregister('$flag_call_reported')
     })
 
     it('should return the right feature flag and call capture', () => {
@@ -73,6 +77,60 @@ describe('featureflags', () => {
         // It should not call `capture` on subsequent calls
         expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
         expect(given.instance.capture).toHaveBeenCalledTimes(3)
+        expect(given.instance.get_property('$flag_call_reported')).toEqual({
+            'beta-feature': ['true'],
+            'multivariate-flag': ['variant-1'],
+            random: ['undefined'],
+        })
+    })
+
+    it('should call capture for every different flag response', () => {
+        given.instance.persistence.register({
+            $enabled_feature_flags: {
+                'beta-feature': true,
+            },
+        })
+        expect(given.featureFlags.getFlags()).toEqual(['beta-feature'])
+        expect(given.featureFlags.getFlagVariants()).toEqual({
+            'beta-feature': true,
+        })
+        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+
+        expect(given.instance.get_property('$flag_call_reported')).toEqual({ 'beta-feature': ['true'] })
+
+        expect(given.instance.capture).toHaveBeenCalledTimes(1)
+
+        // It should not call `capture` on subsequent calls
+        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+        expect(given.instance.capture).toHaveBeenCalledTimes(1)
+
+        given.instance.persistence.register({
+            $enabled_feature_flags: {},
+        })
+        expect(given.featureFlags.getFlagVariants()).toEqual({})
+        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
+        // no extra capture call because flags haven't loaded yet.
+        expect(given.instance.capture).toHaveBeenCalledTimes(1)
+
+        given.instance.persistence.register({
+            $enabled_feature_flags: { x: 'y' },
+        })
+        expect(given.featureFlags.getFlagVariants()).toEqual({ x: 'y' })
+        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(false)
+        expect(given.instance.capture).toHaveBeenCalledTimes(2)
+
+        given.instance.persistence.register({
+            $enabled_feature_flags: {
+                'beta-feature': 'variant-1',
+            },
+        })
+        expect(given.featureFlags.getFlagVariants()).toEqual({ 'beta-feature': 'variant-1' })
+        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+        expect(given.instance.capture).toHaveBeenCalledTimes(3)
+
+        expect(given.instance.get_property('$flag_call_reported')).toEqual({
+            'beta-feature': ['true', 'undefined', 'variant-1'],
+        })
     })
 
     it('should return the right feature flag and not call capture', () => {

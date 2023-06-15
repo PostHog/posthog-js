@@ -22,6 +22,7 @@ export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
+export const FLAG_CALL_REPORTED = '$flag_call_reported'
 
 const USER_STATE = '$user_state'
 
@@ -38,6 +39,7 @@ export const RESERVED_PROPERTIES = [
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
+    FLAG_CALL_REPORTED,
 ]
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [

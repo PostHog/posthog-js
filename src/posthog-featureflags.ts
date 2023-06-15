@@ -15,6 +15,7 @@ import {
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
+    FLAG_CALL_REPORTED,
 } from './posthog-persistence'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
@@ -75,7 +76,6 @@ export const parseFeatureFlagDecideResponse = (
 export class PostHogFeatureFlags {
     instance: PostHog
     _override_warning: boolean
-    flagCallReported: Record<string, boolean>
     featureFlagEventHandlers: FeatureFlagsCallback[]
     reloadFeatureFlagsQueued: boolean
     reloadFeatureFlagsInAction: boolean
@@ -84,7 +84,6 @@ export class PostHogFeatureFlags {
     constructor(instance: PostHog) {
         this.instance = instance
         this._override_warning = false
-        this.flagCallReported = {}
         this.featureFlagEventHandlers = []
 
         this.reloadFeatureFlagsQueued = false
@@ -208,15 +207,26 @@ export class PostHogFeatureFlags {
      * @param {Object|String} key Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string {
-        if (!this.getFlags()) {
+    getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
+        if (!this.getFlags() || this.getFlags().length === 0) {
             console.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
-            return false
+            return undefined
         }
         const flagValue = this.getFlagVariants()[key]
-        if ((options.send_event || !('send_event' in options)) && !this.flagCallReported[key]) {
-            this.flagCallReported[key] = true
-            this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
+        const flagReportValue = `${flagValue}`
+        const flagCallReported: Record<string, string[]> = this.instance.get_property(FLAG_CALL_REPORTED) || {}
+
+        if (options.send_event || !('send_event' in options)) {
+            if (!(key in flagCallReported) || !flagCallReported[key].includes(flagReportValue)) {
+                if (Array.isArray(flagCallReported[key])) {
+                    flagCallReported[key].push(flagReportValue)
+                } else {
+                    flagCallReported[key] = [flagReportValue]
+                }
+                this.instance.persistence.register({ [FLAG_CALL_REPORTED]: flagCallReported })
+
+                this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
+            }
         }
         return flagValue
     }
@@ -236,10 +246,10 @@ export class PostHogFeatureFlags {
      * @param {Object|String} key Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean {
-        if (!this.getFlags()) {
+    isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
+        if (!this.getFlags() || this.getFlags().length === 0) {
             console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
-            return false
+            return undefined
         }
         return !!this.getFeatureFlag(key, options)
     }

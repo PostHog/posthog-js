@@ -40,6 +40,13 @@ module.exports = {
                 'plugin:react-hooks/recommended',
                 'prettier',
             ],
+            rules: {
+                'prettier/prettier': 'error',
+                'prefer-spread': 'off',
+                '@typescript-eslint/no-empty-function': 'off',
+                '@typescript-eslint/no-this-alias': 'off',
+                '@typescript-eslint/no-explicit-any': 'off',
+            },
         },
     ],
 }

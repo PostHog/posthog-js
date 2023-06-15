@@ -463,6 +463,8 @@ describe('bootstrapping feature flags', () => {
     })
 
     it('does nothing when empty', () => {
+        jest.spyOn(console, 'warn').mockImplementation()
+
         given('config', () => ({
             bootstrap: {},
         }))
@@ -471,6 +473,9 @@ describe('bootstrapping feature flags', () => {
         expect(given.lib.get_distinct_id()).not.toBe('abcd')
         expect(given.lib.get_distinct_id()).not.toEqual(undefined)
         expect(given.lib.getFeatureFlag('multivariant')).toBe(undefined)
+        expect(console.warn).toHaveBeenCalledWith(
+            expect.stringContaining('getFeatureFlag for key "multivariant" failed')
+        )
         expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
         expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
         expect(given.lib.featureFlags.getFlagVariants()).toEqual({})
