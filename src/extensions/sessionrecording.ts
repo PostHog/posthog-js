@@ -419,6 +419,7 @@ export class SessionRecording {
     private _flushBuffer() {
         if (this.flushBufferTimer) {
             clearTimeout(this.flushBufferTimer)
+            this.flushBufferTimer = undefined
         }
 
         if (this.buffer && this.buffer.data.length !== 0) {

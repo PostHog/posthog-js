@@ -277,6 +277,40 @@ describe('SessionRecording', () => {
             )
         })
 
+        it('buffers emitted events', () => {
+            given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
+            given.sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+
+            _emit({ event: 1 })
+            _emit({ event: 2 })
+
+            expect(given.posthog.capture).not.toHaveBeenCalled()
+            expect(given.sessionRecording.flushBufferTimer).not.toBeUndefined()
+
+            given.sessionRecording._flushBuffer()
+            expect(given.sessionRecording.flushBufferTimer).toBeUndefined()
+
+            expect(given.posthog.capture).toHaveBeenCalledTimes(1)
+            expect(given.posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $session_id: 'sessionId',
+                    $window_id: 'windowId',
+                    $snapshot_data: [{ event: 1 }, { event: 2 }],
+                    $snapshot_bytes: 22,
+                },
+                {
+                    method: 'POST',
+                    transport: 'XHR',
+                    endpoint: '/s/',
+                    _noTruncate: true,
+                    _batchKey: 'sessionRecording',
+                    _metrics: expect.anything(),
+                }
+            )
+        })
+
         it("doesn't load recording script if already loaded", () => {
             given('__loaded_recorder_version', () => 'v1')
             given.sessionRecording.startRecordingIfEnabled()
