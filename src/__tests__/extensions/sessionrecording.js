@@ -1,5 +1,9 @@
 import { loadScript } from '../../utils'
-import { SessionRecording, RECORDING_IDLE_ACTIVITY_TIMEOUT_MS } from '../../extensions/sessionrecording'
+import {
+    SessionRecording,
+    RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+    RECORDING_MAX_EVENT_SIZE,
+} from '../../extensions/sessionrecording'
 import {
     PostHogPersistence,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
@@ -255,13 +259,16 @@ describe('SessionRecording', () => {
             given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
             _emit({ event: 2 })
 
-            expect(given.posthog.capture).toHaveBeenCalledTimes(2)
+            given.sessionRecording._flushBuffer()
+
+            expect(given.posthog.capture).toHaveBeenCalledTimes(1)
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
                     $session_id: 'sessionId',
                     $window_id: 'windowId',
-                    $snapshot_data: { event: 1 },
+                    $snapshot_data: [{ event: 1 }, { event: 2 }],
+                    $snapshot_bytes: 22,
                 },
                 {
                     method: 'POST',
@@ -272,12 +279,79 @@ describe('SessionRecording', () => {
                     _metrics: expect.anything(),
                 }
             )
+        })
+
+        it('buffers emitted events', () => {
+            given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
+            given.sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+
+            _emit({ event: 1 })
+            _emit({ event: 2 })
+
+            expect(given.posthog.capture).not.toHaveBeenCalled()
+            expect(given.sessionRecording.flushBufferTimer).not.toBeUndefined()
+
+            given.sessionRecording._flushBuffer()
+            expect(given.sessionRecording.flushBufferTimer).toBeUndefined()
+
+            expect(given.posthog.capture).toHaveBeenCalledTimes(1)
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
                     $session_id: 'sessionId',
                     $window_id: 'windowId',
-                    $snapshot_data: { event: 2 },
+                    $snapshot_data: [{ event: 1 }, { event: 2 }],
+                    $snapshot_bytes: 22,
+                },
+                {
+                    method: 'POST',
+                    transport: 'XHR',
+                    endpoint: '/s/',
+                    _noTruncate: true,
+                    _batchKey: 'sessionRecording',
+                    _metrics: expect.anything(),
+                }
+            )
+        })
+
+        it('flushes buffer if the size of the buffer hits the limit', () => {
+            given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
+            given.sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+            const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
+
+            _emit({ event: bigData })
+            _emit({ event: 1 })
+            _emit({ event: 2 })
+            expect(given.posthog.capture).not.toHaveBeenCalled()
+            expect(given.sessionRecording.buffer).toMatchObject({ size: 755008 })
+
+            // Another big event means the old data will be flushed
+            _emit({ event: bigData })
+            expect(given.posthog.capture).toHaveBeenCalled()
+            expect(given.sessionRecording.buffer.data.length).toEqual(1) // The new event
+            expect(given.sessionRecording.buffer).toMatchObject({ size: 754986 })
+        })
+
+        it('flushes buffer if the session_id changes', () => {
+            given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
+            given.sessionRecording.startRecordingIfEnabled()
+
+            _emit({ event: 1 })
+            expect(given.posthog.capture).not.toHaveBeenCalled()
+            expect(given.sessionRecording.buffer.sessionId).toEqual('sessionId')
+            // Not exactly right but easier to test than rotating the session id
+            given.sessionRecording.buffer.sessionId = 'otherSessionId'
+            _emit({ event: 1 })
+            expect(given.posthog.capture).toHaveBeenCalled()
+            expect(given.posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $session_id: 'otherSessionId',
+                    $window_id: 'windowId',
+                    $snapshot_data: [{ event: 1 }],
+                    $snapshot_bytes: 11,
                 },
                 {
                     method: 'POST',
