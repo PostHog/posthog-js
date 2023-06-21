@@ -18,6 +18,8 @@ export default function Home() {
         }
     }, [])
 
+    const randomID = () => Math.round(Math.random() * 10000)
+
     return (
         <>
             <Head>
@@ -33,6 +35,18 @@ export default function Home() {
                     <button onClick={() => posthog?.capture('Clicked button')}>Capture event</button>
                     <button data-attr="autocapture-button">Autocapture buttons</button>
                     <button className="ph-no-capture">Ignore certain elements</button>
+
+                    <button onClick={() => posthog?.identify('user-' + randomID())}>Identify</button>
+
+                    <button
+                        onClick={() =>
+                            posthog?.setPersonProperties({
+                                email: `user-${randomID()}@posthog.com`,
+                            })
+                        }
+                    >
+                        Set user properties
+                    </button>
                 </div>
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>
