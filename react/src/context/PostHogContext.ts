@@ -3,4 +3,4 @@ import { createContext } from 'react'
 
 export type PostHog = typeof posthogJs
 
-export const PostHogContext = createContext<{ client?: PostHog }>({ client: undefined })
+export const PostHogContext = createContext<{ client: PostHog }>({ client: posthogJs })
