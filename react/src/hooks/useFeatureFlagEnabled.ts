@@ -9,9 +9,6 @@ export function useFeatureFlagEnabled(flag: string): boolean | undefined {
     // to a hydration error when using nextjs
 
     useEffect(() => {
-        if (!client) {
-            return
-        }
         return client.onFeatureFlags(() => {
             setFeatureEnabled(client.isFeatureEnabled(flag))
         })

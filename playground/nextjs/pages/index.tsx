@@ -30,7 +30,7 @@ export default function Home() {
                 <p>The current time is {time}</p>
 
                 <div className="buttons">
-                    <button onClick={() => posthog?.capture('Clicked button')}>Capture event</button>
+                    <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
                     <button data-attr="autocapture-button">Autocapture buttons</button>
                     <button className="ph-no-capture">Ignore certain elements</button>
                 </div>
