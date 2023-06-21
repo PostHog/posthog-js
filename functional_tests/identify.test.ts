@@ -73,7 +73,7 @@ test('identify sends an engage request if identify called twice with the same di
     )
 })
 
-test('identify sends an engage request if identify called twice with a different distinct_id', async () => {
+test('identify sends an $set event if identify called twice with a different distinct_id', async () => {
     // This is due to $identify only being called for anonymous users.
     const token = v4()
     const posthog = await createPosthogInstance(token)
