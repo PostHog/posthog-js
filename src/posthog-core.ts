@@ -1290,9 +1290,8 @@ export class PostHog {
     }
 
     /**
-     * Sets properties against the Person associated with the current distinct_id.
+     * Sets properties for the Person associated with the current distinct_id.
      *
-     * Similar to identify but ensures that the current distinct_id is not overwritten.
      *
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
      * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
