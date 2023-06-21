@@ -61,7 +61,7 @@ const server = setupServer(
         // it.
         const data = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
         capturedRequests['/decide/'] = [...(capturedRequests['/decide/'] || []), data]
-        return res(ctx.status(200))
+        return res(ctx.status(200), ctx.json({}))
     })
 )
 

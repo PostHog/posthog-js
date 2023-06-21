@@ -90,7 +90,6 @@ test('person properties set in identify() with the same distinct_id are sent to 
     await waitFor(() => {
         expect(getRequests(token)['/decide/']).toEqual([
             {
-                $anon_distinct_id: anonymousId,
                 distinct_id: 'test-id',
                 groups: {},
                 person_properties: { email: 'test@email.com' },
