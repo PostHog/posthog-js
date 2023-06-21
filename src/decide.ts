@@ -52,6 +52,7 @@ export class Decide {
         this.instance.sessionRecording?.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
         this.instance.webPerformance?.afterDecideResponse(response)
+        this.instance.exceptionAutocapture?.afterDecideResponse(response)
 
         this.instance.featureFlags.receivedFeatureFlags(response)
 

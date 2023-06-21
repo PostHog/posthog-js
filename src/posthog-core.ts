@@ -1,4 +1,3 @@
-import { LZString } from './lz-string'
 import Config from './config'
 import {
     logger,
@@ -20,7 +19,7 @@ import {
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import { ALIAS_ID_KEY, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
+import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
@@ -51,10 +50,13 @@ import {
     AutocaptureConfig,
     JsonType,
     EarlyAccessFeatureCallback,
+    SurveyCallback,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
+import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
+import { PostHogSurveys } from './posthog-surveys'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -114,7 +116,6 @@ const defaultConfig = (): PostHogConfig => ({
     save_referrer: true,
     test: false,
     verbose: false,
-    img: false,
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
     debug: false,
@@ -139,19 +140,7 @@ const defaultConfig = (): PostHogConfig => ({
     inapp_link_new_window: false,
     request_batching: true,
     properties_string_max_length: 65535,
-    session_recording: {
-        // select set of rrweb config options we expose to our users
-        // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-        blockClass: 'ph-no-capture',
-        blockSelector: null,
-        ignoreClass: 'ph-ignore-input',
-        maskAllInputs: true,
-        maskInputOptions: {},
-        maskInputFn: null,
-        slimDOMOptions: {},
-        collectFonts: false,
-        inlineStylesheet: true,
-    },
+    session_recording: {},
     mask_all_element_attributes: false,
     mask_all_text: false,
     advanced_disable_decide: false,
@@ -169,6 +158,7 @@ const defaultConfig = (): PostHogConfig => ({
     callback_fn: 'posthog._jsc',
     bootstrap: {},
     disable_compression: false,
+    session_idle_timeout_seconds: 30 * 60, // 30 minutes
 })
 
 /**
@@ -223,6 +213,8 @@ const create_phlib = function (
     instance.webPerformance = new WebPerformanceObserver(instance)
     instance.webPerformance.startObservingIfEnabled()
 
+    instance.exceptionAutocapture = new ExceptionObserver(instance)
+
     instance.__autocapture = instance.get_config('autocapture')
     autocapture._setIsAutocaptureEnabled(instance)
     if (autocapture._isAutocaptureEnabled) {
@@ -271,10 +263,11 @@ export class PostHog {
     sessionManager: SessionIdManager
     pageViewIdManager: PageViewIdManager
     featureFlags: PostHogFeatureFlags
-    feature_flags: PostHogFeatureFlags
+    surveys: PostHogSurveys
     toolbar: Toolbar
     sessionRecording: SessionRecording | undefined
     webPerformance: WebPerformanceObserver | undefined
+    exceptionAutocapture: ExceptionObserver | undefined
 
     _captureMetrics: CaptureMetrics
     _requestQueue: RequestQueue
@@ -311,9 +304,9 @@ export class PostHog {
         this._jsc = function () {} as JSC
 
         this.featureFlags = new PostHogFeatureFlags(this)
-        this.feature_flags = this.featureFlags
         this.toolbar = new Toolbar(this)
         this.pageViewIdManager = new PageViewIdManager()
+        this.surveys = new PostHogSurveys(this)
 
         // these are created in _init() after we have the config
         this._captureMetrics = undefined as any
@@ -666,11 +659,7 @@ export class PostHog {
             ip: this.get_config('ip'),
         })
 
-        if (_isObject(data) && this.get_config('img')) {
-            const img = document.createElement('img')
-            img.src = url
-            document.body.appendChild(img)
-        } else if (useSendBeacon) {
+        if (useSendBeacon) {
             // beacon documentation https://w3c.github.io/beacon/
             // beacons format the message and use the type property
             // also no need to try catch as sendBeacon does not report errors
@@ -795,6 +784,23 @@ export class PostHog {
         this._execute_array([item])
     }
 
+    /*
+     * PostHog supports exception autocapture, however, this function
+     * is used to manually capture an exception
+     * and can be used to add more context to that exception
+     *
+     * Properties passed as the second option will be merged with the properties
+     * of the exception event.
+     * Where there is a key in both generated exception and passed properties,
+     * the generated exception property takes precedence.
+     */
+    captureException(exception: Error, properties?: Properties): void {
+        this.exceptionAutocapture?.captureException(
+            [exception.name, undefined, undefined, undefined, exception],
+            properties
+        )
+    }
+
     /**
      * Capture an event. This is the most important and
      * frequently used PostHog function.
@@ -860,6 +866,7 @@ export class PostHog {
         }
 
         let data: CaptureResult = {
+            uuid: _UUID('v7'),
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
@@ -1126,7 +1133,7 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key: string, options?: isFeatureEnabledOptions): boolean {
+    isFeatureEnabled(key: string, options?: isFeatureEnabledOptions): boolean | undefined {
         return this.featureFlags.isFeatureEnabled(key, options)
     }
 
@@ -1158,6 +1165,16 @@ export class PostHog {
      */
     onFeatureFlags(callback: (flags: string[], variants: Record<string, string | boolean>) => void): () => void {
         return this.featureFlags.onFeatureFlags(callback)
+    }
+
+    /** Get list of all surveys. */
+    getSurveys(callback: SurveyCallback, forceReload = false): void {
+        this.surveys.getSurveys(callback, forceReload)
+    }
+
+    /** Get surveys that should be enabled for the current user. */
+    getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
+        this.surveys.getActiveMatchingSurveys(callback, forceReload)
     }
 
     /**
@@ -1267,6 +1284,8 @@ export class PostHog {
         // Note we don't reload this on property changes as these get processed async
         if (new_distinct_id !== previous_distinct_id) {
             this.reloadFeatureFlags()
+            // also clear any stored flag calls
+            this.unregister(FLAG_CALL_REPORTED)
         }
     }
 
@@ -1413,6 +1432,43 @@ export class PostHog {
 
     getGroups(): Record<string, any> {
         return this.get_property('$groups') || {}
+    }
+
+    /**
+     * Returns the current session_id.
+     *
+     * NOTE: This should only be used for informative purposes.
+     * Any actual internal use case for the session_id should be handled by the sessionManager.
+     */
+
+    get_session_id(): string {
+        return this.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
+    }
+
+    /**
+     * Returns the Replay url for the current session.
+     *
+     * @param options Options for the url
+     * @param options.withTimestamp Whether to include the timestamp in the url (defaults to false)
+     * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
+     */
+    get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
+        const host = this.config.ui_host || this.config.api_host
+        const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
+        let url = host + '/replay/' + sessionId
+        if (options?.withTimestamp && sessionStartTimestamp) {
+            const LOOK_BACK = options.timestampLookBack ?? 10
+            if (!sessionStartTimestamp) {
+                return url
+            }
+            const recordingStartTime = Math.max(
+                Math.floor((new Date().getTime() - sessionStartTimestamp) / 1000) - LOOK_BACK,
+                0
+            )
+            url += `?t=${recordingStartTime}`
+        }
+
+        return url
     }
 
     /**
@@ -1970,10 +2026,6 @@ export class PostHog {
             localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
         }
-    }
-
-    decodeLZ64(input: string | null | undefined): string | null {
-        return LZString.decompressFromBase64(input || null)
     }
 }
 

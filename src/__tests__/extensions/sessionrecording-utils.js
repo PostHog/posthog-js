@@ -1,5 +1,5 @@
 import {
-    filterDataURLsFromLargeDataObjects,
+    ensureMaxMessageSize,
     replacementImageURI,
     truncateLargeConsoleLogs,
     CONSOLE_LOG_PLUGIN_NAME,
@@ -10,10 +10,6 @@ import { largeString, threeMBAudioURI, threeMBImageURI } from './test_data/sessi
 
 describe(`SessionRecording utility functions`, () => {
     describe(`filterLargeDataURLs`, () => {
-        it(`should handle null data objects`, () => {
-            expect(filterDataURLsFromLargeDataObjects(null)).toBe(null)
-        })
-
         it(`should not touch an object under 5mb`, () => {
             var data = {
                 attributes: [
@@ -26,7 +22,10 @@ describe(`SessionRecording utility functions`, () => {
                     },
                 ],
             }
-            expect(filterDataURLsFromLargeDataObjects(data)).toEqual(data)
+            expect(ensureMaxMessageSize(data)).toEqual({
+                event: data,
+                size: 3548406,
+            })
         })
 
         it(`should replace image data urls if the object is over 5mb`, () => {
@@ -53,27 +52,30 @@ describe(`SessionRecording utility functions`, () => {
                 ],
             }
 
-            expect(filterDataURLsFromLargeDataObjects(data)).toEqual({
-                attributes: [
-                    {
-                        node: {
-                            attributes: {
-                                src: replacementImageURI,
+            expect(ensureMaxMessageSize(data)).toEqual({
+                event: {
+                    attributes: [
+                        {
+                            node: {
+                                attributes: {
+                                    src: replacementImageURI,
+                                },
                             },
                         },
-                    },
-                    {
-                        node: {
-                            attributes: {
+                        {
+                            node: {
                                 attributes: {
-                                    style: {
-                                        background: `url(${replacementImageURI})`,
+                                    attributes: {
+                                        style: {
+                                            background: `url(${replacementImageURI})`,
+                                        },
                                     },
                                 },
                             },
                         },
-                    },
-                ],
+                    ],
+                },
+                size: 815,
             })
         })
 
@@ -97,23 +99,26 @@ describe(`SessionRecording utility functions`, () => {
                 ],
             }
 
-            expect(filterDataURLsFromLargeDataObjects(data)).toEqual({
-                attributes: [
-                    {
-                        node: {
-                            attributes: {
-                                src: '',
+            expect(ensureMaxMessageSize(data)).toEqual({
+                event: {
+                    attributes: [
+                        {
+                            node: {
+                                attributes: {
+                                    src: '',
+                                },
                             },
                         },
-                    },
-                    {
-                        node: {
-                            attributes: {
-                                src: '',
+                        {
+                            node: {
+                                attributes: {
+                                    src: '',
+                                },
                             },
                         },
-                    },
-                ],
+                    ],
+                },
+                size: 86,
             })
         })
     })

@@ -4,7 +4,7 @@ import {
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../posthog-persistence'
 import {
-    filterDataURLsFromLargeDataObjects,
+    ensureMaxMessageSize,
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
@@ -12,14 +12,67 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
-import type { record } from 'rrweb/typings'
-import type { eventWithTime, listenerHandler, pluginEvent, recordOptions } from 'rrweb/typings/types'
+import type {
+    KeepIframeSrcFn,
+    RecordPlugin,
+    SamplingStrategy,
+    blockClass,
+    eventWithTime,
+    hooksParam,
+    listenerHandler,
+    maskTextClass,
+} from '@rrweb/types'
 import Config from '../config'
 import { logger, loadScript } from '../utils'
+import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, SlimDOMOptions } from 'rrweb-snapshot'
 
-const BASE_ENDPOINT = '/e/'
+const BASE_ENDPOINT = '/s/'
 
 export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
+export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
+
+// NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
+// import type { record } from 'rrweb2/typings'
+// import type { recordOptions } from 'rrweb/typings/types'
+
+export type rrwebRecord = {
+    (options: recordOptions<eventWithTime>): listenerHandler
+    addCustomEvent: (tag: string, payload: any) => void
+    takeFullSnapshot: () => void
+}
+
+export declare type recordOptions<T> = {
+    emit?: (e: T, isCheckout?: boolean) => void
+    checkoutEveryNth?: number
+    checkoutEveryNms?: number
+    blockClass?: blockClass
+    blockSelector?: string
+    ignoreClass?: string
+    maskTextClass?: maskTextClass
+    maskTextSelector?: string
+    maskAllInputs?: boolean
+    maskInputOptions?: MaskInputOptions
+    maskInputFn?: MaskInputFn
+    maskTextFn?: MaskTextFn
+    slimDOMOptions?: SlimDOMOptions | 'all' | true
+    ignoreCSSAttributes?: Set<string>
+    inlineStylesheet?: boolean
+    hooks?: hooksParam
+    // packFn?: PackFn
+    sampling?: SamplingStrategy
+    dataURLOptions?: DataURLOptions
+    recordCanvas?: boolean
+    recordCrossOriginIframes?: boolean
+    recordAfter?: 'DOMContentLoaded' | 'load'
+    userTriggeredOnInput?: boolean
+    collectFonts?: boolean
+    inlineImages?: boolean
+    plugins?: RecordPlugin[]
+    mousemoveWait?: number
+    keepIframeSrcFn?: KeepIframeSrcFn
+    // errorHandler?: ErrorHandler
+}
 
 // Copied from rrweb typings to avoid import
 enum IncrementalSource {
@@ -37,6 +90,8 @@ enum IncrementalSource {
     Log = 11,
     Drag = 12,
     StyleDeclaration = 13,
+    Selection = 14,
+    AdoptedStyleSheet = 15,
 }
 
 const ACTIVE_SOURCES = [
@@ -51,18 +106,26 @@ const ACTIVE_SOURCES = [
 ]
 
 export class SessionRecording {
-    instance: PostHog
+    private instance: PostHog
+    private emit: boolean
+    private endpoint: string
+    private windowId: string | null
+    private sessionId: string | null
+    private lastActivityTimestamp: number = Date.now()
+    private flushBufferTimer?: any
+    private buffer?: {
+        size: number
+        data: any[]
+        sessionId: string | null
+        windowId: string | null
+    }
+
     captureStarted: boolean
     snapshots: any[]
-    emit: boolean
-    endpoint: string
     stopRrweb: listenerHandler | undefined
-    windowId: string | null
-    sessionId: string | null
     receivedDecide: boolean
-    rrwebRecord: typeof record | undefined
+    rrwebRecord: rrwebRecord | undefined
     recorderVersion?: string
-    lastActivityTimestamp: number = Date.now()
     isIdle = false
 
     constructor(instance: PostHog) {
@@ -75,6 +138,10 @@ export class SessionRecording {
         this.windowId = null
         this.sessionId = null
         this.receivedDecide = false
+
+        window.addEventListener('beforeunload', () => {
+            this._flushBuffer()
+        })
     }
 
     startRecordingIfEnabled() {
@@ -139,7 +206,7 @@ export class SessionRecording {
         // changing endpoints and the feature being disabled on the server side.
         if (this.receivedDecide) {
             this.emit = true
-            this.snapshots.forEach((properties) => this._captureSnapshot(properties))
+            this.snapshots.forEach((properties) => this._captureSnapshotBuffered(properties))
         }
         this._startCapture()
     }
@@ -162,6 +229,8 @@ export class SessionRecording {
         }
 
         this.captureStarted = true
+        // We want to ensure the sessionManager is reset if necessary on load of the recorder
+        this.instance.sessionManager.checkAndGetSessionAndWindowId()
 
         const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
@@ -215,8 +284,9 @@ export class SessionRecording {
             return
         }
 
+        // We only want to extend the session if it is an interactive event.
         const { windowId, sessionId } = this.instance.sessionManager.checkAndGetSessionAndWindowId(
-            !isUserInteraction, // readonly if it isn't a user interaction
+            !isUserInteraction,
             event.timestamp
         )
 
@@ -254,12 +324,14 @@ export class SessionRecording {
             ignoreClass: 'ph-ignore-input',
             maskTextClass: 'ph-mask',
             maskTextSelector: undefined,
+            maskTextFn: undefined,
             maskAllInputs: true,
             maskInputOptions: {},
             maskInputFn: undefined,
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
+            recordCrossOriginIframes: false,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
@@ -313,10 +385,12 @@ export class SessionRecording {
         this.isIdle = false
     }
 
-    onRRwebEmit(event: eventWithTime) {
-        event = truncateLargeConsoleLogs(
-            filterDataURLsFromLargeDataObjects(event) as pluginEvent<{ payload: string[] }>
-        ) as eventWithTime
+    onRRwebEmit(rawEvent: eventWithTime) {
+        if (!rawEvent || typeof rawEvent !== 'object') {
+            return
+        }
+
+        const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(rawEvent))
 
         this._updateWindowAndSessionIds(event)
 
@@ -326,6 +400,7 @@ export class SessionRecording {
         }
 
         const properties = {
+            $snapshot_bytes: size,
             $snapshot_data: event,
             $session_id: this.sessionId,
             $window_id: this.windowId,
@@ -335,13 +410,58 @@ export class SessionRecording {
         this.instance._captureMetrics.incr(`rrweb-record-${event.type}`)
 
         if (this.emit) {
-            this._captureSnapshot(properties)
+            this._captureSnapshotBuffered(properties)
         } else {
             this.snapshots.push(properties)
         }
     }
 
-    _captureSnapshot(properties: Properties) {
+    private _flushBuffer() {
+        if (this.flushBufferTimer) {
+            clearTimeout(this.flushBufferTimer)
+            this.flushBufferTimer = undefined
+        }
+
+        if (this.buffer && this.buffer.data.length !== 0) {
+            this._captureSnapshot({
+                $snapshot_bytes: this.buffer.size,
+                $snapshot_data: this.buffer.data,
+                $session_id: this.buffer.sessionId,
+                $window_id: this.buffer.windowId,
+            })
+        }
+
+        this.buffer = undefined
+
+        return {
+            size: 0,
+            data: [],
+            sessionId: this.sessionId,
+            windowId: this.windowId,
+        }
+    }
+
+    private _captureSnapshotBuffered(properties: Properties) {
+        const additionalBytes = 2 + (this.buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
+        if (
+            !this.buffer ||
+            this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
+            this.buffer.sessionId !== this.sessionId
+        ) {
+            this.buffer = this._flushBuffer()
+        }
+
+        this.buffer.size += properties.$snapshot_bytes
+        this.buffer.data.push(properties.$snapshot_data)
+
+        if (!this.flushBufferTimer) {
+            this.flushBufferTimer = setTimeout(() => {
+                this._flushBuffer()
+            }, RECORDING_BUFFER_TIMEOUT)
+        }
+    }
+
+    private _captureSnapshot(properties: Properties) {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
             transport: 'XHR',

@@ -1,5 +1,6 @@
 import Config from './config'
 import { Breaker, EventHandler, Properties } from './types'
+import { uuidv7 } from './uuidv7'
 
 /*
  * Saved references to long variable names, so that closure compiler can
@@ -93,34 +94,6 @@ export const _bind_instance_methods = function (obj: Record<string, any>): void 
     }
 }
 
-/**
- * @param {*=} obj
- * @param {function(...*)=} iterator
- * @param {Object=} thisArg
- */
-export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
-    if (obj === null || obj === undefined) {
-        return
-    }
-    if (nativeForEach && Array.isArray(obj) && obj.forEach === nativeForEach) {
-        obj.forEach(iterator, thisArg)
-    } else if ('length' in obj && obj.length === +obj.length) {
-        for (let i = 0, l = obj.length; i < l; i++) {
-            if (i in obj && iterator.call(thisArg, obj[i], i) === breaker) {
-                return
-            }
-        }
-    } else {
-        for (const key in obj) {
-            if (hasOwnProperty.call(obj, key)) {
-                if (iterator.call(thisArg, obj[key], key) === breaker) {
-                    return
-                }
-            }
-        }
-    }
-}
-
 export function _eachArray<E = any>(
     obj: E[] | null | undefined,
     iterator: (value: E, key: number) => void | Breaker,
@@ -134,6 +107,27 @@ export function _eachArray<E = any>(
                 if (i in obj && iterator.call(thisArg, obj[i], i) === breaker) {
                     return
                 }
+            }
+        }
+    }
+}
+
+/**
+ * @param {*=} obj
+ * @param {function(...*)=} iterator
+ * @param {Object=} thisArg
+ */
+export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
+    if (obj === null || obj === undefined) {
+        return
+    }
+    if (Array.isArray(obj)) {
+        return _eachArray(obj, iterator, thisArg)
+    }
+    for (const key in obj) {
+        if (hasOwnProperty.call(obj, key)) {
+            if (iterator.call(thisArg, obj[key], key) === breaker) {
+                return
             }
         }
     }
@@ -526,7 +520,11 @@ export const _UUID = (function () {
         return ret.toString(16)
     }
 
-    return function () {
+    return function (version?: 'v7') {
+        if (version === 'v7') {
+            return uuidv7()
+        }
+
         const se = typeof window !== 'undefined' ? (window.screen.height * window.screen.width).toString(16) : '0'
         return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
     }
@@ -537,7 +535,7 @@ export const _UUID = (function () {
 // sending false capturing data
 export const _isBlockedUA = function (ua: string): boolean {
     if (
-        /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog|applebot|semrushbot|duckduckbot|twitterbot|rogerbot|linkedinbot|mj12bot|sitebulb|bot.htm|bot.php|hubspot|crawler)/i.test(
+        /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog|applebot|semrushbot|duckduckbot|twitterbot|rogerbot|linkedinbot|mj12bot|sitebulb|bot.htm|bot.php|hubspot|crawler|prerender)/i.test(
             ua
         )
     ) {

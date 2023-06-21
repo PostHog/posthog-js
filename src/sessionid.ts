@@ -3,18 +3,20 @@ import { sessionStore } from './storage'
 import { _UUID } from './utils'
 import { PostHogConfig } from './types'
 
-const SESSION_CHANGE_THRESHOLD = 30 * 60 * 1000 // 30 mins
+const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 mins
+const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
-    config: Partial<PostHogConfig>
-    persistence: PostHogPersistence
-    _windowId: string | null | undefined
-    _sessionId: string | null | undefined
-    window_id_storage_key: string
-    primary_window_exists_storage_key: string
-    _sessionStartTimestamp: number | null
-    _sessionActivityTimestamp: number | null
+    private config: Partial<PostHogConfig>
+    private persistence: PostHogPersistence
+    private _windowId: string | null | undefined
+    private _sessionId: string | null | undefined
+    private _window_id_storage_key: string
+    private _primary_window_exists_storage_key: string
+    private _sessionStartTimestamp: number | null
+    private _sessionActivityTimestamp: number | null
+    private _sessionTimeoutMs: number
 
     constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence) {
         this.config = config
@@ -25,31 +27,47 @@ export class SessionIdManager {
         this._sessionActivityTimestamp = null
 
         const persistenceName = config['persistence_name'] || config['token']
+        let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
 
-        this.window_id_storage_key = 'ph_' + persistenceName + '_window_id'
-        this.primary_window_exists_storage_key = 'ph_' + persistenceName + '_primary_window_exists'
+        if (typeof desiredTimeout !== 'number') {
+            console.warn('[PostHog] session_idle_timeout_seconds must be a number. Defaulting to 30 minutes.')
+            desiredTimeout = MAX_SESSION_IDLE_TIMEOUT
+        } else if (desiredTimeout > MAX_SESSION_IDLE_TIMEOUT) {
+            console.warn(
+                '[PostHog] session_idle_timeout_seconds cannot be  greater than 30 minutes. Using 30 minutes instead.'
+            )
+        } else if (desiredTimeout < MIN_SESSION_IDLE_TIMEOUT) {
+            console.warn(
+                '[PostHog] session_idle_timeout_seconds cannot be less than 60 seconds. Using 60 seconds instead.'
+            )
+        }
+
+        this._sessionTimeoutMs =
+            Math.min(Math.max(desiredTimeout, MIN_SESSION_IDLE_TIMEOUT), MAX_SESSION_IDLE_TIMEOUT) * 1000
+        this._window_id_storage_key = 'ph_' + persistenceName + '_window_id'
+        this._primary_window_exists_storage_key = 'ph_' + persistenceName + '_primary_window_exists'
 
         // primary_window_exists is set when the DOM has been loaded and is cleared on unload
         // if it exists here it means there was no unload which suggests this window is opened as a tab duplication, window.open, etc.
         if (this._canUseSessionStorage()) {
-            const lastWindowId = sessionStore.parse(this.window_id_storage_key)
+            const lastWindowId = sessionStore.parse(this._window_id_storage_key)
 
-            const primaryWindowExists = sessionStore.parse(this.primary_window_exists_storage_key)
+            const primaryWindowExists = sessionStore.parse(this._primary_window_exists_storage_key)
             if (lastWindowId && !primaryWindowExists) {
                 // Persist window from previous storage state
                 this._windowId = lastWindowId
             } else {
                 // Wipe any reference to previous window id
-                sessionStore.remove(this.window_id_storage_key)
+                sessionStore.remove(this._window_id_storage_key)
             }
             // Flag this session as having a primary window
-            sessionStore.set(this.primary_window_exists_storage_key, true)
+            sessionStore.set(this._primary_window_exists_storage_key, true)
         }
 
         this._listenToReloadWindow()
     }
 
-    _canUseSessionStorage(): boolean {
+    private _canUseSessionStorage(): boolean {
         // We only want to use sessionStorage if persistence is enabled and not memory storage
         return this.config.persistence !== 'memory' && !this.persistence.disabled && sessionStore.is_supported()
     }
@@ -58,21 +76,21 @@ export class SessionIdManager {
     // and persists page loads/reloads. So it's uniquely suited for storing the windowId. This function also respects
     // when persistence is disabled (by user config) and when sessionStorage is not supported (it *should* be supported on all browsers),
     // and in that case, it falls back to memory (which sadly, won't persist page loads)
-    _setWindowId(windowId: string): void {
+    private _setWindowId(windowId: string): void {
         if (windowId !== this._windowId) {
             this._windowId = windowId
             if (this._canUseSessionStorage()) {
-                sessionStore.set(this.window_id_storage_key, windowId)
+                sessionStore.set(this._window_id_storage_key, windowId)
             }
         }
     }
 
-    _getWindowId(): string | null {
+    private _getWindowId(): string | null {
         if (this._windowId) {
             return this._windowId
         }
         if (this._canUseSessionStorage()) {
-            return sessionStore.parse(this.window_id_storage_key)
+            return sessionStore.parse(this._window_id_storage_key)
         }
         // New window id will be generated
         return null
@@ -80,7 +98,7 @@ export class SessionIdManager {
 
     // Note: 'this.persistence.register' can be disabled in the config.
     // In that case, this works by storing sessionId and the timestamp in memory.
-    _setSessionId(
+    private _setSessionId(
         sessionId: string | null,
         sessionActivityTimestamp: number | null,
         sessionStartTimestamp: number | null
@@ -99,7 +117,7 @@ export class SessionIdManager {
         }
     }
 
-    _getSessionId(): [number, string, number] {
+    private _getSessionId(): [number, string, number] {
         if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
             return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
@@ -125,10 +143,10 @@ export class SessionIdManager {
      * Cloned sessions (new tab, tab duplication, window.open(), ...) WILL have this primaryWindowExists flag in their copied session storage.
      * We conditionally check the primaryWindowExists value in the constructor to decide if the window id in the last session storage should be carried over.
      */
-    _listenToReloadWindow(): void {
+    private _listenToReloadWindow(): void {
         window.addEventListener('beforeunload', () => {
             if (this._canUseSessionStorage()) {
-                sessionStore.remove(this.primary_window_exists_storage_key)
+                sessionStore.remove(this._primary_window_exists_storage_key)
             }
         })
     }
@@ -161,7 +179,7 @@ export class SessionIdManager {
 
         if (
             !sessionId ||
-            (!readOnly && Math.abs(timestamp - lastTimestamp) > SESSION_CHANGE_THRESHOLD) ||
+            (!readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs) ||
             sessionPastMaximumLength
         ) {
             sessionId = _UUID()
@@ -178,8 +196,9 @@ export class SessionIdManager {
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
 
         return {
-            sessionId: sessionId,
-            windowId: windowId,
+            sessionId,
+            windowId,
+            sessionStartTimestamp,
         }
     }
 }

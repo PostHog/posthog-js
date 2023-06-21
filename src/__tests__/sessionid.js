@@ -37,6 +37,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
+                sessionStartTimestamp: given.timestamp,
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
@@ -49,6 +50,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
+                sessionStartTimestamp: given.timestamp,
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
@@ -69,6 +71,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toEqual({
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
+                sessionStartTimestamp: given.timestampOfSessionStart,
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestampOfSessionStart],
@@ -86,6 +89,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toEqual({
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
+                sessionStartTimestamp: sessionStart,
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [oldTimestamp, 'oldSessionID', sessionStart],
@@ -97,6 +101,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'oldSessionID',
+                sessionStartTimestamp: given.timestampOfSessionStart,
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestampOfSessionStart],
@@ -111,6 +116,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
+                sessionStartTimestamp: given.timestamp,
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
@@ -127,6 +133,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
+                sessionStartTimestamp: given.timestamp,
             })
 
             expect(given.persistence.register).toHaveBeenCalledWith({
@@ -145,6 +152,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
+                sessionStartTimestamp: given.timestamp,
             })
 
             expect(given.persistence.register).toHaveBeenCalledWith({
@@ -154,12 +162,14 @@ describe('Session ID manager', () => {
         })
 
         it('uses the current time if no timestamp is provided', () => {
+            const now = new Date().getTime()
             const oldTimestamp = 1601107460000
             given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', given.timestampOfSessionStart])
             given('timestamp', () => undefined)
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
+                sessionStartTimestamp: now,
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [given.now, 'newUUID', given.now],
@@ -171,6 +181,7 @@ describe('Session ID manager', () => {
             expect(given.subject).toEqual({
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
+                sessionStartTimestamp: given.timestamp,
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestamp],
@@ -243,6 +254,33 @@ describe('Session ID manager', () => {
             expect(given.sessionIdManager._windowId).toEqual(undefined)
             expect(sessionStore.remove).toHaveBeenCalledWith('ph_persistance-name_window_id')
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
+        })
+    })
+
+    describe('custom session_idle_timeout_seconds', () => {
+        const mockSessionManager = (timeout) =>
+            new SessionIdManager(
+                {
+                    session_idle_timeout_seconds: timeout,
+                },
+                given.persistence
+            )
+
+        beforeEach(() => {
+            console.warn = jest.fn()
+        })
+
+        it('uses the custom session_idle_timeout_seconds if within bounds', () => {
+            expect(mockSessionManager(61)._sessionTimeoutMs).toEqual(61 * 1000)
+            expect(console.warn).toBeCalledTimes(0)
+            expect(mockSessionManager(59)._sessionTimeoutMs).toEqual(60 * 1000)
+            expect(console.warn).toBeCalledTimes(1)
+            expect(mockSessionManager(30 * 60 - 1)._sessionTimeoutMs).toEqual((30 * 60 - 1) * 1000)
+            expect(console.warn).toBeCalledTimes(1)
+            expect(mockSessionManager(30 * 60 + 1)._sessionTimeoutMs).toEqual(30 * 60 * 1000)
+            expect(console.warn).toBeCalledTimes(2)
+            expect(mockSessionManager('foobar')._sessionTimeoutMs).toEqual(30 * 60 * 1000)
+            expect(console.warn).toBeCalledTimes(3)
         })
     })
 })

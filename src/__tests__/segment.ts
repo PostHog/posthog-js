@@ -1,3 +1,4 @@
+/* eslint-disable compat/compat */
 /*
  * Test that integration with Segment works as expected. The integration should:
  *
@@ -31,7 +32,7 @@ describe(`Module-based loader in Node env`, () => {
                 anonymousId: () => 'test-anonymous-id',
                 id: () => 'test-id',
             }),
-            register: (integration) => {
+            register: (integration: any) => {
                 // IMPORTANT: the real register function returns a Promise. We
                 // want to do the same thing and have some way to verify that
                 // the integration is setup in time for the `loaded` callback.

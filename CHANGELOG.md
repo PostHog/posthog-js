@@ -1,3 +1,114 @@
+## 1.68.2 - 2023-06-20
+
+- feat: Group rrweb events into one capture (#694)
+
+## 1.68.1 - 2023-06-15
+
+
+
+## 1.68.0 - 2023-06-14
+
+
+
+## 1.67.2 - 2023-06-12
+
+- feat: allow decide response to configure errors to drop by pattern (#692)
+- chore: no compatability testing for test files (#690)
+
+## 1.67.1 - 2023-06-09
+
+
+
+## 1.67.0 - 2023-06-07
+
+- feat: get surveys api (#677)
+
+## 1.66.1 - 2023-06-07
+
+- Update utils.ts (#686)
+
+## 1.66.0 - 2023-06-06
+
+- chore: manual version bump (#684)
+- feat: send event UUIDs (#672)
+
+## 1.66.0 - 2023-06-06
+
+Manual addition of version 1.66.0 because CI failed to automatically bump the version
+
+- feat: send event UUIDs (#672)
+
+## 1.65.0 - 2023-06-06
+
+- feat: backoff with jitter (#678)
+
+## 1.64.0 - 2023-06-06
+
+- feat: Add missing maskTextFn for recordings (#679)
+
+## 1.63.6 - 2023-06-06
+
+
+
+## 1.63.5 - 2023-06-06
+
+- add browserlist and eslint checking compatability using it (#673)
+
+## 1.63.4 - 2023-06-05
+
+- feat: default endpoint for session recordings is /s/ (#674)
+
+## 1.63.3 - 2023-06-02
+
+- fix: Typescript import issue with rrweb (#670)
+
+## 1.63.2 - 2023-06-01
+
+- fix: only allow exception capture on remote enabled (#659)
+
+## 1.63.1 - 2023-05-31
+
+- fix: performance observer is not always available (#663)
+- chore: correct pnpm version (#662)
+
+## 1.63.0 - 2023-05-31
+
+- feat: remove lz compression (#654)
+
+## 1.62.0 - 2023-05-31
+
+- feat: Exception Autocapture (#649)
+
+## 1.61.0 - 2023-05-30
+
+- feat(react): Flag autocapture component (#622)
+
+## 1.60.0 - 2023-05-30
+
+- feat: Added support for cross origin iframe recording (#655)
+
+## 1.59.0 - 2023-05-30
+
+- feat: remove broken capture using img support (#651)
+
+## 1.58.0 - 2023-05-26
+
+- Add get_session_id and get_session_replay_url functions  (#647)
+
+## 1.57.4 - 2023-05-25
+
+- fix: Session timeout overridden on reload (#645)
+
+## 1.57.3 - 2023-05-23
+
+- fix: properties with "length" value (#640)
+- docs: Update README around releasing and development (#634)
+- chore: add test for $identify events count optimization (#639)
+- ci: consolidate library checks into one workflow (#638)
+- ci: add prettier and eslint linting stage (#637)
+- chore: add pre-commit to run lint staged. (#636)
+- chore: add functional tests (#635)
+
 ## 1.57.2 - 2023-05-17
 
 

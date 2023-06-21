@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
+/* eslint-disable compat/compat */
+
 import { WebPerformanceObserver } from '../../extensions/web-performance'
 import { PostHog } from '../../posthog-core'
 import { NetworkRequest, PostHogConfig } from '../../types'
@@ -33,7 +35,7 @@ describe('WebPerformance', () => {
 
     beforeEach(() => {
         mockPostHogInstance = {
-            get_config: jest.fn((key: string) => mockConfig[key]),
+            get_config: jest.fn((key: string) => mockConfig[key as keyof PostHogConfig]),
             sessionRecording: {
                 onRRwebEmit: jest.fn(),
             },
@@ -43,6 +45,28 @@ describe('WebPerformance', () => {
         jest.useFakeTimers()
         jest.setSystemTime(new Date('2023-01-01'))
         performance.now = jest.fn(() => Date.now())
+    })
+
+    describe('when the browser does not support performance observer', () => {
+        const OriginalPerformanceObserver = window.PerformanceObserver
+
+        beforeAll(() => {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            window.PerformanceObserver = undefined
+        })
+
+        afterAll(() => {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            window.PerformanceObserver = OriginalPerformanceObserver
+        })
+
+        it('should not start the observer', () => {
+            const webPerformance = new WebPerformanceObserver(mockPostHogInstance as PostHog)
+            webPerformance.startObserving()
+            expect(webPerformance.isObserving()).toBe(false)
+        })
     })
 
     describe('_capturePerformanceEvent', () => {
