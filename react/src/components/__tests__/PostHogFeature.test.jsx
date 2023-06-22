@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react'
 import { PostHogContext, PostHogProvider } from '../../context'
 import { PostHogFeature } from '../'
@@ -89,6 +90,7 @@ describe('PostHogFeature component', () => {
     })
 
     it('should not fire events when interaction is disabled', () => {
+        
         given(
             'render',
             () => () =>
@@ -109,6 +111,45 @@ describe('PostHogFeature component', () => {
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
         expect(given.posthog.capture).not.toHaveBeenCalled()
+    })
+
+    it('should fire events when interaction is disabled but re-enabled after', () => {
+
+        const DynamicUpdateComponent = () => {
+            const [trackInteraction, setTrackInteraction] = useState(false)
+
+            return (
+                <>
+                    <div data-testid="clicker" onClick={() => {setTrackInteraction(true)}}>Click me</div>
+                    <PostHogFeature flag={given.featureFlag} match={given.matchValue} trackInteraction={trackInteraction}>
+                        <div data-testid="helloDiv">Hello</div>
+                    </PostHogFeature>
+                </>
+            )
+        }
+
+        given(
+            'render',
+            () => () =>
+                render(
+                    <PostHogProvider client={given.posthog}>
+                        <DynamicUpdateComponent />
+                    </PostHogProvider>
+                )
+        )
+        given.render()
+
+        fireEvent.click(screen.getByTestId('helloDiv'))
+        expect(given.posthog.capture).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByTestId('clicker'))
+        fireEvent.click(screen.getByTestId('helloDiv'))
+        fireEvent.click(screen.getByTestId('helloDiv'))
+        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+            feature_flag: 'test',
+            $set: { '$feature_interaction/test': true },
+        })
+        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })
 
     it('should not show the feature component if the flag is not enabled', () => {
