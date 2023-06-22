@@ -10,9 +10,6 @@ export function useFeatureFlagPayload(flag: string): JsonType | undefined {
     // to a hydration error when using nextjs
 
     useEffect(() => {
-        if (!client) {
-            return
-        }
         return client.onFeatureFlags(() => {
             setFeatureFlagPayload(client.getFeatureFlagPayload(flag))
         })

@@ -1,8 +1,6 @@
 import posthogJs, { PostHogConfig } from 'posthog-js'
 
-import * as React from 'react'
-
-import { useEffect, useState } from 'react'
+import React, { useMemo } from 'react'
 import { PostHog, PostHogContext } from './PostHogContext'
 
 export function PostHogProvider({
@@ -16,9 +14,7 @@ export function PostHogProvider({
     apiKey?: string | undefined
     options?: Partial<PostHogConfig> | undefined
 }) {
-    const [posthog, setPosthog] = useState<PostHog | undefined>(client)
-
-    useEffect(() => {
+    const posthog = useMemo(() => {
         if (client && apiKey) {
             console.warn(
                 'You have provided both a client and an apiKey to PostHogProvider. The apiKey will be ignored in favour of the client.'
@@ -31,17 +27,19 @@ export function PostHogProvider({
             )
         }
 
-        if (posthog) {
-            return
+        if (client) {
+            return client
         }
 
-        if (client) {
-            setPosthog(client)
-        } else if (apiKey) {
+        if (apiKey) {
+            if (posthogJs.__loaded) {
+                console.warn('posthog was already loaded elsewhere. This may cause issues.')
+            }
             posthogJs.init(apiKey, options)
-            setPosthog(posthogJs)
         }
-    }, [posthog, client, apiKey, options])
+
+        return posthogJs
+    }, [client, apiKey])
 
     return <PostHogContext.Provider value={{ client: posthog }}>{children}</PostHogContext.Provider>
 }

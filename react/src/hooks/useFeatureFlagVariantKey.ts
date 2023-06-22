@@ -9,9 +9,6 @@ export function useFeatureFlagVariantKey(flag: string): string | boolean | undef
     // to a hydration error when using nextjs
 
     useEffect(() => {
-        if (!client) {
-            return
-        }
         return client.onFeatureFlags(() => {
             setFeatureFlagVariantKey(client.getFeatureFlag(flag))
         })

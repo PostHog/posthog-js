@@ -30,7 +30,7 @@ export default function Home() {
                         src={`http://${otherHost}:3000/`}
                         style={{ width: '100%', height: '500px' }}
                         onLoad={() => {
-                            posthog?.capture('iframe loaded')
+                            posthog.capture('iframe loaded')
                         }}
                     />
                 )}

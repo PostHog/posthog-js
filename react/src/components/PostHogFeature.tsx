@@ -32,12 +32,12 @@ export function PostHogFeature({
     return <>{fallback}</>
 }
 
-function trackClicks(flag: string, posthog?: PostHog) {
-    posthog?.capture('$feature_interaction', { feature_flag: flag, $set: { [`$feature_interaction/${flag}`]: true } })
+function trackClicks(flag: string, posthog: PostHog) {
+    posthog.capture('$feature_interaction', { feature_flag: flag, $set: { [`$feature_interaction/${flag}`]: true } })
 }
 
-function trackVisibility(flag: string, posthog?: PostHog) {
-    posthog?.capture('$feature_view', { feature_flag: flag })
+function trackVisibility(flag: string, posthog: PostHog) {
+    posthog.capture('$feature_view', { feature_flag: flag })
 }
 
 function VisibilityAndClickTracker({
