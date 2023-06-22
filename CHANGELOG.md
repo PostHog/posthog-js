@@ -1,3 +1,7 @@
+## 1.68.4 - 2023-06-22
+
+- feat(components): Give option to not track events on feature component (#708)
+
 ## 1.68.3 - 2023-06-22
 
 - fix: PosthogProvider doesn't need to have the client be optional (#705)
