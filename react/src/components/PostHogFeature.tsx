@@ -45,7 +45,7 @@ export function PostHogFeature({
     return <>{fallback}</>
 }
 
-function catureFeatureInteraction(flag: string, posthog: PostHog) {
+function captureFeatureInteraction(flag: string, posthog: PostHog) {
     posthog.capture('$feature_interaction', { feature_flag: flag, $set: { [`$feature_interaction/${flag}`]: true } })
 }
 
@@ -74,7 +74,7 @@ function VisibilityAndClickTracker({
 
     const cachedOnClick = useCallback(() => {
         if (!clickTrackedRef.current && trackInteraction) {
-            catureFeatureInteraction(flag, posthog)
+            captureFeatureInteraction(flag, posthog)
             clickTrackedRef.current = true
         }
     }, [flag, posthog, trackInteraction])
