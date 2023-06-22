@@ -72,6 +72,11 @@ function VisibilityAndClickTracker({
     const visibilityTrackedRef = useRef(!trackView)
     const clickTrackedRef = useRef(!trackInteraction)
 
+    useEffect(() => {
+        clickTrackedRef.current = !trackInteraction
+        visibilityTrackedRef.current = !trackView
+    }, [trackInteraction, trackView])
+
     const cachedOnClick = useCallback(() => {
         if (!clickTrackedRef.current) {
             trackClicks(flag, posthog)
