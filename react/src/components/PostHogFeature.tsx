@@ -8,6 +8,8 @@ export type PostHogFeatureProps = React.HTMLProps<HTMLDivElement> & {
     fallback?: React.ReactNode
     match?: string | boolean
     visibilityObserverOptions?: IntersectionObserverInit
+    trackInteraction?: boolean
+    trackView?: boolean
 }
 
 export function PostHogFeature({
@@ -16,15 +18,26 @@ export function PostHogFeature({
     children,
     fallback,
     visibilityObserverOptions,
+    trackInteraction,
+    trackView,
     ...props
 }: PostHogFeatureProps): JSX.Element | null {
     const payload = useFeatureFlagPayload(flag)
     const variant = useFeatureFlagVariantKey(flag)
 
+    const shouldTrackInteraction = trackInteraction ?? true
+    const shouldTrackView = trackView ?? true
+
     if (match === undefined || variant === match) {
         const childNode: React.ReactNode = typeof children === 'function' ? children(payload) : children
         return (
-            <VisibilityAndClickTracker flag={flag} options={visibilityObserverOptions} {...props}>
+            <VisibilityAndClickTracker
+                flag={flag}
+                options={visibilityObserverOptions}
+                trackInteraction={shouldTrackInteraction}
+                trackView={shouldTrackView}
+                {...props}
+            >
                 {childNode}
             </VisibilityAndClickTracker>
         )
@@ -43,17 +56,21 @@ function trackVisibility(flag: string, posthog: PostHog) {
 function VisibilityAndClickTracker({
     flag,
     children,
+    trackInteraction,
+    trackView,
     options,
     ...props
 }: {
     flag: string
     children: React.ReactNode
+    trackInteraction: boolean
+    trackView: boolean
     options?: IntersectionObserverInit
 }): JSX.Element {
     const ref = useRef<HTMLDivElement>(null)
     const posthog = usePostHog()
-    const visibilityTrackedRef = useRef(false)
-    const clickTrackedRef = useRef(false)
+    const visibilityTrackedRef = useRef(!trackView)
+    const clickTrackedRef = useRef(!trackInteraction)
 
     const cachedOnClick = useCallback(() => {
         if (!clickTrackedRef.current) {
@@ -72,6 +89,7 @@ function VisibilityAndClickTracker({
             }
         }
 
+        // eslint-disable-next-line compat/compat
         const observer = new IntersectionObserver(([entry]) => onIntersect(entry), {
             threshold: 0.1,
             ...options,

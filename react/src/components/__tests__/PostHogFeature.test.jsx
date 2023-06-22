@@ -88,6 +88,29 @@ describe('PostHogFeature component', () => {
         expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })
 
+    it('should not fire events when interaction is disabled', () => {
+        given(
+            'render',
+            () => () =>
+                render(
+                    <PostHogProvider client={given.posthog}>
+                        <PostHogFeature flag={given.featureFlag} match={given.matchValue} trackInteraction={false}>
+                            <div data-testid="helloDiv">Hello</div>
+                        </PostHogFeature>
+                    </PostHogProvider>
+                )
+        )
+        given.render()
+
+        fireEvent.click(screen.getByTestId('helloDiv'))
+        expect(given.posthog.capture).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByTestId('helloDiv'))
+        fireEvent.click(screen.getByTestId('helloDiv'))
+        fireEvent.click(screen.getByTestId('helloDiv'))
+        expect(given.posthog.capture).not.toHaveBeenCalled()
+    })
+
     it('should not show the feature component if the flag is not enabled', () => {
         given('featureFlag', () => 'test_false')
         given.render()
