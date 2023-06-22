@@ -45,11 +45,11 @@ export function PostHogFeature({
     return <>{fallback}</>
 }
 
-function trackClicks(flag: string, posthog: PostHog) {
+function catureFeatureInteraction(flag: string, posthog: PostHog) {
     posthog.capture('$feature_interaction', { feature_flag: flag, $set: { [`$feature_interaction/${flag}`]: true } })
 }
 
-function trackVisibility(flag: string, posthog: PostHog) {
+function captureFeatureView(flag: string, posthog: PostHog) {
     posthog.capture('$feature_view', { feature_flag: flag })
 }
 
@@ -69,27 +69,22 @@ function VisibilityAndClickTracker({
 }): JSX.Element {
     const ref = useRef<HTMLDivElement>(null)
     const posthog = usePostHog()
-    const visibilityTrackedRef = useRef(!trackView)
-    const clickTrackedRef = useRef(!trackInteraction)
-
-    useEffect(() => {
-        clickTrackedRef.current = !trackInteraction
-        visibilityTrackedRef.current = !trackView
-    }, [trackInteraction, trackView])
+    const visibilityTrackedRef = useRef(false)
+    const clickTrackedRef = useRef(false)
 
     const cachedOnClick = useCallback(() => {
-        if (!clickTrackedRef.current) {
-            trackClicks(flag, posthog)
+        if (!clickTrackedRef.current && trackInteraction) {
+            catureFeatureInteraction(flag, posthog)
             clickTrackedRef.current = true
         }
-    }, [flag, posthog])
+    }, [flag, posthog, trackInteraction])
 
     useEffect(() => {
-        if (ref.current === null) return
+        if (ref.current === null || !trackView) return
 
         const onIntersect = (entry: IntersectionObserverEntry) => {
             if (!visibilityTrackedRef.current && entry.isIntersecting) {
-                trackVisibility(flag, posthog)
+                captureFeatureView(flag, posthog)
                 visibilityTrackedRef.current = true
             }
         }
@@ -101,7 +96,7 @@ function VisibilityAndClickTracker({
         })
         observer.observe(ref.current)
         return () => observer.disconnect()
-    }, [flag, options, posthog, ref])
+    }, [flag, options, posthog, ref, trackView])
 
     return (
         <div ref={ref} {...props} onClick={cachedOnClick}>
