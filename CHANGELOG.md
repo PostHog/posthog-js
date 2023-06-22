@@ -1,3 +1,7 @@
+## 1.68.3 - 2023-06-22
+
+- fix: PosthogProvider doesn't need to have the client be optional (#705)
+
 ## 1.68.2 - 2023-06-20
 
 - feat: Group rrweb events into one capture (#694)
