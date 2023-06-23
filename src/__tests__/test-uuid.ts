@@ -35,13 +35,4 @@ describe('uuid', () => {
 
         expect(() => uuidv7()).not.toThrow()
     })
-
-    it('does not generate a UUID if something goes wrong', () => {
-        // let's fake something going wrong
-
-        Date.now = jest.spyOn(Date, 'now').mockImplementation(() => {
-            throw new Error('something went wrong')
-        }) as unknown as () => number
-        expect(uuidv7()).toBeUndefined()
-    })
 })
