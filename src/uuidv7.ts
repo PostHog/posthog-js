@@ -161,7 +161,17 @@ class V7Generator {
         const MAX_COUNTER = 0x3ff_ffff_ffff
         const ROLLBACK_ALLOWANCE = 10_000 // 10 seconds
 
-        const ts = Date.now()
+        let ts = Date.now()
+        // in https://github.com/PostHog/posthog-js/issues/710 we learned
+        // that Date.now() can return a non-integer value, in some
+        // unfortunate circumstances.
+        // In those circumstances it was, at least, a date.
+        // if ts is a Date we actually want its timestamp
+        // so we try and get that.
+        if ((ts as unknown) instanceof Date) {
+            ts = (ts as unknown as Date).getTime()
+        }
+
         if (ts > this.timestamp) {
             this.timestamp = ts
             this.resetCounter()
