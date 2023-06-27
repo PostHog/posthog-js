@@ -1,32 +1,29 @@
-import { PostHogSurveys } from '../posthog-surveys'
+import { PostHogSurveys, SurveyQuestionType, SurveyType } from '../posthog-surveys'
 import { PostHogPersistence } from '../posthog-persistence'
-import { SurveyQuestionType, SurveyType } from '../types'
 
 describe('surveys', () => {
     given('config', () => ({
         token: 'testtoken',
         api_host: 'https://app.posthog.com',
         persistence: 'memory',
-    })),
-        given('instance', () => ({
-            get_config: jest.fn().mockImplementation((key) => given.config[key]),
-            _prepare_callback: (callback) => callback,
-            persistence: new PostHogPersistence(given.config),
-            register: (props) => given.instance.persistence.register(props),
-            unregister: (key) => given.instance.persistence.unregister(key),
-            get_property: (key) => given.instance.persistence.props[key],
+    }))
+    given('instance', () => ({
+        get_config: jest.fn().mockImplementation((key) => given.config[key]),
+        _prepare_callback: (callback) => callback,
+        persistence: new PostHogPersistence(given.config),
+        register: (props) => given.instance.persistence.register(props),
+        unregister: (key) => given.instance.persistence.unregister(key),
+        get_property: (key) => given.instance.persistence.props[key],
+        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.surveysResponse)),
+        featureFlags: {
             _send_request: jest
                 .fn()
-                .mockImplementation((url, data, headers, callback) => callback(given.surveysResponse)),
-            featureFlags: {
-                _send_request: jest
-                    .fn()
-                    .mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
-                isFeatureEnabled: jest
-                    .fn()
-                    .mockImplementation((featureFlag) => given.decideResponse.featureFlags[featureFlag]),
-            },
-        }))
+                .mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+            isFeatureEnabled: jest
+                .fn()
+                .mockImplementation((featureFlag) => given.decideResponse.featureFlags[featureFlag]),
+        },
+    }))
 
     given('surveys', () => new PostHogSurveys(given.instance))
 
@@ -184,8 +181,6 @@ describe('surveys', () => {
             conditions: { url: 'posthogapp.com', selector: '.test-selector' },
             linked_flag_key: 'linked-flag-key',
             targeting_flag_key: 'survey-targeting-flag-key',
-            start_date: new Date().toISOString(),
-            end_date: null,
         }
 
         it('returns surveys that are active', () => {

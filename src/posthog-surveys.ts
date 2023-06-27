@@ -1,6 +1,60 @@
 import { PostHog } from './posthog-core'
 import { SURVEYS } from './posthog-persistence'
-import { SurveyCallback } from 'types'
+
+/**
+ * Having Survey types in types.ts was confusing tsc
+ * and generating an invalid module.d.ts
+ * See https://github.com/PostHog/posthog-js/issues/698
+ */
+export interface SurveyAppearance {
+    background_color?: string
+    button_color?: string
+    text_color?: string
+}
+
+export enum SurveyType {
+    Popover = 'Popover',
+    Button = 'Button',
+    Email = 'Email',
+    FullScreen = 'Fullscreen',
+}
+
+export interface SurveyQuestion {
+    type: SurveyQuestionType
+    question: string
+    required?: boolean
+    link?: boolean
+    choices?: string[]
+}
+
+export enum SurveyQuestionType {
+    Open = 'open',
+    MultipleChoiceSingle = 'multiple_single',
+    MultipleChoiceMulti = 'multiple_multi',
+    NPS = 'nps',
+    Rating = 'rating',
+    Link = 'link',
+}
+
+export interface SurveyResponse {
+    surveys: Survey[]
+}
+
+export type SurveyCallback = (surveys: Survey[]) => void
+
+export interface Survey {
+    // Sync this with the backend's SurveySerializer!
+    name: string
+    description: string
+    type: SurveyType
+    linked_flag_key?: string | null
+    targeting_flag_key?: string | null
+    questions: SurveyQuestion[]
+    appearance?: SurveyAppearance | null
+    conditions?: { url?: string; selector?: string } | null
+    start_date?: string | null
+    end_date?: string | null
+}
 
 export class PostHogSurveys {
     instance: PostHog

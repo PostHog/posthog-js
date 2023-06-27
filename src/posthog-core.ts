@@ -51,13 +51,12 @@ import {
     AutocaptureConfig,
     JsonType,
     EarlyAccessFeatureCallback,
-    SurveyCallback,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
-import { PostHogSurveys } from './posthog-surveys'
+import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
 
 /*
 SIMPLE STYLE GUIDE:
