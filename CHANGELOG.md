@@ -1,3 +1,8 @@
+## 1.68.5 - 2023-06-28
+
+- fix: invalid module d ts because computers are horrible (#715)
+- fix(cd): use package manager field (#704)
+
 ## 1.68.4 - 2023-06-22
 
 - feat(components): Give option to not track events on feature component (#708)
