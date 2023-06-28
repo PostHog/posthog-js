@@ -4,7 +4,7 @@ import { usePostHog } from './usePostHog'
 export function useFeatureFlagEnabled(flag: string): boolean | undefined {
     const client = usePostHog()
 
-    const [featureEnabled, setFeatureEnabled] = useState<boolean | undefined>()
+    const [featureEnabled, setFeatureEnabled] = useState<boolean | undefined>(client.isFeatureEnabled(flag))
     // would be nice to have a default value above however it's not possible due
     // to a hydration error when using nextjs
 

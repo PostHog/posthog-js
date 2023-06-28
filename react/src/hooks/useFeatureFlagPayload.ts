@@ -5,7 +5,7 @@ import { usePostHog } from './usePostHog'
 export function useFeatureFlagPayload(flag: string): JsonType | undefined {
     const client = usePostHog()
 
-    const [featureFlagPayload, setFeatureFlagPayload] = useState<JsonType>()
+    const [featureFlagPayload, setFeatureFlagPayload] = useState<JsonType>(client.getFeatureFlagPayload(flag))
     // would be nice to have a default value above however it's not possible due
     // to a hydration error when using nextjs
 
