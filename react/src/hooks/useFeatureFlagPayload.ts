@@ -1,15 +1,20 @@
-import { useEffect, useState } from 'react'
 import { JsonType } from 'posthog-js'
 import { usePostHog } from './usePostHog'
+import { useIsomorphicLayoutEffect } from './useIsomorphicLayoutEffect'
+import { SsrStateOptions, useSsrSafeState } from './useSsrSafeState'
+import { useCallback } from 'react'
 
-export function useFeatureFlagPayload(flag: string): JsonType | undefined {
+export function useFeatureFlagPayload(flag: string, options?: SsrStateOptions): JsonType | undefined {
     const client = usePostHog()
 
-    const [featureFlagPayload, setFeatureFlagPayload] = useState<JsonType>(client.getFeatureFlagPayload(flag))
+    const [featureFlagPayload, setFeatureFlagPayload] = useSsrSafeState<JsonType>(
+        useCallback(() => client.getFeatureFlagPayload(flag), [client, flag]),
+        options
+    )
     // would be nice to have a default value above however it's not possible due
     // to a hydration error when using nextjs
 
-    useEffect(() => {
+    useIsomorphicLayoutEffect(() => {
         return client.onFeatureFlags(() => {
             setFeatureFlagPayload(client.getFeatureFlagPayload(flag))
         })

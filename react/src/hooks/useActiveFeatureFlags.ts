@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { usePostHog } from './usePostHog'
+import { useIsomorphicLayoutEffect } from './useIsomorphicLayoutEffect'
 
 export function useActiveFeatureFlags(): string[] | undefined {
     const client = usePostHog()
@@ -8,7 +9,7 @@ export function useActiveFeatureFlags(): string[] | undefined {
     // would be nice to have a default value above however it's not possible due
     // to a hydration error when using nextjs
 
-    useEffect(() => {
+    useIsomorphicLayoutEffect(() => {
         return client.onFeatureFlags((flags) => {
             setFeatureFlags(flags)
         })

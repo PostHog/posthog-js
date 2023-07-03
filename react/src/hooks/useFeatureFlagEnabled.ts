@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react'
 import { usePostHog } from './usePostHog'
+import { useIsomorphicLayoutEffect } from './useIsomorphicLayoutEffect'
+import { SsrStateOptions, useSsrSafeState } from './useSsrSafeState'
+import { useCallback } from 'react'
 
-export function useFeatureFlagEnabled(flag: string): boolean | undefined {
+export function useFeatureFlagEnabled(flag: string, options?: SsrStateOptions): boolean | undefined {
     const client = usePostHog()
 
-    const [featureEnabled, setFeatureEnabled] = useState<boolean | undefined>(client.isFeatureEnabled(flag))
-    // would be nice to have a default value above however it's not possible due
-    // to a hydration error when using nextjs
+    const [featureEnabled, setFeatureEnabled] = useSsrSafeState<boolean | undefined>(
+        useCallback(() => client.isFeatureEnabled(flag), [client, flag]),
+        options
+    )
 
-    useEffect(() => {
+    useIsomorphicLayoutEffect(() => {
         return client.onFeatureFlags(() => {
             setFeatureEnabled(client.isFeatureEnabled(flag))
         })
