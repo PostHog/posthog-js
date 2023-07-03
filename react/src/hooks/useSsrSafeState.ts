@@ -21,7 +21,7 @@ export const useSsrSafeState = <T>(
     initialStateFn: () => T,
     options?: SsrStateOptions
 ): [T | undefined, React.Dispatch<React.SetStateAction<T>>] => {
-    // We get the initial state only if we are hydrated already
+    // We get the initial state only if we are hydrated already or if SSR is disabled
     const initialState = useMemo(() => {
         return isHydrated || options?.ssr === false ? initialStateFn() : undefined
     }, [initialStateFn, options?.ssr])
@@ -29,6 +29,7 @@ export const useSsrSafeState = <T>(
     const [state, setState] = useState<T | undefined>(initialState)
 
     useIsomorphicLayoutEffect(() => {
+        // Indicate we are hydrated for future renders whilst also setting the initial state
         isHydrated = true
         if (initialState === undefined) {
             setState(initialStateFn())
