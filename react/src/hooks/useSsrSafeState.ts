@@ -6,6 +6,8 @@ export type SsrStateOptions = {
     ssr?: boolean
 }
 
+let isHydrated = false
+
 /**
  * Helper function to handle issues to do with Server Side Rendering (SSR) and hydration
  * Unlike useState, this hook will not return the initial state until the client is hydrated via a useEffect.
@@ -21,12 +23,13 @@ export const useSsrSafeState = <T>(
 ): [T | undefined, React.Dispatch<React.SetStateAction<T>>] => {
     // We get the initial state only if we are hydrated already
     const initialState = useMemo(() => {
-        return options?.ssr === false ? initialStateFn() : undefined
+        return isHydrated || options?.ssr === false ? initialStateFn() : undefined
     }, [initialStateFn, options?.ssr])
 
     const [state, setState] = useState<T | undefined>(initialState)
 
     useIsomorphicLayoutEffect(() => {
+        isHydrated = true
         if (initialState === undefined) {
             setState(initialStateFn())
         }

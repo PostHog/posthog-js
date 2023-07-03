@@ -38,6 +38,8 @@ export default function Home() {
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>
 
+                <Link href="/other">Go to other page</Link>
+                <br/>
                 <Link href="/iframe">Go to iframe</Link>
             </main>
         </>
