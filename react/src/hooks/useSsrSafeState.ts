@@ -7,10 +7,10 @@ export type SsrStateOptions = {
 }
 
 /**
- * Helper function to handle issues to do with SSR and hydration
- * Unlike useState, this hook will not return the initial state until the client is hydrated.
- * Once hydrated, the initial state will be returned, e.g. due to client side routing
+ * Helper function to handle issues to do with Server Side Rendering (SSR) and hydration
+ * Unlike useState, this hook will not return the initial state until the client is hydrated via a useEffect.
  * It also tries to render the intialState as fast as possible by using useLayoutEffect on the client
+ * If not using SSR then it can be disabled via the options which will return the initial state immediately
  * @param initialStateFn - Function that returns the initial state
  * @param options - (Optional) Allows disabling SSR support for client-side only apps
  * @returns
