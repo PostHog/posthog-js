@@ -956,7 +956,11 @@ describe('_loaded()', () => {
 
             given.subject()
 
-            expect(given.overrides.capture).toHaveBeenCalledWith('$pageview', {}, { send_instantly: true })
+            expect(given.overrides.capture).toHaveBeenCalledWith(
+                '$pageview',
+                { title: 'test' },
+                { send_instantly: true }
+            )
         })
     })
 
