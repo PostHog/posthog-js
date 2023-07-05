@@ -1,3 +1,7 @@
+## 1.69.0 - 2023-07-05
+
+- feat: capture page title with pageview (#721)
+
 ## 1.68.5 - 2023-06-28
 
 - fix: invalid module d ts because computers are horrible (#715)
