@@ -1,21 +1,21 @@
 import Config from './config'
 import {
-    logger,
+    _copyAndTruncateStrings,
+    _each,
+    _eachArray,
+    _extend,
+    _info,
+    _isArray,
+    _isBlockedUA,
+    _isObject,
+    _isUndefined,
+    _register_event,
+    _safewrap_class,
+    _UUID,
     document,
+    logger,
     userAgent,
     window,
-    _isUndefined,
-    _extend,
-    _each,
-    _isObject,
-    _isBlockedUA,
-    _copyAndTruncateStrings,
-    _isArray,
-    _safewrap_class,
-    _register_event,
-    _UUID,
-    _info,
-    _eachArray,
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogPeople } from './posthog-people'
@@ -34,23 +34,23 @@ import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import {
+    AutocaptureConfig,
     CaptureOptions,
     CaptureResult,
     Compression,
-    ToolbarParams,
+    EarlyAccessFeatureCallback,
     GDPROptions,
     isFeatureEnabledOptions,
     JSC,
+    JsonType,
     OptInOutCapturingOptions,
     PostHogConfig,
     Properties,
     Property,
     RequestCallback,
     SnippetArrayItem,
+    ToolbarParams,
     XHROptions,
-    AutocaptureConfig,
-    JsonType,
-    EarlyAccessFeatureCallback,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -516,7 +516,7 @@ export class PostHog {
         // this happens after so a user can call identify in
         // the loaded callback
         if (this.get_config('capture_pageview')) {
-            this.capture('$pageview', {}, { send_instantly: true })
+            this.capture('$pageview', { title: document.title }, { send_instantly: true })
         }
 
         // Call decide to get what features are enabled and other settings.
@@ -921,6 +921,10 @@ export class PostHog {
                 this.pageViewIdManager.onPageview()
             }
             properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
+        }
+
+        if (event_name === '$pageview') {
+            properties['title'] = document.title
         }
 
         if (event_name === '$performance_event') {
