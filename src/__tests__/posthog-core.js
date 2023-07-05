@@ -3,7 +3,8 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { CaptureMetrics } from '../capture-metrics'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
-import { _info } from '../utils'
+import { _info, document } from '../utils'
+
 import { truth } from './helpers/truth'
 
 jest.mock('../gdpr-utils', () => ({
@@ -11,6 +12,10 @@ jest.mock('../gdpr-utils', () => ({
     addOptOutCheck: (fn) => fn,
 }))
 jest.mock('../decide')
+jest.mock('../utils', () => ({
+    ...jest.requireActual('../utils'),
+    document: { title: 'test' },
+}))
 
 given('lib', () => Object.assign(new PostHog(), given.overrides))
 
@@ -272,6 +277,12 @@ describe('_calculate_event_properties()', () => {
         given.lib._calculate_event_properties(given.event_name, properties, given.start_timestamp, given.options)
 
         expect(Object.keys(properties)).toEqual(['prop1', 'prop2'])
+    })
+
+    it('adds page title to $pageview', () => {
+        given('event_name', () => '$pageview')
+
+        expect(given.subject).toEqual(expect.objectContaining({ title: 'test' }))
     })
 })
 
