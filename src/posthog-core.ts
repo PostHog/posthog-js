@@ -58,7 +58,6 @@ import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
-import __ from 'cypress/types/lodash/fp/__'
 
 /*
 SIMPLE STYLE GUIDE:
