@@ -92,6 +92,11 @@ export interface PostHogConfig {
     properties_string_max_length: number
     session_recording: SessionRecordingOptions
     session_idle_timeout_seconds: number
+    /**
+     * Provide a function to be called when the session_id or window_ id changes
+     * used for example to send the session_id to a backend
+     **/
+    on_session_id_changed_fn: (sessionId: string | null | undefined, windowId: string | null | undefined) => void | null
     mask_all_element_attributes: boolean
     mask_all_text: boolean
     advanced_disable_decide: boolean

@@ -527,9 +527,12 @@ describe('SessionRecording', () => {
         })
 
         describe('with a real session id manager', () => {
+            let mockSessionIdChangedFn
             const startingDate = new Date()
 
             beforeEach(() => {
+                mockSessionIdChangedFn = jest.fn()
+                given.config.on_session_id_changed_fn = mockSessionIdChangedFn
                 given('sessionManager', () => new SessionIdManager(given.config, new PostHogPersistence(given.config)))
                 given.sessionRecording.startRecordingIfEnabled()
                 given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
@@ -548,6 +551,7 @@ describe('SessionRecording', () => {
             it('takes a full snapshot for the first _emit', () => {
                 emitAtDateTime(startingDate)
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                expect(mockSessionIdChangedFn).toHaveBeenCalledTimes(1)
             })
 
             it('does not take a full snapshot for the second _emit', () => {
@@ -579,6 +583,7 @@ describe('SessionRecording', () => {
                 )
 
                 expect(given.sessionManager._getSessionId()[1]).toEqual(startingSessionId)
+                expect(mockSessionIdChangedFn).toHaveBeenCalledTimes(1)
             })
 
             it('does not take a full snapshot for the third _emit', () => {
@@ -630,6 +635,7 @@ describe('SessionRecording', () => {
 
                 expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                expect(mockSessionIdChangedFn).toHaveBeenCalledTimes(2)
             })
 
             it('sends a full snapshot if the session is rotated because max time has passed', () => {
@@ -655,6 +661,7 @@ describe('SessionRecording', () => {
 
                 expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                expect(mockSessionIdChangedFn).toHaveBeenCalledTimes(2)
             })
         })
 
@@ -678,6 +685,7 @@ describe('SessionRecording', () => {
                 expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
 
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                expect(mockSessionIdChangedFn).toHaveBeenCalledTimes(2)
 
                 _emit({
                     event: 123,
@@ -701,6 +709,7 @@ describe('SessionRecording', () => {
                 expect(given.sessionRecording.isIdle).toEqual(true)
                 expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                expect(mockSessionIdChangedFn).toHaveBeenCalledTimes(3)
 
                 _emit({
                     event: 123,
@@ -715,6 +724,7 @@ describe('SessionRecording', () => {
                     lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
                 )
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                expect(mockSessionIdChangedFn).toHaveBeenCalledTimes(4)
             })
         })
     })

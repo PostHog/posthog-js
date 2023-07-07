@@ -17,6 +17,8 @@ export class SessionIdManager {
     private _sessionStartTimestamp: number | null
     private _sessionActivityTimestamp: number | null
     private _sessionTimeoutMs: number
+    private onSessionIdChanged: (sessionId: string | null | undefined, windowId: string | null | undefined) => void =
+        () => {}
 
     constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence) {
         this.config = config
@@ -25,6 +27,10 @@ export class SessionIdManager {
         this._sessionId = undefined
         this._sessionStartTimestamp = null
         this._sessionActivityTimestamp = null
+
+        if (this.config.on_session_id_changed_fn) {
+            this.onSessionIdChanged = this.config.on_session_id_changed_fn
+        }
 
         const persistenceName = config['persistence_name'] || config['token']
         let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
@@ -177,6 +183,7 @@ export class SessionIdManager {
         const sessionPastMaximumLength =
             startTimestamp && startTimestamp > 0 && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT
 
+        let valuesChanged = false
         if (
             !sessionId ||
             (!readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs) ||
@@ -185,8 +192,10 @@ export class SessionIdManager {
             sessionId = _UUID()
             windowId = _UUID()
             startTimestamp = timestamp
+            valuesChanged = true
         } else if (!windowId) {
             windowId = _UUID()
+            valuesChanged = true
         }
 
         const newTimestamp = lastTimestamp === 0 || !readOnly || sessionPastMaximumLength ? timestamp : lastTimestamp
@@ -194,6 +203,10 @@ export class SessionIdManager {
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
+
+        if (valuesChanged) {
+            this.onSessionIdChanged?.(sessionId, windowId)
+        }
 
         return {
             sessionId,
