@@ -1,3 +1,7 @@
+## 1.70.0 - 2023-07-07
+
+- feat: callback when session id changes (#725)
+
 ## 1.69.0 - 2023-07-05
 
 - feat: capture page title with pageview (#721)
