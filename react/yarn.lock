@@ -3471,8 +3471,9 @@ posix-character-classes@^0.1.0:
   integrity sha1-AerA/jta9xoqbAL+q7jB/vfgDqs=
 
 "posthog-js@link:..":
-  version "0.0.0"
-  uid ""
+  version "1.70.0"
+  dependencies:
+    fflate "^0.4.1"
 
 prelude-ls@~1.1.2:
   version "1.1.2"
