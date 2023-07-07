@@ -48,6 +48,7 @@ import {
     Properties,
     Property,
     RequestCallback,
+    SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
     XHROptions,
@@ -57,6 +58,7 @@ import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
+import __ from 'cypress/types/lodash/fp/__'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -159,7 +161,6 @@ const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    on_session_id_changed_fn: __NOOP,
 })
 
 /**
@@ -1151,6 +1152,23 @@ export class PostHog {
      */
     onFeatureFlags(callback: (flags: string[], variants: Record<string, string | boolean>) => void): () => void {
         return this.featureFlags.onFeatureFlags(callback)
+    }
+
+    /*
+     * Register an event listener that runs whenever the session id or window id change.
+     * If there is already a session id, the listener is called immediately in addition to being called on future changes.
+     *
+     * Can be used, for example, to sync the PostHog session id with a backend session.
+     *
+     * ### Usage:
+     *
+     *     posthog.onSessionId(function(sessionId, windowId) { // do something })
+     *
+     * @param {Function} [callback] The callback function will be called once a session id is present or when it or the window id are updated.
+     * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by useEffect when the component unmounts.
+     */
+    onSessionId(callback: SessionIdChangedCallback): () => void {
+        return this.sessionManager.onSessionId(callback)
     }
 
     /** Get list of all surveys. */

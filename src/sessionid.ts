@@ -1,7 +1,7 @@
 import { PostHogPersistence, SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
 import { _UUID } from './utils'
-import { PostHogConfig } from './types'
+import { PostHogConfig, SessionIdChangedCallback } from './types'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 mins
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 mins
@@ -17,8 +17,7 @@ export class SessionIdManager {
     private _sessionStartTimestamp: number | null
     private _sessionActivityTimestamp: number | null
     private _sessionTimeoutMs: number
-    private onSessionIdChanged: (sessionId: string | null | undefined, windowId: string | null | undefined) => void =
-        () => {}
+    private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
 
     constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence) {
         this.config = config
@@ -27,10 +26,6 @@ export class SessionIdManager {
         this._sessionId = undefined
         this._sessionStartTimestamp = null
         this._sessionActivityTimestamp = null
-
-        if (this.config.on_session_id_changed_fn) {
-            this.onSessionIdChanged = this.config.on_session_id_changed_fn
-        }
 
         const persistenceName = config['persistence_name'] || config['token']
         let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
@@ -71,6 +66,20 @@ export class SessionIdManager {
         }
 
         this._listenToReloadWindow()
+    }
+
+    onSessionId(callback: SessionIdChangedCallback): () => void {
+        if (this._sessionIdChangedHandlers === undefined) {
+            this._sessionIdChangedHandlers = []
+        }
+
+        this._sessionIdChangedHandlers.push(callback)
+        if (this._sessionId) {
+            callback(this._sessionId, this._windowId)
+        }
+        return () => {
+            this._sessionIdChangedHandlers = this._sessionIdChangedHandlers.filter((h) => h !== callback)
+        }
     }
 
     private _canUseSessionStorage(): boolean {
@@ -205,7 +214,7 @@ export class SessionIdManager {
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
 
         if (valuesChanged) {
-            this.onSessionIdChanged?.(sessionId, windowId)
+            this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId))
         }
 
         return {
