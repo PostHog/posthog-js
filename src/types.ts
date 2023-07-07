@@ -149,6 +149,8 @@ export interface SessionRecordingOptions {
     recordCrossOriginIframes?: boolean
 }
 
+export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
+
 export enum Compression {
     GZipJS = 'gzip-js',
     Base64 = 'base64',

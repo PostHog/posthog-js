@@ -526,14 +526,8 @@ describe('SessionRecording', () => {
             })
         })
 
-        describe('with a real session id manager', () => {
+        describe('the session id manager', () => {
             const startingDate = new Date()
-
-            beforeEach(() => {
-                given('sessionManager', () => new SessionIdManager(given.config, new PostHogPersistence(given.config)))
-                given.sessionRecording.startRecordingIfEnabled()
-                given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
-            })
 
             const emitAtDateTime = (date, source = 1) =>
                 _emit({
@@ -545,176 +539,269 @@ describe('SessionRecording', () => {
                     },
                 })
 
-            it('takes a full snapshot for the first _emit', () => {
-                emitAtDateTime(startingDate)
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
-            })
+            describe('onSessionId Callbacks', () => {
+                let mockCallback
+                let unsubscribeCallback
 
-            it('does not take a full snapshot for the second _emit', () => {
-                emitAtDateTime(startingDate)
-                emitAtDateTime(
-                    new Date(
-                        startingDate.getFullYear(),
-                        startingDate.getMonth(),
-                        startingDate.getDate(),
-                        startingDate.getHours(),
-                        startingDate.getMinutes() + 1
+                beforeEach(() => {
+                    given(
+                        'sessionManager',
+                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config))
                     )
-                )
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
-            })
 
-            it('does not change session id for a second _emit', () => {
-                const startingSessionId = given.sessionManager._getSessionId()[1]
+                    mockCallback = jest.fn()
+                    unsubscribeCallback = given.sessionManager.onSessionId(mockCallback)
 
-                emitAtDateTime(startingDate)
-                emitAtDateTime(
-                    new Date(
-                        startingDate.getFullYear(),
-                        startingDate.getMonth(),
-                        startingDate.getDate(),
-                        startingDate.getHours(),
-                        startingDate.getMinutes() + 1
-                    )
-                )
+                    expect(mockCallback).not.toHaveBeenCalled()
 
-                expect(given.sessionManager._getSessionId()[1]).toEqual(startingSessionId)
-            })
+                    given.sessionRecording.startRecordingIfEnabled()
+                    given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
 
-            it('does not take a full snapshot for the third _emit', () => {
-                emitAtDateTime(startingDate)
-
-                emitAtDateTime(
-                    new Date(
-                        startingDate.getFullYear(),
-                        startingDate.getMonth(),
-                        startingDate.getDate(),
-                        startingDate.getHours(),
-                        startingDate.getMinutes() + 1
-                    )
-                )
-
-                emitAtDateTime(
-                    new Date(
-                        startingDate.getFullYear(),
-                        startingDate.getMonth(),
-                        startingDate.getDate(),
-                        startingDate.getHours(),
-                        startingDate.getMinutes() + 2
-                    )
-                )
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
-            })
-
-            it('sends a full snapshot if the session is rotated because session has been inactive for 30 minutess', () => {
-                const startingSessionId = given.sessionManager._getSessionId()[1]
-                emitAtDateTime(startingDate)
-                emitAtDateTime(
-                    new Date(
-                        startingDate.getFullYear(),
-                        startingDate.getMonth(),
-                        startingDate.getDate(),
-                        startingDate.getHours(),
-                        startingDate.getMinutes() + 1
-                    )
-                )
-
-                const inactivityThresholdLater = new Date(
-                    startingDate.getFullYear(),
-                    startingDate.getMonth(),
-                    startingDate.getDate(),
-                    startingDate.getHours(),
-                    startingDate.getMinutes() + 32
-                )
-                emitAtDateTime(inactivityThresholdLater)
-
-                expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
-            })
-
-            it('sends a full snapshot if the session is rotated because max time has passed', () => {
-                const startingSessionId = given.sessionManager._getSessionId()[1]
-                emitAtDateTime(startingDate)
-                emitAtDateTime(
-                    new Date(
-                        startingDate.getFullYear(),
-                        startingDate.getMonth(),
-                        startingDate.getDate(),
-                        startingDate.getHours(),
-                        startingDate.getMinutes() + 1
-                    )
-                )
-
-                const moreThanADayLater = new Date(
-                    startingDate.getFullYear(),
-                    startingDate.getMonth(),
-                    startingDate.getDate() + 1,
-                    startingDate.getHours() + 1
-                )
-                emitAtDateTime(moreThanADayLater)
-
-                expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
-            })
-        })
-
-        describe('idle timeouts', () => {
-            it("enters idle state if the activity is non-user generated and there's no activity for 5 seconds", () => {
-                given.sessionRecording.startRecordingIfEnabled()
-                const lastActivityTimestamp = given.sessionRecording.lastActivityTimestamp
-                expect(lastActivityTimestamp).toBeGreaterThan(0)
-
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
-
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: {
-                        source: 1,
-                    },
-                    timestamp: lastActivityTimestamp + 100,
+                    expect(mockCallback).toHaveBeenCalledTimes(1)
                 })
-                expect(given.sessionRecording.isIdle).toEqual(false)
-                expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
 
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                it('calls the callback when the session id changes', () => {
+                    const startingSessionId = given.sessionManager._getSessionId()[1]
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
 
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: {
-                        source: 0,
-                    },
-                    timestamp: lastActivityTimestamp + 200,
+                    const inactivityThresholdLater = new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 32
+                    )
+                    emitAtDateTime(inactivityThresholdLater)
+
+                    expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+
+                    expect(mockCallback).toHaveBeenCalledTimes(2)
+                    // last call received the new session id
+                    expect(mockCallback.mock.calls[1][0]).toEqual(given.sessionManager._getSessionId()[1])
                 })
-                expect(given.sessionRecording.isIdle).toEqual(false)
-                expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
 
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: {
-                        source: 0,
-                    },
-                    timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000,
-                })
-                expect(given.sessionRecording.isIdle).toEqual(true)
-                expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                it('does not calls the callback when the session id changes after unsubscribe', () => {
+                    unsubscribeCallback()
 
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: {
-                        source: 1,
-                    },
-                    timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000,
+                    const startingSessionId = given.sessionManager._getSessionId()[1]
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    const inactivityThresholdLater = new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 32
+                    )
+                    emitAtDateTime(inactivityThresholdLater)
+
+                    expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+
+                    expect(mockCallback).toHaveBeenCalledTimes(1)
+                    // the only call received the original session id
+                    expect(mockCallback.mock.calls[0][0]).toEqual(startingSessionId)
                 })
-                expect(given.sessionRecording.isIdle).toEqual(false)
-                expect(given.sessionRecording.lastActivityTimestamp).toEqual(
-                    lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
-                )
-                expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+            })
+
+            describe('with a real session id manager', () => {
+                beforeEach(() => {
+                    given(
+                        'sessionManager',
+                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config))
+                    )
+                    given.sessionRecording.startRecordingIfEnabled()
+                    given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()
+                })
+
+                it('takes a full snapshot for the first _emit', () => {
+                    emitAtDateTime(startingDate)
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                })
+
+                it('does not take a full snapshot for the second _emit', () => {
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                })
+
+                it('does not change session id for a second _emit', () => {
+                    const startingSessionId = given.sessionManager._getSessionId()[1]
+
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    expect(given.sessionManager._getSessionId()[1]).toEqual(startingSessionId)
+                })
+
+                it('does not take a full snapshot for the third _emit', () => {
+                    emitAtDateTime(startingDate)
+
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 2
+                        )
+                    )
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                })
+
+                it('sends a full snapshot if the session is rotated because session has been inactive for 30 minutes', () => {
+                    const startingSessionId = given.sessionManager._getSessionId()[1]
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    const inactivityThresholdLater = new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate(),
+                        startingDate.getHours(),
+                        startingDate.getMinutes() + 32
+                    )
+                    emitAtDateTime(inactivityThresholdLater)
+
+                    expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                })
+
+                it('sends a full snapshot if the session is rotated because max time has passed', () => {
+                    const startingSessionId = given.sessionManager._getSessionId()[1]
+                    emitAtDateTime(startingDate)
+                    emitAtDateTime(
+                        new Date(
+                            startingDate.getFullYear(),
+                            startingDate.getMonth(),
+                            startingDate.getDate(),
+                            startingDate.getHours(),
+                            startingDate.getMinutes() + 1
+                        )
+                    )
+
+                    const moreThanADayLater = new Date(
+                        startingDate.getFullYear(),
+                        startingDate.getMonth(),
+                        startingDate.getDate() + 1,
+                        startingDate.getHours() + 1
+                    )
+                    emitAtDateTime(moreThanADayLater)
+
+                    expect(given.sessionManager._getSessionId()[1]).not.toEqual(startingSessionId)
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                })
+            })
+
+            describe('idle timeouts', () => {
+                it("enters idle state if the activity is non-user generated and there's no activity for 5 seconds", () => {
+                    given.sessionRecording.startRecordingIfEnabled()
+                    const lastActivityTimestamp = given.sessionRecording.lastActivityTimestamp
+                    expect(lastActivityTimestamp).toBeGreaterThan(0)
+
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
+
+                    _emit({
+                        event: 123,
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: {
+                            source: 1,
+                        },
+                        timestamp: lastActivityTimestamp + 100,
+                    })
+                    expect(given.sessionRecording.isIdle).toEqual(false)
+                    expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
+
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+                    _emit({
+                        event: 123,
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: {
+                            source: 0,
+                        },
+                        timestamp: lastActivityTimestamp + 200,
+                    })
+                    expect(given.sessionRecording.isIdle).toEqual(false)
+                    expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
+
+                    _emit({
+                        event: 123,
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: {
+                            source: 0,
+                        },
+                        timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000,
+                    })
+                    expect(given.sessionRecording.isIdle).toEqual(true)
+                    expect(given.sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+                    _emit({
+                        event: 123,
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: {
+                            source: 1,
+                        },
+                        timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000,
+                    })
+                    expect(given.sessionRecording.isIdle).toEqual(false)
+                    expect(given.sessionRecording.lastActivityTimestamp).toEqual(
+                        lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
+                    )
+                    expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                })
             })
         })
     })

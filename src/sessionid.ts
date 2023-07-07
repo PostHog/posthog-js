@@ -1,7 +1,7 @@
 import { PostHogPersistence, SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
 import { _UUID } from './utils'
-import { PostHogConfig } from './types'
+import { PostHogConfig, SessionIdChangedCallback } from './types'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 mins
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 mins
@@ -17,6 +17,7 @@ export class SessionIdManager {
     private _sessionStartTimestamp: number | null
     private _sessionActivityTimestamp: number | null
     private _sessionTimeoutMs: number
+    private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
 
     constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence) {
         this.config = config
@@ -65,6 +66,22 @@ export class SessionIdManager {
         }
 
         this._listenToReloadWindow()
+    }
+
+    onSessionId(callback: SessionIdChangedCallback): () => void {
+        // KLUDGE: when running in tests the handlers array was always undefined
+        // it's yucky but safe to set it here so that it's always definitely available
+        if (this._sessionIdChangedHandlers === undefined) {
+            this._sessionIdChangedHandlers = []
+        }
+
+        this._sessionIdChangedHandlers.push(callback)
+        if (this._sessionId) {
+            callback(this._sessionId, this._windowId)
+        }
+        return () => {
+            this._sessionIdChangedHandlers = this._sessionIdChangedHandlers.filter((h) => h !== callback)
+        }
     }
 
     private _canUseSessionStorage(): boolean {
@@ -177,6 +194,7 @@ export class SessionIdManager {
         const sessionPastMaximumLength =
             startTimestamp && startTimestamp > 0 && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT
 
+        let valuesChanged = false
         if (
             !sessionId ||
             (!readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs) ||
@@ -185,8 +203,10 @@ export class SessionIdManager {
             sessionId = _UUID()
             windowId = _UUID()
             startTimestamp = timestamp
+            valuesChanged = true
         } else if (!windowId) {
             windowId = _UUID()
+            valuesChanged = true
         }
 
         const newTimestamp = lastTimestamp === 0 || !readOnly || sessionPastMaximumLength ? timestamp : lastTimestamp
@@ -194,6 +214,10 @@ export class SessionIdManager {
 
         this._setWindowId(windowId)
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
+
+        if (valuesChanged) {
+            this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId))
+        }
 
         return {
             sessionId,
