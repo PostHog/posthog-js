@@ -69,6 +69,8 @@ export class SessionIdManager {
     }
 
     onSessionId(callback: SessionIdChangedCallback): () => void {
+        // KLUDGE: when running in tests the handlers array was always undefined
+        // it's yucky but safe to set it here so that it's always definitely available
         if (this._sessionIdChangedHandlers === undefined) {
             this._sessionIdChangedHandlers = []
         }
