@@ -5,8 +5,13 @@ describe('uuid', () => {
         expect(_UUID('v7')).toHaveLength(36)
     })
 
-    it('generates many unique ids in a reasonable time', () => {
+    it('generates many unique v7 UUIDs in a reasonable time', () => {
         const ids = Array.from({ length: 500_000 }, () => _UUID('v7'))
+        expect(new Set(ids).size).toBe(ids.length)
+    })
+
+    it('generates many unique OG UUIDs in a reasonable time', () => {
+        const ids = Array.from({ length: 500_000 }, () => _UUID())
         expect(new Set(ids).size).toBe(ids.length)
     })
 
@@ -15,7 +20,7 @@ describe('uuid', () => {
     })
 
     it('generates different UUIDs when window.performance is available', () => {
-        const uuids = Array.from({ length: 500 }, () => _UUID())
+        const uuids = Array.from({ length: 1000 }, () => _UUID())
 
         expect(new Set(uuids).size).toBe(uuids.length)
 
