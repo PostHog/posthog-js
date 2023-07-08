@@ -472,9 +472,10 @@ export const _UUID = (function () {
             // then the busy loop below will never complete.
             // where performance is supported we can use that to
             // avoid the busy loop (saving a full millisecond)
-            // and avoiding getting stuck in a never ending loop
-            // when time is frozen
-            ticks = win.performance.now()
+            // and avoiding getting stuck in a never ending loop when time is frozen
+            // it returns milliseconds as a float whereas the busy loop counts ticks
+            // there should be 10000 ticks in a millisecond, so we multiply by 10,000
+            ticks = win.performance.now() * 10_000
         } else {
             // this while loop figures how many browser ticks go by
             // before 1*new Date() returns a new number, ie the amount
