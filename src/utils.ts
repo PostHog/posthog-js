@@ -532,11 +532,10 @@ export const _UUID = function (defaultVersion?: UUIDVersion) {
     }
 
     return function (version?: UUIDVersion) {
-        console.warn('generating UUIDs with version: ' + version || defaultVersion || 'og', { version, defaultVersion })
         if (version === 'v7' || defaultVersion === 'v7') {
             return uuidv7()
         }
-        console.warn('generating an OG  UUID')
+
         const se = typeof window !== 'undefined' ? (window.screen.height * window.screen.width).toString(16) : '0'
         return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
     }
