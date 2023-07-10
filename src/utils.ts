@@ -464,19 +464,30 @@ export const _utf8Encode = function (string: string): string {
 
 export const _UUID = (function () {
     // Time/ticks information
-    // 1*new Date() is a cross browser version of Date.now()
     const T = function () {
         const d = new Date().valueOf()
-        let i = 0
-
-        // this while loop figures how many browser ticks go by
-        // before 1*new Date() returns a new number, ie the amount
-        // of ticks that go by per millisecond
-        while (d == new Date().valueOf()) {
-            i++
+        let ticks = 0
+        // performance.now is pretty widely supported
+        // https://developer.mozilla.org/en-US/docs/Web/API/Performance/now
+        if (win.performance && win.performance.now) {
+            // if the environment has a frozen time (e.g. in tests)
+            // then the busy loop below will never complete.
+            // where performance is supported we can use that to
+            // avoid the busy loop (saving a full millisecond)
+            // and avoiding getting stuck in a never ending loop when time is frozen
+            // it returns milliseconds as a float whereas the busy loop counts ticks
+            // there should be 10000 ticks in a millisecond, so we multiply by 10,000
+            ticks = win.performance.now() * 10_000
+        } else {
+            // this while loop figures how many browser ticks go by
+            // before 1*new Date() returns a new number, ie the amount
+            // of ticks that go by per millisecond
+            while (d == new Date().valueOf()) {
+                ticks++
+            }
         }
 
-        return d.toString(16) + i.toString(16)
+        return d.toString(16) + Math.floor(ticks).toString(16)
     }
 
     // Math.Random entropy
