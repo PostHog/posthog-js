@@ -1,3 +1,7 @@
+## 1.70.1 - 2023-07-10
+
+- fix: UUIDs should not take literally forever to generate (#727)
+
 ## 1.70.0 - 2023-07-07
 
 - feat: callback when session id changes (#725)
