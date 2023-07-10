@@ -467,6 +467,8 @@ export const _UUID = (function () {
     const T = function () {
         const d = new Date().valueOf()
         let ticks = 0
+        // performance.now is pretty widely supported
+        // https://developer.mozilla.org/en-US/docs/Web/API/Performance/now
         if (win.performance && win.performance.now) {
             // if the environment has a frozen time (e.g. in tests)
             // then the busy loop below will never complete.
