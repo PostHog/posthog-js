@@ -1,26 +1,30 @@
 import { _UUID } from '../utils'
 
 describe('uuid', () => {
+    let originalUUIDFn = _UUID('og')
+    let v7UUIDFn = _UUID('v7')
+    let defaultUUIDFn = _UUID()
+
     it('should be a uuid when requested', () => {
-        expect(_UUID('v7')).toHaveLength(36)
+        expect(v7UUIDFn()).toHaveLength(36)
     })
 
     it('generates many unique v7 UUIDs in a reasonable time', () => {
-        const ids = Array.from({ length: 500_000 }, () => _UUID('v7'))
+        const ids = Array.from({ length: 500_000 }, () => v7UUIDFn())
         expect(new Set(ids).size).toBe(ids.length)
     })
 
     it('generates many unique OG UUIDs in a reasonable time', () => {
-        const ids = Array.from({ length: 500_000 }, () => _UUID())
+        const ids = Array.from({ length: 500_000 }, () => originalUUIDFn())
         expect(new Set(ids).size).toBe(ids.length)
     })
 
     it('by default should be the format we have used forever', () => {
-        expect(_UUID().length).toBeGreaterThanOrEqual(52)
+        expect(defaultUUIDFn().length).toBeGreaterThanOrEqual(52)
     })
 
     it('using window.performance for UUID still generates differing time parts of OG UUID', () => {
-        const uuids = Array.from({ length: 1000 }, () => _UUID())
+        const uuids = Array.from({ length: 1000 }, () => defaultUUIDFn())
 
         for (const uuid of uuids) {
             // both the first and last value are based on time, but we want them to be different

@@ -7,8 +7,9 @@ jest.mock('../utils')
 jest.mock('../storage')
 
 describe('Session ID manager', () => {
+    given('uuidFn', () => () => 'newUUID')
     given('subject', () => given.sessionIdManager.checkAndGetSessionAndWindowId(given.readOnly, given.timestamp))
-    given('sessionIdManager', () => new SessionIdManager(given.config, given.persistence))
+    given('sessionIdManager', () => new SessionIdManager(given.config, given.persistence, given.uuidFn))
 
     given('persistence', () => ({
         props: { [SESSION_ID]: given.storedSessionIdData },
@@ -26,7 +27,6 @@ describe('Session ID manager', () => {
     given('now', () => given.timestamp + 1000)
 
     beforeEach(() => {
-        _UUID.mockReturnValue('newUUID')
         sessionStore.is_supported.mockReturnValue(true)
         const mockDate = new Date(given.now)
         jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
@@ -263,7 +263,8 @@ describe('Session ID manager', () => {
                 {
                     session_idle_timeout_seconds: timeout,
                 },
-                given.persistence
+                given.persistence,
+                given.uuidFn
             )
 
         beforeEach(() => {
