@@ -1,5 +1,3 @@
-import { _UUID } from './utils'
-
 export class PageViewIdManager {
     _pageViewId: string | undefined
 

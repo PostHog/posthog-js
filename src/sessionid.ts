@@ -1,6 +1,5 @@
 import { PostHogPersistence, SESSION_ID } from './posthog-persistence'
 import { sessionStore } from './storage'
-import { _UUID } from './utils'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 mins

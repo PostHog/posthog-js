@@ -1,4 +1,3 @@
-import { _UUID } from '../utils'
 import { PageViewIdManager } from '../page-view-id'
 
 jest.mock('../utils')
