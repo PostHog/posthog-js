@@ -57,7 +57,7 @@ import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
-import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
+import { PostHogSurveys, Survey, SurveyCallback } from './posthog-surveys'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -1179,14 +1179,24 @@ export class PostHog {
         return this.sessionManager.onSessionId(callback)
     }
 
-    /** Get list of all surveys. */
+    /** Get list of all existing surveys. */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getSurveys(callback, forceReload)
     }
 
-    /** Get surveys that should be enabled for the current user. */
+    /** Get list of all active matching surveys. */
+    getAllSurveyMatches(surveys: Survey[]): Survey[] {
+        return this.surveys.getAllSurveyMatches(surveys)
+    }
+
+    /** Get non API surveys that should be enabled for the current user. */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
+    }
+
+    /** Get API surveys that should be enabled for the current user. */
+    getActiveMatchingAPISurveys(callback: SurveyCallback, forceReload = false): void {
+        this.surveys.getActiveMatchingAPISurveys(callback, forceReload)
     }
 
     /**

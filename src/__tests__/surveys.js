@@ -55,6 +55,96 @@ describe('surveys', () => {
         },
     ]
 
+    const draftSurvey = {
+        name: 'draft survey',
+        description: 'draft survey description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a draft survey?' }],
+        start_date: null,
+    }
+    const activeSurvey = {
+        name: 'active survey',
+        description: 'active survey description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a active survey?' }],
+        start_date: new Date().toISOString(),
+        end_date: null,
+    }
+    const completedSurvey = {
+        name: 'completed survey',
+        description: 'completed survey description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a completed survey?' }],
+        start_date: new Date('09/10/2022').toISOString(),
+        end_date: new Date('10/10/2022').toISOString(),
+    }
+    const surveyWithUrl = {
+        name: 'survey with url',
+        description: 'survey with url description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with url?' }],
+        conditions: { url: 'posthog.com' },
+        start_date: new Date().toISOString(),
+        end_date: null,
+    }
+    const surveyWithSelector = {
+        name: 'survey with selector',
+        description: 'survey with selector description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with selector?' }],
+        conditions: { selector: '.test-selector' },
+        start_date: new Date().toISOString(),
+        end_date: null,
+    }
+    const surveyWithUrlAndSelector = {
+        name: 'survey with url and selector',
+        description: 'survey with url and selector description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with url and selector?' }],
+        conditions: { url: 'posthogapp.com', selector: '#foo' },
+        start_date: new Date().toISOString(),
+        end_date: null,
+    }
+    const surveyWithFlags = {
+        name: 'survey with flags',
+        description: 'survey with flags description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+        linked_flag_key: 'linked-flag-key',
+        targeting_flag_key: 'survey-targeting-flag-key',
+        start_date: new Date().toISOString(),
+        end_date: null,
+    }
+    const surveyWithUnmatchedFlags = {
+        name: 'survey with flags2',
+        description: 'survey with flags description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+        linked_flag_key: 'linked-flag-key2',
+        targeting_flag_key: 'survey-targeting-flag-key2',
+        start_date: new Date().toISOString(),
+        end_date: null,
+    }
+    const surveyWithEverything = {
+        name: 'survey with everything',
+        description: 'survey with everything description',
+        type: SurveyType.Popover,
+        questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with everything?' }],
+        start_date: new Date().toISOString(),
+        end_date: null,
+        conditions: { url: 'posthogapp.com', selector: '.test-selector' },
+        linked_flag_key: 'linked-flag-key',
+        targeting_flag_key: 'survey-targeting-flag-key',
+    }
+    const APISurvey = {
+        name: 'custom api survey',
+        description: '',
+        type: SurveyType.API,
+        questions: [],
+        start_date: new Date().toISOString(),
+        end_date: null,
+    }
+
     given('surveysResponse', () => ({ surveys: firstSurveys }))
 
     it('getSurveys gets a list of surveys if not present already', () => {
@@ -101,88 +191,6 @@ describe('surveys', () => {
     })
 
     describe('getActiveMatchingSurveys', () => {
-        const draftSurvey = {
-            name: 'draft survey',
-            description: 'draft survey description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a draft survey?' }],
-            start_date: null,
-        }
-        const activeSurvey = {
-            name: 'active survey',
-            description: 'active survey description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a active survey?' }],
-            start_date: new Date().toISOString(),
-            end_date: null,
-        }
-        const completedSurvey = {
-            name: 'completed survey',
-            description: 'completed survey description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a completed survey?' }],
-            start_date: new Date('09/10/2022').toISOString(),
-            end_date: new Date('10/10/2022').toISOString(),
-        }
-        const surveyWithUrl = {
-            name: 'survey with url',
-            description: 'survey with url description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with url?' }],
-            conditions: { url: 'posthog.com' },
-            start_date: new Date().toISOString(),
-            end_date: null,
-        }
-        const surveyWithSelector = {
-            name: 'survey with selector',
-            description: 'survey with selector description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with selector?' }],
-            conditions: { selector: '.test-selector' },
-            start_date: new Date().toISOString(),
-            end_date: null,
-        }
-        const surveyWithUrlAndSelector = {
-            name: 'survey with url and selector',
-            description: 'survey with url and selector description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with url and selector?' }],
-            conditions: { url: 'posthogapp.com', selector: '#foo' },
-            start_date: new Date().toISOString(),
-            end_date: null,
-        }
-        const surveyWithFlags = {
-            name: 'survey with flags',
-            description: 'survey with flags description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
-            linked_flag_key: 'linked-flag-key',
-            targeting_flag_key: 'survey-targeting-flag-key',
-            start_date: new Date().toISOString(),
-            end_date: null,
-        }
-        const surveyWithUnmatchedFlags = {
-            name: 'survey with flags2',
-            description: 'survey with flags description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
-            linked_flag_key: 'linked-flag-key2',
-            targeting_flag_key: 'survey-targeting-flag-key2',
-            start_date: new Date().toISOString(),
-            end_date: null,
-        }
-        const surveyWithEverything = {
-            name: 'survey with everything',
-            description: 'survey with everything description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with everything?' }],
-            start_date: new Date().toISOString(),
-            end_date: null,
-            conditions: { url: 'posthogapp.com', selector: '.test-selector' },
-            linked_flag_key: 'linked-flag-key',
-            targeting_flag_key: 'survey-targeting-flag-key',
-        }
-
         it('returns surveys that are active', () => {
             given('surveysResponse', () => ({ surveys: [draftSurvey, activeSurvey, completedSurvey] }))
 
@@ -250,6 +258,23 @@ describe('surveys', () => {
             // activeSurvey returns because there are no restrictions on conditions or flags on it
             given.surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([activeSurvey, surveyWithSelector, surveyWithEverything])
+            })
+        })
+
+        it('does not return API surveys', () => {
+            given('surveysResponse', () => ({ surveys: [activeSurvey, APISurvey] }))
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([activeSurvey])
+            })
+        })
+    })
+
+    describe('getActiveMatchingAPISurveys', () => {
+        it('returns surveys that are API type only', () => {
+            given('surveysResponse', () => ({ surveys: [draftSurvey, activeSurvey, completedSurvey, APISurvey] }))
+
+            given.surveys.getActiveMatchingAPISurveys((data) => {
+                expect(data).toEqual([APISurvey])
             })
         })
     })
