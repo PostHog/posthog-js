@@ -17,6 +17,7 @@ export enum SurveyType {
     Button = 'Button',
     Email = 'Email',
     FullScreen = 'Fullscreen',
+    API = 'API',
 }
 
 export interface SurveyQuestion {
@@ -81,37 +82,46 @@ export class PostHogSurveys {
         }
     }
 
+    getAllSurveyMatches(surveys: Survey[]) {
+        const activeSurveys = surveys.filter((survey) => {
+            return !!(survey.start_date && !survey.end_date)
+        })
+        const conditionMatchedSurveys = activeSurveys.filter((survey) => {
+            if (!survey.conditions) {
+                return true
+            }
+            const urlCheck = survey.conditions?.url ? window.location.href.indexOf(survey.conditions.url) > -1 : true
+            const selectorCheck = survey.conditions?.selector
+                ? document.querySelector(survey.conditions.selector)
+                : true
+            return urlCheck && selectorCheck
+        })
+        const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
+            if (!survey.linked_flag_key && !survey.targeting_flag_key) {
+                return true
+            }
+            const linkedFlagCheck = survey.linked_flag_key
+                ? this.instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
+                : true
+            const targetingFlagCheck = survey.targeting_flag_key
+                ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
+                : true
+            return linkedFlagCheck && targetingFlagCheck
+        })
+        return targetingMatchedSurveys
+    }
+
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
-            const activeSurveys = surveys.filter((survey) => {
-                return !!(survey.start_date && !survey.end_date)
-            })
-            const conditionMatchedSurveys = activeSurveys.filter((survey) => {
-                if (!survey.conditions) {
-                    return true
-                }
-                const urlCheck = survey.conditions?.url
-                    ? window.location.href.indexOf(survey.conditions.url) > -1
-                    : true
-                const selectorCheck = survey.conditions?.selector
-                    ? document.querySelector(survey.conditions.selector)
-                    : true
-                return urlCheck && selectorCheck
-            })
-            const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
-                if (!survey.linked_flag_key && !survey.targeting_flag_key) {
-                    return true
-                }
-                const linkedFlagCheck = survey.linked_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
-                    : true
-                const targetingFlagCheck = survey.targeting_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
-                    : true
-                return linkedFlagCheck && targetingFlagCheck
-            })
+            const nonAPISurveys = this.getAllSurveyMatches(surveys).filter((survey) => survey.type !== SurveyType.API)
+            return callback(nonAPISurveys)
+        }, forceReload)
+    }
 
-            return callback(targetingMatchedSurveys)
+    getActiveMatchingAPISurveys(callback: SurveyCallback, forceReload = false) {
+        this.getSurveys((surveys) => {
+            const APISurveys = this.getAllSurveyMatches(surveys).filter((survey) => survey.type === SurveyType.API)
+            return callback(APISurveys)
         }, forceReload)
     }
 }
