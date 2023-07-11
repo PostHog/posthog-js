@@ -1,3 +1,7 @@
+## 1.70.2 - 2023-07-11
+
+- feat: allow moving to UUID v7 by config in posthog-js (#731)
+
 ## 1.70.1 - 2023-07-10
 
 - fix: UUIDs should not take literally forever to generate (#727)
