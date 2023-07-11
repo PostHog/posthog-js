@@ -7,9 +7,11 @@ import { SURVEYS } from './posthog-persistence'
  * See https://github.com/PostHog/posthog-js/issues/698
  */
 export interface SurveyAppearance {
-    background_color?: string
-    button_color?: string
-    text_color?: string
+    backgroundColor?: string
+    submitButtonColor?: string
+    textColor?: string
+    submitButtonText?: string
+    descriptionTextColor?: string
 }
 
 export enum SurveyType {
@@ -23,6 +25,7 @@ export enum SurveyType {
 export interface SurveyQuestion {
     type: SurveyQuestionType
     question: string
+    description?: string | null
     required?: boolean
     link?: boolean
     choices?: string[]
