@@ -29,11 +29,7 @@ describe('Event capture', () => {
             },
         }).as('decide')
 
-        cy.visit('./playground/cypress-full', {
-            onBeforeLoad(win) {
-                cy.stub(win.console, 'error').as('consoleError')
-            },
-        })
+        cy.visit('./playground/cypress-full')
         cy.posthogInit(given.options)
         if (waitForDecide) {
             cy.wait('@decide')

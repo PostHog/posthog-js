@@ -1,4 +1,4 @@
-import { loadScript } from '../../utils'
+import { _UUID, loadScript } from '../../utils'
 import {
     SessionRecording,
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
@@ -67,6 +67,7 @@ describe('SessionRecording', () => {
     given('$session_recording_recorder_version_server_side', () => undefined)
     given('disabled', () => false)
     given('__loaded_recorder_version', () => undefined)
+    given('uuidFn', () => _UUID('v7'))
 
     beforeEach(() => {
         window.rrwebRecord = jest.fn()
@@ -546,7 +547,7 @@ describe('SessionRecording', () => {
                 beforeEach(() => {
                     given(
                         'sessionManager',
-                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config))
+                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config), given.uuidFn)
                     )
 
                     mockCallback = jest.fn()
@@ -625,7 +626,7 @@ describe('SessionRecording', () => {
                 beforeEach(() => {
                     given(
                         'sessionManager',
-                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config))
+                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config), given.uuidFn)
                     )
                     given.sessionRecording.startRecordingIfEnabled()
                     given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()

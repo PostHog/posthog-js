@@ -160,6 +160,7 @@ const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
+    uuid_version: 'og',
 })
 
 /**
@@ -285,6 +286,9 @@ export class PostHog {
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
+    // keep the default as the original version of the function
+    // config _might_ override this in init below
+    private uuidFn: (version?: 'v7') => string = _UUID('og')
 
     constructor() {
         this.config = defaultConfig()
@@ -301,7 +305,7 @@ export class PostHog {
         this.people = new PostHogPeople(this)
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewIdManager = new PageViewIdManager()
+        this.pageViewIdManager = new PageViewIdManager(this.uuidFn)
         this.surveys = new PostHogSurveys(this)
 
         // these are created in _init() after we have the config
@@ -399,6 +403,11 @@ export class PostHog {
             })
         )
 
+        // in preparation for switching from a custom UUID format
+        // to UUID v7 this lets us inject the desired default version
+        // into the _UUID function
+        this.uuidFn = _UUID(this.config.uuid_version || 'og')
+
         this._jsc = function () {} as JSC
 
         // Check if recorder.js is already loaded
@@ -417,7 +426,7 @@ export class PostHog {
         this.__request_queue = []
 
         this.persistence = new PostHogPersistence(this.config)
-        this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionManager = new SessionIdManager(this.config, this.persistence, this.uuidFn)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
@@ -443,7 +452,7 @@ export class PostHog {
         }
 
         if (config.bootstrap?.distinctID !== undefined) {
-            const uuid = this.get_config('get_device_id')(_UUID())
+            const uuid = this.get_config('get_device_id')(this.uuidFn())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
             this.persistence.set_user_state(config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
@@ -477,7 +486,7 @@ export class PostHog {
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persitence
-            const uuid = this.get_config('get_device_id')(_UUID())
+            const uuid = this.get_config('get_device_id')(this.uuidFn())
             this.register_once(
                 {
                     distinct_id: uuid,
@@ -848,7 +857,7 @@ export class PostHog {
         }
 
         let data: CaptureResult = {
-            uuid: _UUID('v7'),
+            uuid: this.uuidFn('v7'),
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
@@ -1384,7 +1393,7 @@ export class PostHog {
         this.sessionPersistence.clear()
         this.persistence.set_user_state('anonymous')
         this.sessionManager.resetSessionId()
-        const uuid = this.get_config('get_device_id')(_UUID())
+        const uuid = this.get_config('get_device_id')(this.uuidFn())
         this.register_once(
             {
                 distinct_id: uuid,

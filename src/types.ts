@@ -47,6 +47,8 @@ export interface AutocaptureConfig {
     css_selector_allowlist?: string[]
 }
 
+export type UUIDVersion = 'og' | 'v7'
+
 export interface PostHogConfig {
     api_host: string
     api_method: string
@@ -111,6 +113,10 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
+    // we are replacing the OG uuid generation code, with newer faster UUIDv7
+    // this is a temporary flag to allow us to test the new UUID generation code
+    // this flag *will be deleted* in a future version of PostHog-js
+    uuid_version?: UUIDVersion
 }
 
 export interface OptInOutCapturingOptions {

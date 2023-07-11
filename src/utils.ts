@@ -1,5 +1,5 @@
 import Config from './config'
-import { Breaker, EventHandler, Properties } from './types'
+import { Breaker, EventHandler, Properties, UUIDVersion } from './types'
 import { uuidv7 } from './uuidv7'
 
 /*
@@ -462,7 +462,7 @@ export const _utf8Encode = function (string: string): string {
     return utftext
 }
 
-export const _UUID = (function () {
+export const _UUID = function (defaultVersion?: UUIDVersion) {
     // Time/ticks information
     const T = function () {
         const d = new Date().valueOf()
@@ -531,15 +531,15 @@ export const _UUID = (function () {
         return ret.toString(16)
     }
 
-    return function (version?: 'v7') {
-        if (version === 'v7') {
+    return function (version?: UUIDVersion) {
+        if (version === 'v7' || defaultVersion === 'v7') {
             return uuidv7()
         }
 
         const se = typeof window !== 'undefined' ? (window.screen.height * window.screen.width).toString(16) : '0'
         return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
     }
-})()
+}
 
 // _.isBlockedUA()
 // This is to block various web spiders from executing our JS and
