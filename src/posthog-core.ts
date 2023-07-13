@@ -18,7 +18,6 @@ import {
     window,
 } from './utils'
 import { autocapture } from './autocapture'
-import { PostHogPeople } from './posthog-people'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
 import { SessionRecording } from './extensions/sessionrecording'
@@ -264,7 +263,6 @@ export class PostHog {
     sessionPersistence: PostHogPersistence
     sessionManager: SessionIdManager
     pageViewIdManager: PageViewIdManager
-    people: PostHogPeople
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
@@ -290,6 +288,12 @@ export class PostHog {
     // config _might_ override this in init below
     private uuidFn: (version?: 'v7') => string = _UUID('og')
 
+    /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
+    people: {
+        set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
+        set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
+    }
+
     constructor() {
         this.config = defaultConfig()
         this.compression = {}
@@ -302,7 +306,7 @@ export class PostHog {
         this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
-        this.people = new PostHogPeople(this)
+
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
         this.pageViewIdManager = new PageViewIdManager(this.uuidFn)
@@ -315,6 +319,20 @@ export class PostHog {
         this.persistence = undefined as any
         this.sessionPersistence = undefined as any
         this.sessionManager = undefined as any
+
+        // NOTE: See the property definition for deprecation notice
+        this.people = {
+            set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
+                const setProps = typeof prop === 'string' ? { [prop]: to } : prop
+                this.setPersonProperties(setProps)
+                callback?.({})
+            },
+            set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
+                const setProps = typeof prop === 'string' ? { [prop]: to } : prop
+                this.setPersonProperties(undefined, setProps)
+                callback?.({})
+            },
+        }
     }
 
     // Initialization methods
@@ -1272,6 +1290,10 @@ export class PostHog {
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
             this.persistence.set_user_state('identified')
+
+            // Update current user properties
+            this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+
             this.capture(
                 '$identify',
                 {
@@ -1283,13 +1305,9 @@ export class PostHog {
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
-        } else {
-            if (userPropertiesToSet) {
-                this.people.set(userPropertiesToSet)
-            }
-            if (userPropertiesToSetOnce) {
-                this.people.set_once(userPropertiesToSetOnce)
-            }
+        } else if (userPropertiesToSet || userPropertiesToSetOnce) {
+            // If the distinct_id is not changing, but we have user properties to set, we can go for a $set event
+            this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
         }
 
         // Reload active feature flags if the user identity changes.
@@ -1299,6 +1317,24 @@ export class PostHog {
             // also clear any stored flag calls
             this.unregister(FLAG_CALL_REPORTED)
         }
+    }
+
+    /**
+     * Sets properties for the Person associated with the current distinct_id.
+     *
+     *
+     * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
+     * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
+     */
+    setPersonProperties(userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
+        if (!userPropertiesToSet && !userPropertiesToSetOnce) {
+            return
+        }
+
+        // Update current user properties
+        this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+
+        this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
     }
 
     /**

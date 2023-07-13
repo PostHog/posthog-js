@@ -410,6 +410,7 @@ describe('Event capture', () => {
                 expect(payload).to.deep.equal({
                     token: 'test_token',
                     distinct_id: 'new-id',
+                    person_properties: {},
                     groups: {
                         company: 'id:5',
                         playlist: 'id:77',

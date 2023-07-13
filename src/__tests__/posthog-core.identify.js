@@ -30,10 +30,6 @@ describe('identify()', () => {
         register_once: jest.fn(),
         unregister: jest.fn(),
         get_property: () => given.deviceId,
-        people: {
-            set: jest.fn(),
-            set_once: jest.fn(),
-        },
         _flags: {},
         _captureMetrics: {
             incr: jest.fn(),
@@ -42,6 +38,7 @@ describe('identify()', () => {
             setAnonymousDistinctId: jest.fn(),
         },
         reloadFeatureFlags: jest.fn(),
+        setPersonPropertiesForFlags: jest.fn(),
         persistence: new PostHogPersistence(given.config),
     }))
 
@@ -74,7 +71,6 @@ describe('identify()', () => {
             },
             { $set: {}, $set_once: {} }
         )
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
@@ -100,7 +96,6 @@ describe('identify()', () => {
             },
             { $set: {}, $set_once: {} }
         )
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
@@ -128,7 +123,6 @@ describe('identify()', () => {
             },
             { $set: {}, $set_once: {} }
         )
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
     })
 
@@ -146,7 +140,6 @@ describe('identify()', () => {
         given.subject()
 
         expect(given.overrides.capture).not.toHaveBeenCalled()
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
     })
 
@@ -163,7 +156,6 @@ describe('identify()', () => {
         given.subject()
 
         expect(given.overrides.capture).not.toHaveBeenCalled()
-        expect(given.overrides.people.set).not.toHaveBeenCalled()
         expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
     })
 
@@ -209,20 +201,20 @@ describe('identify()', () => {
             given.subject()
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
-            expect(given.overrides.people.set).not.toHaveBeenCalled()
             expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
         })
 
-        it('calls people.set when user properties passed', () => {
+        it('calls $set when user properties passed with same ID', () => {
             given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
             given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
 
             given.subject()
 
-            expect(given.overrides.capture).not.toHaveBeenCalled()
+            expect(given.overrides.capture).toHaveBeenCalledWith('$set', {
+                $set: { email: 'john@example.com' },
+                $set_once: { howOftenAmISet: 'once!' },
+            })
             expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
-            expect(given.overrides.people.set).toHaveBeenCalledWith({ email: 'john@example.com' })
-            expect(given.overrides.people.set_once).toHaveBeenCalledWith({ howOftenAmISet: 'once!' })
         })
     })
 
@@ -270,6 +262,55 @@ describe('identify()', () => {
         it('clears flag calls reported when identity changes', () => {
             given.subject()
             expect(given.overrides.unregister).toHaveBeenCalledWith('$flag_call_reported')
+        })
+    })
+
+    describe('setPersonProperties', () => {
+        given('oldIdentity', () => given.identity)
+
+        it('captures a $set event', () => {
+            given('subject', () => () => {
+                given.lib.setPersonProperties(given.userPropertiesToSet, given.userPropertiesToSetOnce)
+            })
+            given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
+            given('userPropertiesToSetOnce', () => ({ name: 'john' }))
+
+            given.subject()
+
+            expect(given.overrides.capture).toHaveBeenCalledWith('$set', {
+                $set: { email: 'john@example.com' },
+                $set_once: { name: 'john' },
+            })
+        })
+
+        it('calls proxies prople.set to setPersonProperties', () => {
+            given('subject', () => () => {
+                given.lib.people.set(given.userPropertiesToSet)
+            })
+            given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
+
+            given.subject()
+
+            expect(given.overrides.capture).toHaveBeenCalledWith('$set', {
+                $set: { email: 'john@example.com' },
+                $set_once: {},
+            })
+            expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
+        })
+
+        it('calls proxies prople.set_once to setPersonProperties', () => {
+            given('subject', () => () => {
+                given.lib.people.set_once(given.userPropertiesToSetOnce)
+            })
+            given('userPropertiesToSetOnce', () => ({ email: 'john@example.com' }))
+
+            given.subject()
+
+            expect(given.overrides.capture).toHaveBeenCalledWith('$set', {
+                $set: {},
+                $set_once: { email: 'john@example.com' },
+            })
+            expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
         })
     })
 })
