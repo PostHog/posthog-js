@@ -1,3 +1,7 @@
+## 1.71.0 - 2023-07-13
+
+- chore: Removed people.set and mapped it to identify (#584)
+
 ## 1.70.2 - 2023-07-11
 
 - feat: allow moving to UUID v7 by config in posthog-js (#731)
