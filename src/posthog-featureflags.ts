@@ -177,6 +177,7 @@ export class PostHogFeatureFlags {
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: personProperties,
             group_properties: groupProperties,
+            disable_flags: this.instance.get_config('advanced_disable_feature_flags'),
         })
 
         const encoded_data = _base64Encode(json_data)
@@ -208,7 +209,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
-        if (!this.getFlags() || this.getFlags().length === 0) {
+        if (!this.instance.decideEndpointWasHit) {
             console.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
@@ -247,7 +248,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
-        if (!this.getFlags() || this.getFlags().length === 0) {
+        if (!this.instance.decideEndpointWasHit) {
             console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
