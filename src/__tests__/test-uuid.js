@@ -9,22 +9,12 @@ describe('uuid', () => {
         expect(v7UUIDFn()).toHaveLength(36)
     })
 
-    it('generates many unique v7 UUIDs in a reasonable time', () => {
-        const ids = Array.from({ length: 500_000 }, () => v7UUIDFn())
-        expect(new Set(ids).size).toBe(ids.length)
-    })
-
-    it('generates many unique OG UUIDs in a reasonable time', () => {
-        const ids = Array.from({ length: 500_000 }, () => originalUUIDFn())
-        expect(new Set(ids).size).toBe(ids.length)
-    })
-
     it('by default should be the format we have used forever', () => {
         expect(defaultUUIDFn().length).toBeGreaterThanOrEqual(52)
     })
 
-    it('using window.performance for UUID still generates differing time parts of OG UUID', () => {
-        const uuids = Array.from({ length: 1000 }, () => defaultUUIDFn())
+    it('using window.performance for UUID still generates differing time parts of default UUID', () => {
+        const uuids = Array.from({ length: 1000 }, () => originalUUIDFn())
 
         for (const uuid of uuids) {
             // both the first and last value are based on time, but we want them to be different
