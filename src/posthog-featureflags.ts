@@ -177,7 +177,7 @@ export class PostHogFeatureFlags {
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: personProperties,
             group_properties: groupProperties,
-            disable_flags: this.instance.get_config('advanced_disable_feature_flags'),
+            disable_flags: this.instance.get_config('advanced_disable_feature_flags') || undefined,
         })
 
         const encoded_data = _base64Encode(json_data)
