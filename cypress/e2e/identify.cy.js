@@ -10,18 +10,18 @@ function setup(initOptions) {
 }
 
 describe('identify()', () => {
-    describe('with v7 uuid config', () => {
+    describe('with OG uuid config', () => {
         beforeEach(() => {
-            setup({ uuid_version: 'v7' })
+            setup({ uuid_version: 'og' })
         })
 
-        it('uses the v7 uuid format when configured', () => {
+        it('uses the OG uuid format when configured', () => {
             cy.posthog().invoke('capture', '$pageview')
             cy.phCaptures({ full: true }).then((events) => {
                 let deviceIds = new Set(events.map((e) => e.properties['$device_id']))
                 expect(deviceIds.size).to.eql(1)
                 const [deviceId] = deviceIds
-                expect(deviceId.length).to.be.lessThan(52)
+                expect(deviceId.length).to.be.greaterThan(51)
             })
         })
     })
@@ -31,14 +31,14 @@ describe('identify()', () => {
             setup()
         })
 
-        it('uses the OG uuid format by default', () => {
+        it('uses the v7 uuid format by default', () => {
             cy.posthog().invoke('capture', 'an-anonymous-event')
             cy.phCaptures({ full: true }).then((events) => {
                 cy.log(events)
                 let deviceIds = new Set(events.map((e) => e.properties['$device_id']))
                 expect(deviceIds.size).to.eql(1)
                 const [deviceId] = deviceIds
-                expect(deviceId.length).to.be.gte(52)
+                expect(deviceId.length).to.be.eql(36)
             })
         })
 
