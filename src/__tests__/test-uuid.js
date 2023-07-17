@@ -9,8 +9,12 @@ describe('uuid', () => {
         expect(v7UUIDFn()).toHaveLength(36)
     })
 
-    it('by default should be the format we have used forever', () => {
-        expect(defaultUUIDFn().length).toBeGreaterThanOrEqual(52)
+    it('by default should be the v7 format', () => {
+        expect(defaultUUIDFn()).toHaveLength(36)
+    })
+
+    it('can be set to OG format format', () => {
+        expect(originalUUIDFn().length).toBeGreaterThanOrEqual(52)
     })
 
     it('using window.performance for UUID still generates differing time parts of default UUID', () => {
