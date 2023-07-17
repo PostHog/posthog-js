@@ -23,7 +23,10 @@ export class Decide {
             groups: this.instance.getGroups(),
             person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
-            disable_flags: this.instance.get_config('advanced_disable_feature_flags'),
+            disable_flags:
+                this.instance.get_config('advanced_disable_feature_flags') ||
+                this.instance.get_config('advanced_disable_feature_flags_on_first_load') ||
+                undefined,
         })
 
         const encoded_data = _base64Encode(json_data)

@@ -128,6 +128,39 @@ describe('Decide', () => {
                 expect.any(Function)
             )
         })
+
+        it('should send disable flags with decide request when config for advanced_disable_feature_flags_on_first_load is set', () => {
+            given.posthog.register({
+                $stored_person_properties: { key: 'value' },
+                $stored_group_properties: { organization: { orgName: 'orgValue' } },
+            })
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+                advanced_disable_feature_flags_on_first_load: true,
+            }))
+            given.subject()
+
+            expect(given.posthog._send_request).toHaveBeenCalledWith(
+                'https://test.com/decide/?v=3',
+                {
+                    data: _base64Encode(
+                        JSON.stringify({
+                            token: 'testtoken',
+                            distinct_id: 'distinctid',
+                            groups: { organization: '5' },
+                            person_properties: { key: 'value' },
+                            group_properties: { organization: { orgName: 'orgValue' } },
+                            disable_flags: true,
+                        })
+                    ),
+                    verbose: true,
+                },
+                { method: 'POST' },
+                expect.any(Function)
+            )
+        })
     })
 
     describe('parseDecideResponse', () => {
@@ -179,7 +212,7 @@ describe('Decide', () => {
             expect(console.error).toHaveBeenCalledWith('Failed to fetch feature flags from PostHog.')
         })
 
-        it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags_on_first_load is set', () => {
+        it('Make sure receivedFeatureFlags is called with empty if advanced_disable_feature_flags_on_first_load is set', () => {
             given('decideResponse', () => ({
                 enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
