@@ -1,3 +1,7 @@
+## 1.72.1 - 2023-07-18
+
+- fix(flags): Make sure flags are reloaded only once on identify calls (#744)
+
 ## 1.72.0 - 2023-07-18
 
 - feat(flags): Allow disabling flags on first load (#740)
