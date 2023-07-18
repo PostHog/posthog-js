@@ -249,7 +249,7 @@ describe('identify()', () => {
             expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
         })
 
-        it('does not reload feature flags if identity does not change but properties do', () => {
+        it('reloads feature flags if identity does not change but properties do', () => {
             given('oldIdentity', () => given.identity)
             given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
             given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
@@ -257,6 +257,20 @@ describe('identify()', () => {
             given.subject()
             expect(given.overrides.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
             expect(given.overrides.reloadFeatureFlags).not.toHaveBeenCalled()
+            expect(given.overrides.setPersonPropertiesForFlags).toHaveBeenCalledWith({ email: 'john@example.com' })
+        })
+
+        it('reloads feature flags if identity and properties change', () => {
+            given('userPropertiesToSet', () => ({ email: 'john@example.com' }))
+            given('userPropertiesToSetOnce', () => ({ howOftenAmISet: 'once!' }))
+
+            given.subject()
+            expect(given.overrides.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+            expect(given.overrides.reloadFeatureFlags).toHaveBeenCalled()
+            expect(given.overrides.setPersonPropertiesForFlags).toHaveBeenCalledWith(
+                { email: 'john@example.com' },
+                false
+            )
         })
 
         it('clears flag calls reported when identity changes', () => {

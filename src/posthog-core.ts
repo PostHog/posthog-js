@@ -1294,7 +1294,7 @@ export class PostHog {
             this.persistence.set_user_state('identified')
 
             // Update current user properties
-            this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+            this.setPersonPropertiesForFlags(userPropertiesToSet || {}, false)
 
             this.capture(
                 '$identify',
