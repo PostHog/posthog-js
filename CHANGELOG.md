@@ -1,3 +1,8 @@
+## 1.72.0 - 2023-07-18
+
+- feat(flags): Allow disabling flags on first load (#740)
+- chore: remove some slow tests that have served their purpose (#739)
+
 ## 1.71.0 - 2023-07-13
 
 - chore: Removed people.set and mapped it to identify (#584)
