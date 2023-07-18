@@ -23,6 +23,10 @@ export class Decide {
             groups: this.instance.getGroups(),
             person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
+            disable_flags:
+                this.instance.get_config('advanced_disable_feature_flags') ||
+                this.instance.get_config('advanced_disable_feature_flags_on_first_load') ||
+                undefined,
         })
 
         const encoded_data = _base64Encode(json_data)
@@ -39,7 +43,6 @@ export class Decide {
             console.error('Failed to fetch feature flags from PostHog.')
             return
         }
-        this.instance.decideEndpointWasHit = true
         if (!(document && document.body)) {
             console.log('document not ready yet, trying again in 500 milliseconds...')
             setTimeout(() => {
@@ -54,7 +57,9 @@ export class Decide {
         this.instance.webPerformance?.afterDecideResponse(response)
         this.instance.exceptionAutocapture?.afterDecideResponse(response)
 
-        this.instance.featureFlags.receivedFeatureFlags(response)
+        if (!this.instance.get_config('advanced_disable_feature_flags_on_first_load')) {
+            this.instance.featureFlags.receivedFeatureFlags(response)
+        }
 
         this.instance['compression'] = {}
         if (response['supportedCompression'] && !this.instance.get_config('disable_compression')) {

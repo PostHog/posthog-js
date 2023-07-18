@@ -56,6 +56,8 @@ describe('featureflags', () => {
     })
 
     it('should return the right feature flag and call capture', () => {
+        given.featureFlags.instance.decideEndpointWasHit = true
+
         expect(given.featureFlags.getFlags()).toEqual([
             'beta-feature',
             'alpha-feature-2',
@@ -85,6 +87,8 @@ describe('featureflags', () => {
     })
 
     it('should call capture for every different flag response', () => {
+        given.featureFlags.instance.decideEndpointWasHit = true
+
         given.instance.persistence.register({
             $enabled_feature_flags: {
                 'beta-feature': true,
@@ -107,11 +111,13 @@ describe('featureflags', () => {
         given.instance.persistence.register({
             $enabled_feature_flags: {},
         })
+        given.featureFlags.instance.decideEndpointWasHit = false
         expect(given.featureFlags.getFlagVariants()).toEqual({})
         expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
         // no extra capture call because flags haven't loaded yet.
         expect(given.instance.capture).toHaveBeenCalledTimes(1)
 
+        given.featureFlags.instance.decideEndpointWasHit = true
         given.instance.persistence.register({
             $enabled_feature_flags: { x: 'y' },
         })
@@ -134,6 +140,8 @@ describe('featureflags', () => {
     })
 
     it('should return the right feature flag and not call capture', () => {
+        given.featureFlags.instance.decideEndpointWasHit = true
+
         expect(given.featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
         expect(given.instance.capture).not.toHaveBeenCalled()
     })
@@ -518,6 +526,32 @@ describe('featureflags', () => {
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: { a: 'b', c: 'd' },
+            })
+        })
+
+        it('on providing config advanced_disable_feature_flags', () => {
+            given('config', () => ({
+                token: 'random fake token',
+                persistence: 'memory',
+                advanced_disable_feature_flags: true,
+            }))
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                first: 'variant-1',
+                second: true,
+            })
+
+            // check the request sent disable_flags
+            expect(
+                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
+            ).toEqual({
+                token: 'random fake token',
+                distinct_id: 'blah id',
+                person_properties: { a: 'b', c: 'd' },
+                disable_flags: true,
             })
         })
     })

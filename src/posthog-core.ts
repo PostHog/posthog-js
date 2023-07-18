@@ -144,6 +144,8 @@ const defaultConfig = (): PostHogConfig => ({
     mask_all_element_attributes: false,
     mask_all_text: false,
     advanced_disable_decide: false,
+    advanced_disable_feature_flags: false,
+    advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
     on_xhr_error: (req) => {
         const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
