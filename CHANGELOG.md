@@ -1,3 +1,7 @@
+## 1.72.3 - 2023-07-19
+
+- fix: defensive about unload logging (#751)
+
 ## 1.72.2 - 2023-07-19
 
 - fix(flags): Don't return undefined for flags when decide is not hit but flags exist (#748)
