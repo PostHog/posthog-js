@@ -676,13 +676,8 @@ export class PostHog {
             try {
                 window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
             } catch (e) {
-                // very defensive over reading config and logging
-                // as this can be called during unload
-                // and some customers have seen errors where `this` might not actually be available
-                // by the time it is called... thanks JS
-                if (this?.get_config('debug') && console?.error) {
-                    console?.error(e)
-                }
+                // send beacon is a best-effort, fire-and-forget mechanism on page unload,
+                // we don't want to throw errors here
             }
         } else if (USE_XHR) {
             try {
