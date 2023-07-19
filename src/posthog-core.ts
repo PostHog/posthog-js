@@ -673,14 +673,11 @@ export class PostHog {
         if (useSendBeacon) {
             // beacon documentation https://w3c.github.io/beacon/
             // beacons format the message and use the type property
-            // also no need to try catch as sendBeacon does not report errors
-            //   and is defined as best effort attempt
             try {
                 window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
             } catch (e) {
-                if (this.get_config('debug')) {
-                    console.error(e)
-                }
+                // send beacon is a best-effort, fire-and-forget mechanism on page unload,
+                // we don't want to throw errors here
             }
         } else if (USE_XHR) {
             try {
