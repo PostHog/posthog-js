@@ -1,3 +1,7 @@
+## 1.72.2 - 2023-07-19
+
+- fix(flags): Don't return undefined for flags when decide is not hit but flags exist (#748)
+
 ## 1.72.1 - 2023-07-18
 
 - fix(flags): Make sure flags are reloaded only once on identify calls (#744)
