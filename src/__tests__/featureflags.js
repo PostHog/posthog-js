@@ -55,8 +55,39 @@ describe('featureflags', () => {
         given.instance.persistence.unregister('$flag_call_reported')
     })
 
+    it('should return flags from persistence even if decide endpoint was not hit', () => {
+        given.featureFlags.instance.decideEndpointWasHit = false
+
+        expect(given.featureFlags.getFlags()).toEqual([
+            'beta-feature',
+            'alpha-feature-2',
+            'multivariate-flag',
+            'disabled-flag',
+        ])
+        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
+    })
+
+    it('should warn if decide endpoint was not hit and no flags exist', () => {
+        given.featureFlags.instance.decideEndpointWasHit = false
+        given.instance.persistence.unregister('$enabled_feature_flags')
+        given.instance.persistence.unregister('$active_feature_flags')
+
+        expect(given.featureFlags.getFlags()).toEqual([])
+        expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
+        expect(window.console.warn).toHaveBeenCalledWith(
+            'isFeatureEnabled for key "beta-feature" failed. Feature flags didn\'t load in time.'
+        )
+
+        window.console.warn.mockClear()
+
+        expect(given.featureFlags.getFeatureFlag('beta-feature')).toEqual(undefined)
+        expect(window.console.warn).toHaveBeenCalledWith(
+            'getFeatureFlag for key "beta-feature" failed. Feature flags didn\'t load in time.'
+        )
+    })
+
     it('should return the right feature flag and call capture', () => {
-        given.featureFlags.instance.decideEndpointWasHit = true
+        given.featureFlags.instance.decideEndpointWasHit = false
 
         expect(given.featureFlags.getFlags()).toEqual([
             'beta-feature',
