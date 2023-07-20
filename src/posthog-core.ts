@@ -161,7 +161,7 @@ const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    uuid_version: 'og',
+    uuid_version: 'v7',
 })
 
 /**
