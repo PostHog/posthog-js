@@ -1,3 +1,7 @@
+## 1.73.0 - 2023-07-20
+
+- feat: use uuidv7 everywhere (#742)
+
 ## 1.72.3 - 2023-07-19
 
 - fix: defensive about unload logging (#751)
