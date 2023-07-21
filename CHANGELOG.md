@@ -1,3 +1,7 @@
+## 1.73.1 - 2023-07-21
+
+- fix: protect against bundling bugs (#754)
+
 ## 1.73.0 - 2023-07-20
 
 - feat: use uuidv7 everywhere (#742)
