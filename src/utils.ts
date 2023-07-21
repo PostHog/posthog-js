@@ -462,8 +462,6 @@ export const _utf8Encode = function (string: string): string {
     return utftext
 }
 
-export const _UUID = uuidv7
-
 // _.isBlockedUA()
 // This is to block various web spiders from executing our JS and
 // sending false capturing data

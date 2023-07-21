@@ -1,8 +1,8 @@
-import { _UUID, loadScript } from '../../utils'
+import { loadScript } from '../../utils'
 import {
-    SessionRecording,
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
     RECORDING_MAX_EVENT_SIZE,
+    SessionRecording,
 } from '../../extensions/sessionrecording'
 import {
     PostHogPersistence,
@@ -15,6 +15,7 @@ import {
     META_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
 } from '../../extensions/sessionrecording-utils'
+import { uuidv7 } from '../../uuidv7'
 
 // Type and source defined here designate a non-user-generated recording event
 const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
@@ -67,7 +68,7 @@ describe('SessionRecording', () => {
     given('$session_recording_recorder_version_server_side', () => undefined)
     given('disabled', () => false)
     given('__loaded_recorder_version', () => undefined)
-    given('uuidFn', () => _UUID('v7'))
+    given('uuidFn', () => uuidv7('v7'))
 
     beforeEach(() => {
         window.rrwebRecord = jest.fn()
