@@ -15,7 +15,6 @@ import {
     META_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
 } from '../../extensions/sessionrecording-utils'
-import { uuidv7 } from '../../uuidv7'
 
 // Type and source defined here designate a non-user-generated recording event
 const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
