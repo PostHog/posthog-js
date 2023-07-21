@@ -83,11 +83,16 @@ export class UUID {
     toString(): string {
         let text = ''
         for (let i = 0; i < this.bytes.length; i++) {
-            text += DIGITS.charAt(this.bytes[i] >>> 4)
-            text += DIGITS.charAt(this.bytes[i] & 0xf)
+            text = text + DIGITS.charAt(this.bytes[i] >>> 4) + DIGITS.charAt(this.bytes[i] & 0xf)
             if (i === 3 || i === 5 || i === 7 || i === 9) {
                 text += '-'
             }
+        }
+
+        if (text.length !== 36) {
+            // We saw one customer whose bundling code was mangling the UUID generation
+            // rather than accept a bad UUID, we throw an error here.
+            throw new Error('Invalid UUIDv7 was generated')
         }
         return text
     }
