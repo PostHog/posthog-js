@@ -323,7 +323,7 @@ export class PostHog {
         this.persistence = undefined as any
         this.sessionPersistence = undefined as any
         this.sessionManager = undefined as any
-        this.rateLimiter = undefined as any
+        this.rateLimiter = new RateLimiter()
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -443,7 +443,6 @@ export class PostHog {
         }
 
         this.persistence = new PostHogPersistence(this.config)
-        this.rateLimiter = new RateLimiter(this.persistence)
 
         this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
         this._requestQueue = new RequestQueue(this._captureMetrics, this._handle_queued_event.bind(this))

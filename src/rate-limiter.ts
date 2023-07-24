@@ -16,11 +16,10 @@ const supportedRetryHeaders = {
 }
 
 export class RateLimiter {
-    constructor(private persistence: PostHogPersistence) {}
+    limits: Record<string, number> = {}
 
     isRateLimited(batchKey: string | undefined): boolean {
-        const limits = this.persistence.get_quota_limits()
-        const retryAfter = limits[batchKey || 'events'] || false
+        const retryAfter = this.limits[batchKey || 'events'] || false
 
         if (retryAfter === false) {
             return false
@@ -33,21 +32,21 @@ export class RateLimiter {
             return
         }
 
-        const newLimits = { ...this.persistence.get_quota_limits() }
-
         Object.entries(supportedRetryHeaders).forEach(([header, batchKey]) => {
             const responseHeader = response.getResponseHeader(header)
             if (!responseHeader) {
                 return
             }
 
-            const retryAfterSeconds = parseInt(responseHeader, 10)
+            let retryAfterSeconds = parseInt(responseHeader, 10)
+            if (isNaN(retryAfterSeconds)) {
+                retryAfterSeconds = 60
+            }
+
             if (retryAfterSeconds) {
                 const retryAfterMillis = retryAfterSeconds * 1000
-                newLimits[batchKey] = new Date().getTime() + retryAfterMillis
+                this.limits[batchKey] = new Date().getTime() + retryAfterMillis
             }
         })
-
-        this.persistence.set_quota_limits(newLimits)
     }
 }

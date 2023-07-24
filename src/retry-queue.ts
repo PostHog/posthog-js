@@ -109,7 +109,7 @@ export class RetryQueue extends RequestQueueScaffold {
                 if (Config.DEBUG) {
                     console.warn('[PostHog RetryQueue] is quota limited. Dropping request.')
                 }
-                return
+                continue
             }
 
             try {
