@@ -8,23 +8,16 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
+    MutationRateLimiter,
+    recordOptions,
+    rrwebRecord,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
-import type {
-    KeepIframeSrcFn,
-    RecordPlugin,
-    SamplingStrategy,
-    blockClass,
-    eventWithTime,
-    hooksParam,
-    listenerHandler,
-    maskTextClass,
-} from '@rrweb/types'
+import type { eventWithTime, listenerHandler } from '@rrweb/types'
 import Config from '../config'
 import { logger, loadScript } from '../utils'
-import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, SlimDOMOptions } from 'rrweb-snapshot'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -35,44 +28,6 @@ export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 // NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
 // import type { record } from 'rrweb2/typings'
 // import type { recordOptions } from 'rrweb/typings/types'
-
-export type rrwebRecord = {
-    (options: recordOptions<eventWithTime>): listenerHandler
-    addCustomEvent: (tag: string, payload: any) => void
-    takeFullSnapshot: () => void
-}
-
-export declare type recordOptions<T> = {
-    emit?: (e: T, isCheckout?: boolean) => void
-    checkoutEveryNth?: number
-    checkoutEveryNms?: number
-    blockClass?: blockClass
-    blockSelector?: string
-    ignoreClass?: string
-    maskTextClass?: maskTextClass
-    maskTextSelector?: string
-    maskAllInputs?: boolean
-    maskInputOptions?: MaskInputOptions
-    maskInputFn?: MaskInputFn
-    maskTextFn?: MaskTextFn
-    slimDOMOptions?: SlimDOMOptions | 'all' | true
-    ignoreCSSAttributes?: Set<string>
-    inlineStylesheet?: boolean
-    hooks?: hooksParam
-    // packFn?: PackFn
-    sampling?: SamplingStrategy
-    dataURLOptions?: DataURLOptions
-    recordCanvas?: boolean
-    recordCrossOriginIframes?: boolean
-    recordAfter?: 'DOMContentLoaded' | 'load'
-    userTriggeredOnInput?: boolean
-    collectFonts?: boolean
-    inlineImages?: boolean
-    plugins?: RecordPlugin[]
-    mousemoveWait?: number
-    keepIframeSrcFn?: KeepIframeSrcFn
-    // errorHandler?: ErrorHandler
-}
 
 // Copied from rrweb typings to avoid import
 enum IncrementalSource {
@@ -127,6 +82,7 @@ export class SessionRecording {
     rrwebRecord: rrwebRecord | undefined
     recorderVersion?: string
     isIdle = false
+    rateLimiter?: MutationRateLimiter
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -356,6 +312,18 @@ export class SessionRecording {
             return
         }
 
+        this.rateLimiter = new MutationRateLimiter(this.rrwebRecord!, {
+            onBlockedNode: (id, node) => {
+                logger.log(
+                    'Too many mutations on node. Rate limiting. This could be due to SVG animations or something similar',
+                    {
+                        nodeId: id,
+                        node: node,
+                    }
+                )
+            },
+        })
+
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
@@ -390,7 +358,13 @@ export class SessionRecording {
             return
         }
 
-        const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(rawEvent))
+        const throttledEvent = this.rateLimiter!.throttleMutations(rawEvent)
+
+        if (!throttledEvent) {
+            return
+        }
+
+        const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(throttledEvent))
 
         this._updateWindowAndSessionIds(event)
 

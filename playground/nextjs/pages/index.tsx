@@ -1,6 +1,8 @@
 import Head from 'next/head'
 import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
 import { useEffect, useState } from 'react'
+import { Player, Controls } from '@lottiefiles/react-lottie-player'
+import Link from 'next/link'
 
 export default function Home() {
     const posthog = usePostHog()
@@ -47,6 +49,11 @@ export default function Home() {
                     >
                         Set user properties
                     </button>
+                </div>
+
+                <div className="buttons">
+                    <Link href="/animations">Animations</Link>
+                    <Link href="/iframe">Iframe</Link>
                 </div>
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>
