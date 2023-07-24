@@ -17,11 +17,12 @@ describe('xhr', () => {
     }))
     given('onXHRError', jest.fn)
     given('on429Response', jest.fn)
+    given('xhrOptions', () => ({}))
     given('xhrParams', () => ({
         url: 'https://any.posthog-instance.com',
         data: '',
         headers: {},
-        options: {},
+        options: given.xhrOptions,
         captureMetrics: {
             incr: () => {},
             decr: () => {},

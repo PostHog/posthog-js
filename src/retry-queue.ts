@@ -102,16 +102,16 @@ export class RetryQueue extends RequestQueueScaffold {
             this._poller = undefined
         }
 
-        if (this.rateLimiter.isRateLimited()) {
-            if (Config.DEBUG) {
-                console.warn('[PostHog RetryQueue] is quota limited. Dropping request.')
-            }
-            this.queue = []
-            return
-        }
-
         for (const { requestData } of this.queue) {
             const { url, data, options } = requestData
+
+            if (this.rateLimiter.isRateLimited(options._batchKey)) {
+                if (Config.DEBUG) {
+                    console.warn('[PostHog RetryQueue] is quota limited. Dropping request.')
+                }
+                return
+            }
+
             try {
                 // we've had send beacon in place for at least 2 years
                 // eslint-disable-next-line compat/compat
@@ -128,7 +128,7 @@ export class RetryQueue extends RequestQueueScaffold {
     }
 
     _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }: QueuedRequestData): void {
-        if (this.rateLimiter.isRateLimited()) {
+        if (this.rateLimiter.isRateLimited(options._batchKey)) {
             if (Config.DEBUG) {
                 console.warn('[PostHog RetryQueue] in quota limited mode. Dropping request.')
             }

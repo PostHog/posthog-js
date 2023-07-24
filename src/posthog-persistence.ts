@@ -335,12 +335,11 @@ export class PostHogPersistence {
         this.save()
     }
 
-    get_quota_limited(): number | false {
-        return this.props[POSTHOG_QUOTA_LIMITED] || false
+    get_quota_limits(): Record<string, number> {
+        return this.props[POSTHOG_QUOTA_LIMITED] || {}
     }
 
-    // receives the timestamp of the next time a call to PostHog is valid
-    set_quota_limited(state: number): void {
+    set_quota_limits(state: Record<string, number>): void {
         this.props[POSTHOG_QUOTA_LIMITED] = state
         this.save()
     }

@@ -4,6 +4,7 @@ import { CaptureMetrics } from '../capture-metrics'
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
 import * as SendRequest from '../send-request'
 import { RateLimiter } from '../rate-limiter'
+import { SESSION_RECORDING_BATCH_KEY } from '../extensions/sessionrecording'
 
 const EPOCH = 1_600_000_000
 const defaultRequestOptions = {
@@ -19,11 +20,11 @@ describe('RetryQueue', () => {
     given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
     given('onXHRError', () => jest.fn().mockImplementation(console.error))
 
-    given('mockIsRateLimited', () => jest.fn().mockReturnValue(false))
-    given('mockSetIsRateLimited', () => jest.fn())
+    given('mockRateLimits', () => jest.fn().mockReturnValue(false))
+    given('mockSetRateLimits', () => jest.fn())
     given('persistence', () => ({
-        get_quota_limited: () => given.mockIsRateLimited(),
-        set_quota_limited: given.mockSetIsRateLimited,
+        get_quota_limits: () => given.mockRateLimits(),
+        set_quota_limits: (x) => given.mockSetRateLimits(x),
     }))
 
     given('xhrStatus', () => 418)
@@ -123,55 +124,65 @@ describe('RetryQueue', () => {
         expect(given.onXHRError).toHaveBeenCalledTimes(0)
     })
 
-    it('does not process retry requests when rate limited', () => {
-        enqueueRequests()
+    it('does not process event retry requests when events are rate limited', () => {
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'baz', timestamp: EPOCH - 1000 },
+            options: defaultRequestOptions,
+        })
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'baz', timestamp: EPOCH - 500 },
+            options: defaultRequestOptions,
+        })
+        given.retryQueue.enqueue({
+            url: '/s',
+            data: { event: 'fizz', timestamp: EPOCH },
+            options: { ...defaultRequestOptions, _batchKey: SESSION_RECORDING_BATCH_KEY },
+        })
 
-        expect(given.retryQueue.queue.length).toEqual(4)
-
-        expect(given.retryQueue.queue).toEqual([
-            {
-                requestData: {
-                    url: '/e',
-                    data: { event: 'foo', timestamp: EPOCH - 3000 },
-                    options: defaultRequestOptions,
-                },
-                retryAt: expect.any(Date),
-            },
-            {
-                requestData: {
-                    url: '/e',
-                    data: { event: 'bar', timestamp: EPOCH - 2000 },
-                    options: defaultRequestOptions,
-                },
-                retryAt: expect.any(Date),
-            },
-            {
-                requestData: {
-                    url: '/e',
-                    data: { event: 'baz', timestamp: EPOCH - 1000 },
-                    options: defaultRequestOptions,
-                },
-                retryAt: expect.any(Date),
-            },
-            {
-                requestData: {
-                    url: '/e',
-                    data: { event: 'fizz', timestamp: EPOCH },
-                    options: defaultRequestOptions,
-                },
-                retryAt: expect.any(Date),
-            },
-        ])
-
+        expect(given.retryQueue.queue.length).toEqual(3)
         expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
 
-        given('mockIsRateLimited', () => jest.fn().mockReturnValue(new Date().getTime() + 10_000))
+        given('mockRateLimits', () => jest.fn().mockReturnValue({ events: new Date().getTime() + 10_000 }))
 
         fastForwardTimeAndRunTimer()
 
         // clears queue
         expect(given.retryQueue.queue.length).toEqual(0)
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(1)
+        expect(given.onXHRError).toHaveBeenCalledTimes(0)
+    })
+
+    it('does not process recording retry requests when they are rate limited', () => {
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'baz', timestamp: EPOCH - 1000 },
+            options: defaultRequestOptions,
+        })
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'baz', timestamp: EPOCH - 500 },
+            options: defaultRequestOptions,
+        })
+        given.retryQueue.enqueue({
+            url: '/s',
+            data: { event: 'fizz', timestamp: EPOCH },
+            options: { ...defaultRequestOptions, _batchKey: SESSION_RECORDING_BATCH_KEY },
+        })
+
+        expect(given.retryQueue.queue.length).toEqual(3)
         expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
+
+        given('mockRateLimits', () =>
+            jest.fn().mockReturnValue({ [SESSION_RECORDING_BATCH_KEY]: new Date().getTime() + 10_000 })
+        )
+
+        fastForwardTimeAndRunTimer()
+
+        // clears queue
+        expect(given.retryQueue.queue.length).toEqual(0)
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(2)
         expect(given.onXHRError).toHaveBeenCalledTimes(0)
     })
 
