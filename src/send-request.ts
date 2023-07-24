@@ -68,6 +68,7 @@ export const xhr = ({
     retryQueue,
     onXHRError,
     timeout = 10000,
+    onRateLimited,
 }: XHRParams) => {
     const req = new XMLHttpRequest()
     req.open(options.method || 'GET', url, true)
@@ -122,6 +123,10 @@ export const xhr = ({
                         retriesPerformedSoFar: (retriesPerformedSoFar || 0) + 1,
                         callback,
                     })
+                }
+
+                if (req.status === 429) {
+                    onRateLimited?.(req)
                 }
 
                 if (callback) {

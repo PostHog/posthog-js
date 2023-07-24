@@ -25,6 +25,7 @@ export const SURVEYS = '$surveys'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
 
 const USER_STATE = '$user_state'
+const POSTHOG_QUOTA_LIMITED = '$posthog_quota_limited'
 
 export const RESERVED_PROPERTIES = [
     PEOPLE_DISTINCT_ID_KEY,
@@ -35,6 +36,7 @@ export const RESERVED_PROPERTIES = [
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
     USER_STATE,
+    POSTHOG_QUOTA_LIMITED,
     PERSISTENCE_EARLY_ACCESS_FEATURES,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -330,6 +332,16 @@ export class PostHogPersistence {
 
     set_user_state(state: 'anonymous' | 'identified'): void {
         this.props[USER_STATE] = state
+        this.save()
+    }
+
+    get_quota_limited(): number | false {
+        return this.props[POSTHOG_QUOTA_LIMITED] || false
+    }
+
+    // receives the timestamp of the next time a call to PostHog is valid
+    set_quota_limited(state: number): void {
+        this.props[POSTHOG_QUOTA_LIMITED] = state
         this.save()
     }
 }

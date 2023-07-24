@@ -3,6 +3,7 @@
 import { CaptureMetrics } from '../capture-metrics'
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
 import * as SendRequest from '../send-request'
+import { RateLimiter } from '../rate-limiter'
 
 const EPOCH = 1_600_000_000
 const defaultRequestOptions = {
@@ -11,15 +12,27 @@ const defaultRequestOptions = {
 }
 
 describe('RetryQueue', () => {
-    given('retryQueue', () => new RetryQueue(given.captureMetrics, given.onXHRError))
+    given(
+        'retryQueue',
+        () => new RetryQueue(given.captureMetrics, given.onXHRError, new RateLimiter(given.persistence))
+    )
     given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
     given('onXHRError', () => jest.fn().mockImplementation(console.error))
+
+    given('mockIsRateLimited', () => jest.fn().mockReturnValue(false))
+    given('mockSetIsRateLimited', () => jest.fn())
+    given('persistence', () => ({
+        get_quota_limited: () => given.mockIsRateLimited(),
+        set_quota_limited: given.mockSetIsRateLimited,
+    }))
+
+    given('xhrStatus', () => 418)
 
     const xhrMockClass = () => ({
         open: jest.fn(),
         send: jest.fn(),
         setRequestHeader: jest.fn(),
-        status: 418,
+        status: given.xhrStatus,
     })
 
     beforeEach(() => {
@@ -110,6 +123,58 @@ describe('RetryQueue', () => {
         expect(given.onXHRError).toHaveBeenCalledTimes(0)
     })
 
+    it('does not process retry requests when rate limited', () => {
+        enqueueRequests()
+
+        expect(given.retryQueue.queue.length).toEqual(4)
+
+        expect(given.retryQueue.queue).toEqual([
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: 'foo', timestamp: EPOCH - 3000 },
+                    options: defaultRequestOptions,
+                },
+                retryAt: expect.any(Date),
+            },
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: 'bar', timestamp: EPOCH - 2000 },
+                    options: defaultRequestOptions,
+                },
+                retryAt: expect.any(Date),
+            },
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: 'baz', timestamp: EPOCH - 1000 },
+                    options: defaultRequestOptions,
+                },
+                retryAt: expect.any(Date),
+            },
+            {
+                requestData: {
+                    url: '/e',
+                    data: { event: 'fizz', timestamp: EPOCH },
+                    options: defaultRequestOptions,
+                },
+                retryAt: expect.any(Date),
+            },
+        ])
+
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
+
+        given('mockIsRateLimited', () => jest.fn().mockReturnValue(new Date().getTime() + 10_000))
+
+        fastForwardTimeAndRunTimer()
+
+        // clears queue
+        expect(given.retryQueue.queue.length).toEqual(0)
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
+        expect(given.onXHRError).toHaveBeenCalledTimes(0)
+    })
+
     it('tries to send requests via beacon on unload', () => {
         enqueueRequests()
 
@@ -118,6 +183,18 @@ describe('RetryQueue', () => {
 
         expect(given.retryQueue.queue.length).toEqual(0)
         expect(window.navigator.sendBeacon).toHaveBeenCalledTimes(4)
+    })
+
+    it('does not try to send requests via beacon on unload when rate limited', () => {
+        enqueueRequests()
+
+        fastForwardTimeAndRunTimer()
+
+        given.retryQueue.poll()
+        given.retryQueue.unload()
+
+        expect(given.retryQueue.queue.length).toEqual(0)
+        expect(window.navigator.sendBeacon).toHaveBeenCalledTimes(0)
     })
 
     it('when you flush the queue onXHRError is passed to xhr', () => {
