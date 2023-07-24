@@ -312,17 +312,19 @@ export class SessionRecording {
             return
         }
 
-        this.rateLimiter = new MutationRateLimiter(this.rrwebRecord!, {
-            onBlockedNode: (id, node) => {
-                logger.log(
-                    'Too many mutations on node. Rate limiting. This could be due to SVG animations or something similar',
-                    {
-                        nodeId: id,
-                        node: node,
-                    }
-                )
-            },
-        })
+        this.rateLimiter =
+            this.rateLimiter ??
+            new MutationRateLimiter(this.rrwebRecord!, {
+                onBlockedNode: (id, node) => {
+                    logger.log(
+                        'Too many mutations on node. Rate limiting. This could be due to SVG animations or something similar',
+                        {
+                            nodeId: id,
+                            node: node,
+                        }
+                    )
+                },
+            })
 
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {

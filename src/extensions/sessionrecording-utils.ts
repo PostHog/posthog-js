@@ -135,27 +135,31 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
 }
 
 export class MutationRateLimiter {
-    mutationBuckets: Record<string, number> = {}
-    blockedNodes: Record<string, boolean> = {}
+    private bucketSize = 100
+    private refillRate = 10
+    private mutationBuckets: Record<string, number> = {}
 
     constructor(
         private readonly rrweb: rrwebRecord,
         private readonly options: {
-            mutationLimit?: number
-            leakRate?: number
+            bucketSize?: number
+            refillRate?: number
             onBlockedNode?: (id: number, node: Node | null) => void
-        }
+        } = {}
     ) {
+        this.refillRate = this.options.refillRate ?? this.refillRate
+        this.bucketSize = this.options.bucketSize ?? this.bucketSize
         setInterval(() => {
-            this.leakBuckets()
+            this.refillBuckets()
         }, 1000)
     }
 
-    private leakBuckets = () => {
+    private refillBuckets = () => {
+        console.log(this.mutationBuckets)
         Object.keys(this.mutationBuckets).forEach((key) => {
-            this.mutationBuckets[key] = Math.max(this.mutationBuckets[key] - (this.options.leakRate ?? 10), 0)
+            this.mutationBuckets[key] = this.mutationBuckets[key] + this.refillRate
 
-            if (this.mutationBuckets[key] === 0) {
+            if (this.mutationBuckets[key] >= this.bucketSize) {
                 delete this.mutationBuckets[key]
             }
         })
@@ -190,25 +194,18 @@ export class MutationRateLimiter {
         data.attributes = data.attributes.filter((attr) => {
             const [nodeId, node] = this.getNodeOrRelevantParent(attr.id)
 
-            if (this.blockedNodes[nodeId]) {
+            if (this.mutationBuckets[nodeId] === 0) {
                 return false
             }
 
-            this.mutationBuckets[nodeId] = this.mutationBuckets[nodeId] ? this.mutationBuckets[nodeId] + 1 : 1
+            this.mutationBuckets[nodeId] = this.mutationBuckets[nodeId] ?? this.bucketSize
+            this.mutationBuckets[nodeId] = Math.max(this.mutationBuckets[nodeId] - 1, 0)
 
-            if (this.mutationBuckets[nodeId] > (this.options.mutationLimit ?? 50)) {
-                this.blockedNodes[nodeId] = true
+            if (this.mutationBuckets[nodeId] === 0) {
                 this.options.onBlockedNode?.(nodeId, node)
             }
 
             return attr
-        })
-
-        // Clean up after ourselves when the nodes get removed
-        data.removes.forEach((attr) => {
-            if (this.blockedNodes[attr.id]) {
-                return
-            }
         })
 
         // Check if every part of the mutation is empty in which case there is nothing to do
