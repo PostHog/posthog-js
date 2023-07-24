@@ -15,7 +15,6 @@ export default function Home() {
             <main>
                 <h1>Animations</h1>
                 <p>Useful testing for Replay handling heavy animations</p>
-                <h4>Animation</h4>
                 <Player
                     src="https://lottie.host/7401522f-2d8b-4049-ad18-eb0edb6af224/CE9lFrNlEH.json"
                     // className="ph-no-capture"
