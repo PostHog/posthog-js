@@ -155,7 +155,6 @@ export class MutationRateLimiter {
     }
 
     private refillBuckets = () => {
-        console.log(this.mutationBuckets)
         Object.keys(this.mutationBuckets).forEach((key) => {
             this.mutationBuckets[key] = this.mutationBuckets[key] + this.refillRate
 

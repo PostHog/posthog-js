@@ -337,7 +337,7 @@ export class SessionRecording {
                         node: node,
                     })
 
-                    this.log(message)
+                    this.log('[PostHog Recorder] ' + message, 'warn')
                 },
             })
 
