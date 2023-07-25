@@ -7,6 +7,7 @@ import rrwebRecord from 'rrweb-v1/es/rrweb/packages/rrweb/src/record'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import { getRecordConsolePlugin } from 'rrweb-v1/es/rrweb/packages/rrweb/src/plugins/console/record'
+import { SessionRecording } from './sessionrecording'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 
@@ -14,5 +15,6 @@ const win: Window & typeof globalThis = typeof window !== 'undefined' ? window :
 
 ;(win as any).rrweb = { record: rrwebRecord, version: 'v1', rrwebVersion: version }
 ;(win as any).rrwebConsoleRecord = { getRecordConsolePlugin }
+;(win as any).PostHogSessionRecording = SessionRecording
 
 export default rrwebRecord
