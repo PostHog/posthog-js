@@ -1,7 +1,24 @@
-import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
+import type {
+    DataURLOptions,
+    KeepIframeSrcFn,
+    MaskInputFn,
+    MaskInputOptions,
+    MaskTextFn,
+    Mirror,
+    SlimDOMOptions,
+} from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'
+import {
+    RecordPlugin,
+    SamplingStrategy,
+    blockClass,
+    eventWithTime,
+    hooksParam,
+    listenerHandler,
+    maskTextClass,
+} from '@rrweb/types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -334,4 +351,55 @@ export interface EarlyAccessFeatureResponse {
 
 export type NetworkRequest = {
     url: string
+}
+
+export type rrwebRecord = {
+    (options: recordOptions<eventWithTime>): listenerHandler
+    addCustomEvent: (tag: string, payload: any) => void
+    takeFullSnapshot: () => void
+    mirror: Mirror
+}
+
+export declare type recordOptions<T> = {
+    emit?: (e: T, isCheckout?: boolean) => void
+    checkoutEveryNth?: number
+    checkoutEveryNms?: number
+    blockClass?: blockClass
+    blockSelector?: string
+    ignoreClass?: string
+    maskTextClass?: maskTextClass
+    maskTextSelector?: string
+    maskAllInputs?: boolean
+    maskInputOptions?: MaskInputOptions
+    maskInputFn?: MaskInputFn
+    maskTextFn?: MaskTextFn
+    slimDOMOptions?: SlimDOMOptions | 'all' | true
+    ignoreCSSAttributes?: Set<string>
+    inlineStylesheet?: boolean
+    hooks?: hooksParam
+    // packFn?: PackFn
+    sampling?: SamplingStrategy
+    dataURLOptions?: DataURLOptions
+    recordCanvas?: boolean
+    recordCrossOriginIframes?: boolean
+    recordAfter?: 'DOMContentLoaded' | 'load'
+    userTriggeredOnInput?: boolean
+    collectFonts?: boolean
+    inlineImages?: boolean
+    plugins?: RecordPlugin[]
+    mousemoveWait?: number
+    keepIframeSrcFn?: KeepIframeSrcFn
+    // errorHandler?: ErrorHandler
+}
+
+export interface ISessionRecording {
+    startRecordingIfEnabled(): void
+    started(): boolean
+    stopRecording(): void
+    isRecordingEnabled(): boolean
+    isConsoleLogCaptureEnabled(): boolean
+    getRecordingVersion(): string
+    afterDecideResponse(response: DecideResponse): void
+    log(message: string, level?: 'log' | 'warn' | 'error'): void
+    onRRwebEmit(rawEvent: eventWithTime): void
 }

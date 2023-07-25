@@ -21,7 +21,7 @@ describe(`Module-based loader in Node env`, () => {
     beforeEach(() => {
         jest.spyOn(posthog, '_send_request').mockReturnValue()
         jest.spyOn(console, 'log').mockReturnValue()
-        posthogName = _UUID('v7')
+        posthogName = _UUID('v7')()
 
         // Create something that looks like the Segment Analytics 2.0 API. We
         // could use the actual client, but it's a little more tricky and we'd

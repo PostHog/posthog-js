@@ -14,7 +14,7 @@ import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
-} from '../../extensions/sessionrecording-utils'
+} from '../../session-recording/sessionrecording-utils'
 
 // Type and source defined here designate a non-user-generated recording event
 

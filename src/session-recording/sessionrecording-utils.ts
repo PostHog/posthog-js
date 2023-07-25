@@ -1,66 +1,13 @@
-import type {
-    KeepIframeSrcFn,
-    RecordPlugin,
-    SamplingStrategy,
-    blockClass,
-    eventWithTime,
-    hooksParam,
-    listenerHandler,
-    maskTextClass,
-    pluginEvent,
-    mutationCallbackParam,
-} from '@rrweb/types'
-import type { Mirror, MaskInputOptions, MaskInputFn, MaskTextFn, SlimDOMOptions, DataURLOptions } from 'rrweb-snapshot'
+import type { eventWithTime, pluginEvent, mutationCallbackParam } from '@rrweb/types'
+import { rrwebRecord } from 'types'
 
 export const replacementImageURI =
     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNOCAwSDE2TDAgMTZWOEw4IDBaIiBmaWxsPSIjMkQyRDJEIi8+CjxwYXRoIGQ9Ik0xNiA4VjE2SDhMMTYgOFoiIGZpbGw9IiMyRDJEMkQiLz4KPC9zdmc+Cg=='
 
-export const FULL_SNAPSHOT_EVENT_TYPE = 2
-export const META_EVENT_TYPE = 4
-export const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
-export const PLUGIN_EVENT_TYPE = 6
-export const MUTATION_SOURCE_TYPE = 0
-
-export const MAX_MESSAGE_SIZE = 5000000 // ~5mb
-
-export type rrwebRecord = {
-    (options: recordOptions<eventWithTime>): listenerHandler
-    addCustomEvent: (tag: string, payload: any) => void
-    takeFullSnapshot: () => void
-    mirror: Mirror
-}
-
-export declare type recordOptions<T> = {
-    emit?: (e: T, isCheckout?: boolean) => void
-    checkoutEveryNth?: number
-    checkoutEveryNms?: number
-    blockClass?: blockClass
-    blockSelector?: string
-    ignoreClass?: string
-    maskTextClass?: maskTextClass
-    maskTextSelector?: string
-    maskAllInputs?: boolean
-    maskInputOptions?: MaskInputOptions
-    maskInputFn?: MaskInputFn
-    maskTextFn?: MaskTextFn
-    slimDOMOptions?: SlimDOMOptions | 'all' | true
-    ignoreCSSAttributes?: Set<string>
-    inlineStylesheet?: boolean
-    hooks?: hooksParam
-    // packFn?: PackFn
-    sampling?: SamplingStrategy
-    dataURLOptions?: DataURLOptions
-    recordCanvas?: boolean
-    recordCrossOriginIframes?: boolean
-    recordAfter?: 'DOMContentLoaded' | 'load'
-    userTriggeredOnInput?: boolean
-    collectFonts?: boolean
-    inlineImages?: boolean
-    plugins?: RecordPlugin[]
-    mousemoveWait?: number
-    keepIframeSrcFn?: KeepIframeSrcFn
-    // errorHandler?: ErrorHandler
-}
+const MAX_MESSAGE_SIZE = 5000000 // ~5mb
+const INCREMENTAL_SNAPSHOT_EVENT_TYPE = 3
+const PLUGIN_EVENT_TYPE = 6
+const MUTATION_SOURCE_TYPE = 0
 
 /*
  * Check whether a data payload is nearing 5mb. If it is, it checks the data for

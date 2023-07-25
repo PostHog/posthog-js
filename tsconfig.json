@@ -22,5 +22,5 @@
         "downlevelIteration": true,
         "declaration": true
     },
-    "include": ["src/*.ts"]
+    "include": ["src/**/*.ts"]
 }

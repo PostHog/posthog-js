@@ -23,7 +23,7 @@ const plugins = [
 
 export default [
     {
-        input: 'src/loader-recorder.ts',
+        input: 'src/session-recording/loader-recorder.ts',
         output: [
             {
                 file: 'dist/recorder.js',
@@ -35,7 +35,7 @@ export default [
         plugins: [...plugins],
     },
     {
-        input: 'src/loader-recorder-v2.ts',
+        input: 'src/session-recording/loader-recorder-v2.ts',
         output: [
             {
                 file: 'dist/recorder-v2.js',

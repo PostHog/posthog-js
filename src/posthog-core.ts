@@ -20,7 +20,7 @@ import {
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
-import { SessionRecording } from './extensions/sessionrecording'
+import { SessionRecordingPlaceholder } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
@@ -39,6 +39,7 @@ import {
     Compression,
     EarlyAccessFeatureCallback,
     GDPROptions,
+    ISessionRecording,
     isFeatureEnabledOptions,
     JSC,
     JsonType,
@@ -210,7 +211,7 @@ const create_phlib = function (
     instance._init(token, config, name, handleCallback('initComplete'))
     instance.toolbar.maybeLoadToolbar()
 
-    instance.sessionRecording = new SessionRecording(instance)
+    instance.sessionRecording = new SessionRecordingPlaceholder(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
     instance.webPerformance = new WebPerformanceObserver(instance)
@@ -268,7 +269,7 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
-    sessionRecording: SessionRecording | undefined
+    sessionRecording: ISessionRecording | undefined
     webPerformance: WebPerformanceObserver | undefined
     exceptionAutocapture: ExceptionObserver | undefined
 
