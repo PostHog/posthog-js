@@ -17,13 +17,20 @@ import {
 } from '../../extensions/sessionrecording-utils'
 
 // Type and source defined here designate a non-user-generated recording event
-const NON_USER_GENERATED_EVENT = { type: INCREMENTAL_SNAPSHOT_EVENT_TYPE, data: { source: MUTATION_SOURCE_TYPE } }
 
 jest.mock('../../utils', () => ({
     ...jest.requireActual('../../utils'),
     loadScript: jest.fn((path, callback) => callback()),
 }))
 jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
+
+const createIncrementalSnapshot = (event = {}) => ({
+    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+    data: {
+        source: 1,
+    },
+    ...event,
+})
 
 describe('SessionRecording', () => {
     let _emit
@@ -254,11 +261,11 @@ describe('SessionRecording', () => {
             given.sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
 
-            _emit({ event: 1 })
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(given.posthog.capture).not.toHaveBeenCalled()
 
             given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
-            _emit({ event: 2 })
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
             given.sessionRecording._flushBuffer()
 
@@ -266,14 +273,17 @@ describe('SessionRecording', () => {
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
+                    $snapshot_bytes: 60,
+                    $snapshot_data: [
+                        { type: 3, data: { source: 1 } },
+                        { type: 3, data: { source: 2 } },
+                    ],
                     $session_id: 'sessionId',
                     $window_id: 'windowId',
-                    $snapshot_data: [{ event: 1 }, { event: 2 }],
-                    $snapshot_bytes: 22,
                 },
                 {
-                    method: 'POST',
                     transport: 'XHR',
+                    method: 'POST',
                     endpoint: '/s/',
                     _noTruncate: true,
                     _batchKey: 'sessionRecording',
@@ -287,8 +297,8 @@ describe('SessionRecording', () => {
             given.sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
 
-            _emit({ event: 1 })
-            _emit({ event: 2 })
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
             expect(given.posthog.capture).not.toHaveBeenCalled()
             expect(given.sessionRecording.flushBufferTimer).not.toBeUndefined()
@@ -302,8 +312,11 @@ describe('SessionRecording', () => {
                 {
                     $session_id: 'sessionId',
                     $window_id: 'windowId',
-                    $snapshot_data: [{ event: 1 }, { event: 2 }],
-                    $snapshot_bytes: 22,
+                    $snapshot_bytes: 60,
+                    $snapshot_data: [
+                        { type: 3, data: { source: 1 } },
+                        { type: 3, data: { source: 2 } },
+                    ],
                 },
                 {
                     method: 'POST',
@@ -322,37 +335,38 @@ describe('SessionRecording', () => {
             expect(loadScript).toHaveBeenCalled()
             const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
 
-            _emit({ event: bigData })
-            _emit({ event: 1 })
-            _emit({ event: 2 })
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
+
             expect(given.posthog.capture).not.toHaveBeenCalled()
-            expect(given.sessionRecording.buffer).toMatchObject({ size: 755008 })
+            expect(given.sessionRecording.buffer).toMatchObject({ size: 755101 })
 
             // Another big event means the old data will be flushed
-            _emit({ event: bigData })
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
             expect(given.posthog.capture).toHaveBeenCalled()
             expect(given.sessionRecording.buffer.data.length).toEqual(1) // The new event
-            expect(given.sessionRecording.buffer).toMatchObject({ size: 754986 })
+            expect(given.sessionRecording.buffer).toMatchObject({ size: 755017 })
         })
 
         it('flushes buffer if the session_id changes', () => {
             given.sessionRecording.afterDecideResponse({ endpoint: '/s/' })
             given.sessionRecording.startRecordingIfEnabled()
 
-            _emit({ event: 1 })
+            _emit(createIncrementalSnapshot())
             expect(given.posthog.capture).not.toHaveBeenCalled()
             expect(given.sessionRecording.buffer.sessionId).toEqual('sessionId')
             // Not exactly right but easier to test than rotating the session id
             given.sessionRecording.buffer.sessionId = 'otherSessionId'
-            _emit({ event: 1 })
+            _emit(createIncrementalSnapshot())
             expect(given.posthog.capture).toHaveBeenCalled()
             expect(given.posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
                     $session_id: 'otherSessionId',
                     $window_id: 'windowId',
-                    $snapshot_data: [{ event: 1 }],
-                    $snapshot_bytes: 11,
+                    $snapshot_data: [{ type: 3, data: { source: 1 } }],
+                    $snapshot_bytes: 30,
                 },
                 {
                     method: 'POST',
@@ -485,41 +499,35 @@ describe('SessionRecording', () => {
 
             it('sends a full snapshot if there is a new session/window id and the event is not type FullSnapshot or Meta', () => {
                 given('incomingSessionAndWindowId', () => ({ sessionId: 'new-session-id', windowId: 'new-window-id' }))
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
+                _emit(createIncrementalSnapshot())
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('sends a full snapshot if there is a new window id and the event is not type FullSnapshot or Meta', () => {
                 given('incomingSessionAndWindowId', () => ({ sessionId: 'old-session-id', windowId: 'new-window-id' }))
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
+                _emit(createIncrementalSnapshot())
                 expect(window.rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is a new session/window id and the event is type FullSnapshot or Meta', () => {
                 given('incomingSessionAndWindowId', () => ({ sessionId: 'new-session-id', windowId: 'new-window-id' }))
-                _emit({ event: 123, type: META_EVENT_TYPE })
+                _emit(createIncrementalSnapshot({ type: META_EVENT_TYPE }))
                 expect(window.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is not a new session or window id', () => {
                 given('incomingSessionAndWindowId', () => ({ sessionId: 'old-session-id', windowId: 'old-window-id' }))
-                _emit({ event: 123, type: INCREMENTAL_SNAPSHOT_EVENT_TYPE })
+                _emit(createIncrementalSnapshot())
                 expect(window.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
             it('it calls checkAndGetSessionAndWindowId with readOnly as true if it not a user interaction', () => {
-                _emit(NON_USER_GENERATED_EVENT)
+                _emit(createIncrementalSnapshot({ data: { source: MUTATION_SOURCE_TYPE, adds: [{ id: 1 }] } }))
                 expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(true, undefined)
             })
 
             it('it calls checkAndGetSessionAndWindowId with readOnly as false if it is a user interaction', () => {
-                _emit({
-                    event: 123,
-                    type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    data: {
-                        source: 1,
-                    },
-                })
+                _emit(createIncrementalSnapshot())
                 expect(given.posthog.sessionManager.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(
                     false,
                     undefined
