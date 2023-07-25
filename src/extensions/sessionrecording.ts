@@ -74,6 +74,7 @@ export class SessionRecording {
         sessionId: string | null
         windowId: string | null
     }
+    private mutationRateLimiter?: MutationRateLimiter
 
     captureStarted: boolean
     snapshots: any[]
@@ -82,7 +83,6 @@ export class SessionRecording {
     rrwebRecord: rrwebRecord | undefined
     recorderVersion?: string
     isIdle = false
-    rateLimiter?: MutationRateLimiter
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -328,8 +328,8 @@ export class SessionRecording {
             return
         }
 
-        this.rateLimiter =
-            this.rateLimiter ??
+        this.mutationRateLimiter =
+            this.mutationRateLimiter ??
             new MutationRateLimiter(this.rrwebRecord!, {
                 onBlockedNode: (id, node) => {
                     const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
@@ -375,7 +375,7 @@ export class SessionRecording {
             return
         }
 
-        const throttledEvent = this.rateLimiter!.throttleMutations(rawEvent)
+        const throttledEvent = this.mutationRateLimiter!.throttleMutations(rawEvent)
 
         if (!throttledEvent) {
             return
