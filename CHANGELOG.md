@@ -1,3 +1,7 @@
+## 1.75.0 - 2023-07-25
+
+- feat: react to rate limiting responses (#757)
+
 ## 1.74.0 - 2023-07-25
 
 - fix: Recording throttling for SVG-like things (#758)
