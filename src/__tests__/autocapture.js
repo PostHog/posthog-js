@@ -21,6 +21,7 @@ const simulateClick = function (el) {
 describe('Autocapture system', () => {
     beforeEach(() => {
         jest.spyOn(window.console, 'log').mockImplementation()
+        autocapture._isDisabledServerSide = null
     })
 
     afterEach(() => {
