@@ -183,35 +183,49 @@ export class MutationRateLimiter {
         return [id, node]
     }
 
+    private numberOfChanges = (data: Partial<mutationCallbackParam>) => {
+        return (
+            (data.removes?.length ?? 0) +
+            (data.attributes?.length ?? 0) +
+            (data.texts?.length ?? 0) +
+            (data.adds?.length ?? 0)
+        )
+    }
+
     public throttleMutations = (event: eventWithTime) => {
         if (event.type !== INCREMENTAL_SNAPSHOT_EVENT_TYPE || event.data.source !== MUTATION_SOURCE_TYPE) {
             return event
         }
 
-        const data = event.data as mutationCallbackParam
+        const data = event.data as Partial<mutationCallbackParam>
 
-        // Most problematic mutations come from attrs where the style or minor properties are changed rapidly
-        data.attributes = data.attributes.filter((attr) => {
-            const [nodeId, node] = this.getNodeOrRelevantParent(attr.id)
+        const initialMutationCount = this.numberOfChanges(data)
 
-            if (this.mutationBuckets[nodeId] === 0) {
-                return false
-            }
+        if (data.attributes) {
+            // Most problematic mutations come from attrs where the style or minor properties are changed rapidly
+            data.attributes = data.attributes.filter((attr) => {
+                const [nodeId, node] = this.getNodeOrRelevantParent(attr.id)
 
-            this.mutationBuckets[nodeId] = this.mutationBuckets[nodeId] ?? this.bucketSize
-            this.mutationBuckets[nodeId] = Math.max(this.mutationBuckets[nodeId] - 1, 0)
+                if (this.mutationBuckets[nodeId] === 0) {
+                    return false
+                }
 
-            if (this.mutationBuckets[nodeId] === 0) {
-                this.options.onBlockedNode?.(nodeId, node)
-            }
+                this.mutationBuckets[nodeId] = this.mutationBuckets[nodeId] ?? this.bucketSize
+                this.mutationBuckets[nodeId] = Math.max(this.mutationBuckets[nodeId] - 1, 0)
 
-            return attr
-        })
+                if (this.mutationBuckets[nodeId] === 0) {
+                    this.options.onBlockedNode?.(nodeId, node)
+                }
+
+                return attr
+            })
+        }
 
         // Check if every part of the mutation is empty in which case there is nothing to do
-        const noMutationsLeft = [data.attributes, data.removes, data.texts, data.adds].every((data) => !data.length)
+        const mutationCount = this.numberOfChanges(data)
 
-        if (noMutationsLeft) {
+        if (mutationCount === 0 && initialMutationCount !== mutationCount) {
+            // If we have modified the mutation count and the remaining count is 0, then we don't need the event.
             return
         }
         return event
