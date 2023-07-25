@@ -24,6 +24,7 @@ const BASE_ENDPOINT = '/s/'
 export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
+export const SESSION_RECORDING_BATCH_KEY = 'sessionRecording'
 
 // NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
 // import type { record } from 'rrweb2/typings'
@@ -459,7 +460,7 @@ export class SessionRecording {
             method: 'POST',
             endpoint: this.endpoint,
             _noTruncate: true,
-            _batchKey: 'sessionRecording',
+            _batchKey: SESSION_RECORDING_BATCH_KEY,
             _metrics: {
                 rrweb_full_snapshot: properties.$snapshot_data.type === FULL_SNAPSHOT_EVENT_TYPE,
             },

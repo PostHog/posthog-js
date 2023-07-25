@@ -57,6 +57,7 @@ import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
+import { RateLimiter } from './rate-limiter'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -262,6 +263,7 @@ export class PostHog {
     config: PostHogConfig
 
     persistence: PostHogPersistence
+    rateLimiter: RateLimiter
     sessionPersistence: PostHogPersistence
     sessionManager: SessionIdManager
     pageViewIdManager: PageViewIdManager
@@ -321,6 +323,7 @@ export class PostHog {
         this.persistence = undefined as any
         this.sessionPersistence = undefined as any
         this.sessionManager = undefined as any
+        this.rateLimiter = new RateLimiter()
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -439,13 +442,14 @@ export class PostHog {
             this.__loaded_recorder_version = window?.rrweb?.version
         }
 
+        this.persistence = new PostHogPersistence(this.config)
+
         this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
         this._requestQueue = new RequestQueue(this._captureMetrics, this._handle_queued_event.bind(this))
-        this._retryQueue = new RetryQueue(this._captureMetrics, this.get_config('on_xhr_error'))
+        this._retryQueue = new RetryQueue(this._captureMetrics, this.get_config('on_xhr_error'), this.rateLimiter)
         this.__captureHooks = []
         this.__request_queue = []
 
-        this.persistence = new PostHogPersistence(this.config)
         this.sessionManager = new SessionIdManager(this.config, this.persistence, this.uuidFn)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
@@ -648,7 +652,14 @@ export class PostHog {
         this._send_request(url, data, _options, callback)
     }
 
-    _send_request(url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback): void {
+    _send_request(url: string, data: Record<string, any>, options: CaptureOptions, callback?: RequestCallback): void {
+        if (this.rateLimiter.isRateLimited(options._batchKey)) {
+            if (this.get_config('debug')) {
+                console.warn('[PostHog SendRequest] is quota limited. Dropping request.')
+            }
+            return
+        }
+
         if (ENQUEUE_REQUESTS) {
             this.__request_queue.push([url, data, options, callback])
             return
@@ -691,6 +702,7 @@ export class PostHog {
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,
                     onXHRError: this.get_config('on_xhr_error'),
+                    onRateLimited: this.rateLimiter.on429Response,
                 })
             } catch (e) {
                 console.error(e)

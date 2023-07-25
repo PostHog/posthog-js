@@ -3,6 +3,8 @@
 import { CaptureMetrics } from '../capture-metrics'
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
 import * as SendRequest from '../send-request'
+import { RateLimiter } from '../rate-limiter'
+import { SESSION_RECORDING_BATCH_KEY } from '../extensions/sessionrecording'
 
 const EPOCH = 1_600_000_000
 const defaultRequestOptions = {
@@ -11,15 +13,18 @@ const defaultRequestOptions = {
 }
 
 describe('RetryQueue', () => {
-    given('retryQueue', () => new RetryQueue(given.captureMetrics, given.onXHRError))
+    given('rateLimiter', () => new RateLimiter())
+    given('retryQueue', () => new RetryQueue(given.captureMetrics, given.onXHRError, given.rateLimiter))
     given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
     given('onXHRError', () => jest.fn().mockImplementation(console.error))
+
+    given('xhrStatus', () => 418)
 
     const xhrMockClass = () => ({
         open: jest.fn(),
         send: jest.fn(),
         setRequestHeader: jest.fn(),
-        status: 418,
+        status: given.xhrStatus,
     })
 
     beforeEach(() => {
@@ -29,6 +34,7 @@ describe('RetryQueue', () => {
         jest.useFakeTimers()
         jest.spyOn(given.retryQueue, 'getTime').mockReturnValue(EPOCH)
         jest.spyOn(window.console, 'warn').mockImplementation()
+        given.rateLimiter.limits = {}
     })
 
     const fastForwardTimeAndRunTimer = () => {
@@ -110,6 +116,70 @@ describe('RetryQueue', () => {
         expect(given.onXHRError).toHaveBeenCalledTimes(0)
     })
 
+    it('does not process event retry requests when events are rate limited', () => {
+        given.rateLimiter.limits = {
+            events: new Date().getTime() + 10_000,
+        }
+
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'baz', timestamp: EPOCH - 1000 },
+            options: defaultRequestOptions,
+        })
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'baz', timestamp: EPOCH - 500 },
+            options: defaultRequestOptions,
+        })
+        given.retryQueue.enqueue({
+            url: '/s',
+            data: { event: 'fizz', timestamp: EPOCH },
+            options: { ...defaultRequestOptions, _batchKey: SESSION_RECORDING_BATCH_KEY },
+        })
+
+        expect(given.retryQueue.queue.length).toEqual(3)
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
+
+        fastForwardTimeAndRunTimer()
+
+        // clears queue
+        expect(given.retryQueue.queue.length).toEqual(0)
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(1)
+        expect(given.onXHRError).toHaveBeenCalledTimes(0)
+    })
+
+    it('does not process recording retry requests when they are rate limited', () => {
+        given.rateLimiter.limits = {
+            [SESSION_RECORDING_BATCH_KEY]: new Date().getTime() + 10_000,
+        }
+
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'baz', timestamp: EPOCH - 1000 },
+            options: defaultRequestOptions,
+        })
+        given.retryQueue.enqueue({
+            url: '/e',
+            data: { event: 'baz', timestamp: EPOCH - 500 },
+            options: defaultRequestOptions,
+        })
+        given.retryQueue.enqueue({
+            url: '/s',
+            data: { event: 'fizz', timestamp: EPOCH },
+            options: { ...defaultRequestOptions, _batchKey: SESSION_RECORDING_BATCH_KEY },
+        })
+
+        expect(given.retryQueue.queue.length).toEqual(3)
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(0)
+
+        fastForwardTimeAndRunTimer()
+
+        // clears queue
+        expect(given.retryQueue.queue.length).toEqual(0)
+        expect(window.XMLHttpRequest).toHaveBeenCalledTimes(2)
+        expect(given.onXHRError).toHaveBeenCalledTimes(0)
+    })
+
     it('tries to send requests via beacon on unload', () => {
         enqueueRequests()
 
@@ -118,6 +188,18 @@ describe('RetryQueue', () => {
 
         expect(given.retryQueue.queue.length).toEqual(0)
         expect(window.navigator.sendBeacon).toHaveBeenCalledTimes(4)
+    })
+
+    it('does not try to send requests via beacon on unload when rate limited', () => {
+        given.rateLimiter.limits = {
+            events: new Date().getTime() + 10_000,
+        }
+        enqueueRequests()
+
+        given.retryQueue.unload()
+
+        expect(given.retryQueue.queue.length).toEqual(0)
+        expect(window.navigator.sendBeacon).toHaveBeenCalledTimes(0)
     })
 
     it('when you flush the queue onXHRError is passed to xhr', () => {

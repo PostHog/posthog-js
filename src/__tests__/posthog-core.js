@@ -49,6 +49,9 @@ describe('capture()', () => {
         compression: {},
         _captureMetrics: new CaptureMetrics(),
         __captureHooks: [],
+        rateLimiter: {
+            isRateLimited: () => false,
+        },
     }))
 
     it('adds a UUID to each message', () => {
