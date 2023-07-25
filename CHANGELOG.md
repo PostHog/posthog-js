@@ -1,3 +1,12 @@
+## 1.74.0 - 2023-07-25
+
+- fix: Recording throttling for SVG-like things (#758)
+- chore(deps): bump semver from 5.7.1 to 5.7.2 in /react (#732)
+- chore(deps): bump semver from 6.3.0 to 6.3.1 in /playground/nextjs (#733)
+- chore(deps): bump word-wrap from 1.2.3 to 1.2.4 in /react (#746)
+- chore(deps): bump word-wrap from 1.2.3 to 1.2.4 (#747)
+- chore(deps): bump word-wrap from 1.2.3 to 1.2.4 in /playground/nextjs (#750)
+
 ## 1.73.1 - 2023-07-21
 
 - fix: protect against bundling bugs (#754)
