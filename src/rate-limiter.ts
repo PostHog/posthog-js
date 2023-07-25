@@ -1,5 +1,4 @@
-import { PostHogPersistence } from './posthog-persistence'
-import { SESSION_RECORDING_BATCH_KEY, SessionRecording } from './extensions/sessionrecording'
+import { SESSION_RECORDING_BATCH_KEY } from './extensions/sessionrecording'
 
 /**
  * Really a 429 response should have a `Retry-After` header which is either a date string,
