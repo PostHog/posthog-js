@@ -138,6 +138,7 @@ export class MutationRateLimiter {
     private bucketSize = 100
     private refillRate = 10
     private mutationBuckets: Record<string, number> = {}
+    private loggedTracker: Record<string, boolean> = {}
 
     constructor(
         private readonly rrweb: rrwebRecord,
@@ -197,7 +198,6 @@ export class MutationRateLimiter {
         }
 
         const data = event.data as Partial<mutationCallbackParam>
-
         const initialMutationCount = this.numberOfChanges(data)
 
         if (data.attributes) {
@@ -213,7 +213,10 @@ export class MutationRateLimiter {
                 this.mutationBuckets[nodeId] = Math.max(this.mutationBuckets[nodeId] - 1, 0)
 
                 if (this.mutationBuckets[nodeId] === 0) {
-                    this.options.onBlockedNode?.(nodeId, node)
+                    if (!this.loggedTracker[nodeId]) {
+                        this.loggedTracker[nodeId] = true
+                        this.options.onBlockedNode?.(nodeId, node)
+                    }
                 }
 
                 return attr
