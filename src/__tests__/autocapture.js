@@ -21,6 +21,7 @@ const simulateClick = function (el) {
 describe('Autocapture system', () => {
     beforeEach(() => {
         jest.spyOn(window.console, 'log').mockImplementation()
+        autocapture._isDisabledServerSide = null
     })
 
     afterEach(() => {
@@ -1069,6 +1070,8 @@ describe('Autocapture system', () => {
     describe('afterDecideResponse()', () => {
         given('subject', () => () => autocapture.afterDecideResponse(given.decideResponse, given.posthog))
 
+        given('persistence', () => ({ props: {}, register: jest.fn() }))
+
         given('posthog', () => ({
             get_config: jest.fn().mockImplementation((key) => given.config[key]),
             token: 'testtoken',
@@ -1076,12 +1079,15 @@ describe('Autocapture system', () => {
             get_distinct_id: () => 'distinctid',
             get_property: (property_key) =>
                 property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? given.$autocapture_disabled_server_side : undefined,
+            persistence: given.persistence,
         }))
+
+        given('clientSideEnabled', () => true)
 
         given('config', () => ({
             api_host: 'https://test.com',
             token: 'testtoken',
-            autocapture: true,
+            autocapture: given.clientSideEnabled,
         }))
 
         given('decideResponse', () => ({ config: { enable_collect_everything: true } }))
@@ -1092,6 +1098,48 @@ describe('Autocapture system', () => {
 
             jest.spyOn(autocapture, '_addDomEventHandlers')
         })
+
+        it('should be enabled before the decide response', () => {
+            // _setIsAutocaptureEnabled is called during init
+            autocapture._setIsAutocaptureEnabled(given.posthog)
+            expect(autocapture._isAutocaptureEnabled).toBe(true)
+        })
+
+        it('should be disabled before the decide response if opt out is in persistence', () => {
+            given('persistence', () => ({ props: { [AUTOCAPTURE_DISABLED_SERVER_SIDE]: true } }))
+
+            // _setIsAutocaptureEnabled is called during init
+            autocapture._setIsAutocaptureEnabled(given.posthog)
+            expect(autocapture._isAutocaptureEnabled).toBe(false)
+        })
+
+        it('should be disabled before the decide response if client side opted out', () => {
+            given('clientSideEnabled', () => false)
+
+            // _setIsAutocaptureEnabled is called during init
+            autocapture._setIsAutocaptureEnabled(given.posthog)
+            expect(autocapture._isAutocaptureEnabled).toBe(false)
+        })
+
+        it.each([
+            // when client side is opted out, it is always off
+            [false, true, false],
+            [false, false, false],
+            // when client side is opted in, it is only on, if the remote does not opt out
+            [true, true, false],
+            [true, false, true],
+        ])(
+            'when client side config is %p and remote opt out is %p - autocapture enabled should be %p',
+            (clientSideOptIn, serverSideOptOut, expected) => {
+                given('clientSideEnabled', () => clientSideOptIn)
+                given('decideResponse', () => ({
+                    config: { enable_collect_everything: true },
+                    autocapture_opt_out: serverSideOptOut,
+                }))
+                given.subject()
+                expect(autocapture._isAutocaptureEnabled).toBe(expected)
+            }
+        )
 
         it('should call _addDomEventHandlders if autocapture is true', () => {
             given('$autocapture_disabled_server_side', () => false)

@@ -31,11 +31,14 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './posthog-persistence'
 
 const autocapture = {
     _initializedTokens: [] as string[],
-
+    _isDisabledServerSide: null as boolean | null,
     _isAutocaptureEnabled: false as boolean,
 
     _setIsAutocaptureEnabled: function (instance: PostHog): void {
-        const disabled_server_side = !!instance.get_property(AUTOCAPTURE_DISABLED_SERVER_SIDE)
+        const disabled_server_side =
+            this._isDisabledServerSide === null
+                ? !!instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+                : this._isDisabledServerSide
         const enabled_client_side = !!instance.get_config('autocapture')
         this._isAutocaptureEnabled = enabled_client_side && !disabled_server_side
     },
@@ -294,7 +297,6 @@ const autocapture = {
     },
 
     afterDecideResponse: function (response: DecideResponse, instance: PostHog): void {
-        this._setIsAutocaptureEnabled(instance)
         const token = instance.get_config('token')
         if (this._initializedTokens.indexOf(token) > -1) {
             logger.log('autocapture already initialized for token "' + token + '"')
@@ -306,6 +308,10 @@ const autocapture = {
                 [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
             })
         }
+        // store this in-memory incase persistence is disabled
+        this._isDisabledServerSide = !!response['autocapture_opt_out']
+
+        this._setIsAutocaptureEnabled(instance)
 
         this._initializedTokens.push(token)
 
