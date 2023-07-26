@@ -376,7 +376,9 @@ export class SessionRecording {
             return
         }
 
-        const throttledEvent = this.mutationRateLimiter!.throttleMutations(rawEvent)
+        const throttledEvent = this.mutationRateLimiter
+            ? this.mutationRateLimiter.throttleMutations(rawEvent)
+            : rawEvent
 
         if (!throttledEvent) {
             return
