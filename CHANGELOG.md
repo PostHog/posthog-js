@@ -1,3 +1,7 @@
+## 1.75.1 - 2023-07-26
+
+- fix: obey server side opt out for autocapture (#762)
+
 ## 1.75.0 - 2023-07-25
 
 - feat: react to rate limiting responses (#757)
