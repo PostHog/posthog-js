@@ -1,3 +1,7 @@
+## 1.75.2 - 2023-07-26
+
+
+
 ## 1.75.1 - 2023-07-26
 
 - fix: obey server side opt out for autocapture (#762)
