@@ -97,6 +97,7 @@ export const xhr = ({
             captureMetrics.decr('_send_request_inflight')
 
             // XMLHttpRequest.DONE == 4, except in safari 4
+            onRateLimited?.(req)
             if (req.status === 200) {
                 if (callback) {
                     let response
@@ -113,8 +114,8 @@ export const xhr = ({
                     onXHRError(req)
                 }
 
-                // don't retry certain errors
-                if ([401, 403, 404, 500].indexOf(req.status) < 0) {
+                // don't retry errors between 400 and 500 inclusive
+                if (req.status < 400 || req.status > 500) {
                     retryQueue.enqueue({
                         url,
                         data,
@@ -125,13 +126,7 @@ export const xhr = ({
                     })
                 }
 
-                if (req.status === 429) {
-                    onRateLimited?.(req)
-                }
-
-                if (callback) {
-                    callback({ status: 0 })
-                }
+                callback?.({ status: 0 })
             }
         }
     }

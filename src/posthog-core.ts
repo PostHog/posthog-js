@@ -702,7 +702,7 @@ export class PostHog {
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,
                     onXHRError: this.get_config('on_xhr_error'),
-                    onRateLimited: this.rateLimiter.on429Response,
+                    onRateLimited: this.rateLimiter.checkForLimiting,
                 })
             } catch (e) {
                 console.error(e)

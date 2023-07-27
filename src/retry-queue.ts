@@ -145,7 +145,7 @@ export class RetryQueue extends RequestQueueScaffold {
             captureMetrics: this.captureMetrics,
             retryQueue: this,
             onXHRError: this.onXHRError,
-            onRateLimited: this.rateLimiter.on429Response,
+            onRateLimited: this.rateLimiter.checkForLimiting,
         })
     }
 
