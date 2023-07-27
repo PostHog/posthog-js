@@ -68,7 +68,7 @@ export const xhr = ({
     retryQueue,
     onXHRError,
     timeout = 10000,
-    onRateLimited,
+    onResponse,
 }: XHRParams) => {
     const req = new XMLHttpRequest()
     req.open(options.method || 'GET', url, true)
@@ -91,13 +91,13 @@ export const xhr = ({
     // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
     req.withCredentials = true
     req.onreadystatechange = () => {
+        // XMLHttpRequest.DONE == 4, except in safari 4
         if (req.readyState === 4) {
             captureMetrics.incr(`xhr-response`)
             captureMetrics.incr(`xhr-response-${req.status}`)
             captureMetrics.decr('_send_request_inflight')
 
-            // XMLHttpRequest.DONE == 4, except in safari 4
-            onRateLimited?.(req)
+            onResponse?.(req)
             if (req.status === 200) {
                 if (callback) {
                     let response

@@ -16,7 +16,7 @@ describe('xhr', () => {
         status: 502,
     }))
     given('onXHRError', jest.fn)
-    given('on429Response', jest.fn)
+    given('checkForLimiting', jest.fn)
     given('xhrOptions', () => ({}))
     given('xhrParams', () => ({
         url: 'https://any.posthog-instance.com',
@@ -33,7 +33,7 @@ describe('xhr', () => {
             enqueue: () => {},
         },
         onXHRError: given.onXHRError,
-        onRateLimited: given.on429Response,
+        onResponse: given.checkForLimiting,
     }))
     given('subject', () => () => {
         xhr(given.xhrParams)
@@ -58,16 +58,10 @@ describe('xhr', () => {
             expect(requestFromError).toHaveProperty('status', 502)
         })
 
-        it('calls the injected 429 handler for 429 responses', () => {
-            given.mockXHR.status = 429
+        it('calls the on response handler - regardless of status', () => {
+            given.mockXHR.status = Math.floor(Math.random() * 100)
             given.subject()
-            expect(given.on429Response).toHaveBeenCalledWith(given.mockXHR)
-        })
-
-        it('does not call the injected 429 handler for non-429 responses', () => {
-            given.mockXHR.status = 404
-            given.subject()
-            expect(given.on429Response).not.toHaveBeenCalled()
+            expect(given.checkForLimiting).toHaveBeenCalledWith(given.mockXHR)
         })
     })
 })
