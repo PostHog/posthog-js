@@ -654,9 +654,6 @@ export class PostHog {
 
     _send_request(url: string, data: Record<string, any>, options: CaptureOptions, callback?: RequestCallback): void {
         if (this.rateLimiter.isRateLimited(options._batchKey)) {
-            if (this.get_config('debug')) {
-                console.warn('[PostHog SendRequest] is quota limited. Dropping request.')
-            }
             return
         }
 

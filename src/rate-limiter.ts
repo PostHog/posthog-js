@@ -1,5 +1,5 @@
-import { SESSION_RECORDING_BATCH_KEY } from './extensions/sessionrecording'
 import { logger } from './utils'
+import Config from './config'
 
 const oneMinuteInMilliseconds = 60 * 1000
 
@@ -9,10 +9,13 @@ interface CaptureResponse {
 
 export class RateLimiter {
     limits: Record<string, number> = {}
+    private checkThreshold: number
 
-    constructor(private checkThreshold = 0.1) {}
+    constructor(checkThreshold = 0.1) {
+        this.checkThreshold = checkThreshold
+    }
 
-    isRateLimited(batchKey: string | undefined): boolean {
+    public isRateLimited(batchKey: string | undefined): boolean {
         const retryAfter = this.limits[batchKey || 'events'] || false
 
         if (retryAfter === false) {
@@ -21,7 +24,9 @@ export class RateLimiter {
         return new Date().getTime() < retryAfter
     }
 
-    checkForLimiting(xmlHttpRequest: XMLHttpRequest): void {
+    // this needs to be an arrow function so that it can be passed as a callback
+    // and have the correct `this` context in order to read `checkThreshold`
+    public checkForLimiting = (xmlHttpRequest: XMLHttpRequest): void => {
         if (Math.random() >= this.checkThreshold) {
             // we don't need to check this on every request
             return
@@ -32,6 +37,9 @@ export class RateLimiter {
             response = JSON.parse(xmlHttpRequest.responseText)
             const quotaLimitedProducts = response.quota_limited || []
             quotaLimitedProducts.forEach((batchKey) => {
+                if (Config.DEBUG) {
+                    console.warn(`[PostHog RateLimiter] ${batchKey || 'events'} is quota limited.`)
+                }
                 this.limits[batchKey] = new Date().getTime() + oneMinuteInMilliseconds
             })
         } catch (e) {
