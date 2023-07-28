@@ -20,11 +20,10 @@ describe('Rate Limiter', () => {
 
         rateLimiter = new RateLimiter(0.1)
 
-        // call a loop 1000 times
         for (let i = 0; i < 1000; i++) {
             rateLimiter.checkForLimiting(objectWithCounting as unknown as XMLHttpRequest)
         }
-        // it should be way less than 300 but the number varies and I don't want the test to flake
+        // it should be way less than 200 but the number varies and I don't want the test to flake
         expect(accessCounter).toBeLessThan(200)
         expect(accessCounter).toBeGreaterThanOrEqual(1)
     })
