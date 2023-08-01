@@ -1,6 +1,5 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
-import { CaptureMetrics } from './capture-metrics'
 import { RetryQueue } from './retry-queue'
 
 export type Property = any
@@ -104,7 +103,6 @@ export interface PostHogConfig {
     name: string
     callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
-    _capture_metrics: boolean
     capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
@@ -198,7 +196,6 @@ export interface QueuedRequestData {
 }
 
 export interface XHRParams extends QueuedRequestData {
-    captureMetrics: CaptureMetrics
     retryQueue: RetryQueue
     onXHRError: (req: XMLHttpRequest) => void
     timeout?: number

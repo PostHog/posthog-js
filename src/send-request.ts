@@ -62,7 +62,6 @@ export const xhr = ({
     data,
     headers,
     options,
-    captureMetrics,
     callback,
     retriesPerformedSoFar,
     retryQueue,
@@ -74,9 +73,6 @@ export const xhr = ({
     req.open(options.method || 'GET', url, true)
 
     const body = encodePostData(data, options)
-
-    captureMetrics.incr('_send_request')
-    captureMetrics.incr('_send_request_inflight')
 
     _each(headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
@@ -92,10 +88,6 @@ export const xhr = ({
     req.withCredentials = true
     req.onreadystatechange = () => {
         if (req.readyState === 4) {
-            captureMetrics.incr(`xhr-response`)
-            captureMetrics.incr(`xhr-response-${req.status}`)
-            captureMetrics.decr('_send_request_inflight')
-
             // XMLHttpRequest.DONE == 4, except in safari 4
             if (req.status === 200) {
                 if (callback) {

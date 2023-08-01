@@ -1,25 +1,16 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { _each } from './utils'
-import { CaptureMetrics } from './capture-metrics'
 import { Properties, QueuedRequestData, XHROptions } from './types'
 
 export class RequestQueue extends RequestQueueScaffold {
-    captureMetrics: CaptureMetrics
     handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void
 
-    constructor(
-        captureMetrics: CaptureMetrics,
-        handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void,
-        pollInterval = 3000
-    ) {
+    constructor(handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void, pollInterval = 3000) {
         super(pollInterval)
         this.handlePollRequest = handlePollRequest
-        this.captureMetrics = captureMetrics
     }
 
     enqueue(url: string, data: Properties, options: XHROptions): void {
-        this.captureMetrics.incr('batch-enqueue')
-
         this._event_queue.push({ url, data, options })
 
         if (!this.isPolling) {
@@ -40,11 +31,6 @@ export class RequestQueue extends RequestQueueScaffold {
                         delete data[dataKey]['timestamp']
                     })
                     this.handlePollRequest(url, data, options)
-
-                    this.captureMetrics.incr('batch-requests')
-                    this.captureMetrics.incr(`batch-requests-${url.slice(url.length - 2)}`)
-                    this.captureMetrics.incr('batch-handle', data.length)
-                    this.captureMetrics.incr(`batch-handle-${url.slice(url.length - 2)}`, data.length)
                 }
                 this._event_queue.length = 0 // flush the _event_queue
                 this._empty_queue_count = 0
@@ -68,18 +54,6 @@ export class RequestQueue extends RequestQueueScaffold {
                 this.poll()
             }
         }, this._pollInterval) as any as number
-    }
-
-    updateUnloadMetrics(): void {
-        const requests = this.formatQueue()
-        for (const key in requests) {
-            const { url, data } = requests[key]
-
-            this.captureMetrics.incr('batch-unload-requests')
-            this.captureMetrics.incr(`batch-unload-requests-${url.slice(url.length - 2)}`)
-            this.captureMetrics.incr('batch-unload', data.length)
-            this.captureMetrics.incr(`batch-unload-${url.slice(url.length - 2)}`, data.length)
-        }
     }
 
     unload(): void {

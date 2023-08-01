@@ -1,6 +1,5 @@
 /* eslint-disable compat/compat */
 
-import { CaptureMetrics } from '../capture-metrics'
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
 import * as SendRequest from '../send-request'
 import { RateLimiter } from '../rate-limiter'
@@ -14,8 +13,7 @@ const defaultRequestOptions = {
 
 describe('RetryQueue', () => {
     given('rateLimiter', () => new RateLimiter())
-    given('retryQueue', () => new RetryQueue(given.captureMetrics, given.onXHRError, given.rateLimiter))
-    given('captureMetrics', () => new CaptureMetrics(true, jest.fn(), jest.fn()))
+    given('retryQueue', () => new RetryQueue(given.onXHRError, given.rateLimiter))
     given('onXHRError', () => jest.fn().mockImplementation(console.error))
 
     given('xhrStatus', () => 418)
