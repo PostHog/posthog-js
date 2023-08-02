@@ -12,7 +12,6 @@ describe('Decide', () => {
         unregister: (key) => given.posthog.persistence.unregister(key),
         get_property: (key) => given.posthog.persistence.props[key],
         capture: jest.fn(),
-        _captureMetrics: { incr: jest.fn() },
         _addCaptureHook: jest.fn(),
         _prepare_callback: jest.fn().mockImplementation((callback) => callback),
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
