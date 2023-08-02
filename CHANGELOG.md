@@ -1,3 +1,7 @@
+## 1.75.3 - 2023-08-02
+
+- chore: remove unused capture metrics (#766)
+
 ## 1.75.2 - 2023-07-26
 
 
