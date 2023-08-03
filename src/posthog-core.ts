@@ -265,9 +265,6 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
-    sessionRecording: SessionRecording | undefined
-    webPerformance: WebPerformanceObserver | undefined
-    exceptionAutocapture: ExceptionObserver | undefined
 
     // These are instance-specific state created after initialisation
     persistence?: PostHogPersistence
@@ -275,6 +272,9 @@ export class PostHog {
     sessionManager?: SessionIdManager
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
+    sessionRecording?: SessionRecording
+    webPerformance?: WebPerformanceObserver
+    exceptionAutocapture?: ExceptionObserver
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>

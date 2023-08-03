@@ -101,7 +101,7 @@ export class SessionRecording {
         })
     }
 
-    private get sessionManager() {
+    private getSessionManager() {
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
             return
@@ -194,7 +194,8 @@ export class SessionRecording {
     }
 
     private _startCapture() {
-        if (!this.sessionManager) {
+        const sessionManager = this.getSessionManager()
+        if (!sessionManager) {
             return
         }
         if (typeof Object.assign === 'undefined') {
@@ -215,7 +216,7 @@ export class SessionRecording {
 
         this.captureStarted = true
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
-        this.sessionManager.checkAndGetSessionAndWindowId()
+        sessionManager.checkAndGetSessionAndWindowId()
 
         const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
@@ -243,7 +244,8 @@ export class SessionRecording {
     }
 
     private _updateWindowAndSessionIds(event: eventWithTime) {
-        if (!this.sessionManager) {
+        const sessionManager = this.getSessionManager()
+        if (!sessionManager) {
             return
         }
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
@@ -273,7 +275,7 @@ export class SessionRecording {
         }
 
         // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this.sessionManager.checkAndGetSessionAndWindowId(
+        const { windowId, sessionId } = sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
             event.timestamp
         )
