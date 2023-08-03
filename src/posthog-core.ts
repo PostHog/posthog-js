@@ -1691,12 +1691,9 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
-            if (this.persistence) {
-                this.persistence.update_config(this.config)
-            }
-            if (this.sessionPersistence) {
-                this.sessionPersistence.update_config(this.config)
-            }
+            this.persistence?.update_config(this.config)
+            this.sessionPersistence?.update_config(this.config)
+
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true
             }
