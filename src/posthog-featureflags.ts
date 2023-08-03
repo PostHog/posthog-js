@@ -224,7 +224,7 @@ export class PostHogFeatureFlags {
                 } else {
                     flagCallReported[key] = [flagReportValue]
                 }
-                this.instance.persistence.register({ [FLAG_CALL_REPORTED]: flagCallReported })
+                this.instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
                 this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
             }
@@ -264,6 +264,9 @@ export class PostHogFeatureFlags {
     }
 
     receivedFeatureFlags(response: Partial<DecideResponse>): void {
+        if (!this.instance.persistence) {
+            return
+        }
         this.instance.decideEndpointWasHit = true
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
@@ -286,15 +289,15 @@ export class PostHogFeatureFlags {
         this._override_warning = false
 
         if (flags === false) {
-            this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+            this.instance.persistence?.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         } else if (Array.isArray(flags)) {
             const flagsObj: Record<string, string | boolean> = {}
             for (let i = 0; i < flags.length; i++) {
                 flagsObj[flags[i]] = true
             }
-            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
+            this.instance.persistence?.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
         } else {
-            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flags })
+            this.instance.persistence?.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flags })
         }
     }
     /*
@@ -330,7 +333,7 @@ export class PostHogFeatureFlags {
         this.setPersonPropertiesForFlags(enrollmentPersonProp, false)
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
-        this.instance.persistence.register({
+        this.instance.persistence?.register({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
         })
@@ -349,7 +352,7 @@ export class PostHogFeatureFlags {
                 { method: 'GET' },
                 (response) => {
                     const earlyAccessFeatures = (response as EarlyAccessFeatureResponse).earlyAccessFeatures
-                    this.instance.persistence.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
+                    this.instance.persistence?.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
                     return callback(earlyAccessFeatures)
                 }
             )

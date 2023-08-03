@@ -260,10 +260,7 @@ export class PostHog {
     __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
     config: PostHogConfig
 
-    persistence: PostHogPersistence
     rateLimiter: RateLimiter
-    sessionPersistence: PostHogPersistence
-    sessionManager: SessionIdManager
     pageViewIdManager: PageViewIdManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
@@ -272,8 +269,12 @@ export class PostHog {
     webPerformance: WebPerformanceObserver | undefined
     exceptionAutocapture: ExceptionObserver | undefined
 
-    _requestQueue: RequestQueue
-    _retryQueue: RetryQueue
+    // These are instance-specific state created after initialisation
+    persistence?: PostHogPersistence
+    sessionPersistence?: PostHogPersistence
+    sessionManager?: SessionIdManager
+    _requestQueue?: RequestQueue
+    _retryQueue?: RetryQueue
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
@@ -313,13 +314,6 @@ export class PostHog {
         this.pageViewIdManager = new PageViewIdManager(this.uuidFn)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
-
-        // these are created in _init() after we have the config
-        this._requestQueue = undefined as any
-        this._retryQueue = undefined as any
-        this.persistence = undefined as any
-        this.sessionPersistence = undefined as any
-        this.sessionManager = undefined as any
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -562,7 +556,7 @@ export class PostHog {
     _start_queue_if_opted_in(): void {
         if (!this.has_opted_out_capturing()) {
             if (this.get_config('request_batching')) {
-                this._requestQueue.poll()
+                this._requestQueue?.poll()
             }
         }
     }
@@ -625,8 +619,8 @@ export class PostHog {
             this.capture('$pageleave')
         }
 
-        this._requestQueue.unload()
-        this._retryQueue.unload()
+        this._requestQueue?.unload()
+        this._retryQueue?.unload()
     }
 
     _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
@@ -645,6 +639,9 @@ export class PostHog {
     }
 
     _send_request(url: string, data: Record<string, any>, options: CaptureOptions, callback?: RequestCallback): void {
+        if (!this.__loaded || !this._retryQueue) {
+            return
+        }
         if (this.rateLimiter.isRateLimited(options._batchKey)) {
             if (this.get_config('debug')) {
                 console.warn('[PostHog SendRequest] is quota limited. Dropping request.')
@@ -837,7 +834,7 @@ export class PostHog {
     ): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
-        if (!this.__loaded) {
+        if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
             return
         }
 
@@ -922,6 +919,10 @@ export class PostHog {
     }
 
     _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
+        if (!this.persistence || !this.sessionPersistence) {
+            return event_properties
+        }
+
         // set defaults
         const start_timestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
@@ -1019,7 +1020,7 @@ export class PostHog {
      * @param {Number} [days] How many days since the user's last visit to store the super properties
      */
     register(properties: Properties, days?: number): void {
-        this.persistence.register(properties, days)
+        this.persistence?.register(properties, days)
     }
 
     /**
@@ -1046,7 +1047,7 @@ export class PostHog {
      * @param {Number} [days] How many days since the users last visit to store the super properties
      */
     register_once(properties: Properties, default_value?: Property, days?: number): void {
-        this.persistence.register_once(properties, default_value, days)
+        this.persistence?.register_once(properties, default_value, days)
     }
 
     /**
@@ -1073,7 +1074,7 @@ export class PostHog {
      * @param {Object} properties An associative array of properties to store about the user
      */
     register_for_session(properties: Properties): void {
-        this.sessionPersistence.register(properties)
+        this.sessionPersistence?.register(properties)
     }
 
     /**
@@ -1082,7 +1083,7 @@ export class PostHog {
      * @param {String} property The name of the super property to remove
      */
     unregister(property: string): void {
-        this.persistence.unregister(property)
+        this.persistence?.unregister(property)
     }
 
     /**
@@ -1091,7 +1092,7 @@ export class PostHog {
      * @param {String} property The name of the session super property to remove
      */
     unregister_for_session(property: string): void {
-        this.sessionPersistence.unregister(property)
+        this.sessionPersistence?.unregister(property)
     }
 
     _register_single(prop: string, value: Property) {
@@ -1191,7 +1192,7 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by useEffect when the component unmounts.
      */
     onSessionId(callback: SessionIdChangedCallback): () => void {
-        return this.sessionManager.onSessionId(callback)
+        return this.sessionManager?.onSessionId(callback) ?? (() => {})
     }
 
     /** Get list of all surveys. */
@@ -1251,6 +1252,9 @@ export class PostHog {
      * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
      */
     identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
+        if (!this.__loaded || !this.persistence) {
+            return
+        }
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
             console.error('Unique user id has not been set in posthog.identify')
@@ -1417,11 +1421,14 @@ export class PostHog {
      * Useful for clearing data when a user logs out.
      */
     reset(reset_device_id?: boolean): void {
+        if (!this.__loaded) {
+            return
+        }
         const device_id = this.get_property('$device_id')
-        this.persistence.clear()
-        this.sessionPersistence.clear()
-        this.persistence.set_user_state('anonymous')
-        this.sessionManager.resetSessionId()
+        this.persistence?.clear()
+        this.sessionPersistence?.clear()
+        this.persistence?.set_user_state('anonymous')
+        this.sessionManager?.resetSessionId()
         const uuid = this.get_config('get_device_id')(this.uuidFn())
         this.register_once(
             {
@@ -1464,7 +1471,7 @@ export class PostHog {
      */
 
     get_session_id(): string {
-        return this.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
+        return this.sessionManager?.checkAndGetSessionAndWindowId(true).sessionId ?? ''
     }
 
     /**
@@ -1475,6 +1482,9 @@ export class PostHog {
      * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
+        if (!this.sessionManager) {
+            return ''
+        }
         const host = this.config.ui_host || this.config.api_host
         const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
         let url = host + '/replay/' + sessionId
@@ -1765,7 +1775,7 @@ export class PostHog {
      * @param {String} property_name The name of the super property you want to retrieve
      */
     get_property(property_name: string): Property | undefined {
-        return this.persistence['props'][property_name]
+        return this.persistence?.['props'][property_name]
     }
 
     /**
@@ -1788,7 +1798,7 @@ export class PostHog {
      * @param {String} property_name The name of the session super property you want to retrieve
      */
     getSessionProperty(property_name: string): Property | undefined {
-        return this.sessionPersistence['props'][property_name]
+        return this.sessionPersistence?.['props'][property_name]
     }
 
     toString(): string {
@@ -1851,11 +1861,11 @@ export class PostHog {
             return
         }
 
-        if (!this.get_config('disable_persistence') && this.persistence.disabled !== disabled) {
-            this.persistence.set_disabled(disabled)
+        if (!this.get_config('disable_persistence') && this.persistence?.disabled !== disabled) {
+            this.persistence?.set_disabled(disabled)
         }
-        if (!this.get_config('disable_persistence') && this.sessionPersistence.disabled !== disabled) {
-            this.sessionPersistence.set_disabled(disabled)
+        if (!this.get_config('disable_persistence') && this.sessionPersistence?.disabled !== disabled) {
+            this.sessionPersistence?.set_disabled(disabled)
         }
     }
 
