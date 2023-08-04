@@ -68,17 +68,12 @@ this.__x === private - only use within the class
 Globals should be all caps
 */
 
-enum InitType {
-    INIT_MODULE = 0,
-    INIT_SNIPPET = 1,
-}
-
-let init_type: InitType
-
 // TODO: the type of this is very loose. Sometimes it's also PostHogLib itself
 let posthog_master: Record<string, PostHog> & {
     init: (token: string, config: Partial<PostHogConfig>, name: string) => void
 }
+
+const instances: Record<string, PostHog> = {}
 
 // some globals for comparisons
 const __NOOP = () => {}
@@ -162,100 +157,6 @@ const defaultConfig = (): PostHogConfig => ({
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     uuid_version: 'v7',
 })
-
-/**
- * create_phlib(token:string, config:object, name:string)
- *
- * This function is used by the init method of PostHogLib objects
- * as well as the main initializer at the end of the JSLib (that
- * initializes document.posthog as well as any additional instances
- * declared before this file has loaded).
- */
-const create_phlib = function (
-    token: string,
-    config?: Partial<PostHogConfig>,
-    name?: string,
-    createComplete?: (instance: PostHog) => void
-): PostHog {
-    let instance: PostHog
-    const target =
-        name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : name ? posthog_master[name] : undefined
-    const callbacksHandled = {
-        initComplete: false,
-        syncCode: false,
-    }
-    const handleCallback = (callbackName: keyof typeof callbacksHandled) => (instance: PostHog) => {
-        if (!callbacksHandled[callbackName]) {
-            callbacksHandled[callbackName] = true
-            if (callbacksHandled.initComplete && callbacksHandled.syncCode) {
-                createComplete?.(instance)
-            }
-        }
-    }
-
-    if (!token) {
-        console.warn(
-            'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
-        )
-    }
-
-    if (target && init_type === InitType.INIT_MODULE) {
-        instance = target as any
-    } else {
-        if (target && !_isArray(target)) {
-            console.error('You have already initialized ' + name)
-            // TODO: throw something instead?
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            return
-        }
-        instance = new PostHog()
-    }
-
-    instance._init(token, config, name, handleCallback('initComplete'))
-    instance.toolbar.maybeLoadToolbar()
-
-    instance.sessionRecording = new SessionRecording(instance)
-    instance.sessionRecording.startRecordingIfEnabled()
-
-    instance.webPerformance = new WebPerformanceObserver(instance)
-    instance.webPerformance.startObservingIfEnabled()
-
-    instance.exceptionAutocapture = new ExceptionObserver(instance)
-
-    instance.__autocapture = instance.get_config('autocapture')
-    autocapture._setIsAutocaptureEnabled(instance)
-    if (autocapture._isAutocaptureEnabled) {
-        instance.__autocapture = instance.get_config('autocapture')
-        const num_buckets = 100
-        const num_enabled_buckets = 100
-        if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
-            instance.__autocapture = false
-            logger.log('Not in active bucket: disabling Automatic Event Collection.')
-        } else if (!autocapture.isBrowserSupported()) {
-            instance.__autocapture = false
-            logger.log('Disabling Automatic Event Collection because this browser is not supported')
-        } else {
-            autocapture.init(instance)
-        }
-    }
-
-    // if any instance on the page has debug = true, we set the
-    // global debug to be true
-    Config.DEBUG = Config.DEBUG || instance.get_config('debug')
-
-    // if target is not defined, we called init after the lib already
-    // loaded, so there won't be an array of things to execute
-    if (typeof target !== 'undefined' && _isArray(target)) {
-        // Crunch through the people queue first - we queue this data up &
-        // flush on identify, so it's better to do all these operations first
-        instance._execute_array.call(instance.people, (target as any).people)
-        instance._execute_array(target)
-    }
-
-    handleCallback('syncCode')(instance)
-    return instance
-}
 
 /**
  * PostHog Library Object
@@ -361,22 +262,18 @@ export class PostHog {
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
     init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
-        if (_isUndefined(name)) {
-            console.error('You must name your new library: init(token, config, name)')
-            return
-        }
-        if (name === PRIMARY_INSTANCE_NAME) {
-            console.error('You must initialize the main posthog object right after you include the PostHog js snippet')
-            return
-        }
+        if (!name || name === PRIMARY_INSTANCE_NAME) {
+            // This means we are initialising the primary instance (i.e. this)
+            return this._init(token, config, name)
+        } else {
+            const namedPosthog = instances[name] ?? new PostHog()
+            namedPosthog._init(token, config, name)
+            instances[name] = namedPosthog
+            // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
+            ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
 
-        const instance: PostHog = create_phlib(token, config, name, (instance: PostHog) => {
-            posthog_master[name] = instance
-            instance._loaded()
-        })
-        posthog_master[name] = instance
-
-        return instance
+            return namedPosthog
+        }
     }
 
     // posthog._init(token:string, config:object, name:string)
@@ -397,7 +294,19 @@ export class PostHog {
         config: Partial<PostHogConfig> = {},
         name?: string,
         initComplete?: (instance: PostHog) => void
-    ): void {
+    ): PostHog | void {
+        if (!token) {
+            console.warn(
+                'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
+            )
+            return
+        }
+
+        if (this.__loaded) {
+            console.warn('You have already initialized PostHog! Re-initialising is a no-op')
+            return
+        }
+
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
@@ -456,6 +365,35 @@ export class PostHog {
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+
+        this.sessionRecording = new SessionRecording(this)
+        this.sessionRecording.startRecordingIfEnabled()
+
+        this.webPerformance = new WebPerformanceObserver(this)
+        this.webPerformance.startObservingIfEnabled()
+
+        this.exceptionAutocapture = new ExceptionObserver(this)
+
+        this.__autocapture = this.get_config('autocapture')
+        autocapture._setIsAutocaptureEnabled(this)
+        if (autocapture._isAutocaptureEnabled) {
+            this.__autocapture = this.get_config('autocapture')
+            const num_buckets = 100
+            const num_enabled_buckets = 100
+            if (!autocapture.enabledForProject(this.get_config('token'), num_buckets, num_enabled_buckets)) {
+                this.__autocapture = false
+                logger.log('Not in active bucket: disabling Automatic Event Collection.')
+            } else if (!autocapture.isBrowserSupported()) {
+                this.__autocapture = false
+                logger.log('Disabling Automatic Event Collection because this browser is not supported')
+            } else {
+                autocapture.init(this)
+            }
+        }
+
+        // if any instance on the page has debug = true, we set the
+        // global debug to be true
+        Config.DEBUG = Config.DEBUG || this.get_config('debug')
 
         this._gdpr_init()
 
@@ -527,9 +465,14 @@ export class PostHog {
         window.addEventListener &&
             window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
 
+        this.toolbar.maybeLoadToolbar()
         // Make sure that we also call the initComplete callback at the end of
         // the synchronous code as well.
         updateInitComplete('syncCode')()
+
+        this._loaded()
+
+        return this
     }
 
     // Private methods
@@ -2059,56 +2002,6 @@ export class PostHog {
 
 _safewrap_class(PostHog, ['identify'])
 
-const instances: Record<string, PostHog> = {}
-const extend_mp = function () {
-    // add all the sub posthog instances
-    _each(instances, function (instance, name) {
-        if (name !== PRIMARY_INSTANCE_NAME) {
-            posthog_master[name] = instance
-        }
-    })
-}
-
-const override_ph_init_func = function () {
-    // we override the snippets init function to handle the case where a
-    // user initializes the posthog library after the script loads & runs
-    posthog_master['init'] = function (token: string, config?: Partial<PostHogConfig>, name?: string) {
-        if (name) {
-            // initialize a sub library
-            if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_phlib(
-                    token,
-                    config || {},
-                    name,
-                    (instance: PostHog) => {
-                        posthog_master[name] = instances[name] = instance
-                        instance._loaded()
-                    }
-                )
-            }
-            return posthog_master[name]
-        }
-
-        let instance: PostHog = posthog_master as any as PostHog
-
-        if (!instances[PRIMARY_INSTANCE_NAME]) {
-            // intialize the main posthog lib if we haven't already
-            instance = create_phlib(token, config || {}, PRIMARY_INSTANCE_NAME, (instance: PostHog) => {
-                instances[PRIMARY_INSTANCE_NAME] = instance
-                instance._loaded()
-            })
-        }
-
-        instances[PRIMARY_INSTANCE_NAME] = instance
-        ;(posthog_master as any) = instance
-        if (init_type === InitType.INIT_SNIPPET) {
-            ;(window as any)[PRIMARY_INSTANCE_NAME] = posthog_master
-        }
-        extend_mp()
-        return instance
-    }
-}
-
 const add_dom_loaded_handler = function () {
     // Cross browser DOM Loaded support
     function dom_loaded_handler() {
@@ -2142,42 +2035,43 @@ const add_dom_loaded_handler = function () {
 }
 
 export function init_from_snippet(): void {
-    init_type = InitType.INIT_SNIPPET
-    if (_isUndefined((window as any).posthog)) {
-        ;(window as any).posthog = []
+    const posthogMaster = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
+
+    const snippetPostHog = (window as any)['posthog']
+
+    if (snippetPostHog) {
+        // Call all pre-loaded init calls properly
+        _each(snippetPostHog['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
+            if (item && _isArray(item)) {
+                const instance = posthogMaster.init(item[0], item[1], item[2])
+
+                if (instance) {
+                    // instance._execute_array.call(instance.people, item[3])
+                }
+
+                // // if target is not defined, we called init after the lib already
+                // // loaded, so there won't be an array of things to execute
+                // if (typeof target !== 'undefined' && _isArray(target)) {
+                //     // Crunch through the people queue first - we queue this data up &
+                //     // flush on identify, so it's better to do all these operations first
+                //     instance._execute_array.call(instance.people, (target as any).people)
+                //     instance._execute_array(target)
+                // }
+            }
+        })
+
+        delete snippetPostHog['_i']
     }
-    posthog_master = (window as any).posthog
 
-    if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
-        // lib has already been loaded at least once; we don't want to override the global object this time so bomb early
-        console.error('PostHog library has already been downloaded at least once.')
-        return
-    }
-
-    // Load instances of the PostHog Library
-    _each(posthog_master['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
-        if (item && _isArray(item)) {
-            instances[item[2]] = create_phlib(...item)
-        }
-    })
-
-    override_ph_init_func()
-    ;(posthog_master['init'] as any)()
-
-    // Fire loaded events after updating the window's posthog object
-    _each(instances, function (instance) {
-        instance._loaded()
-    })
+    ;(window as any)['posthog'] = posthogMaster
 
     add_dom_loaded_handler()
 }
 
 export function init_as_module(): PostHog {
-    init_type = InitType.INIT_MODULE
-    ;(posthog_master as any) = new PostHog()
+    const posthogMaster = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
-    override_ph_init_func()
     add_dom_loaded_handler()
 
-    return posthog_master as any
+    return posthogMaster
 }
