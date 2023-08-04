@@ -193,6 +193,12 @@ const create_phlib = function (
         }
     }
 
+    if (!token) {
+        console.warn(
+            'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
+        )
+    }
+
     if (target && init_type === InitType.INIT_MODULE) {
         instance = target as any
     } else {
@@ -2066,12 +2072,12 @@ const extend_mp = function () {
 const override_ph_init_func = function () {
     // we override the snippets init function to handle the case where a
     // user initializes the posthog library after the script loads & runs
-    posthog_master['init'] = function (token?: string, config?: Partial<PostHogConfig>, name?: string) {
+    posthog_master['init'] = function (token: string, config?: Partial<PostHogConfig>, name?: string) {
         if (name) {
             // initialize a sub library
             if (!posthog_master[name]) {
                 posthog_master[name] = instances[name] = create_phlib(
-                    token || '',
+                    token,
                     config || {},
                     name,
                     (instance: PostHog) => {
@@ -2081,28 +2087,25 @@ const override_ph_init_func = function () {
                 )
             }
             return posthog_master[name]
-        } else {
-            let instance: PostHog = posthog_master as any as PostHog
-
-            if (instances[PRIMARY_INSTANCE_NAME]) {
-                // main posthog lib already initialized
-                instance = instances[PRIMARY_INSTANCE_NAME]
-            } else if (token) {
-                // intialize the main posthog lib
-                instance = create_phlib(token, config || {}, PRIMARY_INSTANCE_NAME, (instance: PostHog) => {
-                    instances[PRIMARY_INSTANCE_NAME] = instance
-                    instance._loaded()
-                })
-                instances[PRIMARY_INSTANCE_NAME] = instance
-            }
-
-            ;(posthog_master as any) = instance
-            if (init_type === InitType.INIT_SNIPPET) {
-                ;(window as any)[PRIMARY_INSTANCE_NAME] = posthog_master
-            }
-            extend_mp()
-            return instance
         }
+
+        let instance: PostHog = posthog_master as any as PostHog
+
+        if (!instances[PRIMARY_INSTANCE_NAME]) {
+            // intialize the main posthog lib if we haven't already
+            instance = create_phlib(token, config || {}, PRIMARY_INSTANCE_NAME, (instance: PostHog) => {
+                instances[PRIMARY_INSTANCE_NAME] = instance
+                instance._loaded()
+            })
+        }
+
+        instances[PRIMARY_INSTANCE_NAME] = instance
+        ;(posthog_master as any) = instance
+        if (init_type === InitType.INIT_SNIPPET) {
+            ;(window as any)[PRIMARY_INSTANCE_NAME] = posthog_master
+        }
+        extend_mp()
+        return instance
     }
 }
 
@@ -2174,7 +2177,6 @@ export function init_as_module(): PostHog {
     ;(posthog_master as any) = new PostHog()
 
     override_ph_init_func()
-    ;(posthog_master['init'] as any)()
     add_dom_loaded_handler()
 
     return posthog_master as any
