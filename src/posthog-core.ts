@@ -68,11 +68,6 @@ this.__x === private - only use within the class
 Globals should be all caps
 */
 
-// TODO: the type of this is very loose. Sometimes it's also PostHogLib itself
-let posthog_master: Record<string, PostHog> & {
-    init: (token: string, config: Partial<PostHogConfig>, name: string) => void
-}
-
 const instances: Record<string, PostHog> = {}
 
 // some globals for comparisons
@@ -2023,27 +2018,52 @@ export function init_from_snippet(): void {
     const snippetPostHog = (window as any)['posthog']
 
     if (snippetPostHog) {
+        /**
+         * The snippet uses some clever tricks to allow deferred loading of array.js (this code)
+         *
+         * window.posthog is an array which the queue of calls made before the lib is loaded
+         * It has methods attached to it to simulate the posthog object so for instance
+         *
+         * window.posthog.init("TOKEN", {api_host: "foo" })
+         * window.posthog.capture("my-event", {foo: "bar" })
+         *
+         * ... will mean that window.posthog will look like this:
+         * window.posthog == [
+         *  ["my-event", {foo: "bar"}]
+         * ]
+         *
+         * window.posthog[_i] == [
+         *   ["TOKEN", {api_host: "foo" }, "posthog"]
+         * ]
+         *
+         * If a name is given to the init function then the same as above is true but as a sub-property on the object:
+         *
+         * window.posthog.init("TOKEN", {}, "ph2")
+         * window.posthog.ph2.people.set({foo: "bar"})
+         *
+         * window.posthog.ph2 == []
+         * window.posthog.people == [
+         *  ["set", {foo: "bar"}]
+         * ]
+         *
+         */
+
         // Call all pre-loaded init calls properly
+
         _each(snippetPostHog['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
             if (item && _isArray(item)) {
                 const instance = posthogMaster.init(item[0], item[1], item[2])
 
-                if (instance) {
-                    // instance._execute_array.call(instance.people, item[3])
-                }
+                let instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
 
-                // // if target is not defined, we called init after the lib already
-                // // loaded, so there won't be an array of things to execute
-                // if (typeof target !== 'undefined' && _isArray(target)) {
-                //     // Crunch through the people queue first - we queue this data up &
-                //     // flush on identify, so it's better to do all these operations first
-                //     instance._execute_array.call(instance.people, (target as any).people)
-                //     instance._execute_array(target)
-                // }
+                if (instance) {
+                    // Crunch through the people queue first - we queue this data up &
+                    // flush on identify, so it's better to do all these operations first
+                    instance._execute_array.call(instance.people, instanceSnippet.people)
+                    instance._execute_array(instanceSnippet)
+                }
             }
         })
-
-        delete snippetPostHog['_i']
     }
 
     ;(window as any)['posthog'] = posthogMaster

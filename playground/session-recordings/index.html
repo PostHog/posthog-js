@@ -110,6 +110,13 @@
                 'other'
             )
 
+            posthog.capture('event')
+            posthog.capture('event2')
+            posthog.people.set({ test: true })
+            posthog.other.capture('other_event')
+            posthog.other.people.set({ test: true })
+            console.log(posthog)
+
             setTimeout(() => {
                 posthog.debug()
                 document.getElementById('current-session-id').innerHTML = posthog.sessionRecording.sessionId
