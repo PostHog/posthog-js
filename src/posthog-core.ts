@@ -862,7 +862,7 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (this.webPerformance?.isEnabled) {
+        if (this.webPerformance?.isEnabled()) {
             if (event_name === '$pageview') {
                 this.pageViewIdManager.onPageview()
             }

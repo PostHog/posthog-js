@@ -9,7 +9,7 @@ jest.mock('../decide')
 
 given('lib', () => {
     const posthog = new PostHog()
-    posthog._init('testtoken', given.config, 'testhog')
+    posthog.init('testtoken', given.config)
     return Object.assign(posthog, given.overrides)
 })
 
