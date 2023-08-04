@@ -289,12 +289,7 @@ export class PostHog {
     // IE11 compatible. We could use polyfills, which would make the
     // code a bit cleaner, but will add some overhead.
     //
-    _init(
-        token: string,
-        config: Partial<PostHogConfig> = {},
-        name?: string,
-        initComplete?: (instance: PostHog) => void
-    ): PostHog | void {
+    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog | void {
         if (!token) {
             console.warn(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
@@ -310,24 +305,6 @@ export class PostHog {
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
-
-        // To avoid using Promises and their helper functions, we instead keep
-        // track of which callbacks have been called, and then call initComplete
-        // when all of them have been called. To add additional async code, add
-        // to `callbacksHandled` and pass updateInitComplete as a callback to
-        // the async code.
-        const callbacksHandled = { segmentRegister: false, syncCode: false }
-        const updateInitComplete = (callbackName: keyof typeof callbacksHandled) => () => {
-            // Update the register of callbacks that have been called, and if
-            // they have all been called, then we are ready to call
-            // initComplete.
-            if (!callbacksHandled[callbackName]) {
-                callbacksHandled[callbackName] = true
-                if (callbacksHandled.segmentRegister && callbacksHandled.syncCode) {
-                    initComplete?.(this)
-                }
-            }
-        }
 
         this.set_config(
             _extend({}, defaultConfig(), config, {
@@ -408,10 +385,6 @@ export class PostHog {
                 })
                 this.persistence.set_user_state('identified')
             }
-
-            config.segment.register(this.segmentIntegration()).then(updateInitComplete('segmentRegister'))
-        } else {
-            updateInitComplete('segmentRegister')()
         }
 
         if (config.bootstrap?.distinctID !== undefined) {
@@ -466,17 +439,20 @@ export class PostHog {
             window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
 
         this.toolbar.maybeLoadToolbar()
-        // Make sure that we also call the initComplete callback at the end of
-        // the synchronous code as well.
-        updateInitComplete('syncCode')()
 
-        this._loaded()
+        // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
+        if (config.segment) {
+            config.segment.register(this.segmentIntegration()).then(() => {
+                this._loaded()
+            })
+        } else {
+            this._loaded()
+        }
 
         return this
     }
 
     // Private methods
-
     _loaded(): void {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
         // These feature flags are loaded in the decide call made right
