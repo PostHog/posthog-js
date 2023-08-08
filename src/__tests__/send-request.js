@@ -23,10 +23,6 @@ describe('xhr', () => {
         data: '',
         headers: {},
         options: given.xhrOptions,
-        captureMetrics: {
-            incr: () => {},
-            decr: () => {},
-        },
         callback: () => {},
         retriesPerformedSoFar: null,
         retryQueue: {

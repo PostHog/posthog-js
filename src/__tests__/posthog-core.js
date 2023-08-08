@@ -1,6 +1,5 @@
 import { init_as_module, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
-import { CaptureMetrics } from '../capture-metrics'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
 import { _info } from '../utils'
@@ -47,7 +46,6 @@ describe('capture()', () => {
             properties: jest.fn(),
         },
         compression: {},
-        _captureMetrics: new CaptureMetrics(),
         __captureHooks: [],
         rateLimiter: {
             isRateLimited: () => false,
@@ -812,9 +810,6 @@ describe('group()', () => {
             sessionPersistence: new PostHogPersistence(given.config),
             _requestQueue: {
                 enqueue: given.captureQueue,
-            },
-            _captureMetrics: {
-                incr: jest.fn(),
             },
             reloadFeatureFlags: jest.fn(),
         }))

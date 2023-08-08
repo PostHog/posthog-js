@@ -1,6 +1,5 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
-import { CaptureMetrics } from './capture-metrics'
 import { QueuedRequestData, RetryQueueElement } from './types'
 import Config from './config'
 import { RateLimiter } from './rate-limiter'
@@ -27,20 +26,14 @@ export function pickNextRetryDelay(retriesPerformedSoFar: number): number {
 }
 
 export class RetryQueue extends RequestQueueScaffold {
-    captureMetrics: CaptureMetrics
     queue: RetryQueueElement[]
     isPolling: boolean
     areWeOnline: boolean
     onXHRError: (failedRequest: XMLHttpRequest) => void
     rateLimiter: RateLimiter
 
-    constructor(
-        captureMetrics: CaptureMetrics,
-        onXHRError: (failedRequest: XMLHttpRequest) => void,
-        rateLimiter: RateLimiter
-    ) {
+    constructor(onXHRError: (failedRequest: XMLHttpRequest) => void, rateLimiter: RateLimiter) {
         super()
-        this.captureMetrics = captureMetrics
         this.isPolling = false
         this.queue = []
         this.areWeOnline = true
@@ -139,7 +132,6 @@ export class RetryQueue extends RequestQueueScaffold {
             headers: headers || {},
             retriesPerformedSoFar: retriesPerformedSoFar || 0,
             callback,
-            captureMetrics: this.captureMetrics,
             retryQueue: this,
             onXHRError: this.onXHRError,
             onResponse: this.rateLimiter.checkForLimiting,

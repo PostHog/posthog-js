@@ -51,7 +51,6 @@ describe('SessionRecording', () => {
         get_config: jest.fn().mockImplementation((key) => given.config[key]),
         capture: jest.fn(),
         persistence: { register: jest.fn() },
-        _captureMetrics: { incr: jest.fn() },
         sessionManager: given.sessionManager,
         _addCaptureHook: jest.fn(),
         __loaded_recorder_version: given.__loaded_recorder_version,

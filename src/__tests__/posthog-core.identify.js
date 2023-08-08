@@ -31,9 +31,6 @@ describe('identify()', () => {
         unregister: jest.fn(),
         get_property: () => given.deviceId,
         _flags: {},
-        _captureMetrics: {
-            incr: jest.fn(),
-        },
         featureFlags: {
             setAnonymousDistinctId: jest.fn(),
         },
