@@ -8,71 +8,27 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
+    MutationRateLimiter,
+    recordOptions,
+    rrwebRecord,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, Properties } from '../types'
-import type {
-    KeepIframeSrcFn,
-    RecordPlugin,
-    SamplingStrategy,
-    blockClass,
-    eventWithTime,
-    hooksParam,
-    listenerHandler,
-    maskTextClass,
-} from '@rrweb/types'
+import type { eventWithTime, listenerHandler } from '@rrweb/types'
 import Config from '../config'
-import { logger, loadScript } from '../utils'
-import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, SlimDOMOptions } from 'rrweb-snapshot'
+import { logger, loadScript, _timestamp } from '../utils'
 
 const BASE_ENDPOINT = '/s/'
 
 export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
+export const SESSION_RECORDING_BATCH_KEY = 'sessionRecording'
 
 // NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
 // import type { record } from 'rrweb2/typings'
 // import type { recordOptions } from 'rrweb/typings/types'
-
-export type rrwebRecord = {
-    (options: recordOptions<eventWithTime>): listenerHandler
-    addCustomEvent: (tag: string, payload: any) => void
-    takeFullSnapshot: () => void
-}
-
-export declare type recordOptions<T> = {
-    emit?: (e: T, isCheckout?: boolean) => void
-    checkoutEveryNth?: number
-    checkoutEveryNms?: number
-    blockClass?: blockClass
-    blockSelector?: string
-    ignoreClass?: string
-    maskTextClass?: maskTextClass
-    maskTextSelector?: string
-    maskAllInputs?: boolean
-    maskInputOptions?: MaskInputOptions
-    maskInputFn?: MaskInputFn
-    maskTextFn?: MaskTextFn
-    slimDOMOptions?: SlimDOMOptions | 'all' | true
-    ignoreCSSAttributes?: Set<string>
-    inlineStylesheet?: boolean
-    hooks?: hooksParam
-    // packFn?: PackFn
-    sampling?: SamplingStrategy
-    dataURLOptions?: DataURLOptions
-    recordCanvas?: boolean
-    recordCrossOriginIframes?: boolean
-    recordAfter?: 'DOMContentLoaded' | 'load'
-    userTriggeredOnInput?: boolean
-    collectFonts?: boolean
-    inlineImages?: boolean
-    plugins?: RecordPlugin[]
-    mousemoveWait?: number
-    keepIframeSrcFn?: KeepIframeSrcFn
-    // errorHandler?: ErrorHandler
-}
 
 // Copied from rrweb typings to avoid import
 enum IncrementalSource {
@@ -119,6 +75,7 @@ export class SessionRecording {
         sessionId: string | null
         windowId: string | null
     }
+    private mutationRateLimiter?: MutationRateLimiter
 
     captureStarted: boolean
     snapshots: any[]
@@ -201,7 +158,23 @@ export class SessionRecording {
         this.startRecordingIfEnabled()
     }
 
-    startCaptureAndTrySendingQueuedSnapshots() {
+    log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
+        this.instance.sessionRecording?.onRRwebEmit({
+            type: 6,
+            data: {
+                plugin: 'rrweb/console@1',
+                payload: {
+                    level,
+                    trace: [],
+                    // Even though it is a string we stringify it as thats what rrweb expects
+                    payload: [JSON.stringify(message)],
+                },
+            },
+            timestamp: _timestamp(),
+        })
+    }
+
+    private startCaptureAndTrySendingQueuedSnapshots() {
         // Only submit data after we've received a decide response to account for
         // changing endpoints and the feature being disabled on the server side.
         if (this.receivedDecide) {
@@ -211,7 +184,7 @@ export class SessionRecording {
         this._startCapture()
     }
 
-    _startCapture() {
+    private _startCapture() {
         // According to the rrweb docs, rrweb is not supported on IE11 and below:
         // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
         // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
@@ -253,11 +226,11 @@ export class SessionRecording {
         }
     }
 
-    _isInteractiveEvent(event: eventWithTime) {
+    private _isInteractiveEvent(event: eventWithTime) {
         return event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && ACTIVE_SOURCES.indexOf(event.data?.source) !== -1
     }
 
-    _updateWindowAndSessionIds(event: eventWithTime) {
+    private _updateWindowAndSessionIds(event: eventWithTime) {
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
@@ -300,7 +273,7 @@ export class SessionRecording {
         this.sessionId = sessionId
     }
 
-    _tryTakeFullSnapshot(): boolean {
+    private _tryTakeFullSnapshot(): boolean {
         if (!this.captureStarted) {
             return false
         }
@@ -314,7 +287,7 @@ export class SessionRecording {
         }
     }
 
-    _onScriptLoaded() {
+    private _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
         const sessionRecordingOptions: recordOptions<eventWithTime> = {
             // select set of rrweb config options we expose to our users
@@ -356,6 +329,19 @@ export class SessionRecording {
             return
         }
 
+        this.mutationRateLimiter =
+            this.mutationRateLimiter ??
+            new MutationRateLimiter(this.rrwebRecord!, {
+                onBlockedNode: (id, node) => {
+                    const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
+                    logger.log(message, {
+                        node: node,
+                    })
+
+                    this.log('[PostHog Recorder] ' + message, 'warn')
+                },
+            })
+
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
@@ -390,7 +376,15 @@ export class SessionRecording {
             return
         }
 
-        const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(rawEvent))
+        const throttledEvent = this.mutationRateLimiter
+            ? this.mutationRateLimiter.throttleMutations(rawEvent)
+            : rawEvent
+
+        if (!throttledEvent) {
+            return
+        }
+
+        const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(throttledEvent))
 
         this._updateWindowAndSessionIds(event)
 
@@ -405,9 +399,6 @@ export class SessionRecording {
             $session_id: this.sessionId,
             $window_id: this.windowId,
         }
-
-        this.instance._captureMetrics.incr('rrweb-record')
-        this.instance._captureMetrics.incr(`rrweb-record-${event.type}`)
 
         if (this.emit) {
             this._captureSnapshotBuffered(properties)
@@ -468,7 +459,7 @@ export class SessionRecording {
             method: 'POST',
             endpoint: this.endpoint,
             _noTruncate: true,
-            _batchKey: 'sessionRecording',
+            _batchKey: SESSION_RECORDING_BATCH_KEY,
             _metrics: {
                 rrweb_full_snapshot: properties.$snapshot_data.type === FULL_SNAPSHOT_EVENT_TYPE,
             },

@@ -26,7 +26,6 @@ import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
-import { CaptureMetrics } from './capture-metrics'
 import { compressData, decideCompression } from './compression'
 import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
@@ -56,6 +55,7 @@ import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
+import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 
 /*
@@ -154,7 +154,6 @@ const defaultConfig = (): PostHogConfig => ({
     get_device_id: (uuid) => uuid,
     // Used for internal testing
     _onCapture: __NOOP,
-    _capture_metrics: false,
     capture_performance: undefined,
     name: 'posthog',
     callback_fn: 'posthog._jsc',
@@ -261,6 +260,7 @@ export class PostHog {
     config: PostHogConfig
 
     persistence: PostHogPersistence
+    rateLimiter: RateLimiter
     sessionPersistence: PostHogPersistence
     sessionManager: SessionIdManager
     pageViewIdManager: PageViewIdManager
@@ -271,7 +271,6 @@ export class PostHog {
     webPerformance: WebPerformanceObserver | undefined
     exceptionAutocapture: ExceptionObserver | undefined
 
-    _captureMetrics: CaptureMetrics
     _requestQueue: RequestQueue
     _retryQueue: RetryQueue
 
@@ -309,9 +308,9 @@ export class PostHog {
         this.toolbar = new Toolbar(this)
         this.pageViewIdManager = new PageViewIdManager()
         this.surveys = new PostHogSurveys(this)
+        this.rateLimiter = new RateLimiter()
 
         // these are created in _init() after we have the config
-        this._captureMetrics = undefined as any
         this._requestQueue = undefined as any
         this._retryQueue = undefined as any
         this.persistence = undefined as any
@@ -430,13 +429,13 @@ export class PostHog {
             this.__loaded_recorder_version = window?.rrweb?.version
         }
 
-        this._captureMetrics = new CaptureMetrics(this.get_config('_capture_metrics'))
-        this._requestQueue = new RequestQueue(this._captureMetrics, this._handle_queued_event.bind(this))
-        this._retryQueue = new RetryQueue(this._captureMetrics, this.get_config('on_xhr_error'))
+        this.persistence = new PostHogPersistence(this.config)
+
+        this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
+        this._retryQueue = new RetryQueue(this.get_config('on_xhr_error'), this.rateLimiter)
         this.__captureHooks = []
         this.__request_queue = []
 
-        this.persistence = new PostHogPersistence(this.config)
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
@@ -616,10 +615,7 @@ export class PostHog {
         if (this.get_config('capture_pageview') && this.get_config('capture_pageleave')) {
             this.capture('$pageleave')
         }
-        if (this.get_config('_capture_metrics')) {
-            this._requestQueue.updateUnloadMetrics()
-            this.capture('$capture_metrics', this._captureMetrics.metrics)
-        }
+
         this._requestQueue.unload()
         this._retryQueue.unload()
     }
@@ -639,7 +635,14 @@ export class PostHog {
         this._send_request(url, data, _options, callback)
     }
 
-    _send_request(url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback): void {
+    _send_request(url: string, data: Record<string, any>, options: CaptureOptions, callback?: RequestCallback): void {
+        if (this.rateLimiter.isRateLimited(options._batchKey)) {
+            if (this.get_config('debug')) {
+                console.warn('[PostHog SendRequest] is quota limited. Dropping request.')
+            }
+            return
+        }
+
         if (ENQUEUE_REQUESTS) {
             this.__request_queue.push([url, data, options, callback])
             return
@@ -677,11 +680,11 @@ export class PostHog {
                     data: data,
                     headers: this.get_config('xhr_headers'),
                     options: options,
-                    captureMetrics: this._captureMetrics,
                     callback,
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,
                     onXHRError: this.get_config('on_xhr_error'),
+                    onRateLimited: this.rateLimiter.on429Response,
                 })
             } catch (e) {
                 console.error(e)
@@ -831,11 +834,6 @@ export class PostHog {
 
         if (userOptedOut(this, false)) {
             return
-        }
-
-        this._captureMetrics.incr('capture')
-        if (event_name === '$snapshot') {
-            this._captureMetrics.incr('snapshot')
         }
 
         options = options || __NOOPTIONS
@@ -1250,8 +1248,6 @@ export class PostHog {
             return
         }
 
-        this._captureMetrics.incr('identify')
-
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
@@ -1341,8 +1337,6 @@ export class PostHog {
             console.error('posthog.group requires a group type and group key')
             return
         }
-
-        this._captureMetrics.incr('group')
 
         const existingGroups = this.getGroups()
 
