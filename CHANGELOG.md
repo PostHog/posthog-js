@@ -1,3 +1,7 @@
+## 1.75.4 - 2023-08-09
+
+- feat: remove old UUID code (#755)
+
 ## 1.75.3 - 2023-08-02
 
 - chore: remove unused capture metrics (#766)
