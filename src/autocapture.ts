@@ -27,7 +27,7 @@ import {
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './posthog-persistence'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 const autocapture = {
     _initializedTokens: [] as string[],

@@ -2,7 +2,7 @@ import sinon from 'sinon'
 import { autocapture } from '../autocapture'
 import { decideCompression, compressData } from '../compression'
 import { Decide } from '../decide'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../posthog-persistence'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 
 describe('decideCompression()', () => {
     given('subject', () => decideCompression(given.compressionSupport))

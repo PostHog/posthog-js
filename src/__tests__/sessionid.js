@@ -1,5 +1,5 @@
 import { SessionIdManager } from '../sessionid'
-import { SESSION_ID } from '../posthog-persistence'
+import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
 
 jest.mock('../utils')

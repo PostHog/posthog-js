@@ -10,6 +10,17 @@ const TOKENS = [
 const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
 const CUSTOM_PERSISTENCE_PREFIX = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
 
+function deleteAllCookies() {
+    var cookies = document.cookie.split(';')
+
+    for (var i = 0; i < cookies.length; i++) {
+        var cookie = cookies[i]
+        var eqPos = cookie.indexOf('=')
+        var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
+        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    }
+}
+
 function forPersistenceTypes(runTests) {
     ;[`cookie`, `localStorage`, `localStorage+cookie`].forEach(function (persistenceType) {
         describe(persistenceType, runTests.bind(null, persistenceType))
@@ -31,16 +42,7 @@ function assertPersistenceValue(persistenceType, token, value, persistencePrefix
         }
     }
 }
-function deleteAllCookies() {
-    var cookies = document.cookie.split(';')
 
-    for (var i = 0; i < cookies.length; i++) {
-        var cookie = cookies[i]
-        var eqPos = cookie.indexOf('=')
-        var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
-        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT'
-    }
-}
 describe(`GDPR utils`, () => {
     // these imports must be re-required before each test
     // so that they reference the correct jsdom document

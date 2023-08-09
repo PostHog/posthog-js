@@ -3,7 +3,7 @@ import sinon from 'sinon'
 
 import { autocapture } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../posthog-persistence'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(

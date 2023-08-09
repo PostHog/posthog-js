@@ -4,11 +4,8 @@ import {
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
     RECORDING_MAX_EVENT_SIZE,
 } from '../../extensions/sessionrecording'
-import {
-    PostHogPersistence,
-    SESSION_RECORDING_ENABLED_SERVER_SIDE,
-    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
-} from '../../posthog-persistence'
+import { PostHogPersistence } from '../../posthog-persistence'
+import { SESSION_RECORDING_ENABLED_SERVER_SIDE, SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE } from '../../constants'
 import { SessionIdManager } from '../../sessionid'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
