@@ -11,7 +11,6 @@ import {
     _isUndefined,
     _register_event,
     _safewrap_class,
-    _UUID,
     document,
     logger,
     userAgent,
@@ -57,6 +56,7 @@ import { PageViewIdManager } from './page-view-id'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
+import { uuidv7 } from './uuidv7'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -160,7 +160,6 @@ const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    uuid_version: 'v7',
 })
 
 /**
@@ -285,9 +284,6 @@ export class PostHog {
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
-    // keep the default as the original version of the function
-    // config _might_ override this in init below
-    private uuidFn: (version?: 'v7') => string = _UUID('og')
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -310,7 +306,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewIdManager = new PageViewIdManager(this.uuidFn)
+        this.pageViewIdManager = new PageViewIdManager()
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 
@@ -422,11 +418,6 @@ export class PostHog {
             })
         )
 
-        // in preparation for switching from a custom UUID format
-        // to UUID v7 this lets us inject the desired default version
-        // into the _UUID function
-        this.uuidFn = _UUID(this.config.uuid_version || 'og')
-
         this._jsc = function () {} as JSC
 
         // Check if recorder.js is already loaded
@@ -445,7 +436,7 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this.config, this.persistence, this.uuidFn)
+        this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
@@ -471,7 +462,7 @@ export class PostHog {
         }
 
         if (config.bootstrap?.distinctID !== undefined) {
-            const uuid = this.get_config('get_device_id')(this.uuidFn())
+            const uuid = this.get_config('get_device_id')(uuidv7())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
             this.persistence.set_user_state(config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
@@ -505,7 +496,7 @@ export class PostHog {
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persitence
-            const uuid = this.get_config('get_device_id')(this.uuidFn())
+            const uuid = this.get_config('get_device_id')(uuidv7())
             this.register_once(
                 {
                     distinct_id: uuid,
@@ -872,7 +863,7 @@ export class PostHog {
         }
 
         let data: CaptureResult = {
-            uuid: this.uuidFn('v7'),
+            uuid: uuidv7(),
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
@@ -1422,7 +1413,7 @@ export class PostHog {
         this.sessionPersistence.clear()
         this.persistence.set_user_state('anonymous')
         this.sessionManager.resetSessionId()
-        const uuid = this.get_config('get_device_id')(this.uuidFn())
+        const uuid = this.get_config('get_device_id')(uuidv7())
         this.register_once(
             {
                 distinct_id: uuid,

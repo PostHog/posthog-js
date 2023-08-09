@@ -1,14 +1,14 @@
 import { SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../posthog-persistence'
 import { sessionStore } from '../storage'
+import { uuidv7 } from '../uuidv7'
 
-jest.mock('../utils')
+jest.mock('../uuidv7')
 jest.mock('../storage')
 
 describe('Session ID manager', () => {
-    given('uuidFn', () => () => 'newUUID')
     given('subject', () => given.sessionIdManager.checkAndGetSessionAndWindowId(given.readOnly, given.timestamp))
-    given('sessionIdManager', () => new SessionIdManager(given.config, given.persistence, given.uuidFn))
+    given('sessionIdManager', () => new SessionIdManager(given.config, given.persistence))
 
     given('persistence', () => ({
         props: { [SESSION_ID]: given.storedSessionIdData },
@@ -29,6 +29,7 @@ describe('Session ID manager', () => {
         sessionStore.is_supported.mockReturnValue(true)
         const mockDate = new Date(given.now)
         jest.spyOn(global, 'Date').mockImplementation(() => mockDate)
+        uuidv7.mockReturnValue('newUUID')
     })
 
     describe('new session id manager', () => {
