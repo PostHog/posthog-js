@@ -1,4 +1,5 @@
-import { PostHogPersistence, SESSION_ID } from './posthog-persistence'
+import { PostHogPersistence } from './posthog-persistence'
+import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuidv7 } from './uuidv7'
