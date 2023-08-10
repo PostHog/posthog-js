@@ -1,3 +1,7 @@
+## 1.76.0 - 2023-08-10
+
+- Fixed up tests to cover all cases (#770)
+
 ## 1.75.4 - 2023-08-09
 
 - feat: remove old UUID code (#755)
