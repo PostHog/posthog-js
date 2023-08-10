@@ -1,14 +1,11 @@
-import { _UUID, loadScript } from '../../utils'
+import { loadScript } from '../../utils'
 import {
-    SessionRecording,
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
     RECORDING_MAX_EVENT_SIZE,
+    SessionRecording,
 } from '../../extensions/sessionrecording'
-import {
-    PostHogPersistence,
-    SESSION_RECORDING_ENABLED_SERVER_SIDE,
-    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
-} from '../../posthog-persistence'
+import { PostHogPersistence } from '../../posthog-persistence'
+import { SESSION_RECORDING_ENABLED_SERVER_SIDE, SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE } from '../../constants'
 import { SessionIdManager } from '../../sessionid'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -73,7 +70,6 @@ describe('SessionRecording', () => {
     given('$session_recording_recorder_version_server_side', () => undefined)
     given('disabled', () => false)
     given('__loaded_recorder_version', () => undefined)
-    given('uuidFn', () => _UUID('v7'))
 
     beforeEach(() => {
         window.rrwebRecord = jest.fn()
@@ -554,7 +550,7 @@ describe('SessionRecording', () => {
                 beforeEach(() => {
                     given(
                         'sessionManager',
-                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config), given.uuidFn)
+                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config))
                     )
 
                     mockCallback = jest.fn()
@@ -633,7 +629,7 @@ describe('SessionRecording', () => {
                 beforeEach(() => {
                     given(
                         'sessionManager',
-                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config), given.uuidFn)
+                        () => new SessionIdManager(given.config, new PostHogPersistence(given.config))
                     )
                     given.sessionRecording.startRecordingIfEnabled()
                     given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()

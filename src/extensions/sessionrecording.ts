@@ -2,7 +2,7 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
-} from '../posthog-persistence'
+} from '../constants'
 import {
     ensureMaxMessageSize,
     FULL_SNAPSHOT_EVENT_TYPE,

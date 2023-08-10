@@ -9,14 +9,15 @@ import {
     JsonType,
     RequestCallback,
 } from './types'
+import { PostHogPersistence } from './posthog-persistence'
+
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
-    PostHogPersistence,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
-} from './posthog-persistence'
+} from './constants'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'

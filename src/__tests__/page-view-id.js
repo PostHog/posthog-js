@@ -1,16 +1,12 @@
 import { PageViewIdManager } from '../page-view-id'
-
-jest.mock('../utils')
+import { uuidv7 } from '../uuidv7'
+jest.mock('../uuidv7')
 
 describe('PageView ID manager', () => {
-    given('uuidFn', () => jest.fn())
-    given('pageViewIdManager', () => new PageViewIdManager(given.uuidFn))
+    given('pageViewIdManager', () => new PageViewIdManager())
 
     beforeEach(() => {
-        given.uuidFn
-            .mockReturnValue('subsequentUUIDs')
-            .mockReturnValueOnce('firstUUID')
-            .mockReturnValueOnce('secondUUID')
+        uuidv7.mockReturnValue('subsequentUUIDs').mockReturnValueOnce('firstUUID').mockReturnValueOnce('secondUUID')
     })
 
     it('generates a page view id and resets page view id', () => {

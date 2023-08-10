@@ -7,11 +7,11 @@
  *   - Enrich Segment events with PostHog event properties.
  */
 
-import { describe, it, expect, beforeEach, jest } from '@jest/globals'
+import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 
 import posthog from '../loader-module'
 import { PostHog } from '../posthog-core'
-import { _UUID } from '../utils'
+import { uuidv7 } from '../uuidv7'
 
 describe(`Module-based loader in Node env`, () => {
     let segment: any
@@ -21,7 +21,7 @@ describe(`Module-based loader in Node env`, () => {
     beforeEach(() => {
         jest.spyOn(posthog, '_send_request').mockReturnValue()
         jest.spyOn(console, 'log').mockReturnValue()
-        posthogName = _UUID('v7')
+        posthogName = uuidv7()
 
         // Create something that looks like the Segment Analytics 2.0 API. We
         // could use the actual client, but it's a little more tricky and we'd

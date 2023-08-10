@@ -113,10 +113,6 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
-    // we are replacing the OG uuid generation code, with newer faster UUIDv7
-    // this is a temporary flag to allow us to test the new UUID generation code
-    // this flag *will be deleted* in a future version of PostHog-js
-    uuid_version?: UUIDVersion
 }
 
 export interface OptInOutCapturingOptions {

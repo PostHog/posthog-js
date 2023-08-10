@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { SURVEYS } from './posthog-persistence'
+import { SURVEYS } from './constants'
 
 /**
  * Having Survey types in types.ts was confusing tsc
