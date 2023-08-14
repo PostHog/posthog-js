@@ -54,6 +54,7 @@ export default function Home() {
                 <div className="buttons">
                     <Link href="/animations">Animations</Link>
                     <Link href="/iframe">Iframe</Link>
+                    <Link href="/media">Media</Link>
                 </div>
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>
