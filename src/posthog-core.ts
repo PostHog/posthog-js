@@ -53,7 +53,7 @@ import {
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
-import { PageViewIdManager } from './page-view-id'
+import { PageViewManager } from './page-view'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
@@ -264,7 +264,7 @@ export class PostHog {
     rateLimiter: RateLimiter
     sessionPersistence: PostHogPersistence
     sessionManager: SessionIdManager
-    pageViewIdManager: PageViewIdManager
+    pageViewIdManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
@@ -307,7 +307,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewIdManager = new PageViewIdManager()
+        this.pageViewIdManager = new PageViewManager()
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 
@@ -934,10 +934,15 @@ export class PostHog {
         }
 
         if (this.webPerformance?.isEnabled) {
+            let performanceProperties: Record<string, any>
             if (event_name === '$pageview') {
-                this.pageViewIdManager.onPageview()
+                performanceProperties = this.pageViewIdManager.doPageView()
+            } else if (event_name === '$pageleave') {
+                performanceProperties = this.pageViewIdManager.doPageLeave()
+            } else {
+                performanceProperties = this.pageViewIdManager.getNonPageEvent()
             }
-            properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
+            properties = _extend(properties, performanceProperties)
         }
 
         if (event_name === '$pageview') {
