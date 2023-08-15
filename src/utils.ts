@@ -467,7 +467,7 @@ export const _utf8Encode = function (string: string): string {
 // sending false capturing data
 export const _isBlockedUA = function (ua: string): boolean {
     if (
-        /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog|applebot|semrushbot|duckduckbot|twitterbot|rogerbot|linkedinbot|mj12bot|sitebulb|bot.htm|bot.php|hubspot|crawler|prerender)/i.test(
+        /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog|applebot|semrushbot|duckduckbot|twitterbot|rogerbot|linkedinbot|mj12bot|sitebulb|bot.htm|bot.php|hubspot|crawler|prerender|gptbot)/i.test(
             ua
         )
     ) {
