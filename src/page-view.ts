@@ -40,6 +40,11 @@ interface NonPageEventProperties {
 export class PageViewManager {
     _pageViewData: PageViewData | undefined
     _hasSeenPageView = false
+    _window: Window
+
+    constructor(window: Window) {
+        this._window = window
+    }
 
     _createPageViewData(): PageViewData {
         const data = {
@@ -178,22 +183,25 @@ export class PageViewManager {
     }
 
     _scrollHeight(): number {
-        return Math.max(0, document.documentElement.scrollHeight - document.documentElement.clientHeight)
+        return Math.max(
+            0,
+            this._window.document.documentElement.scrollHeight - this._window.document.documentElement.clientHeight
+        )
     }
 
     _scrollY(): number {
-        return window.scrollY || window.pageYOffset || document.documentElement.scrollTop
+        return this._window.scrollY || this._window.pageYOffset || this._window.document.documentElement.scrollTop || 0
     }
 
     _contentHeight(): number {
-        return document.documentElement.scrollHeight
+        return this._window.document.documentElement.scrollHeight || 0
     }
 
     _contentY(): number {
-        return (
-            (window.scrollY || window.pageYOffset || document.documentElement.scrollTop) +
-            document.documentElement.clientHeight
-        )
+        const scrollY =
+            this._window.scrollY || this._window.pageYOffset || this._window.document.documentElement.scrollTop || 0
+        const clientHeight = this._window.document.documentElement.clientHeight || 0
+        return scrollY + clientHeight
     }
 }
 
