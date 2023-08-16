@@ -215,6 +215,10 @@ const create_phlib = function (
     instance.webPerformance = new WebPerformanceObserver(instance)
     instance.webPerformance.startObservingIfEnabled()
 
+    if (instance.get_config('capture_pageview')) {
+        instance.pageViewManager.startMeasuringScrollPosition()
+    }
+
     instance.exceptionAutocapture = new ExceptionObserver(instance)
 
     instance.__autocapture = instance.get_config('autocapture')
@@ -264,7 +268,7 @@ export class PostHog {
     rateLimiter: RateLimiter
     sessionPersistence: PostHogPersistence
     sessionManager: SessionIdManager
-    pageViewIdManager: PageViewManager
+    pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
@@ -307,7 +311,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewIdManager = new PageViewManager()
+        this.pageViewManager = new PageViewManager()
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 
@@ -936,11 +940,11 @@ export class PostHog {
         if (this.webPerformance?.isEnabled) {
             let performanceProperties: Record<string, any>
             if (event_name === '$pageview') {
-                performanceProperties = this.pageViewIdManager.doPageView()
+                performanceProperties = this.pageViewManager.doPageView()
             } else if (event_name === '$pageleave') {
-                performanceProperties = this.pageViewIdManager.doPageLeave()
+                performanceProperties = this.pageViewManager.doPageLeave()
             } else {
-                performanceProperties = this.pageViewIdManager.getNonPageEvent()
+                performanceProperties = this.pageViewManager.getNonPageEvent()
             }
             properties = _extend(properties, performanceProperties)
         }
