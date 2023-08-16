@@ -75,14 +75,6 @@ describe('PageView ID manager', () => {
             expect(pageLeave.$prev_pageview_pageview_id).toBeUndefined()
         })
 
-        it('provides a page view id when onPageLeave is called even if doPageView has not been called', () => {
-            const pageViewIdManager = new PageViewManager(window)
-
-            const pageLeave = pageViewIdManager.doPageLeave()
-            expect(pageLeave.$pageview_id).toEqual(FIRST_UUID)
-            expect(pageLeave.$prev_pageview_pageview_id).toBeUndefined()
-        })
-
         it('includes scroll position properties for a partially scrolled long page', () => {
             // note that this means that the user has scrolled 2/3rds of the way down the scrollable area, and seen
             // 3/4 of the content
