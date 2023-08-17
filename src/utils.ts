@@ -1,6 +1,5 @@
 import Config from './config'
 import { Breaker, EventHandler, Properties } from './types'
-import { uuidv7 } from './uuidv7'
 
 /*
  * Saved references to long variable names, so that closure compiler can
