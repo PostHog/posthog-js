@@ -938,13 +938,11 @@ export class PostHog {
         }
 
         if (this.get_config('__preview_measure_pageview_stats')) {
-            let performanceProperties: Record<string, any>
+            let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
                 performanceProperties = this.pageViewManager.doPageView()
             } else if (event_name === '$pageleave') {
                 performanceProperties = this.pageViewManager.doPageLeave()
-            } else {
-                performanceProperties = this.pageViewManager.getNonPageEvent()
             }
             properties = _extend(properties, performanceProperties)
         }

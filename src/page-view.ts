@@ -2,9 +2,6 @@ import { uuidv7 } from './uuidv7'
 import * as utils from './utils'
 
 interface PageViewData {
-    pageViewId: string
-    pathname?: string
-
     // scroll is how far down the page the user has scrolled,
     // content is how far down the page the user can view content
     // (e.g. if the page is 1000 tall, but the user's screen is only 500 tall,
@@ -28,12 +25,6 @@ interface ScrollProperties {
     $prev_pageview_max_content_percentage?: number
 }
 
-interface PageViewEventProperties extends ScrollProperties {
-    $pageview_id: string
-    $prev_pageview_pageview_id: string | undefined
-    $prev_pageview_pathname: string | undefined
-}
-
 interface NonPageEventProperties {
     $pageview_id: string
 }
@@ -42,14 +33,10 @@ export class PageViewManager {
     _hasSeenPageView = false
 
     _createPageViewData(): PageViewData {
-        const data = {
-            pageViewId: uuidv7(),
-            pathname: utils.window?.location.pathname,
-        }
-        return data
+        return {}
     }
 
-    doPageView(): PageViewEventProperties {
+    doPageView(): ScrollProperties {
         let prevPageViewData: PageViewData | undefined
         // if there were events created before the first PageView, we would have created a
         // pageViewData for them. If this happened, we don't want to create a new pageViewData
@@ -68,40 +55,12 @@ export class PageViewManager {
         // of the event loop
         setTimeout(this._updateScrollData, 0)
 
-        return {
-            $pageview_id: this._pageViewData.pageViewId,
-            $prev_pageview_pageview_id: prevPageViewData?.pageViewId,
-            $prev_pageview_pathname: prevPageViewData?.pathname,
-            ...this._calculatePrevPageScrollProperties(prevPageViewData),
-        }
+        return this._calculatePrevPageScrollProperties(prevPageViewData)
     }
 
-    doPageLeave(): PageViewEventProperties {
+    doPageLeave(): ScrollProperties {
         const prevPageViewData = this._pageViewData
-        if (!this._pageViewData) {
-            this._pageViewData = this._createPageViewData()
-        }
-        const pageViewData = this._pageViewData
-
-        // prevPageViewData and pageViewData should be the same here, it's unlikely that
-        // this._pageViewData was undefined, but in case something weird happened, don't
-        // send wrong data, just leave those fields undefined
-
-        return {
-            $pageview_id: pageViewData.pageViewId,
-            $prev_pageview_pageview_id: prevPageViewData?.pageViewId,
-            $prev_pageview_pathname: prevPageViewData?.pathname,
-            ...this._calculatePrevPageScrollProperties(prevPageViewData),
-        }
-    }
-
-    getNonPageEvent(): NonPageEventProperties {
-        if (!this._pageViewData) {
-            this._pageViewData = this._createPageViewData()
-        }
-        return {
-            $pageview_id: this._pageViewData.pageViewId,
-        }
+        return this._calculatePrevPageScrollProperties(prevPageViewData)
     }
 
     _calculatePrevPageScrollProperties(prevPageViewData: PageViewData | undefined): ScrollProperties {
