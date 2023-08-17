@@ -198,10 +198,8 @@ export class PageViewManager {
     }
 
     _contentY(): number {
-        const scrollY =
-            this._window.scrollY || this._window.pageYOffset || this._window.document.documentElement.scrollTop || 0
         const clientHeight = this._window.document.documentElement.clientHeight || 0
-        return scrollY + clientHeight
+        return this._scrollY() + clientHeight
     }
 }
 
