@@ -1,4 +1,3 @@
-import { uuidv7 } from './uuidv7'
 import * as utils from './utils'
 
 interface PageViewData {
@@ -25,9 +24,6 @@ interface ScrollProperties {
     $prev_pageview_max_content_percentage?: number
 }
 
-interface NonPageEventProperties {
-    $pageview_id: string
-}
 export class PageViewManager {
     _pageViewData: PageViewData | undefined
     _hasSeenPageView = false
