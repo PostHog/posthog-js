@@ -1,5 +1,5 @@
 import { uuidv7 } from './uuidv7'
-import { window } from './utils'
+import * as utils from './utils'
 
 interface PageViewData {
     pageViewId: string
@@ -40,16 +40,11 @@ interface NonPageEventProperties {
 export class PageViewManager {
     _pageViewData: PageViewData | undefined
     _hasSeenPageView = false
-    _window: Window
-
-    constructor(window: Window) {
-        this._window = window
-    }
 
     _createPageViewData(): PageViewData {
         const data = {
             pageViewId: uuidv7(),
-            pathname: window?.location.pathname,
+            pathname: utils.window?.location.pathname,
         }
         return data
     }
@@ -171,34 +166,34 @@ export class PageViewManager {
     }
 
     startMeasuringScrollPosition() {
-        window.addEventListener('scroll', this._updateScrollData)
-        window.addEventListener('scrollend', this._updateScrollData)
-        window.addEventListener('resize', this._updateScrollData)
+        utils.window.addEventListener('scroll', this._updateScrollData)
+        utils.window.addEventListener('scrollend', this._updateScrollData)
+        utils.window.addEventListener('resize', this._updateScrollData)
     }
 
     stopMeasuringScrollPosition() {
-        window.removeEventListener('scroll', this._updateScrollData)
-        window.removeEventListener('scrollend', this._updateScrollData)
-        window.removeEventListener('resize', this._updateScrollData)
+        utils.window.removeEventListener('scroll', this._updateScrollData)
+        utils.window.removeEventListener('scrollend', this._updateScrollData)
+        utils.window.removeEventListener('resize', this._updateScrollData)
     }
 
     _scrollHeight(): number {
         return Math.max(
             0,
-            this._window.document.documentElement.scrollHeight - this._window.document.documentElement.clientHeight
+            utils.window.document.documentElement.scrollHeight - utils.window.document.documentElement.clientHeight
         )
     }
 
     _scrollY(): number {
-        return this._window.scrollY || this._window.pageYOffset || this._window.document.documentElement.scrollTop || 0
+        return utils.window.scrollY || utils.window.pageYOffset || utils.window.document.documentElement.scrollTop || 0
     }
 
     _contentHeight(): number {
-        return this._window.document.documentElement.scrollHeight || 0
+        return utils.window.document.documentElement.scrollHeight || 0
     }
 
     _contentY(): number {
-        const clientHeight = this._window.document.documentElement.clientHeight || 0
+        const clientHeight = utils.window.document.documentElement.clientHeight || 0
         return this._scrollY() + clientHeight
     }
 }

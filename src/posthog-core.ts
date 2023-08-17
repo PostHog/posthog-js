@@ -311,7 +311,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewManager = new PageViewManager(window)
+        this.pageViewManager = new PageViewManager()
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 

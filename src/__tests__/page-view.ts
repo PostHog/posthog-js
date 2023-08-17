@@ -2,19 +2,17 @@ import { PageViewManager } from '../page-view'
 import { uuidv7 } from '../uuidv7'
 jest.mock('../uuidv7')
 
+const mockWindowGetter = jest.fn()
+jest.mock('../utils', () => ({
+    ...jest.requireActual('../utils'),
+    get window() {
+        return mockWindowGetter()
+    },
+}))
+
 describe('PageView ID manager', () => {
     const FIRST_UUID = 'FIRST_UUID'
     const SECOND_UUID = 'SECOND_UUID'
-
-    const window = {
-        scrollY: 0,
-        document: {
-            documentElement: {
-                clientHeight: 0,
-                scrollHeight: 0,
-            },
-        },
-    } as unknown as Window
 
     describe('doPageView', () => {
         beforeEach(() => {
@@ -22,10 +20,23 @@ describe('PageView ID manager', () => {
                 .mockReturnValue('subsequentUUIDs')
                 .mockReturnValueOnce(FIRST_UUID)
                 .mockReturnValueOnce(SECOND_UUID)
+
+            mockWindowGetter.mockReturnValue({
+                location: {
+                    pathname: '/pathname',
+                },
+                scrollY: 0,
+                document: {
+                    documentElement: {
+                        clientHeight: 0,
+                        scrollHeight: 0,
+                    },
+                },
+            })
         })
 
         it('creates a page view id for each page', () => {
-            const pageViewIdManager = new PageViewManager(window)
+            const pageViewIdManager = new PageViewManager()
             const firstPageView = pageViewIdManager.doPageView()
             expect(firstPageView.$pageview_id).toEqual(FIRST_UUID)
             expect(firstPageView.$prev_pageview_pageview_id).toBeUndefined()
@@ -42,7 +53,7 @@ describe('PageView ID manager', () => {
         })
 
         it('creates a page view id for the first event, and doesnt rotate for first page view', () => {
-            const pageViewIdManager = new PageViewManager(window)
+            const pageViewIdManager = new PageViewManager()
 
             const firstEvent = pageViewIdManager.getNonPageEvent()
             expect(firstEvent.$pageview_id).toEqual(FIRST_UUID)
@@ -57,7 +68,7 @@ describe('PageView ID manager', () => {
         })
 
         it('provides a page view id when doPageLeave is called', () => {
-            const pageViewIdManager = new PageViewManager(window)
+            const pageViewIdManager = new PageViewManager()
             pageViewIdManager.doPageView()
             pageViewIdManager.doPageView()
 
@@ -68,7 +79,7 @@ describe('PageView ID manager', () => {
         })
 
         it('provides a page view id when onPageLeave is called even if doPageView has not been called', () => {
-            const pageViewIdManager = new PageViewManager(window)
+            const pageViewIdManager = new PageViewManager()
 
             const pageLeave = pageViewIdManager.doPageLeave()
             expect(pageLeave.$pageview_id).toEqual(FIRST_UUID)
@@ -78,7 +89,10 @@ describe('PageView ID manager', () => {
         it('includes scroll position properties for a partially scrolled long page', () => {
             // note that this means that the user has scrolled 2/3rds of the way down the scrollable area, and seen
             // 3/4 of the content
-            const window = {
+            mockWindowGetter.mockReturnValue({
+                location: {
+                    pathname: '/pathname',
+                },
                 scrollY: 2000, // how far down the user has scrolled
                 document: {
                     documentElement: {
@@ -86,9 +100,9 @@ describe('PageView ID manager', () => {
                         scrollHeight: 4000, // how tall the page content is
                     },
                 },
-            } as unknown as Window
+            })
 
-            const pageViewIdManager = new PageViewManager(window)
+            const pageViewIdManager = new PageViewManager()
             pageViewIdManager.doPageView()
 
             // force the manager to update the scroll data by calling an internal method
@@ -106,7 +120,10 @@ describe('PageView ID manager', () => {
         })
 
         it('includes scroll position properties for a short page', () => {
-            const window = {
+            mockWindowGetter.mockReturnValue({
+                location: {
+                    pathname: '/pathname',
+                },
                 scrollY: 0,
                 document: {
                     documentElement: {
@@ -114,9 +131,9 @@ describe('PageView ID manager', () => {
                         scrollHeight: 500, // how tall the page content is
                     },
                 },
-            } as unknown as Window
+            })
 
-            const pageViewIdManager = new PageViewManager(window)
+            const pageViewIdManager = new PageViewManager()
             pageViewIdManager.doPageView()
 
             // force the manager to update the scroll data by calling an internal method
