@@ -32,10 +32,10 @@ jobs:
       - name: Check out posthog-js
         uses: actions/checkout@v2
 
-      - name: Set up Node 14
-        uses: actions/setup-node@v2
+      - name: Set up Node 18
+        uses: actions/setup-node@v3
         with:
-            node-version: 14
+            node-version: 18
 
       - name: Serve static files
         run: python -m http.server 8080 &
