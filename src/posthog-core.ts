@@ -215,7 +215,7 @@ const create_phlib = function (
     instance.webPerformance = new WebPerformanceObserver(instance)
     instance.webPerformance.startObservingIfEnabled()
 
-    if (instance.get_config('capture_pageview')) {
+    if (instance.get_config('__preview_measure_pageview_stats')) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
@@ -937,7 +937,7 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (this.webPerformance?.isEnabled) {
+        if (this.get_config('__preview_measure_pageview_stats')) {
             let performanceProperties: Record<string, any>
             if (event_name === '$pageview') {
                 performanceProperties = this.pageViewManager.doPageView()
