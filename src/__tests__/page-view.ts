@@ -99,5 +99,14 @@ describe('PageView ID manager', () => {
             const secondPageView = pageViewIdManager.doPageView()
             expect(secondPageView.$prev_pageview_last_scroll).toBeDefined()
         })
+
+        it('should include the pathname', () => {
+            const pageViewIdManager = new PageViewManager()
+
+            const firstPageView = pageViewIdManager.doPageView()
+            expect(firstPageView.$prev_pageview_pathname).toBeUndefined()
+            const secondPageView = pageViewIdManager.doPageView()
+            expect(secondPageView.$prev_pageview_pathname).toEqual('/pathname')
+        })
     })
 })
