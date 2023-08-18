@@ -37,10 +37,10 @@ jobs:
                   fetch-depth: 0
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
-            - name: Set up Node 14
-              uses: actions/setup-node@v2
+            - name: Set up Node 18
+              uses: actions/setup-node@v3
               with:
-                  node-version: 14
+                  node-version: 18
                   registry-url: https://registry.npmjs.org
 
             - name: Install dependencies
