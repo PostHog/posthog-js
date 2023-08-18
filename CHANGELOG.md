@@ -1,3 +1,9 @@
+## 1.77.0 - 2023-08-18
+
+- feat: Add previous page properties to page events (#773)
+- style: Tighten eslint rules (#775)
+- chore: add media examples to playground (#771)
+
 ## 1.76.0 - 2023-08-10
 
 - Fixed up tests to cover all cases (#770)
