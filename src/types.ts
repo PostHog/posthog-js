@@ -113,6 +113,7 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
+    __preview_measure_pageview_stats?: boolean
 }
 
 export interface OptInOutCapturingOptions {
