@@ -1,6 +1,7 @@
 import * as utils from './utils'
 
 interface PageViewData {
+    pathname: string
     // scroll is how far down the page the user has scrolled,
     // content is how far down the page the user can view content
     // (e.g. if the page is 1000 tall, but the user's screen is only 500 tall,
@@ -24,15 +25,21 @@ interface ScrollProperties {
     $prev_pageview_max_content_percentage?: number
 }
 
+interface PageViewEventProperties extends ScrollProperties {
+    $prev_pageview_pathname?: string
+}
+
 export class PageViewManager {
     _pageViewData: PageViewData | undefined
     _hasSeenPageView = false
 
     _createPageViewData(): PageViewData {
-        return {}
+        return {
+            pathname: utils.window.location.pathname,
+        }
     }
 
-    doPageView(): ScrollProperties {
+    doPageView(): PageViewEventProperties {
         let prevPageViewData: PageViewData | undefined
         // if there were events created before the first PageView, we would have created a
         // pageViewData for them. If this happened, we don't want to create a new pageViewData
@@ -51,12 +58,18 @@ export class PageViewManager {
         // of the event loop
         setTimeout(this._updateScrollData, 0)
 
-        return this._calculatePrevPageScrollProperties(prevPageViewData)
+        return {
+            $prev_pageview_pathname: prevPageViewData?.pathname,
+            ...this._calculatePrevPageScrollProperties(prevPageViewData),
+        }
     }
 
-    doPageLeave(): ScrollProperties {
+    doPageLeave(): PageViewEventProperties {
         const prevPageViewData = this._pageViewData
-        return this._calculatePrevPageScrollProperties(prevPageViewData)
+        return {
+            $prev_pageview_pathname: prevPageViewData?.pathname,
+            ...this._calculatePrevPageScrollProperties(prevPageViewData),
+        }
     }
 
     _calculatePrevPageScrollProperties(prevPageViewData: PageViewData | undefined): ScrollProperties {
