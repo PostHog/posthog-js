@@ -8,6 +8,7 @@ env:
   BROWSERSTACK_DEBUG: 'true'
   BROWSERSTACK_NETWORK_LOGS: 'true'
   BROWSERSTACK_CONSOLE: 'info'
+  BROWSERSTACK_FORCE_PROXY: 'true'
 
 jobs:
   browsers:
