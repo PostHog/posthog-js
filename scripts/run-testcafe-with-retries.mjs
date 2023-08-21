@@ -21,7 +21,7 @@ const main = async () => {
     }
     console.log("Test failed")
   }
-  throw new Error(`Test failed after ${retries} retries`)
+  throw new Error(`Test failed after ${attempts} attempts`)
 }
 
 
