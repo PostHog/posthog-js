@@ -38,12 +38,16 @@ jobs:
         uses: actions/setup-node@v3
         with:
             node-version: 18
+            cache: 'yarn'
 
       - name: Serve static files
         run: python -m http.server 8080 &
 
+      - name: Install node dependencies
+        run: yarn
+
       - name: Set up posthog-js
-        run: yarn && yarn build-rollup
+        run: yarn build-rollup
 
       - name: Run ${{ matrix.name }} test
         run: yarn testcafe "browserstack:${{ matrix.browserstack }}"
