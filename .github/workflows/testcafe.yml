@@ -44,4 +44,4 @@ jobs:
         run: yarn && yarn build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: yarn testcafe "browserstack:${{ matrix.browserstack }}" testcafe/*.spec.js
+        run: yarn testcafe "browserstack:${{ matrix.browserstack }}"
