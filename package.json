@@ -82,7 +82,8 @@
         "testcafe": "1.19.0",
         "testcafe-browser-provider-browserstack": "1.14.0",
         "tslib": "^2.4.0",
-        "typescript": "^4.7.4"
+        "typescript": "^4.7.4",
+        "yargs": "^17.7.2"
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",
