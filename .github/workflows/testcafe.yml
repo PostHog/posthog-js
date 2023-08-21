@@ -9,6 +9,7 @@ env:
   BROWSERSTACK_NETWORK_LOGS: 'true'
   BROWSERSTACK_CONSOLE: 'info'
   BROWSERSTACK_FORCE_PROXY: 'true'
+  BROWSERSTACK_USE_AUTOMATE: 'true'
 
 jobs:
   browsers:
