@@ -8,6 +8,8 @@ env:
   BROWSERSTACK_DEBUG: 'true'
   BROWSERSTACK_NETWORK_LOGS: 'true'
   BROWSERSTACK_CONSOLE: 'info'
+  BROWSERSTACK_FORCE_PROXY: 'true'
+  BROWSERSTACK_USE_AUTOMATE: 'true'
 
 jobs:
   browsers:
@@ -36,12 +38,16 @@ jobs:
         uses: actions/setup-node@v3
         with:
             node-version: 18
+            cache: 'yarn'
 
       - name: Serve static files
         run: python -m http.server 8080 &
 
+      - name: Install node dependencies
+        run: yarn
+
       - name: Set up posthog-js
-        run: yarn && yarn build-rollup
+        run: yarn build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: npx testcafe "browserstack:${{ matrix.browserstack }}" testcafe/*.spec.js
+        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browserstack }}" --attempts 3
