@@ -1,3 +1,9 @@
+## 1.77.1 - 2023-08-22
+
+- feat: Add pathname to prev page events (#776)
+- fix: Mitigate testcafe flakiness (#779)
+- feat: Filter out events from GPTBot (#772)
+
 ## 1.77.0 - 2023-08-18
 
 - feat: Add previous page properties to page events (#773)
