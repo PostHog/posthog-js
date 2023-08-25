@@ -29,6 +29,13 @@ import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Propertie
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './posthog-persistence'
 
+function limitText(length: number, text: string): string {
+    if (text.length > length) {
+        return text.slice(0, length) + '...'
+    }
+    return text
+}
+
 const autocapture = {
     _initializedTokens: [] as string[],
 
@@ -79,9 +86,9 @@ const autocapture = {
         }
         if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
             if (tag_name.toLowerCase() === 'a' || tag_name.toLowerCase() === 'button') {
-                props['$el_text'] = getDirectAndNestedSpanText(elem)
+                props['$el_text'] = limitText(1024, getDirectAndNestedSpanText(elem))
             } else {
-                props['$el_text'] = getSafeText(elem)
+                props['$el_text'] = limitText(1024, getSafeText(elem))
             }
         }
 
@@ -96,7 +103,7 @@ const autocapture = {
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
 
             if (!maskInputs && shouldCaptureValue(attr.value) && !isAngularStyleAttr(attr.name)) {
-                props['attr__' + attr.name] = attr.value
+                props['attr__' + attr.name] = limitText(1024, attr.value)
             }
         })
 
