@@ -1,3 +1,7 @@
+## 1.77.2 - 2023-08-25
+
+- fix(autocapture): element properties tracked up to 1k bytes (#783)
+
 ## 1.77.1 - 2023-08-22
 
 - feat: Add pathname to prev page events (#776)
