@@ -508,7 +508,12 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 // sending false capturing data
 export const _isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
     return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents).some((blockedUA) => {
-        return ua.includes(blockedUA)
+        if (ua.includes) {
+            return ua.includes(blockedUA)
+        } else {
+            // IE 11 :/
+            return ua.indexOf(blockedUA) !== -1
+        }
     })
 }
 
