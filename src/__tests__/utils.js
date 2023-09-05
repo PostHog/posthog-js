@@ -5,7 +5,13 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, _info, loadScript } from '../utils'
+import { _copyAndTruncateStrings, _info, _isBlockedUA, DEFAULT_BLOCKED_UA_STRS, loadScript } from '../utils'
+
+function userAgentFor(botString) {
+    const randOne = (Math.random() + 1).toString(36).substring(7)
+    const randTwo = (Math.random() + 1).toString(36).substring(7)
+    return `Mozilla/5.0 (compatible; ${botString}/${randOne}; +http://a.com/bot/${randTwo})`
+}
 
 describe(`utils.js`, () => {
     it('should have $host and $pathname in properties', () => {
@@ -207,5 +213,16 @@ describe('loadScript', () => {
 
         new_script.onerror('uh-oh')
         expect(callback).toHaveBeenCalledWith('uh-oh')
+    })
+
+    describe('user agent blocking', () => {
+        it.each(DEFAULT_BLOCKED_UA_STRS.concat('testington'))(
+            'blocks a bot based on the user agent %s',
+            (botString) => {
+                const randomisedUserAgent = userAgentFor(botString)
+
+                expect(_isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
+            }
+        )
     })
 })

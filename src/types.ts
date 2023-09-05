@@ -63,6 +63,10 @@ export interface PostHogConfig {
     loaded: (posthog_instance: PostHog) => void
     store_google: boolean
     custom_campaign_params: string[]
+    // a list of strings to be tested against navigator.userAgent to determine if the source is a bot
+    // this is **added to** the default list of bots that we check
+    // defaults to the empty array
+    custom_blocked_useragents: string[]
     save_referrer: boolean
     test: boolean
     verbose: boolean
