@@ -1,3 +1,7 @@
+## 1.77.3 - 2023-09-05
+
+- feat: test a better list of bots and allow users to configure the bot… (#788)
+
 ## 1.77.2 - 2023-08-25
 
 - fix(autocapture): element properties tracked up to 1k bytes (#783)
