@@ -514,7 +514,7 @@ export const _isBlockedUA = function (ua: string, customBlockedUserAgents: strin
         botRegex = new RegExp(joinedBots, 'i')
     }
 
-    return botRegex.test(ua)
+    return !botRegex.test(ua)
 }
 
 /**
