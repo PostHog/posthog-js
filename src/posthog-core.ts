@@ -114,6 +114,7 @@ const defaultConfig = (): PostHogConfig => ({
     loaded: __NOOP,
     store_google: true,
     custom_campaign_params: [],
+    custom_blocked_useragents: [],
     save_referrer: true,
     test: false,
     verbose: false,
@@ -853,7 +854,7 @@ export class PostHog {
             return
         }
 
-        if (_isBlockedUA(userAgent)) {
+        if (_isBlockedUA(userAgent, this.get_config('custom_blocked_useragents'))) {
             return
         }
 
