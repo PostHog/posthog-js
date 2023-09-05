@@ -461,7 +461,7 @@ export const _utf8Encode = function (string: string): string {
     return utftext
 }
 
-const BLOCKED_UA_STRS = [
+export const DEFAULT_BLOCKED_UA_STRS = [
     'ahrefsbot',
     'applebot',
     'baiduspider',
@@ -503,18 +503,13 @@ const BLOCKED_UA_STRS = [
     'storebot-google',
 ]
 
-let botRegex: RegExp | null = null
 // _.isBlockedUA()
 // This is to block various web spiders from executing our JS and
 // sending false capturing data
 export const _isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
-    if (botRegex === null) {
-        // convert BLOCKED_UA_STRS to a regex like bot.php|hubspot|crawler|prerender etc.:
-        const joinedBots = BLOCKED_UA_STRS.concat(customBlockedUserAgents).join('|')
-        botRegex = new RegExp(joinedBots, 'i')
-    }
-
-    return !botRegex.test(ua)
+    return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents).some((blockedUA) => {
+        return ua.includes(blockedUA)
+    })
 }
 
 /**
