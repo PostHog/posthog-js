@@ -1,4 +1,4 @@
-import { _base64Encode, _entries, _extend } from './utils'
+import { _base64Encode, _entries, _extend, logger } from './utils'
 import { PostHog } from './posthog-core'
 import {
     DecideResponse,
@@ -287,6 +287,10 @@ export class PostHogFeatureFlags {
      * @param {Object|Array|String} flags Flags to override with.
      */
     override(flags: boolean | string[] | Record<string, string | boolean>): void {
+        if (!this.instance.__loaded || !this.instance.persistence) {
+            return logger.unintializedWarning('posthog.feature_flags.override')
+        }
+
         this._override_warning = false
 
         if (flags === false) {
