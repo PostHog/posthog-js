@@ -61,6 +61,9 @@ export class Decide {
             this.instance.featureFlags.receivedFeatureFlags(response)
         }
 
+        this.instance.featureFlags.resetRequestQueue()
+        this.instance.featureFlags.setReloadingPaused(false)
+
         this.instance['compression'] = {}
         if (response['supportedCompression'] && !this.instance.get_config('disable_compression')) {
             const compression: Partial<Record<Compression, boolean>> = {}
