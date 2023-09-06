@@ -294,15 +294,15 @@ export class PostHogFeatureFlags {
         this._override_warning = false
 
         if (flags === false) {
-            this.instance.persistence?.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+            this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         } else if (Array.isArray(flags)) {
             const flagsObj: Record<string, string | boolean> = {}
             for (let i = 0; i < flags.length; i++) {
                 flagsObj[flags[i]] = true
             }
-            this.instance.persistence?.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
+            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
         } else {
-            this.instance.persistence?.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flags })
+            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flags })
         }
     }
     /*
