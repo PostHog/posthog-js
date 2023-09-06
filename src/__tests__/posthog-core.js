@@ -606,7 +606,7 @@ describe('init()', () => {
         delete window.rrwebRecord
         window.rrwebRecord = 'is possible'
         given.subject()
-        expect(given.lib.__loaded_recorder_version).toMatch(new RegExp(`^1\.?`)) // start with 1.?.?
+        expect(given.lib.__loaded_recorder_version).toMatch(/^1\./) // start with 1.?.?
     })
 
     it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
@@ -618,7 +618,7 @@ describe('init()', () => {
         delete window.rrwebRecord
         window.rrwebRecord = 'is possible'
         given.subject()
-        expect(given.lib.__loaded_recorder_version).toMatch(new RegExp(`^2\.?`)) // start with 2.?.?
+        expect(given.lib.__loaded_recorder_version).toMatch(/^2\./) // start with 2.?.?
     })
 
     it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
@@ -668,8 +668,8 @@ describe('init()', () => {
 
             expect(given.lib.register_once).toHaveBeenCalledWith(
                 {
-                    $device_id: truth((val) => val.match(/^[0-9a-f\-]+$/)),
-                    distinct_id: truth((val) => val.match(/^[0-9a-f\-]+$/)),
+                    $device_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
+                    distinct_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
                 },
                 ''
             )
@@ -693,8 +693,8 @@ describe('init()', () => {
 
             expect(given.lib.register_once).toHaveBeenCalledWith(
                 {
-                    $device_id: truth((val) => val.match(/^custom\-[0-9a-f]+/)),
-                    distinct_id: truth((val) => val.match(/^custom\-[0-9a-f]+/)),
+                    $device_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
+                    distinct_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
                 },
                 ''
             )

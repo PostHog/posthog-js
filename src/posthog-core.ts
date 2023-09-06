@@ -53,7 +53,7 @@ import {
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
-import { PageViewIdManager } from './page-view-id'
+import { PageViewManager } from './page-view'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
@@ -114,6 +114,7 @@ const defaultConfig = (): PostHogConfig => ({
     loaded: __NOOP,
     store_google: true,
     custom_campaign_params: [],
+    custom_blocked_useragents: [],
     save_referrer: true,
     test: false,
     verbose: false,
@@ -215,6 +216,10 @@ const create_phlib = function (
     instance.webPerformance = new WebPerformanceObserver(instance)
     instance.webPerformance.startObservingIfEnabled()
 
+    if (instance.get_config('__preview_measure_pageview_stats')) {
+        instance.pageViewManager.startMeasuringScrollPosition()
+    }
+
     instance.exceptionAutocapture = new ExceptionObserver(instance)
 
     instance.__autocapture = instance.get_config('autocapture')
@@ -261,7 +266,7 @@ export class PostHog {
     config: PostHogConfig
 
     rateLimiter: RateLimiter
-    pageViewIdManager: PageViewIdManager
+    pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
@@ -270,6 +275,7 @@ export class PostHog {
     persistence?: PostHogPersistence
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
+
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
@@ -308,7 +314,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewIdManager = new PageViewIdManager()
+        this.pageViewManager = new PageViewManager()
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 
@@ -846,7 +852,7 @@ export class PostHog {
             return
         }
 
-        if (_isBlockedUA(userAgent)) {
+        if (_isBlockedUA(userAgent, this.get_config('custom_blocked_useragents'))) {
             return
         }
 
@@ -934,11 +940,14 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (this.webPerformance?.isEnabled) {
+        if (this.get_config('__preview_measure_pageview_stats')) {
+            let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
-                this.pageViewIdManager.onPageview()
+                performanceProperties = this.pageViewManager.doPageView()
+            } else if (event_name === '$pageleave') {
+                performanceProperties = this.pageViewManager.doPageLeave()
             }
-            properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
+            properties = _extend(properties, performanceProperties)
         }
 
         if (event_name === '$pageview') {
