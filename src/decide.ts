@@ -39,6 +39,9 @@ export class Decide {
     }
 
     parseDecideResponse(response: DecideResponse): void {
+        this.instance.featureFlags.resetRequestQueue()
+        this.instance.featureFlags.setReloadingPaused(false)
+
         if (response?.status === 0) {
             console.error('Failed to fetch feature flags from PostHog.')
             return
@@ -60,9 +63,6 @@ export class Decide {
         if (!this.instance.get_config('advanced_disable_feature_flags_on_first_load')) {
             this.instance.featureFlags.receivedFeatureFlags(response)
         }
-
-        this.instance.featureFlags.resetRequestQueue()
-        this.instance.featureFlags.setReloadingPaused(false)
 
         this.instance['compression'] = {}
         if (response['supportedCompression'] && !this.instance.get_config('disable_compression')) {
