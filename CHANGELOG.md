@@ -1,3 +1,7 @@
+## 1.78.0 - 2023-09-07
+
+- fix: Handle uninitialised helpers better (#767)
+
 ## 1.77.3 - 2023-09-05
 
 - feat: test a better list of bots and allow users to configure the bot… (#788)
