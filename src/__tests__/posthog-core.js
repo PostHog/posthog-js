@@ -923,10 +923,15 @@ describe('_loaded()', () => {
             Decide.mockImplementation(() => ({ call }))
         })
 
+        afterEach(() => {
+            Decide.mockReset()
+        })
+
         it('is called by default', () => {
             given.subject()
 
             expect(new Decide().call).toHaveBeenCalled()
+            expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
         })
 
         it('does not call decide if disabled', () => {
@@ -938,6 +943,7 @@ describe('_loaded()', () => {
             given.subject()
 
             expect(new Decide().call).not.toHaveBeenCalled()
+            expect(given.overrides.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
         })
     })
 
@@ -968,16 +974,7 @@ describe('_loaded()', () => {
             )
         })
     })
-
-    it('toggles feature flags on and off', () => {
-        given.subject()
-
-        expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
-        expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
-        expect(given.overrides.featureFlags.resetRequestQueue).toHaveBeenCalled()
-    })
 })
-
 describe('session_id', () => {
     given('overrides', () => ({
         sessionManager: {

@@ -39,6 +39,9 @@ export class Decide {
     }
 
     parseDecideResponse(response: DecideResponse): void {
+        this.instance.featureFlags.resetRequestQueue()
+        this.instance.featureFlags.setReloadingPaused(false)
+
         if (response?.status === 0) {
             console.error('Failed to fetch feature flags from PostHog.')
             return

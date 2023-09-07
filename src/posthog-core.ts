@@ -524,7 +524,10 @@ export class PostHog {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
         // These feature flags are loaded in the decide call made right
         // afterwards
-        this.featureFlags.setReloadingPaused(true)
+        const disableDecide = this.get_config('advanced_disable_decide')
+        if (!disableDecide) {
+            this.featureFlags.setReloadingPaused(true)
+        }
 
         try {
             this.get_config('loaded')(this)
@@ -543,12 +546,9 @@ export class PostHog {
         // Call decide to get what features are enabled and other settings.
         // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
         // and compression will not be available.
-        if (!this.get_config('advanced_disable_decide')) {
+        if (!disableDecide) {
             new Decide(this).call()
         }
-
-        this.featureFlags.resetRequestQueue()
-        this.featureFlags.setReloadingPaused(false)
     }
 
     _start_queue_if_opted_in(): void {
