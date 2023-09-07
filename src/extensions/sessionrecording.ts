@@ -101,6 +101,15 @@ export class SessionRecording {
         })
     }
 
+    private getSessionManager() {
+        if (!this.instance.sessionManager) {
+            logger.error('Session recording started without valid sessionManager')
+            return
+        }
+
+        return this.instance.sessionManager
+    }
+
     startRecordingIfEnabled() {
         if (this.isRecordingEnabled()) {
             this.startCaptureAndTrySendingQueuedSnapshots()
@@ -185,14 +194,18 @@ export class SessionRecording {
     }
 
     private _startCapture() {
-        // According to the rrweb docs, rrweb is not supported on IE11 and below:
-        // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
-        // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
-        //
-        // However, MutationObserver does exist on IE11, it just doesn't work well and does not detect all changes.
-        // Instead, when we load "recorder.js", the first JS error is about "Object.assign" being undefined.
-        // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
+        const sessionManager = this.getSessionManager()
+        if (!sessionManager) {
+            return
+        }
         if (typeof Object.assign === 'undefined') {
+            // According to the rrweb docs, rrweb is not supported on IE11 and below:
+            // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
+            // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
+            //
+            // However, MutationObserver does exist on IE11, it just doesn't work well and does not detect all changes.
+            // Instead, when we load "recorder.js", the first JS error is about "Object.assign" being undefined.
+            // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
             return
         }
 
@@ -203,7 +216,7 @@ export class SessionRecording {
 
         this.captureStarted = true
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
-        this.instance.sessionManager.checkAndGetSessionAndWindowId()
+        sessionManager.checkAndGetSessionAndWindowId()
 
         const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
@@ -231,6 +244,10 @@ export class SessionRecording {
     }
 
     private _updateWindowAndSessionIds(event: eventWithTime) {
+        const sessionManager = this.getSessionManager()
+        if (!sessionManager) {
+            return
+        }
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
@@ -258,7 +275,7 @@ export class SessionRecording {
         }
 
         // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this.instance.sessionManager.checkAndGetSessionAndWindowId(
+        const { windowId, sessionId } = sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
             event.timestamp
         )

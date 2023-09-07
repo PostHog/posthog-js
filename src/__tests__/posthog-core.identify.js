@@ -7,7 +7,11 @@ jest.mock('../gdpr-utils', () => ({
 }))
 jest.mock('../decide')
 
-given('lib', () => Object.assign(new PostHog(), given.overrides))
+given('lib', () => {
+    const posthog = new PostHog()
+    posthog._init('testtoken', given.config, 'testhog')
+    return Object.assign(posthog, given.overrides)
+})
 
 describe('identify()', () => {
     given(
@@ -338,10 +342,6 @@ describe('reset()', () => {
     given('overrides', () => ({
         persistence: new PostHogPersistence(given.config),
     }))
-
-    beforeEach(() => {
-        given.lib._init('testtoken', given.config, 'testhog')
-    })
 
     it('clears persistence', () => {
         given.lib.persistence.register({ $enabled_feature_flags: { flag: 'variant', other: true } })

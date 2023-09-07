@@ -77,6 +77,11 @@ const logger = {
             }
         }
     },
+    unintializedWarning: function (methodName: string): void {
+        if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
+            logger.error(`[PostHog] You must initialize PostHog before calling ${methodName}`)
+        }
+    },
 }
 
 // UNDERSCORE
