@@ -1,3 +1,7 @@
+## 1.78.1 - 2023-09-07
+
+- fix(flags): Re-enable reload only when request finishes (#791)
+
 ## 1.78.0 - 2023-09-07
 
 - fix: Handle uninitialised helpers better (#767)
