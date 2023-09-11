@@ -98,8 +98,6 @@ describe('Toolbar', () => {
         })
 
         it('should initialize the toolbar when there are editor params in the session', () => {
-            given('storedEditorParams', () => JSON.stringify(toolbarParams))
-
             given.subject()
             expect(given.toolbar.loadToolbar).toHaveBeenCalledWith({
                 ...given.toolbarParams,

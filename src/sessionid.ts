@@ -1,6 +1,8 @@
-import { PostHogPersistence, SESSION_ID } from './posthog-persistence'
+import { PostHogPersistence } from './posthog-persistence'
+import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
+import { uuidv7 } from './uuidv7'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 mins
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 mins
@@ -18,7 +20,7 @@ export class SessionIdManager {
     private _sessionTimeoutMs: number
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
 
-    constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence, private uuidFn: () => string) {
+    constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence) {
         this.config = config
         this.persistence = persistence
         this._windowId = undefined
@@ -199,12 +201,12 @@ export class SessionIdManager {
             (!readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs) ||
             sessionPastMaximumLength
         ) {
-            sessionId = this.uuidFn()
-            windowId = this.uuidFn()
+            sessionId = uuidv7()
+            windowId = uuidv7()
             startTimestamp = timestamp
             valuesChanged = true
         } else if (!windowId) {
-            windowId = this.uuidFn()
+            windowId = uuidv7()
             valuesChanged = true
         }
 

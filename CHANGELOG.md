@@ -1,3 +1,39 @@
+## 1.78.1 - 2023-09-07
+
+- fix(flags): Re-enable reload only when request finishes (#791)
+
+## 1.78.0 - 2023-09-07
+
+- fix: Handle uninitialised helpers better (#767)
+
+## 1.77.3 - 2023-09-05
+
+- feat: test a better list of bots and allow users to configure the bot… (#788)
+
+## 1.77.2 - 2023-08-25
+
+- fix(autocapture): element properties tracked up to 1k bytes (#783)
+
+## 1.77.1 - 2023-08-22
+
+- feat: Add pathname to prev page events (#776)
+- fix: Mitigate testcafe flakiness (#779)
+- feat: Filter out events from GPTBot (#772)
+
+## 1.77.0 - 2023-08-18
+
+- feat: Add previous page properties to page events (#773)
+- style: Tighten eslint rules (#775)
+- chore: add media examples to playground (#771)
+
+## 1.76.0 - 2023-08-10
+
+- Fixed up tests to cover all cases (#770)
+
+## 1.75.4 - 2023-08-09
+
+- feat: remove old UUID code (#755)
+
 ## 1.75.3 - 2023-08-02
 
 - chore: remove unused capture metrics (#766)

@@ -16,7 +16,11 @@ jest.mock('../utils', () => ({
     document: { title: 'test' },
 }))
 
-given('lib', () => Object.assign(new PostHog(), given.overrides))
+given('lib', () => {
+    const posthog = new PostHog()
+    posthog._init('testtoken', given.config, 'testhog')
+    return Object.assign(posthog, given.overrides)
+})
 
 describe('capture()', () => {
     given('eventName', () => '$event')
@@ -29,6 +33,7 @@ describe('capture()', () => {
     given('config', () => ({
         property_blacklist: [],
         _onCapture: jest.fn(),
+        get_device_id: jest.fn().mockReturnValue('device-id'),
     }))
 
     given('overrides', () => ({
@@ -38,11 +43,13 @@ describe('capture()', () => {
         persistence: {
             remove_event_timer: jest.fn(),
             properties: jest.fn(),
+            update_config: jest.fn(),
         },
         sessionPersistence: {
             update_search_keyword: jest.fn(),
             update_campaign_params: jest.fn(),
             update_referrer_info: jest.fn(),
+            update_config: jest.fn(),
             properties: jest.fn(),
         },
         compression: {},
@@ -599,7 +606,7 @@ describe('init()', () => {
         delete window.rrwebRecord
         window.rrwebRecord = 'is possible'
         given.subject()
-        expect(given.lib.__loaded_recorder_version).toMatch(new RegExp(`^1\.?`)) // start with 1.?.?
+        expect(given.lib.__loaded_recorder_version).toMatch(/^1\./) // start with 1.?.?
     })
 
     it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
@@ -611,7 +618,7 @@ describe('init()', () => {
         delete window.rrwebRecord
         window.rrwebRecord = 'is possible'
         given.subject()
-        expect(given.lib.__loaded_recorder_version).toMatch(new RegExp(`^2\.?`)) // start with 2.?.?
+        expect(given.lib.__loaded_recorder_version).toMatch(/^2\./) // start with 2.?.?
     })
 
     it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
@@ -661,8 +668,8 @@ describe('init()', () => {
 
             expect(given.lib.register_once).toHaveBeenCalledWith(
                 {
-                    $device_id: truth((val) => val.match(/^[0-9a-f\-]+$/)),
-                    distinct_id: truth((val) => val.match(/^[0-9a-f\-]+$/)),
+                    $device_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
+                    distinct_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
                 },
                 ''
             )
@@ -686,8 +693,8 @@ describe('init()', () => {
 
             expect(given.lib.register_once).toHaveBeenCalledWith(
                 {
-                    $device_id: truth((val) => val.match(/^custom\-[0-9a-f]+/)),
-                    distinct_id: truth((val) => val.match(/^custom\-[0-9a-f]+/)),
+                    $device_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
+                    distinct_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
                 },
                 ''
             )
@@ -916,10 +923,15 @@ describe('_loaded()', () => {
             Decide.mockImplementation(() => ({ call }))
         })
 
+        afterEach(() => {
+            Decide.mockReset()
+        })
+
         it('is called by default', () => {
             given.subject()
 
             expect(new Decide().call).toHaveBeenCalled()
+            expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
         })
 
         it('does not call decide if disabled', () => {
@@ -931,6 +943,7 @@ describe('_loaded()', () => {
             given.subject()
 
             expect(new Decide().call).not.toHaveBeenCalled()
+            expect(given.overrides.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
         })
     })
 
@@ -961,16 +974,7 @@ describe('_loaded()', () => {
             )
         })
     })
-
-    it('toggles feature flags on and off', () => {
-        given.subject()
-
-        expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
-        expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
-        expect(given.overrides.featureFlags.resetRequestQueue).toHaveBeenCalled()
-    })
 })
-
 describe('session_id', () => {
     given('overrides', () => ({
         sessionManager: {

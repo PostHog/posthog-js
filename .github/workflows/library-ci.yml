@@ -17,7 +17,7 @@ jobs:
             # Install Node.js
             - uses: actions/setup-node@v3
               with:
-                  node-version: 14
+                  node-version: 18
                   cache: 'yarn'
 
             # Install your dependencies
@@ -33,7 +33,8 @@ jobs:
 
             - uses: actions/setup-node@v3
               with:
-                  node-version: 16
+                  node-version: 18
+                  cache: 'yarn'
 
             - run: yarn install && yarn build
 
@@ -50,7 +51,7 @@ jobs:
             # Install Node.js
             - uses: actions/setup-node@v3
               with:
-                  node-version: 14
+                  node-version: 18
                   cache: 'yarn'
 
             # Install your dependencies
@@ -68,7 +69,7 @@ jobs:
             # Install Node.js
             - uses: actions/setup-node@v3
               with:
-                  node-version: 14
+                  node-version: 18
                   cache: 'yarn'
 
             # Install your dependencies

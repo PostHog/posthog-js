@@ -1,6 +1,7 @@
 import { _extend, logger } from './utils'
 import { PersistentStore, Properties } from './types'
 import Config from './config'
+import { DISTINCT_ID, SESSION_ID } from './constants'
 
 const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
 
@@ -15,7 +16,7 @@ export const cookieStore: PersistentStore = {
     get: function (name) {
         try {
             const nameEQ = name + '='
-            const ca = document.cookie.split(';')
+            const ca = document.cookie.split(';').filter((x) => x.length)
             for (let i = 0; i < ca.length; i++) {
                 let c = ca[i]
                 while (c.charAt(0) == ' ') {
@@ -46,6 +47,7 @@ export const cookieStore: PersistentStore = {
                 secure = ''
 
             if (cross_subdomain) {
+                // NOTE: Could we use this for cross domain tracking?
                 const matches = document.location.hostname.match(DOMAIN_MATCH_REGEX),
                     domain = matches ? matches[0] : ''
 
@@ -157,9 +159,11 @@ export const localStore: PersistentStore = {
     },
 }
 
-// Use localstorage for most data but still use cookie for distinct_id
+// Use localstorage for most data but still use cookie for COOKIE_PERSISTED_PROPERTIES
 // This solves issues with cookies having too much data in them causing headers too large
 // Also makes sure we don't have to send a ton of data to the server
+const COOKIE_PERSISTED_PROPERTIES = [DISTINCT_ID, SESSION_ID]
+
 export const localPlusCookieStore: PersistentStore = {
     ...localStore,
     parse: function (name) {
@@ -168,9 +172,6 @@ export const localPlusCookieStore: PersistentStore = {
             try {
                 // See if there's a cookie stored with data.
                 extend = cookieStore.parse(name) || {}
-                if (extend['distinct_id']) {
-                    cookieStore.set(name, { distinct_id: extend['distinct_id'] })
-                }
             } catch (err) {}
             const value = _extend(extend, JSON.parse(localStore.get(name) || '{}'))
             localStore.set(name, value)
@@ -184,8 +185,15 @@ export const localPlusCookieStore: PersistentStore = {
     set: function (name, value, days, cross_subdomain, is_secure) {
         try {
             localStore.set(name, value)
-            if (value.distinct_id) {
-                cookieStore.set(name, { distinct_id: value.distinct_id }, days, cross_subdomain, is_secure)
+            const cookiePersistedProperties: Record<string, any> = {}
+            COOKIE_PERSISTED_PROPERTIES.forEach((key) => {
+                if (value[key]) {
+                    cookiePersistedProperties[key] = value[key]
+                }
+            })
+
+            if (Object.keys(cookiePersistedProperties).length) {
+                cookieStore.set(name, cookiePersistedProperties, days, cross_subdomain, is_secure)
             }
         } catch (err) {
             localStore.error(err)

@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { SURVEYS } from './posthog-persistence'
+import { SURVEYS } from './constants'
 
 /**
  * Having Survey types in types.ts was confusing tsc
@@ -72,7 +72,7 @@ export class PostHogSurveys {
                 { method: 'GET' },
                 (response) => {
                     const surveys = response.surveys
-                    this.instance.persistence.register({ [SURVEYS]: surveys })
+                    this.instance.persistence?.register({ [SURVEYS]: surveys })
                     return callback(surveys)
                 }
             )

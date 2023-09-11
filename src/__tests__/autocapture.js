@@ -3,7 +3,7 @@ import sinon from 'sinon'
 
 import { autocapture } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../posthog-persistence'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 
 const triggerMouseEvent = function (node, eventType) {
     node.dispatchEvent(
@@ -706,6 +706,30 @@ describe('Autocapture system', () => {
             expect(props['$elements'][1]).toHaveProperty('tag_name', 'span')
             expect(props['$elements'][2]).toHaveProperty('tag_name', 'div')
             expect(props['$elements'][props['$elements'].length - 1]).toHaveProperty('tag_name', 'body')
+        })
+
+        it('truncate any element property value to 1024 bytes', () => {
+            const elTarget = document.createElement('a')
+            elTarget.setAttribute('href', 'http://test.com')
+            const longString = 'prop'.repeat(400)
+            elTarget.dataset.props = longString
+            const elParent = document.createElement('span')
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('div')
+            elGrandparent.appendChild(elParent)
+            const elGreatGrandparent = document.createElement('table')
+            elGreatGrandparent.appendChild(elGrandparent)
+            document.body.appendChild(elGreatGrandparent)
+            const e = {
+                target: elTarget,
+                type: 'click',
+            }
+            autocapture._captureEvent(e, lib)
+            expect(lib.capture.calledOnce).toBe(true)
+            const captureArgs = lib.capture.args[0]
+            const props = captureArgs[1]
+            expect(longString).toBe('prop'.repeat(400))
+            expect(props['$elements'][0]).toHaveProperty('attr__data-props', 'prop'.repeat(256) + '...')
         })
 
         it('gets the href attribute from parent anchor tags', () => {

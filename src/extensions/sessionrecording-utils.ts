@@ -79,7 +79,7 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
         // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
         // 2) Extracts the mime type of the data uri in the first group
         // 3) Determines when the data URI ends.Depending on if it's used in the src tag or css, it can end with a ) or "
-        const dataURIRegex = /data:([\w\/\-\.]+);(\w+),([^)"]*)/gim
+        const dataURIRegex = /data:([\w/\-.]+);(\w+),([^)"]*)/gim
         const matches = stringifiedData.matchAll(dataURIRegex)
         for (const match of matches) {
             if (match[1].toLocaleLowerCase().slice(0, 6) === 'image/') {

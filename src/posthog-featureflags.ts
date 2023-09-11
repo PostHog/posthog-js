@@ -1,4 +1,4 @@
-import { _base64Encode, _entries, _extend } from './utils'
+import { _base64Encode, _entries, _extend, logger } from './utils'
 import { PostHog } from './posthog-core'
 import {
     DecideResponse,
@@ -9,14 +9,15 @@ import {
     JsonType,
     RequestCallback,
 } from './types'
+import { PostHogPersistence } from './posthog-persistence'
+
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
-    PostHogPersistence,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
-} from './posthog-persistence'
+} from './constants'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -224,7 +225,7 @@ export class PostHogFeatureFlags {
                 } else {
                     flagCallReported[key] = [flagReportValue]
                 }
-                this.instance.persistence.register({ [FLAG_CALL_REPORTED]: flagCallReported })
+                this.instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
                 this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
             }
@@ -264,6 +265,9 @@ export class PostHogFeatureFlags {
     }
 
     receivedFeatureFlags(response: Partial<DecideResponse>): void {
+        if (!this.instance.persistence) {
+            return
+        }
         this.instance.decideEndpointWasHit = true
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
@@ -283,6 +287,10 @@ export class PostHogFeatureFlags {
      * @param {Object|Array|String} flags Flags to override with.
      */
     override(flags: boolean | string[] | Record<string, string | boolean>): void {
+        if (!this.instance.__loaded || !this.instance.persistence) {
+            return logger.unintializedWarning('posthog.feature_flags.override')
+        }
+
         this._override_warning = false
 
         if (flags === false) {
@@ -330,7 +338,7 @@ export class PostHogFeatureFlags {
         this.setPersonPropertiesForFlags(enrollmentPersonProp, false)
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
-        this.instance.persistence.register({
+        this.instance.persistence?.register({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
         })
@@ -349,7 +357,7 @@ export class PostHogFeatureFlags {
                 { method: 'GET' },
                 (response) => {
                     const earlyAccessFeatures = (response as EarlyAccessFeatureResponse).earlyAccessFeatures
-                    this.instance.persistence.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
+                    this.instance.persistence?.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
                     return callback(earlyAccessFeatures)
                 }
             )

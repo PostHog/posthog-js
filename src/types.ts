@@ -63,6 +63,10 @@ export interface PostHogConfig {
     loaded: (posthog_instance: PostHog) => void
     store_google: boolean
     custom_campaign_params: string[]
+    // a list of strings to be tested against navigator.userAgent to determine if the source is a bot
+    // this is **added to** the default list of bots that we check
+    // defaults to the empty array
+    custom_blocked_useragents: string[]
     save_referrer: boolean
     test: boolean
     verbose: boolean
@@ -113,10 +117,7 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
-    // we are replacing the OG uuid generation code, with newer faster UUIDv7
-    // this is a temporary flag to allow us to test the new UUID generation code
-    // this flag *will be deleted* in a future version of PostHog-js
-    uuid_version?: UUIDVersion
+    __preview_measure_pageview_stats?: boolean
 }
 
 export interface OptInOutCapturingOptions {

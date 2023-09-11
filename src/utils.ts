@@ -1,6 +1,5 @@
 import Config from './config'
-import { Breaker, EventHandler, Properties, UUIDVersion } from './types'
-import { uuidv7 } from './uuidv7'
+import { Breaker, EventHandler, Properties } from './types'
 
 /*
  * Saved references to long variable names, so that closure compiler can
@@ -76,6 +75,11 @@ const logger = {
                     error(arg)
                 })
             }
+        }
+    },
+    unintializedWarning: function (methodName: string): void {
+        if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
+            logger.error(`[PostHog] You must initialize PostHog before calling ${methodName}`)
         }
     },
 }
@@ -462,97 +466,60 @@ export const _utf8Encode = function (string: string): string {
     return utftext
 }
 
-export const _UUID = function (defaultVersion?: UUIDVersion) {
-    // Time/ticks information
-    const T = function () {
-        const d = new Date().valueOf()
-        let ticks = 0
-        // performance.now is pretty widely supported
-        // https://developer.mozilla.org/en-US/docs/Web/API/Performance/now
-        if (win.performance && win.performance.now) {
-            // if the environment has a frozen time (e.g. in tests)
-            // then the busy loop below will never complete.
-            // where performance is supported we can use that to
-            // avoid the busy loop (saving a full millisecond)
-            // and avoiding getting stuck in a never ending loop when time is frozen
-            // it returns milliseconds as a float whereas the busy loop counts ticks
-            // there should be 10000 ticks in a millisecond, so we multiply by 10,000
-            ticks = win.performance.now() * 10_000
-        } else {
-            // this while loop figures how many browser ticks go by
-            // before 1*new Date() returns a new number, ie the amount
-            // of ticks that go by per millisecond
-            while (d == new Date().valueOf()) {
-                ticks++
-            }
-        }
+export const DEFAULT_BLOCKED_UA_STRS = [
+    'ahrefsbot',
+    'applebot',
+    'baiduspider',
+    'bingbot',
+    'bingpreview',
+    'bot.htm',
+    'bot.php',
+    'crawler',
+    'duckduckbot',
+    'facebookexternal',
+    'facebookcatalog',
+    'gptbot',
+    'hubspot',
+    'linkedinbot',
+    'mj12bot',
+    'petalbot',
+    'pinterest',
+    'prerender',
+    'rogerbot',
+    'screaming frog',
+    'semrushbot',
+    'sitebulb',
+    'twitterbot',
+    'yahoo! slurp',
+    'yandexbot',
 
-        return d.toString(16) + Math.floor(ticks).toString(16)
-    }
-
-    // Math.Random entropy
-    const R = function () {
-        return Math.random().toString(16).replace('.', '')
-    }
-
-    // User agent entropy
-    // This function takes the user agent string, and then xors
-    // together each sequence of 8 bytes.  This produces a final
-    // sequence of 8 bytes which it returns as hex.
-    const UA = function () {
-        const ua = userAgent
-        let i,
-            ch,
-            ret = 0,
-            buffer: number[] = []
-
-        function xor(result: number, byte_array: number[]) {
-            let j,
-                tmp = 0
-            for (j = 0; j < byte_array.length; j++) {
-                tmp |= buffer[j] << (j * 8)
-            }
-            return result ^ tmp
-        }
-
-        for (i = 0; i < ua.length; i++) {
-            ch = ua.charCodeAt(i)
-            buffer.unshift(ch & 0xff)
-            if (buffer.length >= 4) {
-                ret = xor(ret, buffer)
-                buffer = []
-            }
-        }
-
-        if (buffer.length > 0) {
-            ret = xor(ret, buffer)
-        }
-
-        return ret.toString(16)
-    }
-
-    return function (version?: UUIDVersion) {
-        if (version === 'og' || defaultVersion === 'og') {
-            const se = typeof window !== 'undefined' ? (window.screen.height * window.screen.width).toString(16) : '0'
-            return T() + '-' + R() + '-' + UA() + '-' + se + '-' + T()
-        }
-
-        return uuidv7()
-    }
-}
+    // a whole bunch of goog-specific crawlers
+    // https://developers.google.com/search/docs/advanced/crawling/overview-google-crawlers
+    'adsbot-google',
+    'apis-google',
+    'duplexweb-google',
+    'feedfetcher-google',
+    'google favicon',
+    'google web preview',
+    'google-read-aloud',
+    'googlebot',
+    'googleweblight',
+    'mediapartners-google',
+    'storebot-google',
+]
 
 // _.isBlockedUA()
 // This is to block various web spiders from executing our JS and
 // sending false capturing data
-export const _isBlockedUA = function (ua: string): boolean {
-    if (
-        /(google web preview|baiduspider|yandexbot|bingbot|googlebot|yahoo! slurp|ahrefsbot|facebookexternalhit|facebookcatalog|applebot|semrushbot|duckduckbot|twitterbot|rogerbot|linkedinbot|mj12bot|sitebulb|bot.htm|bot.php|hubspot|crawler|prerender)/i.test(
-            ua
-        )
-    ) {
-        return true
-    }
-    return false
+export const _isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
+    return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents).some((blockedUA) => {
+        if (ua.includes) {
+            return ua.includes(blockedUA)
+        } else {
+            // IE 11 :/
+            return ua.indexOf(blockedUA) !== -1
+        }
+    })
 }
 
 /**

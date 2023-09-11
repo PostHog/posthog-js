@@ -2,7 +2,7 @@ import { autocapture } from './autocapture'
 import { _base64Encode, loadScript } from './utils'
 import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
-import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './posthog-persistence'
+import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 export class Decide {
     instance: PostHog
@@ -39,6 +39,9 @@ export class Decide {
     }
 
     parseDecideResponse(response: DecideResponse): void {
+        this.instance.featureFlags.resetRequestQueue()
+        this.instance.featureFlags.setReloadingPaused(false)
+
         if (response?.status === 0) {
             console.error('Failed to fetch feature flags from PostHog.')
             return

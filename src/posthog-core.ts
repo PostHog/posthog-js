@@ -11,7 +11,6 @@ import {
     _isUndefined,
     _register_event,
     _safewrap_class,
-    _UUID,
     document,
     logger,
     userAgent,
@@ -19,7 +18,8 @@ import {
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
-import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, PostHogPersistence } from './posthog-persistence'
+import { PostHogPersistence } from './posthog-persistence'
+import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
 import { SessionRecording } from './extensions/sessionrecording'
 import { WebPerformanceObserver } from './extensions/web-performance'
 import { Decide } from './decide'
@@ -53,10 +53,11 @@ import {
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
-import { PageViewIdManager } from './page-view-id'
+import { PageViewManager } from './page-view'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
+import { uuidv7 } from './uuidv7'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -113,6 +114,7 @@ const defaultConfig = (): PostHogConfig => ({
     loaded: __NOOP,
     store_google: true,
     custom_campaign_params: [],
+    custom_blocked_useragents: [],
     save_referrer: true,
     test: false,
     verbose: false,
@@ -160,7 +162,6 @@ const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    uuid_version: 'v7',
 })
 
 /**
@@ -215,6 +216,10 @@ const create_phlib = function (
     instance.webPerformance = new WebPerformanceObserver(instance)
     instance.webPerformance.startObservingIfEnabled()
 
+    if (instance.get_config('__preview_measure_pageview_stats')) {
+        instance.pageViewManager.startMeasuringScrollPosition()
+    }
+
     instance.exceptionAutocapture = new ExceptionObserver(instance)
 
     instance.__autocapture = instance.get_config('autocapture')
@@ -260,20 +265,22 @@ export class PostHog {
     __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
     config: PostHogConfig
 
-    persistence: PostHogPersistence
     rateLimiter: RateLimiter
-    sessionPersistence: PostHogPersistence
-    sessionManager: SessionIdManager
-    pageViewIdManager: PageViewIdManager
+    pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
-    sessionRecording: SessionRecording | undefined
-    webPerformance: WebPerformanceObserver | undefined
-    exceptionAutocapture: ExceptionObserver | undefined
 
-    _requestQueue: RequestQueue
-    _retryQueue: RetryQueue
+    // These are instance-specific state created after initialisation
+    persistence?: PostHogPersistence
+    sessionPersistence?: PostHogPersistence
+    sessionManager?: SessionIdManager
+
+    _requestQueue?: RequestQueue
+    _retryQueue?: RetryQueue
+    sessionRecording?: SessionRecording
+    webPerformance?: WebPerformanceObserver
+    exceptionAutocapture?: ExceptionObserver
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
@@ -285,9 +292,6 @@ export class PostHog {
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
-    // keep the default as the original version of the function
-    // config _might_ override this in init below
-    private uuidFn: (version?: 'v7') => string = _UUID('og')
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -310,16 +314,9 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewIdManager = new PageViewIdManager(this.uuidFn)
+        this.pageViewManager = new PageViewManager()
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
-
-        // these are created in _init() after we have the config
-        this._requestQueue = undefined as any
-        this._retryQueue = undefined as any
-        this.persistence = undefined as any
-        this.sessionPersistence = undefined as any
-        this.sessionManager = undefined as any
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -422,11 +419,6 @@ export class PostHog {
             })
         )
 
-        // in preparation for switching from a custom UUID format
-        // to UUID v7 this lets us inject the desired default version
-        // into the _UUID function
-        this.uuidFn = _UUID(this.config.uuid_version || 'og')
-
         this._jsc = function () {} as JSC
 
         // Check if recorder.js is already loaded
@@ -445,7 +437,7 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this.config, this.persistence, this.uuidFn)
+        this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
@@ -471,7 +463,7 @@ export class PostHog {
         }
 
         if (config.bootstrap?.distinctID !== undefined) {
-            const uuid = this.get_config('get_device_id')(this.uuidFn())
+            const uuid = this.get_config('get_device_id')(uuidv7())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
             this.persistence.set_user_state(config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
@@ -505,7 +497,7 @@ export class PostHog {
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persitence
-            const uuid = this.get_config('get_device_id')(this.uuidFn())
+            const uuid = this.get_config('get_device_id')(uuidv7())
             this.register_once(
                 {
                     distinct_id: uuid,
@@ -532,7 +524,10 @@ export class PostHog {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
         // These feature flags are loaded in the decide call made right
         // afterwards
-        this.featureFlags.setReloadingPaused(true)
+        const disableDecide = this.get_config('advanced_disable_decide')
+        if (!disableDecide) {
+            this.featureFlags.setReloadingPaused(true)
+        }
 
         try {
             this.get_config('loaded')(this)
@@ -551,18 +546,15 @@ export class PostHog {
         // Call decide to get what features are enabled and other settings.
         // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
         // and compression will not be available.
-        if (!this.get_config('advanced_disable_decide')) {
+        if (!disableDecide) {
             new Decide(this).call()
         }
-
-        this.featureFlags.resetRequestQueue()
-        this.featureFlags.setReloadingPaused(false)
     }
 
     _start_queue_if_opted_in(): void {
         if (!this.has_opted_out_capturing()) {
             if (this.get_config('request_batching')) {
-                this._requestQueue.poll()
+                this._requestQueue?.poll()
             }
         }
     }
@@ -625,8 +617,8 @@ export class PostHog {
             this.capture('$pageleave')
         }
 
-        this._requestQueue.unload()
-        this._retryQueue.unload()
+        this._requestQueue?.unload()
+        this._retryQueue?.unload()
     }
 
     _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
@@ -645,6 +637,9 @@ export class PostHog {
     }
 
     _send_request(url: string, data: Record<string, any>, options: CaptureOptions, callback?: RequestCallback): void {
+        if (!this.__loaded || !this._retryQueue) {
+            return
+        }
         if (this.rateLimiter.isRateLimited(options._batchKey)) {
             return
         }
@@ -834,8 +829,8 @@ export class PostHog {
     ): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
-        if (!this.__loaded) {
-            return
+        if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
+            return logger.unintializedWarning('posthog.capture')
         }
 
         if (userOptedOut(this, false)) {
@@ -854,7 +849,7 @@ export class PostHog {
             return
         }
 
-        if (_isBlockedUA(userAgent)) {
+        if (_isBlockedUA(userAgent, this.get_config('custom_blocked_useragents'))) {
             return
         }
 
@@ -869,7 +864,7 @@ export class PostHog {
         }
 
         let data: CaptureResult = {
-            uuid: this.uuidFn('v7'),
+            uuid: uuidv7(),
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
@@ -919,6 +914,10 @@ export class PostHog {
     }
 
     _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
+        if (!this.persistence || !this.sessionPersistence) {
+            return event_properties
+        }
+
         // set defaults
         const start_timestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
@@ -938,11 +937,14 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (this.webPerformance?.isEnabled) {
+        if (this.get_config('__preview_measure_pageview_stats')) {
+            let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
-                this.pageViewIdManager.onPageview()
+                performanceProperties = this.pageViewManager.doPageView()
+            } else if (event_name === '$pageleave') {
+                performanceProperties = this.pageViewManager.doPageLeave()
             }
-            properties = _extend(properties, { $pageview_id: this.pageViewIdManager.getPageViewId() })
+            properties = _extend(properties, performanceProperties)
         }
 
         if (event_name === '$pageview') {
@@ -1016,7 +1018,7 @@ export class PostHog {
      * @param {Number} [days] How many days since the user's last visit to store the super properties
      */
     register(properties: Properties, days?: number): void {
-        this.persistence.register(properties, days)
+        this.persistence?.register(properties, days)
     }
 
     /**
@@ -1043,7 +1045,7 @@ export class PostHog {
      * @param {Number} [days] How many days since the users last visit to store the super properties
      */
     register_once(properties: Properties, default_value?: Property, days?: number): void {
-        this.persistence.register_once(properties, default_value, days)
+        this.persistence?.register_once(properties, default_value, days)
     }
 
     /**
@@ -1070,7 +1072,7 @@ export class PostHog {
      * @param {Object} properties An associative array of properties to store about the user
      */
     register_for_session(properties: Properties): void {
-        this.sessionPersistence.register(properties)
+        this.sessionPersistence?.register(properties)
     }
 
     /**
@@ -1079,7 +1081,7 @@ export class PostHog {
      * @param {String} property The name of the super property to remove
      */
     unregister(property: string): void {
-        this.persistence.unregister(property)
+        this.persistence?.unregister(property)
     }
 
     /**
@@ -1088,7 +1090,7 @@ export class PostHog {
      * @param {String} property The name of the session super property to remove
      */
     unregister_for_session(property: string): void {
-        this.sessionPersistence.unregister(property)
+        this.sessionPersistence?.unregister(property)
     }
 
     _register_single(prop: string, value: Property) {
@@ -1188,7 +1190,7 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by useEffect when the component unmounts.
      */
     onSessionId(callback: SessionIdChangedCallback): () => void {
-        return this.sessionManager.onSessionId(callback)
+        return this.sessionManager?.onSessionId(callback) ?? (() => {})
     }
 
     /** Get list of all surveys. */
@@ -1248,6 +1250,9 @@ export class PostHog {
      * @param {Object} [userPropertiesToSetOnce] Optional: An associative array of properties to store about the user. If property is previously set, this does not override that value.
      */
     identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
+        if (!this.__loaded || !this.persistence) {
+            return logger.unintializedWarning('posthog.identify')
+        }
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
             console.error('Unique user id has not been set in posthog.identify')
@@ -1414,12 +1419,15 @@ export class PostHog {
      * Useful for clearing data when a user logs out.
      */
     reset(reset_device_id?: boolean): void {
+        if (!this.__loaded) {
+            return logger.unintializedWarning('posthog.reset')
+        }
         const device_id = this.get_property('$device_id')
-        this.persistence.clear()
-        this.sessionPersistence.clear()
-        this.persistence.set_user_state('anonymous')
-        this.sessionManager.resetSessionId()
-        const uuid = this.get_config('get_device_id')(this.uuidFn())
+        this.persistence?.clear()
+        this.sessionPersistence?.clear()
+        this.persistence?.set_user_state('anonymous')
+        this.sessionManager?.resetSessionId()
+        const uuid = this.get_config('get_device_id')(uuidv7())
         this.register_once(
             {
                 distinct_id: uuid,
@@ -1461,7 +1469,7 @@ export class PostHog {
      */
 
     get_session_id(): string {
-        return this.sessionManager.checkAndGetSessionAndWindowId(true).sessionId
+        return this.sessionManager?.checkAndGetSessionAndWindowId(true).sessionId ?? ''
     }
 
     /**
@@ -1472,6 +1480,9 @@ export class PostHog {
      * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
+        if (!this.sessionManager) {
+            return ''
+        }
         const host = this.config.ui_host || this.config.api_host
         const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
         let url = host + '/replay/' + sessionId
@@ -1678,12 +1689,9 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
-            if (this.persistence) {
-                this.persistence.update_config(this.config)
-            }
-            if (this.sessionPersistence) {
-                this.sessionPersistence.update_config(this.config)
-            }
+            this.persistence?.update_config(this.config)
+            this.sessionPersistence?.update_config(this.config)
+
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true
             }
@@ -1762,7 +1770,7 @@ export class PostHog {
      * @param {String} property_name The name of the super property you want to retrieve
      */
     get_property(property_name: string): Property | undefined {
-        return this.persistence['props'][property_name]
+        return this.persistence?.['props'][property_name]
     }
 
     /**
@@ -1785,7 +1793,7 @@ export class PostHog {
      * @param {String} property_name The name of the session super property you want to retrieve
      */
     getSessionProperty(property_name: string): Property | undefined {
-        return this.sessionPersistence['props'][property_name]
+        return this.sessionPersistence?.['props'][property_name]
     }
 
     toString(): string {
@@ -1848,11 +1856,11 @@ export class PostHog {
             return
         }
 
-        if (!this.get_config('disable_persistence') && this.persistence.disabled !== disabled) {
-            this.persistence.set_disabled(disabled)
+        if (!this.get_config('disable_persistence') && this.persistence?.disabled !== disabled) {
+            this.persistence?.set_disabled(disabled)
         }
-        if (!this.get_config('disable_persistence') && this.sessionPersistence.disabled !== disabled) {
-            this.sessionPersistence.set_disabled(disabled)
+        if (!this.get_config('disable_persistence') && this.sessionPersistence?.disabled !== disabled) {
+            this.sessionPersistence?.set_disabled(disabled)
         }
     }
 
