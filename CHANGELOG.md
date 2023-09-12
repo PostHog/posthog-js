@@ -1,3 +1,7 @@
+## 1.78.2 - 2023-09-12
+
+- fix: Update rrweb (#793)
+
 ## 1.78.1 - 2023-09-07
 
 - fix(flags): Re-enable reload only when request finishes (#791)
