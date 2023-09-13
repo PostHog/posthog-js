@@ -1,3 +1,7 @@
+## 1.78.3 - 2023-09-13
+
+- feat: different rate limiting handling (#765)
+
 ## 1.78.2 - 2023-09-12
 
 - fix: Update rrweb (#793)
