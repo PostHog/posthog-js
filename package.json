@@ -17,7 +17,6 @@
         "test-react": "cd react; yarn test",
         "test-watch": "jest --watch src",
         "cypress": "cypress open",
-        "prepare": "husky install"
     },
     "main": "dist/module.js",
     "module": "dist/es.js",
