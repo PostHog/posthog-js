@@ -1,5 +1,4 @@
 import { logger } from './utils'
-import Config from './config'
 
 const oneMinuteInMilliseconds = 60 * 1000
 
