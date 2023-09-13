@@ -69,7 +69,7 @@
         "localStorage": "1.0.4",
         "msw": "^1.2.1",
         "node-fetch": "^2.6.1",
-        "posthog-js": "link:.",
+        "posthog-js": "https://github.com/ankitbishtgit/posthog-js.git",
         "prettier": "^2.7.1",
         "rollup": "^2.77.0",
         "rollup-plugin-dts": "^4.2.2",
