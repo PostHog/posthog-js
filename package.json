@@ -2,7 +2,7 @@
     "name": "posthog-js",
     "version": "1.78.2",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
-    "repository": "https://github.com/PostHog/posthog-js",
+    "repository": "https://github.com/ankitbishtgit/posthog-js.git",
     "author": "hey@posthog.com",
     "license": "MIT",
     "scripts": {
