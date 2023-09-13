@@ -641,9 +641,6 @@ export class PostHog {
             return
         }
         if (this.rateLimiter.isRateLimited(options._batchKey)) {
-            if (this.get_config('debug')) {
-                console.warn('[PostHog SendRequest] is quota limited. Dropping request.')
-            }
             return
         }
 
@@ -688,7 +685,7 @@ export class PostHog {
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,
                     onXHRError: this.get_config('on_xhr_error'),
-                    onRateLimited: this.rateLimiter.on429Response,
+                    onResponse: this.rateLimiter.checkForLimiting,
                 })
             } catch (e) {
                 console.error(e)

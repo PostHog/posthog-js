@@ -122,9 +122,6 @@ export class RetryQueue extends RequestQueueScaffold {
 
     _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }: QueuedRequestData): void {
         if (this.rateLimiter.isRateLimited(options._batchKey)) {
-            if (Config.DEBUG) {
-                console.warn('[PostHog RetryQueue] in quota limited mode. Dropping request.')
-            }
             return
         }
 
@@ -137,7 +134,7 @@ export class RetryQueue extends RequestQueueScaffold {
             callback,
             retryQueue: this,
             onXHRError: this.onXHRError,
-            onRateLimited: this.rateLimiter.on429Response,
+            onResponse: this.rateLimiter.checkForLimiting,
         })
     }
 

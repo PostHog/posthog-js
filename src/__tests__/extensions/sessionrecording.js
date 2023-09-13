@@ -281,7 +281,7 @@ describe('SessionRecording', () => {
                     method: 'POST',
                     endpoint: '/s/',
                     _noTruncate: true,
-                    _batchKey: 'sessionRecording',
+                    _batchKey: 'recordings',
                     _metrics: expect.anything(),
                 }
             )
@@ -318,7 +318,7 @@ describe('SessionRecording', () => {
                     transport: 'XHR',
                     endpoint: '/s/',
                     _noTruncate: true,
-                    _batchKey: 'sessionRecording',
+                    _batchKey: 'recordings',
                     _metrics: expect.anything(),
                 }
             )
@@ -368,7 +368,7 @@ describe('SessionRecording', () => {
                     transport: 'XHR',
                     endpoint: '/s/',
                     _noTruncate: true,
-                    _batchKey: 'sessionRecording',
+                    _batchKey: 'recordings',
                     _metrics: expect.anything(),
                 }
             )

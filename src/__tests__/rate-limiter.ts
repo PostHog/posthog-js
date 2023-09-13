@@ -5,7 +5,6 @@ describe('Rate Limiter', () => {
 
     beforeEach(() => {
         jest.useFakeTimers()
-
         rateLimiter = new RateLimiter()
     })
 
@@ -35,75 +34,80 @@ describe('Rate Limiter', () => {
         expect(rateLimiter.isRateLimited('the batch key')).toBe(true)
     })
 
-    it('sets the retryAfter on429Response', () => {
-        rateLimiter.on429Response({
-            status: 429,
-            getResponseHeader: (name: string) => (name === 'X-PostHog-Retry-After-Events' ? '150' : null),
-        } as unknown as XMLHttpRequest)
+    it('sets the events retryAfter on checkForLimiting', () => {
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ quota_limited: ['events'] }),
+        })
 
-        expect(rateLimiter.limits).toStrictEqual({ events: new Date().getTime() + 150_000 })
+        const expectedRetry = new Date().getTime() + 60_000
+        expect(rateLimiter.limits).toStrictEqual({ events: expectedRetry })
     })
 
-    it('sets the retryAfter to a default if the header is not a number in on429Response', () => {
-        rateLimiter.on429Response({
-            status: 429,
-            getResponseHeader: (name: string) => (name === 'X-PostHog-Retry-After-Events' ? 'tomato' : null),
-        } as unknown as XMLHttpRequest)
+    it('sets the recordings retryAfter on checkForLimiting', () => {
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ quota_limited: ['recordings'] }),
+        })
 
-        expect(rateLimiter.limits).toStrictEqual({ events: new Date().getTime() + 60_000 })
+        const expectedRetry = new Date().getTime() + 60_000
+        expect(rateLimiter.limits).toStrictEqual({ recordings: expectedRetry })
     })
 
-    it('keeps existing batch keys on429Response', () => {
-        rateLimiter.limits = { 'some-other-key': 4000 }
-        rateLimiter.on429Response({
-            status: 429,
-            getResponseHeader: (name: string) => (name === 'X-PostHog-Retry-After-Events' ? '150' : null),
-        } as unknown as XMLHttpRequest)
+    it('sets multiple retryAfter on checkForLimiting', () => {
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ quota_limited: ['recordings', 'events', 'mystery'] }),
+        })
 
+        const expectedRetry = new Date().getTime() + 60_000
         expect(rateLimiter.limits).toStrictEqual({
-            'some-other-key': 4000,
-            events: new Date().getTime() + 150_000,
+            events: expectedRetry,
+            recordings: expectedRetry,
+            mystery: expectedRetry,
         })
     })
 
-    it('replaces matching keys on429Response and ignores unexpected ones', () => {
-        rateLimiter.limits = { 'some-other-key': 4000, events: 1000 }
-        rateLimiter.on429Response({
-            status: 429,
-            getResponseHeader: (name: string) => {
-                if (name === 'X-PostHog-Retry-After-Events') {
-                    return '150'
-                } else if (name === 'X-PostHog-Retry-After-Recordings') {
-                    return '200'
-                }
-                return null
-            },
-        } as unknown as XMLHttpRequest)
+    it('keeps existing batch keys checkForLimiting', () => {
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ quota_limited: ['events'] }),
+        })
+
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ quota_limited: ['recordings'] }),
+        })
 
         expect(rateLimiter.limits).toStrictEqual({
-            'some-other-key': 4000,
-            events: new Date().getTime() + 150_000,
-            sessionRecording: new Date().getTime() + 200_000,
+            events: expect.any(Number),
+            recordings: expect.any(Number),
         })
     })
 
-    it('does not set a limit if no Retry-After header is present', () => {
-        rateLimiter.on429Response({
-            status: 429,
-            getResponseHeader: () => null,
-        } as unknown as XMLHttpRequest)
+    it('replaces matching keys', () => {
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ quota_limited: ['events'] }),
+        })
+
+        const firstRetryValue = rateLimiter.limits.events
+        jest.advanceTimersByTime(1000)
+
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ quota_limited: ['events'] }),
+        })
+
+        expect(rateLimiter.limits).toStrictEqual({
+            events: firstRetryValue + 1000,
+        })
+    })
+
+    it('does not set a limit if no limits are present', () => {
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ quota_limited: [] }),
+        })
 
         expect(rateLimiter.limits).toStrictEqual({})
-    })
 
-    it('does not replace any limits if no Retry-After header is present', () => {
-        rateLimiter.limits = { 'some-other-key': 4000, events: 1000 }
+        rateLimiter.checkForLimiting({
+            responseText: JSON.stringify({ status: 1 }),
+        })
 
-        rateLimiter.on429Response({
-            status: 429,
-            getResponseHeader: () => null,
-        } as unknown as XMLHttpRequest)
-
-        expect(rateLimiter.limits).toStrictEqual({ 'some-other-key': 4000, events: 1000 })
+        expect(rateLimiter.limits).toStrictEqual({})
     })
 })

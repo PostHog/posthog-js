@@ -67,7 +67,7 @@ export const xhr = ({
     retryQueue,
     onXHRError,
     timeout = 10000,
-    onRateLimited,
+    onResponse,
 }: XHRParams) => {
     const req = new XMLHttpRequest()
     req.open(options.method || 'GET', url, true)
@@ -87,8 +87,9 @@ export const xhr = ({
     // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
     req.withCredentials = true
     req.onreadystatechange = () => {
+        // XMLHttpRequest.DONE == 4, except in safari 4
         if (req.readyState === 4) {
-            // XMLHttpRequest.DONE == 4, except in safari 4
+            onResponse?.(req)
             if (req.status === 200) {
                 if (callback) {
                     let response
@@ -105,8 +106,8 @@ export const xhr = ({
                     onXHRError(req)
                 }
 
-                // don't retry certain errors
-                if ([401, 403, 404, 500].indexOf(req.status) < 0) {
+                // don't retry errors between 400 and 500 inclusive
+                if (req.status < 400 || req.status > 500) {
                     retryQueue.enqueue({
                         url,
                         data,
@@ -117,13 +118,7 @@ export const xhr = ({
                     })
                 }
 
-                if (req.status === 429) {
-                    onRateLimited?.(req)
-                }
-
-                if (callback) {
-                    callback({ status: 0 })
-                }
+                callback?.({ status: 0 })
             }
         }
     }
