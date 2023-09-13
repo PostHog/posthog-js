@@ -2054,7 +2054,7 @@ export function init_from_snippet(): void {
             if (item && _isArray(item)) {
                 const instance = posthogMaster.init(item[0], item[1], item[2])
 
-                let instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
+                const instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
 
                 if (instance) {
                     // Crunch through the people queue first - we queue this data up &
