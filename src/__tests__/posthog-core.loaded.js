@@ -17,7 +17,7 @@ describe('loaded() with flags', () => {
         capture: jest.fn(),
         featureFlags: {
             setReloadingPaused: jest.fn(),
-            resetRequestQueue: jest.fn(),
+            _startReloadTimer: jest.fn(),
             receivedFeatureFlags: jest.fn(),
         },
         _start_queue_if_opted_in: jest.fn(),
@@ -48,24 +48,28 @@ describe('loaded() with flags', () => {
         beforeEach(() => {
             jest.spyOn(given.lib.featureFlags, 'setGroupPropertiesForFlags')
             jest.spyOn(given.lib.featureFlags, 'setReloadingPaused')
-            jest.spyOn(given.lib.featureFlags, 'resetRequestQueue')
+            jest.spyOn(given.lib.featureFlags, '_startReloadTimer')
             jest.spyOn(given.lib.featureFlags, '_reloadFeatureFlagsRequest')
         })
 
         it('doesnt call flags while initial load is happening', () => {
             given.subject()
 
-            jest.runAllTimers()
+            jest.runOnlyPendingTimers()
 
             expect(given.lib.featureFlags.setGroupPropertiesForFlags).toHaveBeenCalled() // loaded ph.group() calls setGroupPropertiesForFlags
             expect(given.lib.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
-            expect(given.lib.featureFlags.resetRequestQueue).toHaveBeenCalledTimes(1)
+            expect(given.lib.featureFlags._startReloadTimer).toHaveBeenCalled()
             expect(given.lib.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
 
-            // even if the decide request returned late, we should not call _reloadFeatureFlagsRequest
+            // we should call _reloadFeatureFlagsRequest for `group` only after the initial load
             // because it ought to be paused until decide returns
             expect(given.overrides._send_request).toHaveBeenCalledTimes(1)
             expect(given.lib.featureFlags._reloadFeatureFlagsRequest).toHaveBeenCalledTimes(0)
+
+            jest.runOnlyPendingTimers()
+            expect(given.overrides._send_request).toHaveBeenCalledTimes(2)
+            expect(given.lib.featureFlags._reloadFeatureFlagsRequest).toHaveBeenCalledTimes(1)
         })
     })
 
@@ -74,7 +78,7 @@ describe('loaded() with flags', () => {
 
         expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
         expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
-        expect(given.overrides.featureFlags.resetRequestQueue).toHaveBeenCalledTimes(1)
+        expect(given.overrides.featureFlags._startReloadTimer).toHaveBeenCalled()
         expect(given.overrides.featureFlags.receivedFeatureFlags).toHaveBeenCalledTimes(1)
     })
 })

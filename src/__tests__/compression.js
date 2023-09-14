@@ -92,8 +92,8 @@ describe('Payload Compression', () => {
                 },
                 featureFlags: {
                     receivedFeatureFlags: jest.fn(),
-                    resetRequestQueue: jest.fn(),
                     setReloadingPaused: jest.fn(),
+                    _startReloadTimer: jest.fn(),
                 },
                 _hasBootstrappedFeatureFlags: jest.fn(),
                 get_property: (property_key) =>

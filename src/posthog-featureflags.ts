@@ -151,10 +151,6 @@ export class PostHogFeatureFlags {
         this.reloadFeatureFlagsInAction = isPaused
     }
 
-    resetRequestQueue(): void {
-        this.reloadFeatureFlagsQueued = false
-    }
-
     _startReloadTimer(): void {
         if (this.reloadFeatureFlagsQueued && !this.reloadFeatureFlagsInAction) {
             setTimeout(() => {

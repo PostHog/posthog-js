@@ -107,10 +107,7 @@ test('person properties set in identify() with the same distinct_id are sent to 
     })
 })
 
-test('identify() doesnt trigger new request automatically if first request takes too long', async () => {
-    // TODO: Make this experience nicer, and queue requests, rather than leave
-    // it upto the user to call reloadFeatureFlags() manually.
-
+test('identify() triggers new request in queue after first request', async () => {
     const token = v4()
     const posthog = await createPosthogInstance(token, { advanced_disable_decide: false })
 
@@ -130,12 +127,28 @@ test('identify() doesnt trigger new request automatically if first request takes
     resetRequests(token)
 
     // don't wait for decide callback
-
     posthog.identify('test-id', {
-        email: 'test@email.com',
+        email: 'test2@email.com',
     })
 
     await waitFor(() => {
         expect(getRequests(token)['/decide/']).toEqual([])
+    })
+
+    // wait for decide callback
+    // eslint-disable-next-line compat/compat
+    await new Promise((res) => setTimeout(res, 500))
+
+    // now second call should've fired
+    await waitFor(() => {
+        expect(getRequests(token)['/decide/']).toEqual([
+            {
+                $anon_distinct_id: anonymousId,
+                distinct_id: 'test-id',
+                groups: {},
+                person_properties: { email: 'test2@email.com' },
+                token,
+            },
+        ])
     })
 })
