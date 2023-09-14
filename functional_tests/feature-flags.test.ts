@@ -152,3 +152,35 @@ test('identify() triggers new request in queue after first request', async () =>
         ])
     })
 })
+
+test('identify() does not trigger new request in queue after first request for loaded callback', async () => {
+    const token = v4()
+    await createPosthogInstance(token, {
+        advanced_disable_decide: false,
+        bootstrap: { distinctID: 'anon-id' },
+        loaded: (ph) => {
+            ph.identify('test-id', { email: 'test3@email.com' })
+            ph.group('playlist', 'id:77', { length: 8 })
+        },
+    })
+
+    await waitFor(() => {
+        expect(getRequests(token)['/decide/']).toEqual([
+            // This is the initial call to the decide endpoint on PostHog init, with all info added from `loaded`.
+            {
+                // $anon_distinct_id: 'anon-id', // no anonymous ID is sent because this was overridden on load
+                distinct_id: 'test-id',
+                groups: { playlist: 'id:77' },
+                person_properties: {
+                    email: 'test3@email.com',
+                },
+                group_properties: {
+                    playlist: {
+                        length: 8,
+                    },
+                },
+                token,
+            },
+        ])
+    })
+})

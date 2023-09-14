@@ -17,6 +17,7 @@ describe('loaded() with flags', () => {
         capture: jest.fn(),
         featureFlags: {
             setReloadingPaused: jest.fn(),
+            resetRequestQueue: jest.fn(),
             _startReloadTimer: jest.fn(),
             receivedFeatureFlags: jest.fn(),
         },
@@ -49,6 +50,7 @@ describe('loaded() with flags', () => {
             jest.spyOn(given.lib.featureFlags, 'setGroupPropertiesForFlags')
             jest.spyOn(given.lib.featureFlags, 'setReloadingPaused')
             jest.spyOn(given.lib.featureFlags, '_startReloadTimer')
+            jest.spyOn(given.lib.featureFlags, 'resetRequestQueue')
             jest.spyOn(given.lib.featureFlags, '_reloadFeatureFlagsRequest')
         })
 
@@ -59,6 +61,7 @@ describe('loaded() with flags', () => {
 
             expect(given.lib.featureFlags.setGroupPropertiesForFlags).toHaveBeenCalled() // loaded ph.group() calls setGroupPropertiesForFlags
             expect(given.lib.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
+            expect(given.lib.featureFlags.resetRequestQueue).toHaveBeenCalledTimes(1)
             expect(given.lib.featureFlags._startReloadTimer).toHaveBeenCalled()
             expect(given.lib.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
 

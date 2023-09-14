@@ -9,7 +9,7 @@ This README is intended for developing the library itself.
 ## Testing
 
 Unit tests: run `yarn test`.
-Cypress: run `yarn serve` to have a test server running and separately `yarn cypress` to launch Cypress test engine.
+Cypress: run `yarn start` to have a test server running and separately `yarn cypress` to launch Cypress test engine.
 
 ### Running TestCafe E2E tests with BrowserStack
 

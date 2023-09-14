@@ -543,6 +543,10 @@ export class PostHog {
             this.capture('$pageview', { title: document.title }, { send_instantly: true })
         }
 
+        // TRICKY: Reset any decide reloads queued during config.loaded because they'll be
+        // covered by the decide call right below
+        this.featureFlags.resetRequestQueue()
+
         // Call decide to get what features are enabled and other settings.
         // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
         // and compression will not be available.
