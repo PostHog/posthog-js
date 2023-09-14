@@ -39,8 +39,9 @@ export class Decide {
     }
 
     parseDecideResponse(response: DecideResponse): void {
-        this.instance.featureFlags.resetRequestQueue()
         this.instance.featureFlags.setReloadingPaused(false)
+        // :TRICKY: Reload - start another request if queued!
+        this.instance.featureFlags._startReloadTimer()
 
         if (response?.status === 0) {
             console.error('Failed to fetch feature flags from PostHog.')

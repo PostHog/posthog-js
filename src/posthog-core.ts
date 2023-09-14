@@ -548,6 +548,10 @@ export class PostHog {
         // and compression will not be available.
         if (!disableDecide) {
             new Decide(this).call()
+
+            // TRICKY: Reset any decide reloads queued during config.loaded because they'll be
+            // covered by the decide call right above.
+            this.featureFlags.resetRequestQueue()
         }
     }
 

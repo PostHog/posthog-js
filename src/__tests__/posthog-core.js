@@ -893,6 +893,7 @@ describe('_loaded()', () => {
         featureFlags: {
             setReloadingPaused: jest.fn(),
             resetRequestQueue: jest.fn(),
+            _startReloadTimer: jest.fn(),
         },
         _start_queue_if_opted_in: jest.fn(),
     }))
