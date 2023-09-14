@@ -550,7 +550,7 @@ export class PostHog {
             new Decide(this).call()
 
             // TRICKY: Reset any decide reloads queued during config.loaded because they'll be
-            // covered by the decide call right below
+            // covered by the decide call right above.
             this.featureFlags.resetRequestQueue()
         }
     }
