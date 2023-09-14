@@ -1,3 +1,7 @@
+## 1.78.5 - 2023-09-14
+
+- fix(flags): Enqueue follow up requests without dropping (#797)
+
 ## 1.78.4 - 2023-09-13
 
 
