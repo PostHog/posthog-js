@@ -16,7 +16,6 @@ node_modules
 .mypy_cache
 package-lock.json
 .idea
-dist/*
 lib/
 static/*
 .yalc
