@@ -1,3 +1,7 @@
+## 1.79.0 - 2023-09-15
+
+- feat: add an attribute denylist for autocapture (#800)
+
 ## 1.78.6 - 2023-09-15
 
 - fix: toolbar cache busting (#798)
