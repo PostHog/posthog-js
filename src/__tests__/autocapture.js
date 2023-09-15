@@ -125,6 +125,19 @@ describe('Autocapture system', () => {
             expect(props['attr__data-attr-2']).toBeUndefined()
             expect(props['attr__data-attr-3']).toBe('value')
         })
+
+        it('an empty ignorelist does nothing', () => {
+            autocapture.config = {
+                element_attribute_ignorelist: [],
+            }
+            div.setAttribute('data-attr', 'value')
+            div.setAttribute('data-attr-2', 'value')
+            div.setAttribute('data-attr-3', 'value')
+            const props = autocapture._getPropertiesFromElement(div)
+            expect(props['attr__data-attr']).toBe('value')
+            expect(props['attr__data-attr-2']).toBe('value')
+            expect(props['attr__data-attr-3']).toBe('value')
+        })
     })
 
     describe('_getAugmentPropertiesFromElement', () => {
@@ -1249,6 +1262,26 @@ describe('Autocapture system', () => {
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
+        it('an empty url regex allowlist does not match any url', () => {
+            var main_el = document.createElement('some-element')
+            var button = document.createElement('a')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = {
+                target: main_el,
+                composedPath: () => [button, main_el],
+                type: 'click',
+            }
+            const autocapture_config = {
+                url_allowlist: [],
+            }
+
+            delete window.location
+            window.location = new URL('https://posthog.com/test/captured')
+
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+        })
+
         it('only capture event types which match the allowlist', () => {
             var main_el = document.createElement('some-element')
             var button = document.createElement('button')
@@ -1268,6 +1301,22 @@ describe('Autocapture system', () => {
                 dom_event_allowlist: ['change'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
+        })
+
+        it('an empty event type allowlist matches no events', () => {
+            var main_el = document.createElement('some-element')
+            var button = document.createElement('button')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = {
+                target: main_el,
+                composedPath: () => [button, main_el],
+                type: 'click',
+            }
+            const autocapture_config = {
+                dom_event_allowlist: [],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('only capture elements which match the allowlist', () => {
@@ -1291,6 +1340,22 @@ describe('Autocapture system', () => {
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })
 
+        it('an empty event allowlist means we capture no elements', () => {
+            var main_el = document.createElement('some-element')
+            var button = document.createElement('button')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = {
+                target: main_el,
+                composedPath: () => [button, main_el],
+                type: 'click',
+            }
+            const autocapture_config = {
+                element_allowlist: [],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+        })
+
         it('only capture elements which match the css allowlist', () => {
             var main_el = document.createElement('some-element')
             var button = document.createElement('button')
@@ -1311,6 +1376,23 @@ describe('Autocapture system', () => {
                 css_selector_allowlist: ['[data-track="no"]'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
+        })
+
+        it('an empty css selector list captures no elements', () => {
+            var main_el = document.createElement('some-element')
+            var button = document.createElement('button')
+            button.setAttribute('data-track', 'yes')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = {
+                target: main_el,
+                composedPath: () => [button, main_el],
+                type: 'click',
+            }
+            const autocapture_config = {
+                css_selector_allowlist: [],
+            }
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
     })
 })
