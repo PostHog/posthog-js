@@ -55,9 +55,10 @@ import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
-import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
+import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
+import { SurveyCallback } from 'posthog-surveys-types'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -256,6 +257,7 @@ const create_phlib = function (
     return instance
 }
 
+// TODO(neil): create interface & implement
 /**
  * PostHog Library Object
  * @constructor

@@ -74,6 +74,23 @@ export class Decide {
             this.instance['compression'] = compression
         }
 
+        // Check if recorder.js is already loaded
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const surveysGenerator = window?.generateSurveys
+
+        if (response['surveys'] && !surveysGenerator) {
+            loadScript(this.instance.get_config('api_host') + `/static/surveys.js`, (err) => {
+                if (err) {
+                    return console.error(`Could not load surveys script`, err)
+                }
+
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                window.generateSurveys(this.instance)
+            })
+        }
+
         if (response['siteApps']) {
             if (this.instance.get_config('opt_in_site_apps')) {
                 const apiHost = this.instance.get_config('api_host')
