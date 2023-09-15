@@ -97,13 +97,13 @@ export class Toolbar {
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         ;(window as any)['_postHogToolbarLoaded'] = true
 
-        // By design array.js, recorder.js, and toolbar.js are served from Django with no or limited caching, not from our CDN
-        // Django respects the query params for caching, returning a 304 if appropriate
         const host = this.instance.get_config('api_host')
-        const timestampToNearestThirtySeconds = Math.floor(Date.now() / 30000) * 30000
-        const toolbarUrl = `${host}${
-            host.endsWith('/') ? '' : '/'
-        }static/toolbar.js?_ts=${timestampToNearestThirtySeconds}`
+        // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
+        // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
+        const fiveMinutesInMillis = 5 * 60 * 1000
+        // this ensures that we bust the cache periodically
+        const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
+        const toolbarUrl = `${host}${host.endsWith('/') ? '' : '/'}static/toolbar.js?t=${timestampToNearestFiveMinutes}`
         const disableToolbarMetrics =
             !POSTHOG_MANAGED_HOSTS.includes(this.instance.get_config('api_host')) &&
             this.instance.get_config('advanced_disable_toolbar_metrics')
