@@ -44,6 +44,12 @@ export interface AutocaptureConfig {
      * e.g. ['[ph-capture]']
      */
     css_selector_allowlist?: string[]
+
+    /**
+     * Exclude certain element attributes from autocapture
+     * E.g. ['aria-label'] or [data-attr-pii]
+     */
+    element_attribute_ignorelist?: string[]
 }
 
 export type UUIDVersion = 'og' | 'v7'

@@ -112,6 +112,19 @@ describe('Autocapture system', () => {
             expect(props['_ngcontent-dpm-c448']).toBeUndefined()
             expect(props['_nghost-dpm-c448']).toBeUndefined()
         })
+
+        it('should filter element attributes based on the ignorelist', () => {
+            autocapture.config = {
+                element_attribute_ignorelist: ['data-attr', 'data-attr-2'],
+            }
+            div.setAttribute('data-attr', 'value')
+            div.setAttribute('data-attr-2', 'value')
+            div.setAttribute('data-attr-3', 'value')
+            const props = autocapture._getPropertiesFromElement(div)
+            expect(props['attr__data-attr']).toBeUndefined()
+            expect(props['attr__data-attr-2']).toBeUndefined()
+            expect(props['attr__data-attr-3']).toBe('value')
+        })
     })
 
     describe('_getAugmentPropertiesFromElement', () => {
