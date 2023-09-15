@@ -1,3 +1,7 @@
+## 1.78.6 - 2023-09-15
+
+- fix: toolbar cache busting (#798)
+
 ## 1.78.5 - 2023-09-14
 
 - fix(flags): Enqueue follow up requests without dropping (#797)
