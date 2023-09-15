@@ -102,12 +102,12 @@ const autocapture = {
             })
 
         // capture the deny list here because this not-a-class class makes it tricky to use this.config in the function below
-        const elementAttributeDenylist = this.config?.element_attribute_denylist
+        const elementAttributeIgnorelist = this.config?.element_attribute_ignorelist
         _each(elem.attributes, function (attr: Attr) {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
 
-            if (elementAttributeDenylist?.includes(attr.name)) return
+            if (elementAttributeIgnorelist?.includes(attr.name)) return
 
             if (!maskInputs && shouldCaptureValue(attr.value) && !isAngularStyleAttr(attr.name)) {
                 props['attr__' + attr.name] = limitText(1024, attr.value)

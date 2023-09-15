@@ -113,9 +113,9 @@ describe('Autocapture system', () => {
             expect(props['_nghost-dpm-c448']).toBeUndefined()
         })
 
-        it('should filter element attributes based on the denylist', () => {
+        it('should filter element attributes based on the ignorelist', () => {
             autocapture.config = {
-                element_attribute_denylist: ['data-attr', 'data-attr-2'],
+                element_attribute_ignorelist: ['data-attr', 'data-attr-2'],
             }
             div.setAttribute('data-attr', 'value')
             div.setAttribute('data-attr-2', 'value')
