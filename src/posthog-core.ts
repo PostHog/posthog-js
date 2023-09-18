@@ -43,6 +43,7 @@ import {
     JsonType,
     OptInOutCapturingOptions,
     PostHogConfig,
+    PostHogInterface,
     Properties,
     Property,
     RequestCallback,
@@ -257,12 +258,11 @@ const create_phlib = function (
     return instance
 }
 
-// TODO(neil): create interface & implement
 /**
  * PostHog Library Object
  * @constructor
  */
-export class PostHog {
+export class PostHog implements PostHogInterface {
     __loaded: boolean
     __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
     config: PostHogConfig

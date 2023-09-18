@@ -1,9 +1,33 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { RetryQueue } from './retry-queue'
+import { RequestQueueScaffold } from 'base-request-queue'
 
 export type Property = any
 export type Properties = Record<string, Property>
+
+export interface PostHogInterface {
+    __loaded: boolean
+    __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
+    config: PostHogConfig
+
+    _requestQueue?: RequestQueueScaffold
+    _retryQueue?: RequestQueueScaffold
+
+    _triggered_notifs: any
+    compression: Partial<Record<Compression, boolean>>
+    _jsc: JSC
+    __captureHooks: ((eventName: string) => void)[]
+    __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
+    __autocapture: boolean | AutocaptureConfig | undefined
+    decideEndpointWasHit: boolean
+
+    segmentIntegration: () => any
+
+    capture: (event_name: string, properties?: Properties | null, options?: CaptureOptions) => CaptureResult | void
+
+    get_session_replay_url: (options?: { withTimestamp?: boolean; timestampLookBack?: number }) => string
+}
 export interface CaptureResult {
     uuid: string
     event: string
