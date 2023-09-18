@@ -162,7 +162,7 @@ const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes,
-    send_nms_recording: false
+    send_nms_recording: true
 })
 
 /**
