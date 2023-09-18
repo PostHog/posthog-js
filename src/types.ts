@@ -2,6 +2,7 @@ import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { RetryQueue } from './retry-queue'
 import { RequestQueueScaffold } from 'base-request-queue'
+import { SurveyCallback } from 'posthog-surveys-types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -27,6 +28,8 @@ export interface PostHogInterface {
     capture: (event_name: string, properties?: Properties | null, options?: CaptureOptions) => CaptureResult | void
 
     get_session_replay_url: (options?: { withTimestamp?: boolean; timestampLookBack?: number }) => string
+
+    getActiveMatchingSurveys: (callback: SurveyCallback, forceReload?: boolean) => void
 }
 export interface CaptureResult {
     uuid: string

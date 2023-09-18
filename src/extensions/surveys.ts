@@ -483,7 +483,7 @@ export function generateSurveys(posthog: PostHogInterface) {
         return formElement
     }
 
-    const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
+    const callSurveys = (posthog: PostHogInterface, forceReload: boolean = false) => {
         posthog?.getActiveMatchingSurveys((surveys) => {
             const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
             nonAPISurveys.forEach((survey) => {
