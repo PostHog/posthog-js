@@ -281,7 +281,11 @@ export const createOpenTextPopup = (posthog: PostHog, survey: Survey) => {
             <div class="buttons">
                 <button class="form-submit" type="submit">${survey.appearance?.submitButtonText || 'Submit'}</button>
             </div>
-            <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
+            ${
+                survey.appearance?.whiteLabel
+                    ? ''
+                    : `<div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>`
+            }
         </div>
     </div>
 `
@@ -316,7 +320,11 @@ export const createThankYouMessage = (survey: Survey) => {
     <div class="thank-you-message-container">
         <h3 class="thank-you-message-header">${survey.appearance?.thankYouMessageHeader || 'Thank you!'}</h3>
         <div class="thank-you-message-body">${survey.appearance?.thankYouMessageDescription || ''}</div>
-        <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
+        ${
+            survey.appearance?.whiteLabel
+                ? ''
+                : `<div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>`
+        }
     </div>
     `
     const thankYouElement = Object.assign(document.createElement('div'), {
@@ -386,8 +394,8 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey) => {
             <div class="rating-options">
             </div>
             <div class="rating-text">
-            <div>${question.lowerBoundLabel}</div>
-            <div>${question.upperBoundLabel}</div>
+            <div>${question.lowerBoundLabel || ''}</div>
+            <div>${question.upperBoundLabel || ''}</div>
             </div>
             <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
         </div>
@@ -446,7 +454,11 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey) => {
         <div class="buttons">
             <button class="form-submit" type="submit">${survey.appearance?.submitButtonText || 'Submit'}</button>
         </div>
-        <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
+        ${
+            survey.appearance?.whiteLabel
+                ? ''
+                : `<div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>`
+        }
     </div>
 
     </div>
