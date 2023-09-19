@@ -281,11 +281,7 @@ export const createOpenTextPopup = (posthog: PostHog, survey: Survey) => {
             <div class="buttons">
                 <button class="form-submit" type="submit">${survey.appearance?.submitButtonText || 'Submit'}</button>
             </div>
-            ${
-                survey.appearance?.whiteLabel
-                    ? ''
-                    : `<div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>`
-            }
+            <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
         </div>
     </div>
 `
@@ -454,11 +450,7 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey) => {
         <div class="buttons">
             <button class="form-submit" type="submit">${survey.appearance?.submitButtonText || 'Submit'}</button>
         </div>
-        ${
-            survey.appearance?.whiteLabel
-                ? ''
-                : `<div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>`
-        }
+        <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
     </div>
 
     </div>
