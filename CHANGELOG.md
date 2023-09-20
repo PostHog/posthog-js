@@ -1,3 +1,8 @@
+## 1.79.1 - 2023-09-20
+
+- fix: Increase timeout to 60 seconds (#803)
+- chore: add tests on impact of empty autocapture config (#802)
+
 ## 1.79.0 - 2023-09-15
 
 - feat: add an attribute denylist for autocapture (#800)
