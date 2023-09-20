@@ -66,7 +66,7 @@ export const xhr = ({
     retriesPerformedSoFar,
     retryQueue,
     onXHRError,
-    timeout = 10000,
+    timeout = 60000,
     onResponse,
 }: XHRParams) => {
     const req = new XMLHttpRequest()
