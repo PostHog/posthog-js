@@ -322,6 +322,15 @@ export class SessionRecording {
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            recordCanvas: true,
+            sampling: {
+                canvas: 15,
+            },
+            // optional image format settings
+            dataURLOptions: {
+                type: 'image/webp',
+                quality: 0.6,
+            },
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
