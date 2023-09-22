@@ -1,5 +1,6 @@
 import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
+import { _isValidRegex } from './utils'
 
 /**
  * Having Survey types in types.ts was confusing tsc
@@ -81,6 +82,23 @@ export class PostHogSurveys {
         }
     }
 
+    getMatchingUrl(url?: string): boolean {
+        if (!url) return true
+
+        // If the url string starts and ends with / it is meant to be a regular expression
+        if (url.startsWith('/') && url.endsWith('/')) {
+            const regexPattern = url.slice(1, -1)
+            if (_isValidRegex(regexPattern)) {
+                return new RegExp(regexPattern).test(window.location.href)
+            }
+        }
+        // If the url string has a wildcard, convert to a regular expression
+        if (url.includes('*')) {
+            return new RegExp(url.replace(/\./g, '\\.').replace(/\*/g, '.*')).test(window.location.href)
+        }
+        return window.location.href.indexOf(url) > -1
+    }
+
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
             const activeSurveys = surveys.filter((survey) => {
@@ -90,9 +108,7 @@ export class PostHogSurveys {
                 if (!survey.conditions) {
                     return true
                 }
-                const urlCheck = survey.conditions?.url
-                    ? window.location.href.indexOf(survey.conditions.url) > -1
-                    : true
+                const urlCheck = this.getMatchingUrl(survey.conditions?.url)
                 const selectorCheck = survey.conditions?.selector
                     ? document.querySelector(survey.conditions.selector)
                     : true

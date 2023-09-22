@@ -133,6 +133,42 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         }
+        const surveyWithRegexUrl = {
+            name: 'survey with regex url',
+            description: 'survey with regex url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with regex url?' }],
+            conditions: { url: '/test/' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
+        const surveyWithParamRegexUrl = {
+            name: 'survey with param regex url',
+            description: 'survey with param regex url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with param regex url?' }],
+            conditions: { url: '/(\\?|\\&)(name.*)\\=([^&]+)/' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
+        const surveyWithWildcardSubdomainUrl = {
+            name: 'survey with wildcard subdomain url',
+            description: 'survey with wildcard subdomain url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with wildcard subdomain url?' }],
+            conditions: { url: '*.example.com' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
+        const surveyWithWildcardRouteUrl = {
+            name: 'survey with wildcard route url',
+            description: 'survey with wildcard route url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with wildcard route url?' }],
+            conditions: { url: 'wildcard.com/*/other' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
         const surveyWithSelector = {
             name: 'survey with selector',
             description: 'survey with selector description',
@@ -192,7 +228,17 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on url and selector matching', () => {
-            given('surveysResponse', () => ({ surveys: [surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector] }))
+            given('surveysResponse', () => ({
+                surveys: [
+                    surveyWithUrl,
+                    surveyWithSelector,
+                    surveyWithUrlAndSelector,
+                    surveyWithRegexUrl,
+                    surveyWithParamRegexUrl,
+                    surveyWithWildcardRouteUrl,
+                    surveyWithWildcardSubdomainUrl,
+                ],
+            }))
             const originalWindowLocation = window.location
             delete window.location
             // eslint-disable-next-line compat/compat
@@ -201,6 +247,35 @@ describe('surveys', () => {
                 expect(data).toEqual([surveyWithUrl])
             })
             window.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://example.com/test')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithRegexUrl])
+            })
+            window.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://example.com?name=something')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithParamRegexUrl])
+            })
+            window.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://app.example.com')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithWildcardSubdomainUrl])
+            })
+            window.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://wildcard.com/something/other')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithWildcardRouteUrl])
+            })
+            window.location = originalWindowLocation
+
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             given.surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithSelector])
