@@ -77,7 +77,7 @@ export class Decide {
         // Check if recorder.js is already loaded
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
-        const surveysGenerator = window?.generateSurveys
+        const surveysGenerator = window?.extendPostHogWithSurveys
 
         if (response['surveys'] && !surveysGenerator) {
             loadScript(this.instance.get_config('api_host') + `/static/surveys.js`, (err) => {
@@ -87,7 +87,7 @@ export class Decide {
 
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
-                window.generateSurveys(this.instance)
+                window.extendPostHogWithSurveys(this.instance)
             })
         }
 
