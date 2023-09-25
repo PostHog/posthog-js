@@ -1,3 +1,7 @@
+## 1.81.0 - 2023-09-25
+
+- feat(surveys): Make surveys site app native to posthog-js (#801)
+
 ## 1.80.0 - 2023-09-25
 
 - Add root $el_text (#806)
