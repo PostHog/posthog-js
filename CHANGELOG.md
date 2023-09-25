@@ -1,3 +1,16 @@
+## 1.81.0 - 2023-09-25
+
+- feat(surveys): Make surveys site app native to posthog-js (#801)
+
+## 1.80.0 - 2023-09-25
+
+- Add root $el_text (#806)
+
+## 1.79.1 - 2023-09-20
+
+- fix: Increase timeout to 60 seconds (#803)
+- chore: add tests on impact of empty autocapture config (#802)
+
 ## 1.79.0 - 2023-09-15
 
 - feat: add an attribute denylist for autocapture (#800)

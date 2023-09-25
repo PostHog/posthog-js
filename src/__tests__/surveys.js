@@ -1,4 +1,5 @@
-import { PostHogSurveys, SurveyQuestionType, SurveyType } from '../posthog-surveys'
+import { PostHogSurveys } from '../posthog-surveys'
+import { SurveyType, SurveyQuestionType } from '../posthog-surveys-types'
 import { PostHogPersistence } from '../posthog-persistence'
 
 describe('surveys', () => {

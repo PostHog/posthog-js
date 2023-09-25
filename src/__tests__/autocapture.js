@@ -886,10 +886,10 @@ describe('Autocapture system', () => {
             autocapture._captureEvent(e1, lib)
 
             const props1 = getCapturedProps(lib.capture)
-            expect(props1['$elements'][0]).toHaveProperty(
-                '$el_text',
+            const text1 =
                 "Some super duper really long Text with new lines that we'll strip out and also we will want to make this text shorter since it's not likely people really care about text content that's super long and it also takes up more space and bandwidth. Some super d"
-            )
+            expect(props1['$elements'][0]).toHaveProperty('$el_text', text1)
+            expect(props1['$el_text']).toEqual(text1)
             lib.capture.resetHistory()
 
             const e2 = {
@@ -899,6 +899,7 @@ describe('Autocapture system', () => {
             autocapture._captureEvent(e2, lib)
             const props2 = getCapturedProps(lib.capture)
             expect(props2['$elements'][0]).toHaveProperty('$el_text', 'Some text')
+            expect(props2['$el_text']).toEqual('Some text')
             lib.capture.resetHistory()
 
             const e3 = {
@@ -908,6 +909,7 @@ describe('Autocapture system', () => {
             autocapture._captureEvent(e3, lib)
             const props3 = getCapturedProps(lib.capture)
             expect(props3['$elements'][0]).toHaveProperty('$el_text', '')
+            expect(props3).not.toHaveProperty('$el_text')
         })
 
         it('does not capture sensitive text content', () => {

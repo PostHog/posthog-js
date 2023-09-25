@@ -4,6 +4,7 @@ import { RetryQueue } from './retry-queue'
 
 export type Property = any
 export type Properties = Record<string, Property>
+
 export interface CaptureResult {
     uuid: string
     event: string
@@ -233,6 +234,7 @@ export interface DecideResponse {
         consoleLogRecordingEnabled?: boolean
         recorderVersion?: 'v1' | 'v2'
     }
+    surveys?: boolean
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
