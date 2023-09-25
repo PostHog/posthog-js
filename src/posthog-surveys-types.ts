@@ -1,0 +1,90 @@
+/**
+ * Having Survey types in types.ts was confusing tsc
+ * and generating an invalid module.d.ts
+ * See https://github.com/PostHog/posthog-js/issues/698
+ */
+
+export interface SurveyAppearance {
+    // keep in sync with frontend/src/types.ts -> SurveyAppearance
+    backgroundColor?: string
+    submitButtonColor?: string
+    textColor?: string
+    submitButtonText?: string
+    descriptionTextColor?: string
+    ratingButtonColor?: string
+    ratingButtonHoverColor?: string
+    whiteLabel?: boolean
+    displayThankYouMessage?: boolean
+    thankYouMessageHeader?: string
+    thankYouMessageDescription?: string
+    // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
+    maxWidth?: string
+    zIndex?: string
+}
+
+export enum SurveyType {
+    Popover = 'popover',
+    Button = 'button',
+    FullScreen = 'full_screen',
+    Email = 'email',
+    API = 'api',
+}
+
+export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
+
+interface SurveyQuestionBase {
+    question: string
+    description?: string | null
+    required?: boolean
+}
+
+export interface BasicSurveyQuestion extends SurveyQuestionBase {
+    type: SurveyQuestionType.Open
+}
+
+export interface LinkSurveyQuestion extends SurveyQuestionBase {
+    type: SurveyQuestionType.Link
+    link: string | null
+}
+
+export interface RatingSurveyQuestion extends SurveyQuestionBase {
+    type: SurveyQuestionType.Rating
+    display: 'number' | 'emoji'
+    scale: number
+    lowerBoundLabel: string
+    upperBoundLabel: string
+}
+
+export interface MultipleSurveyQuestion extends SurveyQuestionBase {
+    type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice
+    choices: string[]
+}
+
+export enum SurveyQuestionType {
+    Open = 'open',
+    MultipleChoice = 'multiple_choice',
+    SingleChoice = 'single_choice',
+    Rating = 'rating',
+    Link = 'link',
+}
+
+export interface SurveyResponse {
+    surveys: Survey[]
+}
+
+export type SurveyCallback = (surveys: Survey[]) => void
+
+export interface Survey {
+    // Sync this with the backend's SurveyAPISerializer!
+    id: string
+    name: string
+    description: string
+    type: SurveyType
+    linked_flag_key: string | null
+    targeting_flag_key: string | null
+    questions: SurveyQuestion[]
+    appearance: SurveyAppearance | null
+    conditions: { url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number } | null
+    start_date: string | null
+    end_date: string | null
+}
