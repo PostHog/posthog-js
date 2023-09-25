@@ -35,6 +35,10 @@ export default function Home() {
                 <div className="buttons">
                     <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
                     <button data-attr="autocapture-button">Autocapture buttons</button>
+                    <a data-attr="autocapture-button" href="#">
+                        <span>Autocapture a &gt; span</span>
+                    </a>
+
                     <button className="ph-no-capture">Ignore certain elements</button>
 
                     <button onClick={() => posthog?.identify('user-' + randomID())}>Identify</button>

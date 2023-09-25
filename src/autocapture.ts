@@ -265,6 +265,7 @@ const autocapture = {
                 {
                     $elements: elementsJson,
                 },
+                elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
                 this._getCustomProperties(targetElementList),
                 autocaptureAugmentProperties
             )
