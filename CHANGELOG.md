@@ -1,3 +1,7 @@
+## 1.80.0 - 2023-09-25
+
+- Add root $el_text (#806)
+
 ## 1.79.1 - 2023-09-20
 
 - fix: Increase timeout to 60 seconds (#803)
