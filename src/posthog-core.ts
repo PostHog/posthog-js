@@ -58,7 +58,7 @@ import { ExceptionObserver } from './extensions/exceptions/exception-autocapture
 import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
-import { SurveyCallback } from 'posthog-surveys-types'
+import { SurveyCallback } from './posthog-surveys-types'
 
 /*
 SIMPLE STYLE GUIDE:
