@@ -1,3 +1,7 @@
+## 1.81.1 - 2023-09-26
+
+- fix(types): Relative import to fix typescript compilation (#809)
+
 ## 1.81.0 - 2023-09-25
 
 - feat(surveys): Make surveys site app native to posthog-js (#801)
