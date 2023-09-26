@@ -55,10 +55,9 @@ import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
 import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
-import { PostHogSurveys } from './posthog-surveys'
+import { PostHogSurveys, SurveyCallback } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
-import { SurveyCallback } from 'posthog-surveys-types'
 
 /*
 SIMPLE STYLE GUIDE:
