@@ -10,14 +10,14 @@ export class PostHogSurveys {
     }
 
     getSurveys(callback: SurveyCallback, forceReload = false) {
-        const existingSurveys = this.instance.get_property(SURVEYS)
+        const existingSurveys = this.instance.get_property(SURVEYS) || []
         if (!existingSurveys || forceReload) {
             this.instance._send_request(
                 `${this.instance.get_config('api_host')}/api/surveys/?token=${this.instance.get_config('token')}`,
                 {},
                 { method: 'GET' },
                 (response) => {
-                    const surveys = response.surveys
+                    const surveys = response.surveys || []
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
                     return callback(surveys)
                 }
@@ -29,9 +29,6 @@ export class PostHogSurveys {
 
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
-            if (!surveys) {
-                return callback([])
-            }
             const activeSurveys = surveys.filter((survey) => {
                 return !!(survey.start_date && !survey.end_date)
             })
