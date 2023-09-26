@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
-import { SurveyCallback } from 'posthog-surveys-types'
+import { SurveyCallback } from './posthog-surveys-types'
 
 export class PostHogSurveys {
     instance: PostHog
