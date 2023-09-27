@@ -102,7 +102,7 @@ describe('surveys', () => {
     })
 
     it('getSurveys returns empty array if surveys are undefined', () => {
-        given('surveysResponse', () => ({ surveys: undefined }))
+        given('surveysResponse', () => ({ status: 0 }))
         given.surveys.getSurveys((data) => {
             expect(data).toEqual([])
         })
