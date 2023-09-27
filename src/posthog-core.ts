@@ -120,6 +120,7 @@ const defaultConfig = (): PostHogConfig => ({
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
     debug: false,
+    verbose: false,
     cookie_expiration: 365,
     upgrade: false,
     disable_session_recording: false,
