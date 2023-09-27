@@ -576,7 +576,7 @@ describe('init()', () => {
                 'a-name'
             )
         )
-        expect(given.subject.get_config('on_xhr_error')).toBe(fakeOnXHRError)
+        expect(given.subject.config.on_xhr_error).toBe(fakeOnXHRError)
     })
 
     it('does not load decide endpoint on advanced_disable_decide', () => {

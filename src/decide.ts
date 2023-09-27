@@ -18,20 +18,20 @@ export class Decide {
         Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
         */
         const json_data = JSON.stringify({
-            token: this.instance.get_config('token'),
+            token: this.instance.config.token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
             person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
             disable_flags:
-                this.instance.get_config('advanced_disable_feature_flags') ||
-                this.instance.get_config('advanced_disable_feature_flags_on_first_load') ||
+                this.instance.config.advanced_disable_feature_flags ||
+                this.instance.config.advanced_disable_feature_flags_on_first_load ||
                 undefined,
         })
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            `${this.instance.get_config('api_host')}/decide/?v=3`,
+            `${this.instance.config.api_host}/decide/?v=3`,
             { data: encoded_data, verbose: true },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response as DecideResponse)
@@ -61,12 +61,12 @@ export class Decide {
         this.instance.webPerformance?.afterDecideResponse(response)
         this.instance.exceptionAutocapture?.afterDecideResponse(response)
 
-        if (!this.instance.get_config('advanced_disable_feature_flags_on_first_load')) {
+        if (!this.instance.config.advanced_disable_feature_flags_on_first_load) {
             this.instance.featureFlags.receivedFeatureFlags(response)
         }
 
         this.instance['compression'] = {}
-        if (response['supportedCompression'] && !this.instance.get_config('disable_compression')) {
+        if (response['supportedCompression'] && !this.instance.config.disable_compression) {
             const compression: Partial<Record<Compression, boolean>> = {}
             for (const method of response['supportedCompression']) {
                 compression[method] = true
@@ -80,7 +80,7 @@ export class Decide {
         const surveysGenerator = window?.extendPostHogWithSurveys
 
         if (response['surveys'] && !surveysGenerator) {
-            loadScript(this.instance.get_config('api_host') + `/static/surveys.js`, (err) => {
+            loadScript(this.instance.config.api_host + `/static/surveys.js`, (err) => {
                 if (err) {
                     return console.error(`Could not load surveys script`, err)
                 }
@@ -92,8 +92,8 @@ export class Decide {
         }
 
         if (response['siteApps']) {
-            if (this.instance.get_config('opt_in_site_apps')) {
-                const apiHost = this.instance.get_config('api_host')
+            if (this.instance.config.opt_in_site_apps) {
+                const apiHost = this.instance.config.api_host
                 for (const { id, url } of response['siteApps']) {
                     const scriptUrl = [
                         apiHost,

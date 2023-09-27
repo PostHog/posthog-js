@@ -117,8 +117,6 @@ const defaultConfig = (): PostHogConfig => ({
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
-    test: false,
-    verbose: false,
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
     debug: false,
@@ -217,19 +215,19 @@ const create_phlib = function (
     instance.webPerformance = new WebPerformanceObserver(instance)
     instance.webPerformance.startObservingIfEnabled()
 
-    if (instance.get_config('__preview_measure_pageview_stats')) {
+    if (instance.config.__preview_measure_pageview_stats) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
     instance.exceptionAutocapture = new ExceptionObserver(instance)
 
-    instance.__autocapture = instance.get_config('autocapture')
+    instance.__autocapture = instance.config.autocapture
     autocapture._setIsAutocaptureEnabled(instance)
     if (autocapture._isAutocaptureEnabled) {
-        instance.__autocapture = instance.get_config('autocapture')
+        instance.__autocapture = instance.config.autocapture
         const num_buckets = 100
         const num_enabled_buckets = 100
-        if (!autocapture.enabledForProject(instance.get_config('token'), num_buckets, num_enabled_buckets)) {
+        if (!autocapture.enabledForProject(instance.config.token, num_buckets, num_enabled_buckets)) {
             instance.__autocapture = false
             logger.log('Not in active bucket: disabling Automatic Event Collection.')
         } else if (!autocapture.isBrowserSupported()) {
@@ -242,7 +240,7 @@ const create_phlib = function (
 
     // if any instance on the page has debug = true, we set the
     // global debug to be true
-    Config.DEBUG = Config.DEBUG || instance.get_config('debug')
+    Config.DEBUG = Config.DEBUG || instance.config.debug
 
     // if target is not defined, we called init after the lib already
     // loaded, so there won't be an array of things to execute
@@ -434,7 +432,7 @@ export class PostHog {
         this.persistence = new PostHogPersistence(this.config)
 
         this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
-        this._retryQueue = new RetryQueue(this.get_config('on_xhr_error'), this.rateLimiter)
+        this._retryQueue = new RetryQueue(this.config.on_xhr_error, this.rateLimiter)
         this.__captureHooks = []
         this.__request_queue = []
 
@@ -464,7 +462,7 @@ export class PostHog {
         }
 
         if (config.bootstrap?.distinctID !== undefined) {
-            const uuid = this.get_config('get_device_id')(uuidv7())
+            const uuid = this.config.get_device_id(uuidv7())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
             this.persistence.set_user_state(config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
@@ -498,7 +496,7 @@ export class PostHog {
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persitence
-            const uuid = this.get_config('get_device_id')(uuidv7())
+            const uuid = this.config.get_device_id(uuidv7())
             this.register_once(
                 {
                     distinct_id: uuid,
@@ -525,13 +523,13 @@ export class PostHog {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
         // These feature flags are loaded in the decide call made right
         // afterwards
-        const disableDecide = this.get_config('advanced_disable_decide')
+        const disableDecide = this.config.advanced_disable_decide
         if (!disableDecide) {
             this.featureFlags.setReloadingPaused(true)
         }
 
         try {
-            this.get_config('loaded')(this)
+            this.config.loaded(this)
         } catch (err) {
             console.error('`loaded` function failed', err)
         }
@@ -540,7 +538,7 @@ export class PostHog {
 
         // this happens after so a user can call identify in
         // the loaded callback
-        if (this.get_config('capture_pageview')) {
+        if (this.config.capture_pageview) {
             this.capture('$pageview', { title: document.title }, { send_instantly: true })
         }
 
@@ -558,7 +556,7 @@ export class PostHog {
 
     _start_queue_if_opted_in(): void {
         if (!this.has_opted_out_capturing()) {
-            if (this.get_config('request_batching')) {
+            if (this.config.request_batching) {
                 this._requestQueue?.poll()
             }
         }
@@ -601,7 +599,7 @@ export class PostHog {
             // callback string to reflect that.
             const jsc = this._jsc
             const randomized_cb = '' + Math.floor(Math.random() * 100000000)
-            const callback_string = this.get_config('callback_fn') + '[' + randomized_cb + ']'
+            const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
             jsc[randomized_cb] = function (response: any) {
                 delete jsc[randomized_cb]
                 callback(response, data)
@@ -611,14 +609,14 @@ export class PostHog {
     }
 
     _handle_unload(): void {
-        if (!this.get_config('request_batching')) {
-            if (this.get_config('capture_pageview') && this.get_config('capture_pageleave')) {
+        if (!this.config.request_batching) {
+            if (this.config.capture_pageview && this.config.capture_pageleave) {
                 this.capture('$pageleave', null, { transport: 'sendBeacon' })
             }
             return
         }
 
-        if (this.get_config('capture_pageview') && this.get_config('capture_pageleave')) {
+        if (this.config.capture_pageview && this.config.capture_pageleave) {
             this.capture('$pageleave')
         }
 
@@ -655,9 +653,9 @@ export class PostHog {
         }
 
         const DEFAULT_OPTIONS = {
-            method: this.get_config('api_method'),
-            transport: this.get_config('api_transport'),
-            verbose: this.get_config('verbose'),
+            method: this.config.api_method,
+            transport: this.config.api_transport,
+            verbose: this.config.verbose,
         }
 
         options = _extend(DEFAULT_OPTIONS, options || {})
@@ -667,7 +665,7 @@ export class PostHog {
 
         const useSendBeacon = 'sendBeacon' in window.navigator && options.transport === 'sendBeacon'
         url = addParamsToURL(url, options.urlQueryArgs || {}, {
-            ip: this.get_config('ip'),
+            ip: this.config.ip,
         })
 
         if (useSendBeacon) {
@@ -684,12 +682,12 @@ export class PostHog {
                 xhr({
                     url: url,
                     data: data,
-                    headers: this.get_config('xhr_headers'),
+                    headers: this.config.xhr_headers,
                     options: options,
                     callback,
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,
-                    onXHRError: this.get_config('on_xhr_error'),
+                    onXHRError: this.config.on_xhr_error,
                     onResponse: this.rateLimiter.checkForLimiting,
                 })
             } catch (e) {
@@ -854,17 +852,17 @@ export class PostHog {
             return
         }
 
-        if (_isBlockedUA(userAgent, this.get_config('custom_blocked_useragents'))) {
+        if (_isBlockedUA(userAgent, this.config.custom_blocked_useragents)) {
             return
         }
 
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
-        if (this.get_config('store_google')) {
+        if (this.config.store_google) {
             this.sessionPersistence.update_campaign_params()
         }
-        if (this.get_config('save_referrer')) {
+        if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
         }
 
@@ -879,26 +877,19 @@ export class PostHog {
             data['$set_once'] = options['$set_once']
         }
 
-        data = _copyAndTruncateStrings(
-            data,
-            options._noTruncate ? null : this.get_config('properties_string_max_length')
-        )
+        data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
         data.timestamp = options.timestamp || new Date()
 
-        if (this.get_config('debug')) {
+        if (this.config.debug) {
             logger.log('PostHog.js send', data)
         }
         const jsonData = JSON.stringify(data)
 
-        const url = this.get_config('api_host') + (options.endpoint || '/e/')
+        const url = this.config.api_host + (options.endpoint || '/e/')
 
         const has_unique_traits = options !== __NOOPTIONS
 
-        if (
-            this.get_config('request_batching') &&
-            (!has_unique_traits || options._batchKey) &&
-            !options.send_instantly
-        ) {
+        if (this.config.request_batching && (!has_unique_traits || options._batchKey) && !options.send_instantly) {
             this._requestQueue.enqueue(url, data, options)
         } else {
             this.__compress_and_send_json_request(url, jsonData, options)
@@ -926,7 +917,7 @@ export class PostHog {
         // set defaults
         const start_timestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
-        properties['token'] = this.get_config('token')
+        properties['token'] = this.config.token
 
         if (event_name === '$snapshot') {
             const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
@@ -942,7 +933,7 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (this.get_config('__preview_measure_pageview_stats')) {
+        if (this.config.__preview_measure_pageview_stats) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
                 performanceProperties = this.pageViewManager.doPageView()
@@ -983,7 +974,7 @@ export class PostHog {
             properties
         )
 
-        const property_blacklist = this.get_config('property_blacklist')
+        const property_blacklist = this.config.property_blacklist
         if (_isArray(property_blacklist)) {
             _each(property_blacklist, function (blacklisted_prop) {
                 delete properties[blacklisted_prop]
@@ -992,7 +983,7 @@ export class PostHog {
             console.error('Invalid value for property_blacklist config: ' + property_blacklist)
         }
 
-        const sanitize_properties = this.get_config('sanitize_properties')
+        const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
             properties = sanitize_properties(properties, event_name)
         }
@@ -1432,7 +1423,7 @@ export class PostHog {
         this.sessionPersistence?.clear()
         this.persistence?.set_user_state('anonymous')
         this.sessionManager?.resetSessionId()
-        const uuid = this.get_config('get_device_id')(uuidv7())
+        const uuid = this.config.get_device_id(uuidv7())
         this.register_once(
             {
                 distinct_id: uuid,
@@ -1687,10 +1678,10 @@ export class PostHog {
         if (_isObject(config)) {
             _extend(this.config, config)
 
-            if (!this.get_config('persistence_name')) {
+            if (!this.config.persistence_name) {
                 this.config.persistence_name = this.config.cookie_name
             }
-            if (!this.get_config('disable_persistence')) {
+            if (!this.config.disable_persistence) {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
@@ -1700,7 +1691,7 @@ export class PostHog {
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true
             }
-            if (this.get_config('debug')) {
+            if (this.config.debug) {
                 Config.DEBUG = true
             }
 
@@ -1802,7 +1793,7 @@ export class PostHog {
     }
 
     toString(): string {
-        let name = this.get_config('name') ?? PRIMARY_INSTANCE_NAME
+        let name = this.config.name ?? PRIMARY_INSTANCE_NAME
         if (name !== PRIMARY_INSTANCE_NAME) {
             name = PRIMARY_INSTANCE_NAME + '.' + name
         }
@@ -1811,7 +1802,7 @@ export class PostHog {
 
     // perform some housekeeping around GDPR opt-in/out state
     _gdpr_init(): void {
-        const is_localStorage_requested = this.get_config('opt_out_capturing_persistence_type') === 'localStorage'
+        const is_localStorage_requested = this.config.opt_out_capturing_persistence_type === 'localStorage'
 
         // try to convert opt-in/out cookies to localStorage if possible
         if (is_localStorage_requested && localStore.is_supported()) {
@@ -1836,11 +1827,11 @@ export class PostHog {
             //       used as an initial state while GDPR information is being collected
         } else if (
             !this.has_opted_in_capturing() &&
-            (this.get_config('opt_out_capturing_by_default') || cookieStore.get('ph_optout'))
+            (this.config.opt_out_capturing_by_default || cookieStore.get('ph_optout'))
         ) {
             cookieStore.remove('ph_optout')
             this.opt_out_capturing({
-                clear_persistence: this.get_config('opt_out_persistence_by_default'),
+                clear_persistence: this.config.opt_out_persistence_by_default,
             })
         }
     }
@@ -1861,10 +1852,10 @@ export class PostHog {
             return
         }
 
-        if (!this.get_config('disable_persistence') && this.persistence?.disabled !== disabled) {
+        if (!this.config.disable_persistence && this.persistence?.disabled !== disabled) {
             this.persistence?.set_disabled(disabled)
         }
-        if (!this.get_config('disable_persistence') && this.sessionPersistence?.disabled !== disabled) {
+        if (!this.config.disable_persistence && this.sessionPersistence?.disabled !== disabled) {
             this.sessionPersistence?.set_disabled(disabled)
         }
     }
@@ -1877,11 +1868,11 @@ export class PostHog {
         options = _extend(
             {
                 capture: this.capture.bind(this),
-                persistence_type: this.get_config('opt_out_capturing_persistence_type'),
-                cookie_prefix: this.get_config('opt_out_capturing_cookie_prefix'),
-                cookie_expiration: this.get_config('cookie_expiration'),
-                cross_subdomain_cookie: this.get_config('cross_subdomain_cookie'),
-                secure_cookie: this.get_config('secure_cookie'),
+                persistence_type: this.config.opt_out_capturing_persistence_type,
+                cookie_prefix: this.config.opt_out_capturing_cookie_prefix,
+                cookie_expiration: this.config.cookie_expiration,
+                cross_subdomain_cookie: this.config.cross_subdomain_cookie,
+                secure_cookie: this.config.secure_cookie,
             },
             options || {}
         )
@@ -1891,7 +1882,7 @@ export class PostHog {
             options['persistence_type'] = 'cookie'
         }
 
-        return func(this.get_config('token'), {
+        return func(this.config.token, {
             capture: options['capture'],
             captureEventName: options['capture_event_name'],
             captureProperties: options['capture_properties'],

@@ -132,19 +132,19 @@ export class SessionRecording {
 
     isRecordingEnabled() {
         const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = !this.instance.get_config('disable_session_recording')
+        const enabled_client_side = !this.instance.config.disable_session_recording
         return enabled_server_side && enabled_client_side
     }
 
     isConsoleLogCaptureEnabled() {
         const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = this.instance.get_config('enable_recording_console_log')
+        const enabled_client_side = this.instance.config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
     }
 
     getRecordingVersion() {
         const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
-        const recordingVersion_client_side = this.instance.get_config('session_recording')?.recorderVersion
+        const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
@@ -210,7 +210,7 @@ export class SessionRecording {
         }
 
         // We do not switch recorder versions midway through a recording.
-        if (this.captureStarted || this.instance.get_config('disable_session_recording')) {
+        if (this.captureStarted || this.instance.config.disable_session_recording) {
             return
         }
 
@@ -224,16 +224,13 @@ export class SessionRecording {
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
         if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
-            loadScript(
-                this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
-                (err) => {
-                    if (err) {
-                        return logger.error(`Could not load ${recorderJS}`, err)
-                    }
-
-                    this._onScriptLoaded()
+            loadScript(this.instance.config.api_host + `/static/${recorderJS}?v=${Config.LIB_VERSION}`, (err) => {
+                if (err) {
+                    return logger.error(`Could not load ${recorderJS}`, err)
                 }
-            )
+
+                this._onScriptLoaded()
+            })
         } else {
             this._onScriptLoaded()
         }
@@ -330,7 +327,7 @@ export class SessionRecording {
         this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
 
         // only allows user to set our 'allowlisted' options
-        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+        const userSessionRecordingOptions = this.instance.config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

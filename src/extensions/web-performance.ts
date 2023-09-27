@@ -147,7 +147,7 @@ export class WebPerformanceObserver {
     }
 
     isEnabled() {
-        return this.instance.get_config('capture_performance') ?? this.remoteEnabled ?? false
+        return this.instance.config.capture_performance ?? this.remoteEnabled ?? false
     }
 
     afterDecideResponse(response: DecideResponse) {
@@ -160,8 +160,8 @@ export class WebPerformanceObserver {
     _capturePerformanceEvent(event: PerformanceEntry) {
         // NOTE: We don't want to capture our own request events.
 
-        if (event.name.indexOf(this.instance.get_config('api_host')) === 0) {
-            const path = event.name.replace(this.instance.get_config('api_host'), '')
+        if (event.name.indexOf(this.instance.config.api_host) === 0) {
+            const path = event.name.replace(this.instance.config.api_host, '')
 
             if (POSTHOG_PATHS_TO_IGNORE.find((x) => path.indexOf(x) === 0)) {
                 return
@@ -174,7 +174,7 @@ export class WebPerformanceObserver {
             url: event.name,
         }
 
-        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+        const userSessionRecordingOptions = this.instance.config.session_recording
 
         if (userSessionRecordingOptions.maskNetworkRequestFn) {
             networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)

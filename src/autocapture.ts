@@ -46,7 +46,7 @@ const autocapture = {
             this._isDisabledServerSide === null
                 ? !!instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
                 : this._isDisabledServerSide
-        const enabled_client_side = !!instance.get_config('autocapture')
+        const enabled_client_side = !!instance.config.autocapture
         this._isAutocaptureEnabled = enabled_client_side && !disabled_server_side
     },
 
@@ -233,8 +233,8 @@ const autocapture = {
                 elementsJson.push(
                     this._getPropertiesFromElement(
                         el,
-                        instance.get_config('mask_all_element_attributes'),
-                        instance.get_config('mask_all_text')
+                        instance.config.mask_all_element_attributes,
+                        instance.config.mask_all_text
                     )
                 )
 
@@ -242,7 +242,7 @@ const autocapture = {
                 _extend(autocaptureAugmentProperties, augmentProperties)
             })
 
-            if (!instance.get_config('mask_all_text')) {
+            if (!instance.config.mask_all_text) {
                 // if the element is a button or anchor tag get the span text from any
                 // children and include it as/with the text property on the parent element
                 if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
@@ -305,11 +305,11 @@ const autocapture = {
             this.config.url_allowlist = this.config.url_allowlist.map((url) => new RegExp(url))
         }
 
-        this.rageclicks = new RageClick(instance.get_config('rageclick'))
+        this.rageclicks = new RageClick(instance.config.rageclick)
     },
 
     afterDecideResponse: function (response: DecideResponse, instance: PostHog): void {
-        const token = instance.get_config('token')
+        const token = instance.config.token
         if (this._initializedTokens.indexOf(token) > -1) {
             logger.log('autocapture already initialized for token "' + token + '"')
             return
