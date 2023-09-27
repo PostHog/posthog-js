@@ -14,8 +14,8 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, Properties } from '../types'
-import type { eventWithTime, listenerHandler } from '@rrweb/types'
+import { DecideResponse, NetworkRequest, Properties } from '../types'
+import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../config'
 import { logger, loadScript, _timestamp } from '../utils'
 
@@ -376,7 +376,11 @@ export class SessionRecording {
             // If anything could go wrong here it has the potential to block the main loop so we catch all errors.
             try {
                 if (eventName === '$pageview') {
-                    this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
+                    const href = this._maskUrl(window.location.href)
+                    if (!href) {
+                        return
+                    }
+                    this.rrwebRecord?.addCustomEvent('$pageview', { href })
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)
@@ -391,6 +395,14 @@ export class SessionRecording {
     onRRwebEmit(rawEvent: eventWithTime) {
         if (!rawEvent || typeof rawEvent !== 'object') {
             return
+        }
+
+        if (rawEvent.type === EventType.Meta) {
+            const href = this._maskUrl(rawEvent.data.href)
+            if (!href) {
+                return
+            }
+            rawEvent.data.href = href
         }
 
         const throttledEvent = this.mutationRateLimiter
@@ -422,6 +434,22 @@ export class SessionRecording {
         } else {
             this.snapshots.push(properties)
         }
+    }
+
+    private _maskUrl(url: string): string | undefined {
+        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+
+        if (userSessionRecordingOptions.maskNetworkRequestFn) {
+            let networkRequest: NetworkRequest | null | undefined = {
+                url,
+            }
+
+            networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
+
+            return networkRequest?.url
+        }
+
+        return url
     }
 
     private _flushBuffer() {
