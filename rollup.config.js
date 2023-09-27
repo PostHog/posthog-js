@@ -31,13 +31,8 @@ export default [
                 format: 'iife',
                 name: 'posthog',
             },
-        ],
-        plugins: [...plugins],
-    },
-    {
-        input: 'src/loader-recorder-v2.ts',
-        output: [
             {
+                // NOTE: We keep this to ensure that old versions of the snippet still work
                 file: 'dist/recorder-v2.js',
                 sourcemap: true,
                 format: 'iife',
