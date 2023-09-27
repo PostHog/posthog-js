@@ -350,7 +350,7 @@ export class PostHogFeatureFlags {
 
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request(
-                `${this.instance.config.api_host}/api/early_access_features/?token=${this.config.                    'token                )}`,
+                `${this.instance.config.api_host}/api/early_access_features/?token=${this.instance.config.token}`,
                 {},
                 { method: 'GET' },
                 (response) => {
