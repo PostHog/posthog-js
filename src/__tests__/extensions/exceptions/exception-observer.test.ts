@@ -13,7 +13,7 @@ describe('Exception Observer', () => {
 
     beforeEach(() => {
         mockPostHogInstance = {
-            get_config: jest.fn((key: string) => mockConfig[key as keyof PostHogConfig]),
+            config: mockConfig,
             get_distinct_id: jest.fn(() => 'mock-distinct-id'),
             capture: mockCapture,
         }

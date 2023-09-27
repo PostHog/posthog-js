@@ -9,7 +9,7 @@ describe('surveys', () => {
         persistence: 'memory',
     }))
     given('instance', () => ({
-        get_config: jest.fn().mockImplementation((key) => given.config[key]),
+        config: given.config,
         _prepare_callback: (callback) => callback,
         persistence: new PostHogPersistence(given.config),
         register: (props) => given.instance.persistence.register(props),

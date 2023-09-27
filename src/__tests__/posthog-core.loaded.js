@@ -13,7 +13,7 @@ describe('loaded() with flags', () => {
     given('subject', () => () => given.lib._loaded())
 
     given('overrides', () => ({
-        get_config: (key) => given.config?.[key],
+        config: given.config,
         capture: jest.fn(),
         featureFlags: {
             setReloadingPaused: jest.fn(),
@@ -39,7 +39,7 @@ describe('loaded() with flags', () => {
         }))
 
         given('overrides', () => ({
-            get_config: (key) => given.config?.[key],
+            config: given.config,
             capture: jest.fn(),
             _send_request: jest.fn((host, data, header, callback) => setTimeout(() => callback({ status: 200 }), 1000)),
             _start_queue_if_opted_in: jest.fn(),

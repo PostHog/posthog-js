@@ -473,13 +473,12 @@ describe(`GDPR utils`, () => {
     describe(`addOptOutCheckPostHogLib`, () => {
         const captureEventName = `єνєηт`
         const captureProperties = { '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞': `𝓿𝓪𝓵𝓾𝓮` }
-        let getConfig, capture, postHogLib
+        let capture, postHogLib
 
-        function setupMocks(getConfigFunc, silenceErrors = false) {
-            getConfig = sinon.spy((name) => getConfigFunc()[name])
+        function setupMocks(config, silenceErrors = false) {
             capture = sinon.spy()
             postHogLib = {
-                get_config: getConfig,
+                config,
                 capture: undefined,
             }
             postHogLib.capture = gdpr.addOptOutCheck(postHogLib, capture, silenceErrors)
@@ -488,7 +487,7 @@ describe(`GDPR utils`, () => {
         forPersistenceTypes(function (persistenceType) {
             it(`should call the wrapped method if the user is neither opted in or opted out`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
+                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
 
                     postHogLib.capture(captureEventName, captureProperties)
 
@@ -498,7 +497,7 @@ describe(`GDPR utils`, () => {
 
             it(`should call the wrapped method if the user is opted in`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
+                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
 
                     gdpr.optIn(token, { persistenceType })
                     postHogLib.capture(captureEventName, captureProperties)
@@ -509,7 +508,7 @@ describe(`GDPR utils`, () => {
 
             it(`should not call the wrapped method if the user is opted out`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
+                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
 
                     gdpr.optOut(token, { persistenceType })
                     postHogLib.capture(captureEventName, captureProperties)
@@ -520,7 +519,7 @@ describe(`GDPR utils`, () => {
 
             it(`should not invoke the callback directly if the user is neither opted in or opted out`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
+                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
                     const callback = sinon.spy()
 
                     postHogLib.capture(captureEventName, captureProperties, callback)
@@ -531,7 +530,7 @@ describe(`GDPR utils`, () => {
 
             it(`should not invoke the callback directly if the user is opted in`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
+                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
                     const callback = sinon.spy()
 
                     gdpr.optIn(token, { persistenceType })
@@ -543,7 +542,7 @@ describe(`GDPR utils`, () => {
 
             it(`should invoke the callback directly if the user is opted out`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => ({ token, opt_out_capturing_persistence_type: persistenceType }))
+                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
                     const callback = sinon.spy()
 
                     gdpr.optOut(token, { persistenceType })
@@ -555,7 +554,7 @@ describe(`GDPR utils`, () => {
 
             it(`should call the wrapped method if there is no token available`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => ({ token: null, opt_out_capturing_persistence_type: persistenceType }))
+                    setupMocks({ token: null, opt_out_capturing_persistence_type: persistenceType })
 
                     gdpr.optIn(token, { persistenceType })
                     postHogLib.capture(captureEventName, captureProperties)
@@ -593,11 +592,11 @@ describe(`GDPR utils`, () => {
 
             it(`should allow use of a custom "persistence prefix" string`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => ({
+                    setupMocks({
                         token,
                         opt_out_capturing_persistence_type: persistenceType,
                         opt_out_capturing_cookie_prefix: CUSTOM_PERSISTENCE_PREFIX,
-                    }))
+                    })
 
                     gdpr.optOut(token, { persistenceType, persistencePrefix: CUSTOM_PERSISTENCE_PREFIX })
                     postHogLib.capture(captureEventName, captureProperties)

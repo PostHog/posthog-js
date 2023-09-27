@@ -45,7 +45,7 @@ describe('SessionRecording', () => {
                 : property_key === SESSION_RECORDING_ENABLED_SERVER_SIDE
                 ? given.$session_recording_enabled_server_side
                 : given.$console_log_enabled_server_side,
-        get_config: jest.fn().mockImplementation((key) => given.config[key]),
+        config: given.config,
         capture: jest.fn(),
         persistence: { register: jest.fn() },
         sessionManager: given.sessionManager,

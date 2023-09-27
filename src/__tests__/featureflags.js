@@ -13,7 +13,7 @@ describe('featureflags', () => {
         persistence: 'memory',
     })),
         given('instance', () => ({
-            get_config: jest.fn().mockImplementation((key) => given.config[key]),
+            config: given.config,
             get_distinct_id: () => 'blah id',
             getGroups: () => {},
             _prepare_callback: (callback) => callback,

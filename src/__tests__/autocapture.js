@@ -474,14 +474,10 @@ describe('Autocapture system', () => {
                     return 'distinctid'
                 },
                 capture: sandbox.spy(),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'mask_all_element_attributes':
-                            return false
-                        case 'rageclick':
-                            return true
-                    }
-                }),
+                config: {
+                    mask_all_element_attributes: false,
+                    rageclick: true,
+                },
             }
         })
 
@@ -506,18 +502,12 @@ describe('Autocapture system', () => {
         it('should add the custom property when an element matching any of the event selectors is clicked', () => {
             lib = {
                 _prepare_callback: sandbox.spy((callback) => callback),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                        case 'mask_all_element_attributes':
-                            return false
-                        case 'autocapture':
-                            return true
-                    }
-                }),
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    mask_all_element_attributes: false,
+                    autocapture: true,
+                },
                 token: 'testtoken',
                 capture: sandbox.spy(),
                 get_distinct_id() {
@@ -614,21 +604,15 @@ describe('Autocapture system', () => {
             expect(captureProperties).toHaveProperty('parent-augment', 'the parent')
         })
 
-        it('should not capture events when get_config returns false, when an element matching any of the event selectors is clicked', () => {
+        it('should not capture events when config returns false, when an element matching any of the event selectors is clicked', () => {
             lib = {
                 _prepare_callback: sandbox.spy((callback) => callback),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                        case 'mask_all_element_attributes':
-                            return false
-                        case 'autocapture':
-                            return false
-                    }
-                }),
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    mask_all_element_attributes: false,
+                    autocapture: false,
+                },
                 token: 'testtoken',
                 capture: sandbox.spy(),
                 get_distinct_id() {
@@ -666,21 +650,15 @@ describe('Autocapture system', () => {
             lib.capture.resetHistory()
         })
 
-        it('should not capture events when get_config returns true but server setting is disabled', () => {
+        it('should not capture events when config returns true but server setting is disabled', () => {
             lib = {
                 _prepare_callback: sandbox.spy((callback) => callback),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                        case 'mask_all_element_attributes':
-                            return false
-                        case 'autocapture':
-                            return true
-                    }
-                }),
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    mask_all_element_attributes: false,
+                    autocapture: true,
+                },
                 token: 'testtoken',
                 capture: sandbox.spy(),
                 get_distinct_id() {
@@ -1035,7 +1013,12 @@ describe('Autocapture system', () => {
       </button>
       `
 
-            const newLib = { ...lib, get_config: jest.fn(() => true) }
+            const newLib = {
+                ...lib,
+                config: {
+                    // TODO
+                },
+            }
 
             document.body.innerHTML = dom
             const button1 = document.getElementById('button1')
@@ -1057,7 +1040,12 @@ describe('Autocapture system', () => {
         </a>
         `
 
-            const newLib = { ...lib, get_config: jest.fn(() => true) }
+            const newLib = {
+                ...lib,
+                config: {
+                    // TODO: Return true
+                },
+            }
 
             document.body.innerHTML = dom
             const a = document.getElementById('a1')
@@ -1075,19 +1063,14 @@ describe('Autocapture system', () => {
     })
 
     describe('_addDomEventHandlers', () => {
-        const sandbox = sinon.createSandbox()
-
         const lib = {
             capture: sinon.spy(),
             get_distinct_id() {
                 return 'distinctid'
             },
-            get_config: sandbox.spy(function (key) {
-                switch (key) {
-                    case 'mask_all_element_attributes':
-                        return false
-                }
-            }),
+            config: {
+                mask_all_element_attributes: false,
+            },
         }
 
         let navigateSpy
@@ -1125,7 +1108,7 @@ describe('Autocapture system', () => {
         given('persistence', () => ({ props: {}, register: jest.fn() }))
 
         given('posthog', () => ({
-            get_config: jest.fn().mockImplementation((key) => given.config[key]),
+            config: given.config,
             token: 'testtoken',
             capture: jest.fn(),
             get_distinct_id: () => 'distinctid',

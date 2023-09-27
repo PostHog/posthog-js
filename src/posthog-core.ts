@@ -1742,13 +1742,6 @@ export class PostHog {
     }
 
     /**
-     * returns the current config object for the library.
-     */
-    get_config<K extends keyof PostHogConfig>(prop_name: K): PostHogConfig[K] {
-        return this.config?.[prop_name]
-    }
-
-    /**
      * Returns the value of the super property named property_name. If no such
      * property is set, get_property() will return the undefined value.
      *
