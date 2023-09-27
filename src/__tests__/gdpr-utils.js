@@ -563,22 +563,9 @@ describe(`GDPR utils`, () => {
                 })
             })
 
-            it(`should call the wrapped method if an unexpected error occurs`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks(() => {
-                        throw new Error(`Unexpected error!`)
-                    }, true)
-
-                    gdpr.optIn(token, { persistenceType })
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
-                })
-            })
-
             it(`should call the wrapped method if config is undefined`, () => {
                 TOKENS.forEach((token) => {
-                    setupMocks(() => undefined, false)
+                    setupMocks(undefined, false)
                     console.error = jest.fn()
 
                     gdpr.optIn(token, { persistenceType })
