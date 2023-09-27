@@ -1016,7 +1016,8 @@ describe('Autocapture system', () => {
             const newLib = {
                 ...lib,
                 config: {
-                    // TODO
+                    ...lib.config,
+                    mask_all_element_attributes: true,
                 },
             }
 
@@ -1043,7 +1044,8 @@ describe('Autocapture system', () => {
             const newLib = {
                 ...lib,
                 config: {
-                    // TODO: Return true
+                    ...lib.config,
+                    mask_all_text: true,
                 },
             }
 
@@ -1212,7 +1214,7 @@ describe('Autocapture system', () => {
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
-            given('config', () => ({ api_host: 'https://test.com', token: 'anotherproject', autocapture: true }))
+            given.posthog.config = { api_host: 'https://test.com', token: 'anotherproject', autocapture: true }
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
         })
