@@ -1108,21 +1108,17 @@ describe('Autocapture system', () => {
         given('persistence', () => ({ props: {}, register: jest.fn() }))
 
         given('posthog', () => ({
-            config: given.config,
+            config: {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                autocapture: true,
+            },
             token: 'testtoken',
             capture: jest.fn(),
             get_distinct_id: () => 'distinctid',
             get_property: (property_key) =>
                 property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? given.$autocapture_disabled_server_side : undefined,
             persistence: given.persistence,
-        }))
-
-        given('clientSideEnabled', () => true)
-
-        given('config', () => ({
-            api_host: 'https://test.com',
-            token: 'testtoken',
-            autocapture: given.clientSideEnabled,
         }))
 
         given('decideResponse', () => ({ config: { enable_collect_everything: true } }))
@@ -1149,7 +1145,7 @@ describe('Autocapture system', () => {
         })
 
         it('should be disabled before the decide response if client side opted out', () => {
-            given('clientSideEnabled', () => false)
+            given.posthog.config.autocapture = false
 
             // _setIsAutocaptureEnabled is called during init
             autocapture._setIsAutocaptureEnabled(given.posthog)
@@ -1166,7 +1162,7 @@ describe('Autocapture system', () => {
         ])(
             'when client side config is %p and remote opt out is %p - autocapture enabled should be %p',
             (clientSideOptIn, serverSideOptOut, expected) => {
-                given('clientSideEnabled', () => clientSideOptIn)
+                given.posthog.config.autocapture = clientSideOptIn
                 given('decideResponse', () => ({
                     config: { enable_collect_everything: true },
                     autocapture_opt_out: serverSideOptOut,
@@ -1184,11 +1180,11 @@ describe('Autocapture system', () => {
         })
 
         it('should not call _addDomEventHandlders if autocapture is disabled', () => {
-            given('config', () => ({
+            given.posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: false,
-            }))
+            }
             given('$autocapture_disabled_server_side', () => true)
             given.subject()
             expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
