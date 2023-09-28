@@ -1,3 +1,9 @@
+## 1.81.2 - 2023-09-28
+
+- Fix config access (#816)
+- fix: Remove complex get_config (#812)
+- fix: Mask page URLs in session recordings (#811)
+
 ## 1.81.1 - 2023-09-26
 
 - fix(types): Relative import to fix typescript compilation (#809)
