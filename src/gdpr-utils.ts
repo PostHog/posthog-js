@@ -214,11 +214,11 @@ export function userOptedOut(posthog: PostHog, silenceErrors: boolean | undefine
     let optedOut = false
 
     try {
-        const token = posthog.get_config('token')
-        const respectDnt = posthog.get_config('respect_dnt')
-        const persistenceType = posthog.get_config('opt_out_capturing_persistence_type')
-        const persistencePrefix = posthog.get_config('opt_out_capturing_cookie_prefix') || undefined
-        const win = posthog.get_config('window' as any) as Window | undefined // used to override window during browser tests
+        const token = posthog.config.token
+        const respectDnt = posthog.config.respect_dnt
+        const persistenceType = posthog.config.opt_out_capturing_persistence_type
+        const persistencePrefix = posthog.config.opt_out_capturing_cookie_prefix || undefined
+        const win = (posthog.config as any).window as Window | undefined // used to override window during browser tests
 
         if (token) {
             // if there was an issue getting the token, continue method execution as normal

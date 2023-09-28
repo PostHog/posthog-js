@@ -3,10 +3,28 @@ import { Decide } from '../decide'
 import { _base64Encode } from '../utils'
 import { PostHogPersistence } from '../posthog-persistence'
 
+const expectDecodedSendRequest = (send_request, data) => {
+    const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
+
+    const decoded = JSON.parse(atob(lastCall[1].data))
+    // Helper to give us more accurate error messages
+    expect(decoded).toEqual(data)
+
+    expect(given.posthog._send_request).toHaveBeenCalledWith(
+        'https://test.com/decide/?v=3',
+        {
+            data: _base64Encode(JSON.stringify(data)),
+            verbose: true,
+        },
+        { method: 'POST' },
+        expect.any(Function)
+    )
+}
+
 describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))
     given('posthog', () => ({
-        get_config: jest.fn().mockImplementation((key) => given.config[key]),
+        config: given.config,
         persistence: new PostHogPersistence(given.config),
         register: (props) => given.posthog.persistence.register(props),
         unregister: (key) => given.posthog.persistence.unregister(key),
@@ -54,21 +72,11 @@ describe('Decide', () => {
         it('should call instance._send_request on constructor', () => {
             given.subject()
 
-            expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/?v=3',
-                {
-                    data: _base64Encode(
-                        JSON.stringify({
-                            token: 'testtoken',
-                            distinct_id: 'distinctid',
-                            groups: { organization: '5' },
-                        })
-                    ),
-                    verbose: true,
-                },
-                { method: 'POST' },
-                expect.any(Function)
-            )
+            expectDecodedSendRequest(given.posthog._send_request, {
+                token: 'testtoken',
+                distinct_id: 'distinctid',
+                groups: { organization: '5' },
+            })
         })
 
         it('should send all stored properties with decide request', () => {
@@ -78,89 +86,59 @@ describe('Decide', () => {
             })
             given.subject()
 
-            expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/?v=3',
-                {
-                    data: _base64Encode(
-                        JSON.stringify({
-                            token: 'testtoken',
-                            distinct_id: 'distinctid',
-                            groups: { organization: '5' },
-                            person_properties: { key: 'value' },
-                            group_properties: { organization: { orgName: 'orgValue' } },
-                        })
-                    ),
-                    verbose: true,
-                },
-                { method: 'POST' },
-                expect.any(Function)
-            )
+            expectDecodedSendRequest(given.posthog._send_request, {
+                token: 'testtoken',
+                distinct_id: 'distinctid',
+                groups: { organization: '5' },
+                person_properties: { key: 'value' },
+                group_properties: { organization: { orgName: 'orgValue' } },
+            })
         })
 
         it('should send disable flags with decide request when config is set', () => {
-            given.posthog.register({
-                $stored_person_properties: { key: 'value' },
-                $stored_group_properties: { organization: { orgName: 'orgValue' } },
-            })
             given('config', () => ({
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags: true,
             }))
-            given.subject()
-
-            expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/?v=3',
-                {
-                    data: _base64Encode(
-                        JSON.stringify({
-                            token: 'testtoken',
-                            distinct_id: 'distinctid',
-                            groups: { organization: '5' },
-                            person_properties: { key: 'value' },
-                            group_properties: { organization: { orgName: 'orgValue' } },
-                            disable_flags: true,
-                        })
-                    ),
-                    verbose: true,
-                },
-                { method: 'POST' },
-                expect.any(Function)
-            )
-        })
-
-        it('should send disable flags with decide request when config for advanced_disable_feature_flags_on_first_load is set', () => {
             given.posthog.register({
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
+            given.subject()
+
+            expectDecodedSendRequest(given.posthog._send_request, {
+                token: 'testtoken',
+                distinct_id: 'distinctid',
+                groups: { organization: '5' },
+                person_properties: { key: 'value' },
+                group_properties: { organization: { orgName: 'orgValue' } },
+                disable_flags: true,
+            })
+        })
+
+        it('should send disable flags with decide request when config for advanced_disable_feature_flags_on_first_load is set', () => {
             given('config', () => ({
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags_on_first_load: true,
             }))
+            given.posthog.register({
+                $stored_person_properties: { key: 'value' },
+                $stored_group_properties: { organization: { orgName: 'orgValue' } },
+            })
             given.subject()
 
-            expect(given.posthog._send_request).toHaveBeenCalledWith(
-                'https://test.com/decide/?v=3',
-                {
-                    data: _base64Encode(
-                        JSON.stringify({
-                            token: 'testtoken',
-                            distinct_id: 'distinctid',
-                            groups: { organization: '5' },
-                            person_properties: { key: 'value' },
-                            group_properties: { organization: { orgName: 'orgValue' } },
-                            disable_flags: true,
-                        })
-                    ),
-                    verbose: true,
-                },
-                { method: 'POST' },
-                expect.any(Function)
-            )
+            expectDecodedSendRequest(given.posthog._send_request, {
+                token: 'testtoken',
+                distinct_id: 'distinctid',
+                groups: { organization: '5' },
+                person_properties: { key: 'value' },
+                group_properties: { organization: { orgName: 'orgValue' } },
+                disable_flags: true,
+            })
         })
     })
 

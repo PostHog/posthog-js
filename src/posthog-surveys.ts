@@ -13,7 +13,7 @@ export class PostHogSurveys {
         const existingSurveys = this.instance.get_property(SURVEYS)
         if (!existingSurveys || forceReload) {
             this.instance._send_request(
-                `${this.instance.get_config('api_host')}/api/surveys/?token=${this.instance.get_config('token')}`,
+                `${this.instance.config.api_host}/api/surveys/?token=${this.instance.config.token}`,
                 {},
                 { method: 'GET' },
                 (response) => {

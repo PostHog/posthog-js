@@ -69,14 +69,10 @@ describe('Payload Compression', () => {
                         throw new Error('Should not get here')
                     }
                 }),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                    }
-                }),
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                },
                 token: 'testtoken',
                 get_distinct_id() {
                     return 'distinctid'
