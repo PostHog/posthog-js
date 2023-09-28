@@ -434,7 +434,7 @@ export class SessionRecording {
     }
 
     private _maskUrl(url: string): string | undefined {
-        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+        const userSessionRecordingOptions = this.instance.config.session_recording
 
         if (userSessionRecordingOptions.maskNetworkRequestFn) {
             let networkRequest: NetworkRequest | null | undefined = {
