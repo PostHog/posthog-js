@@ -1,3 +1,8 @@
+## 1.81.3 - 2023-10-02
+
+- fix(surveys): Handle filtering on undefined (#810)
+- feat(surveys): popup changes and multiple questions support (#819)
+
 ## 1.81.2 - 2023-09-28
 
 - Fix config access (#816)
