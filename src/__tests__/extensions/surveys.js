@@ -81,9 +81,13 @@ describe('survey display logic', () => {
         })
 
         // submit the survey
-        const submitButton = document
+        const ratingButton = document
             .getElementsByClassName(`PostHogSurvey${mockSurveys[0].id}`)[0]
             .shadowRoot.querySelectorAll('.rating_1')[0]
+        ratingButton.click()
+        const submitButton = document
+            .getElementsByClassName(`PostHogSurvey${mockSurveys[0].id}`)[0]
+            .shadowRoot.querySelectorAll('.form-submit')[0]
         submitButton.click()
         expect(mockPostHog.capture).toBeCalledTimes(2)
         expect(mockPostHog.capture).toBeCalledWith('survey sent', {
