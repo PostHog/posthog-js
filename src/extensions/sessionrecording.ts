@@ -14,8 +14,8 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, Properties } from '../types'
-import type { eventWithTime, listenerHandler } from '@rrweb/types'
+import { DecideResponse, NetworkRequest, Properties } from '../types'
+import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../config'
 import { logger, loadScript, _timestamp } from '../utils'
 
@@ -132,19 +132,19 @@ export class SessionRecording {
 
     isRecordingEnabled() {
         const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = !this.instance.get_config('disable_session_recording')
+        const enabled_client_side = !this.instance.config.disable_session_recording
         return enabled_server_side && enabled_client_side
     }
 
     isConsoleLogCaptureEnabled() {
         const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = this.instance.get_config('enable_recording_console_log')
+        const enabled_client_side = this.instance.config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
     }
 
     getRecordingVersion() {
         const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
-        const recordingVersion_client_side = this.instance.get_config('session_recording')?.recorderVersion
+        const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
@@ -210,7 +210,7 @@ export class SessionRecording {
         }
 
         // We do not switch recorder versions midway through a recording.
-        if (this.captureStarted || this.instance.get_config('disable_session_recording')) {
+        if (this.captureStarted || this.instance.config.disable_session_recording) {
             return
         }
 
@@ -224,16 +224,13 @@ export class SessionRecording {
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
         if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
-            loadScript(
-                this.instance.get_config('api_host') + `/static/${recorderJS}?v=${Config.LIB_VERSION}`,
-                (err) => {
-                    if (err) {
-                        return logger.error(`Could not load ${recorderJS}`, err)
-                    }
-
-                    this._onScriptLoaded()
+            loadScript(this.instance.config.api_host + `/static/${recorderJS}?v=${Config.LIB_VERSION}`, (err) => {
+                if (err) {
+                    return logger.error(`Could not load ${recorderJS}`, err)
                 }
-            )
+
+                this._onScriptLoaded()
+            })
         } else {
             this._onScriptLoaded()
         }
@@ -330,7 +327,7 @@ export class SessionRecording {
         this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
 
         // only allows user to set our 'allowlisted' options
-        const userSessionRecordingOptions = this.instance.get_config('session_recording')
+        const userSessionRecordingOptions = this.instance.config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -376,7 +373,11 @@ export class SessionRecording {
             // If anything could go wrong here it has the potential to block the main loop so we catch all errors.
             try {
                 if (eventName === '$pageview') {
-                    this.rrwebRecord?.addCustomEvent('$pageview', { href: window.location.href })
+                    const href = this._maskUrl(window.location.href)
+                    if (!href) {
+                        return
+                    }
+                    this.rrwebRecord?.addCustomEvent('$pageview', { href })
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)
@@ -391,6 +392,14 @@ export class SessionRecording {
     onRRwebEmit(rawEvent: eventWithTime) {
         if (!rawEvent || typeof rawEvent !== 'object') {
             return
+        }
+
+        if (rawEvent.type === EventType.Meta) {
+            const href = this._maskUrl(rawEvent.data.href)
+            if (!href) {
+                return
+            }
+            rawEvent.data.href = href
         }
 
         const throttledEvent = this.mutationRateLimiter
@@ -422,6 +431,22 @@ export class SessionRecording {
         } else {
             this.snapshots.push(properties)
         }
+    }
+
+    private _maskUrl(url: string): string | undefined {
+        const userSessionRecordingOptions = this.instance.config.session_recording
+
+        if (userSessionRecordingOptions.maskNetworkRequestFn) {
+            let networkRequest: NetworkRequest | null | undefined = {
+                url,
+            }
+
+            networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
+
+            return networkRequest?.url
+        }
+
+        return url
     }
 
     private _flushBuffer() {

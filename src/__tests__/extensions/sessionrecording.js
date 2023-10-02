@@ -45,7 +45,7 @@ describe('SessionRecording', () => {
                 : property_key === SESSION_RECORDING_ENABLED_SERVER_SIDE
                 ? given.$session_recording_enabled_server_side
                 : given.$console_log_enabled_server_side,
-        get_config: jest.fn().mockImplementation((key) => given.config[key]),
+        config: given.config,
         capture: jest.fn(),
         persistence: { register: jest.fn() },
         sessionManager: given.sessionManager,
@@ -55,7 +55,7 @@ describe('SessionRecording', () => {
 
     given('config', () => ({
         api_host: 'https://test.com',
-        disable_session_recording: given.disabled,
+        disable_session_recording: false,
         enable_recording_console_log: given.enable_recording_console_log_client_side,
         autocapture: false, // Assert that session recording works even if `autocapture = false`
         session_recording: {
@@ -68,7 +68,6 @@ describe('SessionRecording', () => {
     given('$session_recording_enabled_server_side', () => true)
     given('$console_log_enabled_server_side', () => false)
     given('$session_recording_recorder_version_server_side', () => undefined)
-    given('disabled', () => false)
     given('__loaded_recorder_version', () => undefined)
 
     beforeEach(() => {
@@ -90,7 +89,7 @@ describe('SessionRecording', () => {
         })
 
         it('is disabled if the client config is disabled', () => {
-            given('disabled', () => true)
+            given.posthog.config.disable_session_recording = true
             given.subject()
             expect(given.subject()).toBe(false)
         })
@@ -164,7 +163,7 @@ describe('SessionRecording', () => {
         })
 
         it('call stopRecording if its not enabled', () => {
-            given('disabled', () => true)
+            given.posthog.config.disable_session_recording = true
             given.subject()
             expect(given.sessionRecording.stopRecording).toHaveBeenCalled()
         })
@@ -427,7 +426,7 @@ describe('SessionRecording', () => {
         })
 
         it('does not load script if disable_session_recording passed', () => {
-            given('disabled', () => true)
+            given.posthog.config.disable_session_recording = true
 
             given.sessionRecording.startRecordingIfEnabled()
             given.sessionRecording.startCaptureAndTrySendingQueuedSnapshots()

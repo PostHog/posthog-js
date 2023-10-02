@@ -474,14 +474,10 @@ describe('Autocapture system', () => {
                     return 'distinctid'
                 },
                 capture: sandbox.spy(),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'mask_all_element_attributes':
-                            return false
-                        case 'rageclick':
-                            return true
-                    }
-                }),
+                config: {
+                    mask_all_element_attributes: false,
+                    rageclick: true,
+                },
             }
         })
 
@@ -506,18 +502,12 @@ describe('Autocapture system', () => {
         it('should add the custom property when an element matching any of the event selectors is clicked', () => {
             lib = {
                 _prepare_callback: sandbox.spy((callback) => callback),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                        case 'mask_all_element_attributes':
-                            return false
-                        case 'autocapture':
-                            return true
-                    }
-                }),
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    mask_all_element_attributes: false,
+                    autocapture: true,
+                },
                 token: 'testtoken',
                 capture: sandbox.spy(),
                 get_distinct_id() {
@@ -614,21 +604,15 @@ describe('Autocapture system', () => {
             expect(captureProperties).toHaveProperty('parent-augment', 'the parent')
         })
 
-        it('should not capture events when get_config returns false, when an element matching any of the event selectors is clicked', () => {
+        it('should not capture events when config returns false, when an element matching any of the event selectors is clicked', () => {
             lib = {
                 _prepare_callback: sandbox.spy((callback) => callback),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                        case 'mask_all_element_attributes':
-                            return false
-                        case 'autocapture':
-                            return false
-                    }
-                }),
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    mask_all_element_attributes: false,
+                    autocapture: false,
+                },
                 token: 'testtoken',
                 capture: sandbox.spy(),
                 get_distinct_id() {
@@ -666,21 +650,15 @@ describe('Autocapture system', () => {
             lib.capture.resetHistory()
         })
 
-        it('should not capture events when get_config returns true but server setting is disabled', () => {
+        it('should not capture events when config returns true but server setting is disabled', () => {
             lib = {
                 _prepare_callback: sandbox.spy((callback) => callback),
-                get_config: sandbox.spy(function (key) {
-                    switch (key) {
-                        case 'api_host':
-                            return 'https://test.com'
-                        case 'token':
-                            return 'testtoken'
-                        case 'mask_all_element_attributes':
-                            return false
-                        case 'autocapture':
-                            return true
-                    }
-                }),
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    mask_all_element_attributes: false,
+                    autocapture: true,
+                },
                 token: 'testtoken',
                 capture: sandbox.spy(),
                 get_distinct_id() {
@@ -1035,7 +1013,13 @@ describe('Autocapture system', () => {
       </button>
       `
 
-            const newLib = { ...lib, get_config: jest.fn(() => true) }
+            const newLib = {
+                ...lib,
+                config: {
+                    ...lib.config,
+                    mask_all_element_attributes: true,
+                },
+            }
 
             document.body.innerHTML = dom
             const button1 = document.getElementById('button1')
@@ -1057,7 +1041,13 @@ describe('Autocapture system', () => {
         </a>
         `
 
-            const newLib = { ...lib, get_config: jest.fn(() => true) }
+            const newLib = {
+                ...lib,
+                config: {
+                    ...lib.config,
+                    mask_all_text: true,
+                },
+            }
 
             document.body.innerHTML = dom
             const a = document.getElementById('a1')
@@ -1075,19 +1065,14 @@ describe('Autocapture system', () => {
     })
 
     describe('_addDomEventHandlers', () => {
-        const sandbox = sinon.createSandbox()
-
         const lib = {
             capture: sinon.spy(),
             get_distinct_id() {
                 return 'distinctid'
             },
-            get_config: sandbox.spy(function (key) {
-                switch (key) {
-                    case 'mask_all_element_attributes':
-                        return false
-                }
-            }),
+            config: {
+                mask_all_element_attributes: false,
+            },
         }
 
         let navigateSpy
@@ -1125,21 +1110,17 @@ describe('Autocapture system', () => {
         given('persistence', () => ({ props: {}, register: jest.fn() }))
 
         given('posthog', () => ({
-            get_config: jest.fn().mockImplementation((key) => given.config[key]),
+            config: {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                autocapture: true,
+            },
             token: 'testtoken',
             capture: jest.fn(),
             get_distinct_id: () => 'distinctid',
             get_property: (property_key) =>
                 property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? given.$autocapture_disabled_server_side : undefined,
             persistence: given.persistence,
-        }))
-
-        given('clientSideEnabled', () => true)
-
-        given('config', () => ({
-            api_host: 'https://test.com',
-            token: 'testtoken',
-            autocapture: given.clientSideEnabled,
         }))
 
         given('decideResponse', () => ({ config: { enable_collect_everything: true } }))
@@ -1166,7 +1147,7 @@ describe('Autocapture system', () => {
         })
 
         it('should be disabled before the decide response if client side opted out', () => {
-            given('clientSideEnabled', () => false)
+            given.posthog.config.autocapture = false
 
             // _setIsAutocaptureEnabled is called during init
             autocapture._setIsAutocaptureEnabled(given.posthog)
@@ -1183,7 +1164,7 @@ describe('Autocapture system', () => {
         ])(
             'when client side config is %p and remote opt out is %p - autocapture enabled should be %p',
             (clientSideOptIn, serverSideOptOut, expected) => {
-                given('clientSideEnabled', () => clientSideOptIn)
+                given.posthog.config.autocapture = clientSideOptIn
                 given('decideResponse', () => ({
                     config: { enable_collect_everything: true },
                     autocapture_opt_out: serverSideOptOut,
@@ -1201,11 +1182,11 @@ describe('Autocapture system', () => {
         })
 
         it('should not call _addDomEventHandlders if autocapture is disabled', () => {
-            given('config', () => ({
+            given.posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: false,
-            }))
+            }
             given('$autocapture_disabled_server_side', () => true)
             given.subject()
             expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
@@ -1233,7 +1214,7 @@ describe('Autocapture system', () => {
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
-            given('config', () => ({ api_host: 'https://test.com', token: 'anotherproject', autocapture: true }))
+            given.posthog.config = { api_host: 'https://test.com', token: 'anotherproject', autocapture: true }
             autocapture.afterDecideResponse(given.decideResponse, given.posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
         })

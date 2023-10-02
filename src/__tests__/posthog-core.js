@@ -38,7 +38,6 @@ describe('capture()', () => {
 
     given('overrides', () => ({
         __loaded: true,
-        get_config: (key) => given.config?.[key],
         config: given.config,
         persistence: {
             remove_event_timer: jest.fn(),
@@ -187,7 +186,7 @@ describe('_calculate_event_properties()', () => {
     given('options', () => ({}))
 
     given('overrides', () => ({
-        get_config: (key) => given.config[key],
+        config: given.config,
         persistence: {
             properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
             remove_event_timer: jest.fn(),
@@ -298,7 +297,7 @@ describe('_handle_unload()', () => {
     given('subject', () => () => given.lib._handle_unload())
 
     given('overrides', () => ({
-        get_config: (key) => given.config[key],
+        config: given.config,
         capture: jest.fn(),
         compression: {},
         _requestQueue: {
@@ -369,7 +368,7 @@ describe('__compress_and_send_json_request', () => {
     given('overrides', () => ({
         compression: {},
         _send_request: jest.fn(),
-        get_config: () => false,
+        config: {},
     }))
 
     it('handles base64 compression', () => {
@@ -576,7 +575,7 @@ describe('init()', () => {
                 'a-name'
             )
         )
-        expect(given.subject.get_config('on_xhr_error')).toBe(fakeOnXHRError)
+        expect(given.subject.config.on_xhr_error).toBe(fakeOnXHRError)
     })
 
     it('does not load decide endpoint on advanced_disable_decide', () => {
@@ -888,7 +887,7 @@ describe('_loaded()', () => {
     given('subject', () => () => given.lib._loaded())
 
     given('overrides', () => ({
-        get_config: (key) => given.config?.[key],
+        config: given.config,
         capture: jest.fn(),
         featureFlags: {
             setReloadingPaused: jest.fn(),

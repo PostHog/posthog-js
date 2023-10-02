@@ -75,7 +75,6 @@ export interface PostHogConfig {
     // defaults to the empty array
     custom_blocked_useragents: string[]
     save_referrer: boolean
-    test: boolean
     verbose: boolean
     capture_pageview: boolean
     capture_pageleave: boolean

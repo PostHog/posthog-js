@@ -19,7 +19,7 @@ export class ExceptionObserver {
     }
 
     private debugLog(...args: any[]) {
-        if (this.instance.get_config('debug')) {
+        if (this.instance.config.debug) {
             console.log('PostHog.js [PostHog.ExceptionObserver]', ...args)
         }
     }
@@ -125,7 +125,7 @@ export class ExceptionObserver {
 
         const propertiesToSend = { ...properties, ...errorProperties }
 
-        const posthogHost = this.instance.get_config('ui_host') || this.instance.get_config('api_host')
+        const posthogHost = this.instance.config.ui_host || this.instance.config.api_host
         errorProperties.$exception_personURL = posthogHost + '/person/' + this.instance.get_distinct_id()
 
         this.sendExceptionEvent(propertiesToSend)

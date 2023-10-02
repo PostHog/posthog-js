@@ -10,7 +10,7 @@ describe('Toolbar', () => {
     given('toolbar', () => new Toolbar(given.lib))
 
     given('lib', () => ({
-        get_config: jest.fn().mockImplementation((key) => given.config[key]),
+        config: given.config,
         set_config: jest.fn(),
     }))
 

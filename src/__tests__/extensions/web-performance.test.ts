@@ -35,7 +35,7 @@ describe('WebPerformance', () => {
 
     beforeEach(() => {
         mockPostHogInstance = {
-            get_config: jest.fn((key: string) => mockConfig[key as keyof PostHogConfig]),
+            config: mockConfig,
             sessionRecording: {
                 onRRwebEmit: jest.fn(),
             },

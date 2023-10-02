@@ -79,7 +79,7 @@ export class Toolbar {
                 delete toolbarParams.userIntent
             }
 
-            if (toolbarParams['token'] && this.instance.get_config('token') === toolbarParams['token']) {
+            if (toolbarParams['token'] && this.instance.config.token === toolbarParams['token']) {
                 this.loadToolbar(toolbarParams)
                 return true
             } else {
@@ -97,7 +97,7 @@ export class Toolbar {
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         ;(window as any)['_postHogToolbarLoaded'] = true
 
-        const host = this.instance.get_config('api_host')
+        const host = this.instance.config.api_host
         // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
         // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
         const fiveMinutesInMillis = 5 * 60 * 1000
@@ -105,11 +105,11 @@ export class Toolbar {
         const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
         const toolbarUrl = `${host}${host.endsWith('/') ? '' : '/'}static/toolbar.js?t=${timestampToNearestFiveMinutes}`
         const disableToolbarMetrics =
-            !POSTHOG_MANAGED_HOSTS.includes(this.instance.get_config('api_host')) &&
-            this.instance.get_config('advanced_disable_toolbar_metrics')
+            !POSTHOG_MANAGED_HOSTS.includes(this.instance.config.api_host) &&
+            this.instance.config.advanced_disable_toolbar_metrics
 
         const toolbarParams = {
-            token: this.instance.get_config('token'),
+            token: this.instance.config.token,
             ...params,
             apiURL: host, // defaults to api_host from the instance config if nothing else set
             ...(disableToolbarMetrics ? { instrument: false } : {}),
