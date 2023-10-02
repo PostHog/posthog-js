@@ -246,6 +246,11 @@ export const _isValidRegex = function (str: string): boolean {
     return true
 }
 
+export const _isUrlMatchingRegex = function (url: string, pattern: string): boolean {
+    if (!_isValidRegex(pattern)) return false
+    return new RegExp(pattern).test(url)
+}
+
 export const _encodeDates = function (obj: Properties): Properties {
     _each(obj, function (v, k) {
         if (_isDate(v)) {
