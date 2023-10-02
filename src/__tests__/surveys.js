@@ -101,6 +101,13 @@ describe('surveys', () => {
         expect(given.instance._send_request).toHaveBeenCalledTimes(2)
     })
 
+    it('getSurveys returns empty array if surveys are undefined', () => {
+        given('surveysResponse', () => ({ status: 0 }))
+        given.surveys.getSurveys((data) => {
+            expect(data).toEqual([])
+        })
+    })
+
     describe('getActiveMatchingSurveys', () => {
         const draftSurvey = {
             name: 'draft survey',

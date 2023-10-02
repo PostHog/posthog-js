@@ -17,7 +17,7 @@ export class PostHogSurveys {
                 {},
                 { method: 'GET' },
                 (response) => {
-                    const surveys = response.surveys
+                    const surveys = response.surveys || []
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
                     return callback(surveys)
                 }
