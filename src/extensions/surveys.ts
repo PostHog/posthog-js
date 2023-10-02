@@ -6,10 +6,9 @@ import {
     RatingSurveyQuestion,
     Survey,
     SurveyAppearance,
+    SurveyQuestion,
 } from '../posthog-surveys-types'
 
-const posthogLogo =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="12" viewBox="0 0 50 30" fill="none"><path d="M10.8914 17.2057c-.3685.7371-1.42031.7371-1.78884 0L8.2212 15.443c-.14077-.2815-.14077-.6129 0-.8944l.88136-1.7627c.36853-.7371 1.42034-.7371 1.78884 0l.8814 1.7627c.1407.2815.1407.6129 0 .8944l-.8814 1.7627zM10.8914 27.2028c-.3685.737-1.42031.737-1.78884 0L8.2212 25.44c-.14077-.2815-.14077-.6129 0-.8944l.88136-1.7627c.36853-.7371 1.42034-.7371 1.78884 0l.8814 1.7627c.1407.2815.1407.6129 0 .8944l-.8814 1.7628z" fill="##6A6B69"/><path d="M0 23.4082c0-.8909 1.07714-1.3371 1.70711-.7071l4.58338 4.5834c.62997.63.1838 1.7071-.7071 1.7071H.999999c-.552284 0-.999999-.4477-.999999-1v-4.5834zm0-4.8278c0 .2652.105357.5196.292893.7071l9.411217 9.4112c.18753.1875.44189.2929.70709.2929h5.1692c.8909 0 1.3371-1.0771.7071-1.7071L1.70711 12.7041C1.07714 12.0741 0 12.5203 0 13.4112v5.1692zm0-9.99701c0 .26521.105357.51957.292893.7071L19.7011 28.6987c.1875.1875.4419.2929.7071.2929h5.1692c.8909 0 1.3371-1.0771.7071-1.7071L1.70711 2.70711C1.07715 2.07715 0 2.52331 0 3.41421v5.16918zm9.997 0c0 .26521.1054.51957.2929.7071l17.994 17.99401c.63.63 1.7071.1838 1.7071-.7071v-5.1692c0-.2652-.1054-.5196-.2929-.7071l-17.994-17.994c-.63-.62996-1.7071-.18379-1.7071.70711v5.16918zm11.7041-5.87628c-.63-.62997-1.7071-.1838-1.7071.7071v5.16918c0 .26521.1054.51957.2929.7071l7.997 7.99701c.63.63 1.7071.1838 1.7071-.7071v-5.1692c0-.2652-.1054-.5196-.2929-.7071l-7.997-7.99699z" fill="#6A6B69"/><path d="M42.5248 23.5308l-9.4127-9.4127c-.63-.63-1.7071-.1838-1.7071.7071v13.1664c0 .5523.4477 1 1 1h14.5806c.5523 0 1-.4477 1-1v-1.199c0-.5523-.4496-.9934-.9973-1.0647-1.6807-.2188-3.2528-.9864-4.4635-2.1971zm-6.3213 2.2618c-.8829 0-1.5995-.7166-1.5995-1.5996 0-.8829.7166-1.5995 1.5995-1.5995.883 0 1.5996.7166 1.5996 1.5995 0 .883-.7166 1.5996-1.5996 1.5996z" fill="#6A6B69"/><path d="M0 27.9916c0 .5523.447715 1 1 1h4.58339c.8909 0 1.33707-1.0771.70711-1.7071l-4.58339-4.5834C1.07714 22.0711 0 22.5173 0 23.4082v4.5834zM9.997 10.997L1.70711 2.70711C1.07714 2.07714 0 2.52331 0 3.41421v5.16918c0 .26521.105357.51957.292893.7071L9.997 18.9946V10.997zM1.70711 12.7041C1.07714 12.0741 0 12.5203 0 13.4112v5.1692c0 .2652.105357.5196.292893.7071L9.997 28.9916V20.994l-8.28989-8.2899z" fill="#6A6B69"/><path d="M19.994 11.4112c0-.2652-.1053-.5196-.2929-.7071l-7.997-7.99699c-.6299-.62997-1.70709-.1838-1.70709.7071v5.16918c0 .26521.10539.51957.29289.7071l9.7041 9.70411v-7.5834zM9.99701 28.9916h5.58339c.8909 0 1.3371-1.0771.7071-1.7071L9.99701 20.994v7.9976zM9.99701 10.997v7.5834c0 .2652.10539.5196.29289.7071l9.7041 9.7041v-7.5834c0-.2652-.1053-.5196-.2929-.7071L9.99701 10.997z" fill="#6a6b69"/></svg>'
 const satisfiedEmoji =
     '<svg class="emoji-svg" xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 -960 960 960" width="48"><path d="M626-533q22.5 0 38.25-15.75T680-587q0-22.5-15.75-38.25T626-641q-22.5 0-38.25 15.75T572-587q0 22.5 15.75 38.25T626-533Zm-292 0q22.5 0 38.25-15.75T388-587q0-22.5-15.75-38.25T334-641q-22.5 0-38.25 15.75T280-587q0 22.5 15.75 38.25T334-533Zm146 272q66 0 121.5-35.5T682-393h-52q-23 40-63 61.5T480.5-310q-46.5 0-87-21T331-393h-53q26 61 81 96.5T480-261Zm0 181q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-400Zm0 340q142.375 0 241.188-98.812Q820-337.625 820-480t-98.812-241.188Q622.375-820 480-820t-241.188 98.812Q140-622.375 140-480t98.812 241.188Q337.625-140 480-140Z"/></svg>'
 const neutralEmoji =
@@ -21,223 +20,294 @@ const veryDissatisfiedEmoji =
 const verySatisfiedEmoji =
     '<svg class="emoji-svg" xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 -960 960 960" width="48"><path d="M479.504-261Q537-261 585.5-287q48.5-26 78.5-72.4 6-11.6-.75-22.6-6.75-11-20.25-11H316.918Q303-393 296.5-382t-.5 22.6q30 46.4 78.5 72.4 48.5 26 105.004 26ZM347-578l27 27q7.636 8 17.818 8Q402-543 410-551q8-8 8-18t-8-18l-42-42q-8.8-9-20.9-9-12.1 0-21.1 9l-42 42q-8 7.636-8 17.818Q276-559 284-551q8 8 18 8t18-8l27-27Zm267 0 27 27q7.714 8 18 8t18-8q8-7.636 8-17.818Q685-579 677-587l-42-42q-8.8-9-20.9-9-12.1 0-21.1 9l-42 42q-8 7.714-8 18t8 18q7.636 8 17.818 8Q579-543 587-551l27-27ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-400Zm0 340q142.375 0 241.188-98.812Q820-337.625 820-480t-98.812-241.188Q622.375-820 480-820t-241.188 98.812Q140-622.375 140-480t98.812 241.188Q337.625-140 480-140Z"/></svg>'
 const cancelSVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20"><path d="M291-232.348 232.348-291l189-189-189-189L291-727.652l189 189 189-189L727.652-669l-189 189 189 189L669-232.348l-189-189-189 189Z"/></svg>'
+    '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M0.164752 0.164752C0.384422 -0.0549175 0.740578 -0.0549175 0.960248 0.164752L6 5.20451L11.0398 0.164752C11.2594 -0.0549175 11.6156 -0.0549175 11.8352 0.164752C12.0549 0.384422 12.0549 0.740578 11.8352 0.960248L6.79549 6L11.8352 11.0398C12.0549 11.2594 12.0549 11.6156 11.8352 11.8352C11.6156 12.0549 11.2594 12.0549 11.0398 11.8352L6 6.79549L0.960248 11.8352C0.740578 12.0549 0.384422 12.0549 0.164752 11.8352C-0.0549175 11.6156 -0.0549175 11.2594 0.164752 11.0398L5.20451 6L0.164752 0.960248C-0.0549175 0.740578 -0.0549175 0.384422 0.164752 0.164752Z" fill="black"/></svg>'
+const posthogLogo =
+    '<svg width="77" height="14" viewBox="0 0 77 14" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#clip0_2415_6911)"><mask id="mask0_2415_6911" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="77" height="14"><path d="M0.5 0H76.5V14H0.5V0Z" fill="white"/></mask><g mask="url(#mask0_2415_6911)"><path d="M5.77226 8.02931C5.59388 8.37329 5.08474 8.37329 4.90634 8.02931L4.4797 7.20672C4.41155 7.07535 4.41155 6.9207 4.4797 6.78933L4.90634 5.96669C5.08474 5.62276 5.59388 5.62276 5.77226 5.96669L6.19893 6.78933C6.26709 6.9207 6.26709 7.07535 6.19893 7.20672L5.77226 8.02931ZM5.77226 12.6946C5.59388 13.0386 5.08474 13.0386 4.90634 12.6946L4.4797 11.872C4.41155 11.7406 4.41155 11.586 4.4797 11.4546L4.90634 10.632C5.08474 10.288 5.59388 10.288 5.77226 10.632L6.19893 11.4546C6.26709 11.586 6.26709 11.7406 6.19893 11.872L5.77226 12.6946Z" fill="#1D4AFF"/><path d="M0.5 10.9238C0.5 10.508 1.02142 10.2998 1.32637 10.5938L3.54508 12.7327C3.85003 13.0267 3.63405 13.5294 3.20279 13.5294H0.984076C0.716728 13.5294 0.5 13.3205 0.5 13.0627V10.9238ZM0.5 8.67083C0.5 8.79459 0.551001 8.91331 0.641783 9.00081L5.19753 13.3927C5.28831 13.4802 5.41144 13.5294 5.53982 13.5294H8.0421C8.47337 13.5294 8.68936 13.0267 8.3844 12.7327L1.32637 5.92856C1.02142 5.63456 0.5 5.84278 0.5 6.25854V8.67083ZM0.5 4.00556C0.5 4.12932 0.551001 4.24802 0.641783 4.33554L10.0368 13.3927C10.1276 13.4802 10.2508 13.5294 10.3791 13.5294H12.8814C13.3127 13.5294 13.5287 13.0267 13.2237 12.7327L1.32637 1.26329C1.02142 0.969312 0.5 1.17752 0.5 1.59327V4.00556ZM5.33931 4.00556C5.33931 4.12932 5.39033 4.24802 5.4811 4.33554L14.1916 12.7327C14.4965 13.0267 15.0179 12.8185 15.0179 12.4028V9.99047C15.0179 9.86671 14.9669 9.74799 14.8762 9.66049L6.16568 1.26329C5.86071 0.969307 5.33931 1.17752 5.33931 1.59327V4.00556ZM11.005 1.26329C10.7 0.969307 10.1786 1.17752 10.1786 1.59327V4.00556C10.1786 4.12932 10.2296 4.24802 10.3204 4.33554L14.1916 8.06748C14.4965 8.36148 15.0179 8.15325 15.0179 7.7375V5.3252C15.0179 5.20144 14.9669 5.08272 14.8762 4.99522L11.005 1.26329Z" fill="#F9BD2B"/><path d="M21.0852 10.981L16.5288 6.58843C16.2238 6.29443 15.7024 6.50266 15.7024 6.91841V13.0627C15.7024 13.3205 15.9191 13.5294 16.1865 13.5294H23.2446C23.5119 13.5294 23.7287 13.3205 23.7287 13.0627V12.5032C23.7287 12.2455 23.511 12.0396 23.2459 12.0063C22.4323 11.9042 21.6713 11.546 21.0852 10.981ZM18.0252 12.0365C17.5978 12.0365 17.251 11.7021 17.251 11.2901C17.251 10.878 17.5978 10.5436 18.0252 10.5436C18.4527 10.5436 18.7996 10.878 18.7996 11.2901C18.7996 11.7021 18.4527 12.0365 18.0252 12.0365Z" fill="currentColor"/><path d="M0.5 13.0627C0.5 13.3205 0.716728 13.5294 0.984076 13.5294H3.20279C3.63405 13.5294 3.85003 13.0267 3.54508 12.7327L1.32637 10.5938C1.02142 10.2998 0.5 10.508 0.5 10.9238V13.0627ZM5.33931 5.13191L1.32637 1.26329C1.02142 0.969306 0.5 1.17752 0.5 1.59327V4.00556C0.5 4.12932 0.551001 4.24802 0.641783 4.33554L5.33931 8.86412V5.13191ZM1.32637 5.92855C1.02142 5.63455 0.5 5.84278 0.5 6.25853V8.67083C0.5 8.79459 0.551001 8.91331 0.641783 9.00081L5.33931 13.5294V9.79717L1.32637 5.92855Z" fill="#1D4AFF"/><path d="M10.1787 5.3252C10.1787 5.20144 10.1277 5.08272 10.0369 4.99522L6.16572 1.26329C5.8608 0.969306 5.33936 1.17752 5.33936 1.59327V4.00556C5.33936 4.12932 5.39037 4.24802 5.48114 4.33554L10.1787 8.86412V5.3252ZM5.33936 13.5294H8.04214C8.47341 13.5294 8.6894 13.0267 8.38443 12.7327L5.33936 9.79717V13.5294ZM5.33936 5.13191V8.67083C5.33936 8.79459 5.39037 8.91331 5.48114 9.00081L10.1787 13.5294V9.99047C10.1787 9.86671 10.1277 9.74803 10.0369 9.66049L5.33936 5.13191Z" fill="#F54E00"/><path d="M29.375 11.6667H31.3636V8.48772H33.0249C34.8499 8.48772 36.0204 7.4443 36.0204 5.83052C36.0204 4.21681 34.8499 3.17334 33.0249 3.17334H29.375V11.6667ZM31.3636 6.84972V4.81136H32.8236C33.5787 4.81136 34.0318 5.19958 34.0318 5.83052C34.0318 6.4615 33.5787 6.84972 32.8236 6.84972H31.3636ZM39.618 11.7637C41.5563 11.7637 42.9659 10.429 42.9659 8.60905C42.9659 6.78905 41.5563 5.45438 39.618 5.45438C37.6546 5.45438 36.2701 6.78905 36.2701 8.60905C36.2701 10.429 37.6546 11.7637 39.618 11.7637ZM38.1077 8.60905C38.1077 7.63838 38.7118 6.97105 39.618 6.97105C40.5116 6.97105 41.1157 7.63838 41.1157 8.60905C41.1157 9.57972 40.5116 10.2471 39.618 10.2471C38.7118 10.2471 38.1077 9.57972 38.1077 8.60905ZM46.1482 11.7637C47.6333 11.7637 48.6402 10.8658 48.6402 9.81025C48.6402 7.33505 45.2294 8.13585 45.2294 7.16518C45.2294 6.8983 45.5189 6.72843 45.9342 6.72843C46.3622 6.72843 46.8782 6.98318 47.0418 7.54132L48.527 6.94678C48.2375 6.06105 47.1677 5.45438 45.8713 5.45438C44.4743 5.45438 43.6058 6.25518 43.6058 7.21372C43.6058 9.53118 46.9663 8.88812 46.9663 9.84665C46.9663 10.1864 46.6391 10.417 46.1482 10.417C45.4434 10.417 44.9525 9.94376 44.8015 9.3735L43.3164 9.93158C43.6436 10.8537 44.6001 11.7637 46.1482 11.7637ZM53.4241 11.606L53.2982 10.0651C53.0843 10.1743 52.8074 10.2106 52.5808 10.2106C52.1278 10.2106 51.8257 9.89523 51.8257 9.34918V7.03172H53.3612V5.55145H51.8257V3.78001H49.9755V5.55145H48.9687V7.03172H49.9755V9.57972C49.9755 11.06 51.0202 11.7637 52.3921 11.7637C52.7696 11.7637 53.122 11.7031 53.4241 11.606ZM59.8749 3.17334V6.47358H56.376V3.17334H54.3874V11.6667H56.376V8.11158H59.8749V11.6667H61.8761V3.17334H59.8749ZM66.2899 11.7637C68.2281 11.7637 69.6378 10.429 69.6378 8.60905C69.6378 6.78905 68.2281 5.45438 66.2899 5.45438C64.3265 5.45438 62.942 6.78905 62.942 8.60905C62.942 10.429 64.3265 11.7637 66.2899 11.7637ZM64.7796 8.60905C64.7796 7.63838 65.3837 6.97105 66.2899 6.97105C67.1835 6.97105 67.7876 7.63838 67.7876 8.60905C67.7876 9.57972 67.1835 10.2471 66.2899 10.2471C65.3837 10.2471 64.7796 9.57972 64.7796 8.60905ZM73.2088 11.4725C73.901 11.4725 74.5177 11.242 74.845 10.8416V11.424C74.845 12.1034 74.2786 12.5767 73.4102 12.5767C72.7935 12.5767 72.2523 12.2854 72.1642 11.788L70.4776 12.0428C70.7042 13.1955 71.925 13.972 73.4102 13.972C75.361 13.972 76.6574 12.8679 76.6574 11.2298V5.55145H74.8324V6.07318C74.4926 5.69705 73.9136 5.45438 73.171 5.45438C71.409 5.45438 70.3014 6.61918 70.3014 8.46345C70.3014 10.3077 71.409 11.4725 73.2088 11.4725ZM72.1012 8.46345C72.1012 7.55345 72.655 6.97105 73.5109 6.97105C74.3793 6.97105 74.9331 7.55345 74.9331 8.46345C74.9331 9.37345 74.3793 9.95585 73.5109 9.95585C72.655 9.95585 72.1012 9.37345 72.1012 8.46345Z" fill="currentColor"/></g></g><defs><clipPath id="clip0_2415_6911"><rect width="76" height="14" fill="white" transform="translate(0.5)"/></clipPath></defs></svg>'
+const checkSVG =
+    '<svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5.30769 10.6923L4.77736 11.2226C4.91801 11.3633 5.10878 11.4423 5.30769 11.4423C5.5066 11.4423 5.69737 11.3633 5.83802 11.2226L5.30769 10.6923ZM15.5303 1.53033C15.8232 1.23744 15.8232 0.762563 15.5303 0.46967C15.2374 0.176777 14.7626 0.176777 14.4697 0.46967L15.5303 1.53033ZM1.53033 5.85429C1.23744 5.56139 0.762563 5.56139 0.46967 5.85429C0.176777 6.14718 0.176777 6.62205 0.46967 6.91495L1.53033 5.85429ZM5.83802 11.2226L15.5303 1.53033L14.4697 0.46967L4.77736 10.162L5.83802 11.2226ZM0.46967 6.91495L4.77736 11.2226L5.83802 10.162L1.53033 5.85429L0.46967 6.91495Z" fill="currentColor"/></svg>'
 
-const style = (id: string, appearance: SurveyAppearance | null) => `
-    .survey-${id}-form {
-        position: fixed;
-        bottom: 3vh;
-        right: 20px;
-        color: black;
-        font-weight: normal;
-        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-        text-align: left;
-        max-width: ${parseInt(appearance?.maxWidth || '320')}px;
-        z-index: ${parseInt(appearance?.zIndex || '99999')};
+const style = (id: string, appearance: SurveyAppearance | null) => {
+    const positions = {
+        left: 'left: 30px;',
+        right: 'right: 30px;',
+        center: `
+            left: 50%;
+            transform: translateX(-50%);
+          `,
     }
-    .form-submit[disabled] {
-        opacity: 0.6;
-        filter: grayscale(100%);
-        cursor: not-allowed;
-    }
-    .survey-${id}-form {
-        flex-direction: column;
-        background: ${appearance?.backgroundColor || 'white'};
-        border: 1px solid #f0f0f0;
-        border-radius: 8px;
-        padding-top: 5px;
-        box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
-    }
-    .survey-${id}-form textarea {
-        color: #2d2d2d;
-        font-size: 14px;
-        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-        background: white;
-        color: black;
-        outline: none;
-        padding-left: 10px;
-        padding-right: 10px;
-        padding-top: 10px;
-        border-radius: 6px;
-        margin: 0.5rem;        
-    }
-    .form-submit {
-        box-sizing: border-box;
-        margin: 0;
-        font-family: inherit;
-        overflow: visible;
-        text-transform: none;
-        line-height: 1.5715;
-        position: relative;
-        display: inline-block;
-        font-weight: 400;
-        white-space: nowrap;
-        text-align: center;
-        border: 1px solid transparent;
-        cursor: pointer;
-        transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
-        user-select: none;
-        touch-action: manipulation;
-        height: 32px;
-        padding: 4px 15px;
-        font-size: 14px;
-        border-radius: 4px;
-        outline: 0;
-        background: ${appearance?.submitButtonColor || '#2C2C2C'} !important;
-        color: #E5E7E0;
-        text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
-        box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
-    }
-    .form-submit:hover {
-        filter: brightness(1.2);
-    }
-    .form-cancel {
-        float: right;
-        border: none;
-        background: ${appearance?.backgroundColor || 'white'};
-        cursor: pointer;
-    }
-    .bolded { font-weight: 600; }
-    .bottom-section {
-        padding-bottom: .5rem;
-    }
-    .buttons {
-        display: flex;
-        justify-content: center;
-    }
-    .footer-branding {
-        color: #6a6b69;
-        font-size: 10.5px;
-        padding-top: .5rem;
-        text-align: center;
-    }
-    .survey-${id}-box {
-        padding: .5rem 1rem;
-        display: flex;
-        flex-direction: column;
-    }
-    .survey-question {
-        padding-top: 4px;
-        padding-bottom: 4px;
-        font-weight: 500;
-        color: ${appearance?.textColor || 'black'};
-    }
-    .question-textarea-wrapper {
-        display: flex;
-        flex-direction: column;
-        padding-bottom: 4px;
-    }
-    .description {
-        font-size: 14px;
-        margin-top: .75rem;
-        margin-bottom: .75rem;
-        color: ${appearance?.descriptionTextColor || '#4b4b52'};
-    }
-    .ratings-number {
-        background-color: ${appearance?.ratingButtonColor || '#e0e2e8'};
-        font-size: 14px;
-        border-radius: 6px;
-        border: 1px solid ${appearance?.ratingButtonColor || '#e0e2e8'};
-        padding: 8px;
-    }
-    .ratings-number:hover {
-        cursor: pointer;
-        filter: brightness(1.1);
-    }
-    .rating-options {
-        margin-top: .5rem;
-    }
-    .rating-options-buttons {
-        display: flex;
-        justify-content: space-evenly;
-    }
-    .max-numbers {
-        min-width: 280px;
-    }
-    .rating-options-emoji {
-        display: flex;
-        justify-content: space-evenly;
-    }
-    .ratings-emoji {
-        font-size: 16px;
-        background-color: transparent;
-        border: none;
-    }
-    .ratings-emoji:hover {
-        cursor: pointer;
-    }
-    .emoji-svg {
-        fill: ${appearance?.ratingButtonColor || 'black'};
-    }
-    .emoji-svg:hover {
-        fill: ${appearance?.ratingButtonHoverColor || 'coral'};
-    }
-    .rating-text {
-        display: flex;
-        flex-direction: row;
-        font-size: 12px;
-        justify-content: space-between;
-        margin-top: .5rem;
-        margin-bottom: .5rem;
-        color: #4b4b52;
-    }
-    .rating-section {
-        margin-bottom: .5rem;
-    }
-    .multiple-choice-options {
-        margin-bottom: .5rem;
-        margin-top: .5rem;
-        font-size: 14px;
-    }
-    .multiple-choice-options .choice-option {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        background: #00000003;
-        font-size: 14px;
-        padding: 10px 20px 10px 15px;
-        border: 1px solid #0000000d;
-        border-radius: 4px;
-        cursor: pointer;
-        margin-bottom: 6px;
-    }
-    .multiple-choice-options .choice-option:hover {
-        background: #0000000a;
-    }
-    .multiple-choice-options input {
-        cursor: pointer;
-    }
-    .multiple-choice-options label {
-        width: 100%;
-        cursor: pointer;
-    }
-    .thank-you-message {
-        position: fixed;
-        bottom: 8vh;
-        right: 20px;
-        border-radius: 8px;
-        z-index: ${parseInt(appearance?.zIndex || '99999')};
-        box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
-        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-    }
-    .thank-you-message-container {
-        background: ${appearance?.backgroundColor || 'white'};
-        border: 1px solid #f0f0f0;
-        border-radius: 8px;
-        padding: 12px 18px;
-        text-align: center;
-        max-width: 320px;
-        min-width: 150px;
-    }
-    .thank-you-message {
-        color: ${appearance?.textColor || 'black'};
-    }
-    .thank-you-message-body {
-        padding-bottom: 8px;
-        font-size: 14px;
-        color: ${appearance?.descriptionTextColor || '#4b4b52'};
-    }
-    `
+    return `
+          .survey-${id}-form {
+              position: fixed;
+              margin: 0px;
+              bottom: 0px;
+              color: black;
+              font-weight: normal;
+              font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              text-align: left;
+              max-width: ${parseInt(appearance?.maxWidth || '290')}px;
+              z-index: ${parseInt(appearance?.zIndex || '99999')};
+              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              border-bottom: 0px;
+              width: 100%;
+              ${positions[appearance?.position || 'right'] || 'right: 30px;'}
+          }
+          .survey-${id}-form .tab {
+              display: none;
+          }
+          .form-submit[disabled] {
+              opacity: 0.6;
+              filter: grayscale(100%);
+              cursor: not-allowed;
+          }
+          .survey-${id}-form {
+              flex-direction: column;
+              background: ${appearance?.backgroundColor || '#eeeded'};
+              border-top-left-radius: 10px;
+              border-top-right-radius: 10px;
+              box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
+          }
+          .survey-${id}-form textarea {
+              color: #2d2d2d;
+              font-size: 14px;
+              font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              background: white;
+              color: black;
+              outline: none;
+              padding-left: 10px;
+              padding-right: 10px;
+              padding-top: 10px;
+              border-radius: 6px;
+              border-color: ${appearance?.borderColor || '#c9c6c6'};
+              margin-top: 14px; 
+          }
+          .form-submit {
+              box-sizing: border-box;
+              margin: 0;
+              font-family: inherit;
+              overflow: visible;
+              text-transform: none;
+              position: relative;
+              display: inline-block;
+              font-weight: 700;
+              white-space: nowrap;
+              text-align: center;
+              border: 1.5px solid transparent;
+              cursor: pointer;
+              user-select: none;
+              touch-action: manipulation;
+              padding: 12px;
+              font-size: 14px;
+              border-radius: 6px;
+              outline: 0;
+              background: ${appearance?.submitButtonColor || 'black'} !important;
+              text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
+              box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
+              width: 100%;
+          }
+          .form-cancel {
+              float: right;
+              border: none;
+              background: none;
+              cursor: pointer;
+          }
+          .cancel-btn-wrapper {
+              position: absolute;
+              width: 35px;
+              height: 35px;
+              border-radius: 100%;
+              top: 0;
+              right: 0;
+              transform: translate(50%, -50%);
+              background: white;
+              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              display: flex;
+              justify-content: center;
+              align-items: center;
+          }
+          .bolded { font-weight: 600; }
+          .buttons {
+              display: flex;
+              justify-content: center;
+          }
+          .footer-branding {
+              font-size: 11px;
+              margin-top: 10px;
+              text-align: center;
+              display: flex;
+              justify-content: center;
+              gap: 4px;
+              align-items: center;
+              font-weight: 500;
+              background: ${appearance?.backgroundColor || '#eeeded'};
+              text-decoration: none;
+          }
+          .survey-${id}-box {
+              padding: 20px 25px 10px;
+              display: flex;
+              flex-direction: column;
+          }
+          .survey-question {
+              font-weight: 500;
+              font-size: 14px;
+              background: ${appearance?.backgroundColor || '#eeeded'};
+          }
+          .question-textarea-wrapper {
+              display: flex;
+              flex-direction: column;
+          }
+          .description {
+              font-size: 13px;
+              margin-top: 5px;
+              opacity: .60;
+              background: ${appearance?.backgroundColor || '#eeeded'};
+          }
+          .ratings-number {
+              background-color: ${appearance?.ratingButtonColor || 'white'};
+              font-size: 14px;
+              padding: 8px 0px;
+              border: none;
+          }
+          .ratings-number:hover {
+              cursor: pointer;
+          }
+          .rating-options {
+              margin-top: 14px;
+          }
+          .rating-options-buttons {
+              display: grid;
+              border-radius: 6px;
+              overflow: hidden;
+              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+          }
+          .rating-options-buttons > .ratings-number {
+              border-right: 1px solid ${appearance?.borderColor || '#c9c6c6'};
+          }
+          .rating-options-buttons > .ratings-number:last-of-type {
+              border-right: 0px;
+          }
+          .rating-options-buttons .rating-active {
+              background: ${appearance?.ratingButtonActiveColor || 'black'};
+          }
+          .rating-options-emoji {
+              display: flex;
+              justify-content: space-between;
+          }
+          .ratings-emoji {
+              font-size: 16px;
+              background-color: transparent;
+              border: none;
+              padding: 0px;
+          }
+          .ratings-emoji:hover {
+              cursor: pointer;
+          }
+          .ratings-emoji.rating-active svg {
+              fill: ${appearance?.ratingButtonActiveColor || 'black'};
+          }
+          .emoji-svg {
+              fill: ${appearance?.ratingButtonColor || '#c9c6c6'};
+          }
+          .rating-text {
+              display: flex;
+              flex-direction: row;
+              font-size: 11px;
+              justify-content: space-between;
+              margin-top: 6px;
+              background: ${appearance?.backgroundColor || '#eeeded'};
+              opacity: .60;
+          }
+          .multiple-choice-options {
+              margin-top: 13px;
+              font-size: 14px;
+          }
+          .multiple-choice-options .choice-option {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              font-size: 13px;
+              cursor: pointer;
+              margin-bottom: 5px;
+              position: relative;
+          }
+          .multiple-choice-options > .choice-option:last-of-type {
+              margin-bottom: 0px;
+          }
+          
+          .multiple-choice-options input {
+              cursor: pointer;
+              position: absolute;
+              opacity: 0;
+          }
+          .choice-check {
+              position: absolute;
+              right: 10px;
+              background: white;
+          }
+          .choice-check svg {
+              display: none;
+          }
+          .multiple-choice-options .choice-option:hover .choice-check svg {
+              display: inline-block;
+              opacity: .25;
+          }
+          .multiple-choice-options input:checked + label + .choice-check svg {
+              display: inline-block;
+              opacity: 100% !important;
+          }
+          .multiple-choice-options input[type=checkbox]:checked + label {
+              font-weight: bold;
+          }
+          .multiple-choice-options input:checked + label {
+              border: 1.5px solid rgba(0,0,0);
+          }
+          .multiple-choice-options label {
+              width: 100%;
+              cursor: pointer;
+              padding: 10px;
+              border: 1.5px solid rgba(0,0,0,.25);
+              border-radius: 4px;
+              background: white;
+          }
+          .thank-you-message {
+              position: fixed;
+              bottom: 0px;
+              z-index: ${parseInt(appearance?.zIndex || '99999')};
+              box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
+              font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              border-top-left-radius: 10px;
+              border-top-right-radius: 10px;
+              padding: 20px 25px 10px;
+              background: ${appearance?.backgroundColor || '#eeeded'};
+              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              text-align: center;
+              max-width: ${parseInt(appearance?.maxWidth || '290')}px;
+              min-width: 150px;
+              width: 100%;
+              ${positions[appearance?.position || 'right'] || 'right: 30px;'}
+          }
+          .thank-you-message {
+              color: ${appearance?.textColor || 'black'};
+          }
+          .thank-you-message-body {
+              margin-top: 6px;
+              font-size: 14px;
+              color: ${appearance?.descriptionTextColor || '#4b4b52'};
+          }
+          .thank-you-message-header {
+              margin: 10px 0px 0px;
+          }
+          .thank-you-message-container .form-submit {
+              margin-top: 20px;
+              margin-bottom: 10px;
+          }
+          .thank-you-message-countdown {
+              margin-left: 6px;
+          }
+          .bottom-section {
+              margin-top: 14px;
+          }
+          `
+}
 
 export const createShadow = (styleSheet: string, surveyId: string) => {
     const div = document.createElement('div')
@@ -262,8 +332,11 @@ export const closeSurveyPopup = (surveyId: string, surveyPopup: HTMLFormElement)
     surveyPopup.reset()
 }
 
-export const createOpenTextPopup = (posthog: PostHog, survey: Survey) => {
-    const question = survey.questions[0] as BasicSurveyQuestion | LinkSurveyQuestion
+export const createOpenTextOrLinkPopup = (
+    posthog: PostHog,
+    survey: Survey,
+    question: BasicSurveyQuestion | LinkSurveyQuestion
+) => {
     const surveyQuestionType = question.type
     const surveyDescription = question.description
     const questionText = question.question
@@ -273,39 +346,67 @@ export const createOpenTextPopup = (posthog: PostHog, survey: Survey) => {
             <button class="form-cancel" type="cancel">${cancelSVG}</button>
         </div>
         <div class="question-textarea-wrapper">
-            <div class="survey-question">${questionText}</div>
-            ${surveyDescription ? `<span class="description">${surveyDescription}</span>` : ''}
-            ${surveyQuestionType === 'open' ? `<textarea class="survey-textarea" name="survey" rows=4></textarea>` : ''}
+            <div class="survey-question auto-text-color">${questionText}</div>
+            ${surveyDescription ? `<span class="description auto-text-color">${surveyDescription}</span>` : ''}
+            ${
+                surveyQuestionType === 'open'
+                    ? `<textarea class="survey-textarea" name="survey" rows=4 placeholder="${
+                          survey.appearance?.placeholder || ''
+                      }"></textarea>`
+                    : ''
+            }
         </div>
         <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit" type="submit">${survey.appearance?.submitButtonText || 'Submit'}</button>
+                <button class="form-submit auto-text-color" type="submit" ${
+                    surveyQuestionType === 'open' ? 'disabled' : null
+                }>${survey.appearance?.submitButtonText || 'Submit'}</button>
             </div>
-            <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
+            <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
     </div>
 `
-    const formElement = Object.assign(document.createElement('form'), {
-        className: `survey-${survey.id}-form`,
-        innerHTML: form,
-        onsubmit: function (e: any) {
-            e.preventDefault()
-            const surveyQuestionType = question.type
-            posthog.capture('survey sent', {
-                $survey_name: survey.name,
-                $survey_id: survey.id,
-                $survey_question: survey.questions[0],
-                $survey_response: surveyQuestionType === 'open' ? e.target.survey.value : 'link clicked',
-                sessionRecordingUrl: posthog.get_session_replay_url(),
-            })
+    let formElement: HTMLFormElement | HTMLDivElement
+    if (survey.questions.length === 1) {
+        formElement = Object.assign(document.createElement('form'), {
+            className: `survey-${survey.id}-form`,
+            innerHTML: form,
+            onsubmit: function (e: any) {
+                e.preventDefault()
+                const surveyQuestionType = question.type
+                posthog.capture('survey sent', {
+                    $survey_name: survey.name,
+                    $survey_id: survey.id,
+                    $survey_question: survey.questions[0].question,
+                    $survey_response: surveyQuestionType === 'open' ? e.target.survey.value : 'link clicked',
+                    sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                })
+                if (surveyQuestionType === 'link') {
+                    window.open(question.link || undefined)
+                }
+                window.setTimeout(() => {
+                    window.dispatchEvent(new Event('PHSurveySent'))
+                }, 200)
+                closeSurveyPopup(survey.id, formElement as HTMLFormElement)
+            },
+        })
+    } else {
+        formElement = Object.assign(document.createElement('div'), {
+            innerHTML: form,
+        })
+        const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
+        submitButton.addEventListener('click', () => {
             if (surveyQuestionType === 'link') {
                 window.open(question.link || undefined)
             }
-            window.setTimeout(() => {
-                window.dispatchEvent(new Event('PHSurveySent'))
-            }, 200)
-            closeSurveyPopup(survey.id, formElement)
-        },
+        })
+    }
+
+    formElement.addEventListener('input', (e: any) => {
+        if (formElement.querySelector('.form-submit')) {
+            const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
+            submitButton.disabled = !e.data
+        }
     })
 
     return formElement
@@ -314,12 +415,16 @@ export const createOpenTextPopup = (posthog: PostHog, survey: Survey) => {
 export const createThankYouMessage = (survey: Survey) => {
     const thankYouHTML = `
     <div class="thank-you-message-container">
+        <div class="cancel-btn-wrapper">
+            <button class="form-cancel" type="cancel">${cancelSVG}</button>
+        </div>
         <h3 class="thank-you-message-header">${survey.appearance?.thankYouMessageHeader || 'Thank you!'}</h3>
         <div class="thank-you-message-body">${survey.appearance?.thankYouMessageDescription || ''}</div>
+        <button class="form-submit auto-text-color"><span>Close</span><span class="thank-you-message-countdown"></span></button>
         ${
             survey.appearance?.whiteLabel
                 ? ''
-                : `<div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>`
+                : `<a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>`
         }
     </div>
     `
@@ -351,16 +456,16 @@ export const addCancelListeners = (
     })
 }
 
-export const createRatingsPopup = (posthog: PostHog, survey: Survey) => {
-    const question = survey.questions[0] as RatingSurveyQuestion
+export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: RatingSurveyQuestion) => {
     const scale = question.scale
     const displayType = question.display
     const ratingOptionsElement = document.createElement('div')
     if (displayType === 'number') {
-        ratingOptionsElement.className = `rating-options-buttons ${scale === 10 ? 'max-numbers' : ''}`
+        ratingOptionsElement.className = 'rating-options-buttons'
+        ratingOptionsElement.style.gridTemplateColumns = `repeat(${scale}, minmax(0, 1fr))`
         for (let i = 1; i <= scale; i++) {
             const buttonElement = document.createElement('button')
-            buttonElement.className = `ratings-number rating_${i}`
+            buttonElement.className = `ratings-number rating_${i} auto-text-color`
             buttonElement.type = 'submit'
             buttonElement.value = `${i}`
             buttonElement.innerHTML = `${i}`
@@ -384,96 +489,159 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey) => {
         <div class="cancel-btn-wrapper">
             <button class="form-cancel" type="cancel">${cancelSVG}</button>
         </div>
-        <div class="survey-question">${question.question}</div>
-        ${question.description ? `<span class="description">${question.description}</span>` : ''}
+        <div class="survey-question auto-text-color">${question.question}</div>
+        ${question.description ? `<span class="description auto-text-color">${question.description}</span>` : ''}
         <div class="rating-section">
             <div class="rating-options">
             </div>
-            <div class="rating-text">
+            ${
+                question.lowerBoundLabel || question.upperBoundLabel
+                    ? `<div class="rating-text auto-text-color">
             <div>${question.lowerBoundLabel || ''}</div>
             <div>${question.upperBoundLabel || ''}</div>
+            </div>`
+                    : ''
+            }
+            <div class="bottom-section">
+            <div class="buttons">
+                <button class="form-submit auto-text-color" type="submit" disabled>${
+                    survey.appearance?.submitButtonText || 'Submit'
+                }</button>
             </div>
-            <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
+            <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
+        </div>
         </div>
     </div>
             `
-    const formElement = Object.assign(document.createElement('form'), {
-        className: `survey-${survey.id}-form`,
-        innerHTML: ratingsForm,
-    })
+    let formElement: HTMLFormElement | HTMLDivElement
+    if (survey.questions.length === 1) {
+        formElement = Object.assign(document.createElement('form'), {
+            className: `survey-${survey.id}-form`,
+            innerHTML: ratingsForm,
+            onsubmit: (e: Event) => {
+                e.preventDefault()
+                const activeRatingEl = formElement.querySelector('.rating-active')
+                posthog.capture('survey sent', {
+                    $survey_name: survey.name,
+                    $survey_id: survey.id,
+                    $survey_question: question.question,
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore // TODO: Fix this, error because it doesn't know that the target is a button
+                    $survey_response: parseInt(activeRatingEl?.value),
+                    sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                })
+                window.setTimeout(() => {
+                    window.dispatchEvent(new Event('PHSurveySent'))
+                }, 200)
+                closeSurveyPopup(survey.id, formElement as HTMLFormElement)
+            },
+        })
+    } else {
+        formElement = Object.assign(document.createElement('div'), {
+            innerHTML: ratingsForm,
+        })
+    }
+
     formElement.getElementsByClassName('rating-options')[0].insertAdjacentElement('afterbegin', ratingOptionsElement)
     for (const x of Array(question.scale).keys()) {
-        formElement.getElementsByClassName(`rating_${x + 1}`)[0].addEventListener('click', (e: Event) => {
+        const ratingEl = formElement.getElementsByClassName(`rating_${x + 1}`)[0]
+        ratingEl.addEventListener('click', (e) => {
             e.preventDefault()
-            posthog.capture('survey sent', {
-                $survey_name: survey.name,
-                $survey_id: survey.id,
-                $survey_question: question.question,
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore // TODO: Fix this, error because it doesn't know that the target is a button
-                $survey_response: parseInt(e.currentTarget?.value),
-                sessionRecordingUrl: posthog.get_session_replay_url(),
-            })
-            window.setTimeout(() => {
-                window.dispatchEvent(new Event('PHSurveySent'))
-            }, 200)
-            closeSurveyPopup(survey.id, formElement)
+            for (const activeRatingEl of formElement.getElementsByClassName('rating-active')) {
+                activeRatingEl.classList.remove('rating-active')
+            }
+            ratingEl.classList.add('rating-active')
+            if (formElement.querySelector('.form-submit')) {
+                ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
+            }
+            setTextColors(formElement)
         })
     }
 
     return formElement
 }
 
-export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey) => {
-    const surveyQuestion = survey.questions[0].question
-    const surveyDescription = survey.questions[0].description
-    const surveyQuestionChoices = (survey.questions[0] as MultipleSurveyQuestion).choices
-    const singleOrMultiSelect = survey.questions[0].type
+export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, question: MultipleSurveyQuestion) => {
+    const surveyQuestion = question.question
+    const surveyDescription = question.description
+    const surveyQuestionChoices = question.choices
+    const singleOrMultiSelect = question.type
     const form = `
     <div class="survey-${survey.id}-box">
         <div class="cancel-btn-wrapper">
             <button class="form-cancel" type="cancel">${cancelSVG}</button>
         </div>
-        <div class="survey-question">${surveyQuestion}</div>
-        ${surveyDescription ? `<span class="description">${surveyDescription}</span>` : ''}
+        <div class="survey-question auto-text-color">${surveyQuestion}</div>
+        ${surveyDescription ? `<span class="description auto-text-color">${surveyDescription}</span>` : ''}
         <div class="multiple-choice-options">
         ${surveyQuestionChoices
             .map((option, idx) => {
                 const inputType = singleOrMultiSelect === 'single_choice' ? 'radio' : 'checkbox'
                 const singleOrMultiSelectString = `<div class="choice-option"><input type=${inputType} id=surveyQuestionMultipleChoice${idx} name="choice" value="${option}">
-            <label for=surveyQuestionMultipleChoice${idx}>${option}</label></div>`
+            <label class="auto-text-color" for=surveyQuestionMultipleChoice${idx}>${option}</label><span class="choice-check auto-text-color">${checkSVG}</span></div>`
                 return singleOrMultiSelectString
             })
             .join(' ')}
         </div>
         <div class="bottom-section">
         <div class="buttons">
-            <button class="form-submit" type="submit">${survey.appearance?.submitButtonText || 'Submit'}</button>
+            <button class="form-submit auto-text-color" type="submit" disabled>${
+                survey.appearance?.submitButtonText || 'Submit'
+            }</button>
         </div>
-        <div class="footer-branding"><div>powered by ${posthogLogo} PostHog</div></div>
+        <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
     </div>
 
     </div>
     `
-    const formElement = Object.assign(document.createElement('form'), {
-        className: `survey-${survey.id}-form`,
-        innerHTML: form,
-        onsubmit: (e: any) => {
-            e.preventDefault()
-            const selectedChoices =
-                singleOrMultiSelect === 'single_choice'
-                    ? e.target.querySelector('input[type=radio]:checked').value
-                    : [...e.target.querySelectorAll('input[type=checkbox]:checked')].map((choice) => choice.value)
-            posthog.capture('survey sent', {
-                $survey_name: survey.name,
-                $survey_id: survey.id,
-                $survey_question: survey.questions[0],
-                $survey_response: selectedChoices,
-                sessionRecordingUrl: posthog.get_session_replay_url(),
-            })
-            closeSurveyPopup(survey.id, formElement)
-        },
+    let formElement: HTMLFormElement | HTMLDivElement
+    if (survey.questions.length === 1) {
+        formElement = Object.assign(document.createElement('form'), {
+            className: `survey-${survey.id}-form`,
+            innerHTML: form,
+            onsubmit: (e: Event) => {
+                e.preventDefault()
+                const targetElement = e.target as HTMLFormElement
+                const selectedChoices =
+                    singleOrMultiSelect === 'single_choice'
+                        ? (targetElement.querySelector('input[type=radio]:checked') as HTMLInputElement)?.value
+                        : [
+                              ...(targetElement.querySelectorAll(
+                                  'input[type=checkbox]:checked'
+                              ) as NodeListOf<HTMLInputElement>),
+                          ].map((choice) => choice.value)
+                posthog.capture('survey sent', {
+                    $survey_name: survey.name,
+                    $survey_id: survey.id,
+                    $survey_question: survey.questions[0].question,
+                    $survey_response: selectedChoices,
+                    sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                })
+                window.setTimeout(() => {
+                    window.dispatchEvent(new Event('PHSurveySent'))
+                }, 200)
+                closeSurveyPopup(survey.id, formElement as HTMLFormElement)
+            },
+        })
+    } else {
+        formElement = Object.assign(document.createElement('div'), {
+            innerHTML: form,
+        })
+    }
+    formElement.addEventListener('change', () => {
+        const selectedChoices =
+            singleOrMultiSelect === 'single_choice'
+                ? formElement.querySelector('input[type=radio]:checked')
+                : formElement.querySelectorAll('input[type=checkbox]:checked')
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore // TODO: Fix this, error because it doesn't recognize node list as an array
+        if (selectedChoices && (selectedChoices.length ?? 0) > 0) {
+            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
+        } else {
+            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
+        }
     })
+
     return formElement
 }
 
@@ -494,51 +662,204 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                 }
 
                 if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
-                    let surveyPopup
-                    const surveyQuestionType = survey.questions[0].type
-                    if (surveyQuestionType === 'rating') {
-                        surveyPopup = createRatingsPopup(posthog, survey)
-                    } else if (surveyQuestionType === 'open' || surveyQuestionType === 'link') {
-                        surveyPopup = createOpenTextPopup(posthog, survey)
-                    } else if (surveyQuestionType === 'single_choice' || surveyQuestionType === 'multiple_choice') {
-                        surveyPopup = createMultipleChoicePopup(posthog, survey)
-                    }
-
-                    if (!surveyPopup) {
-                        console.error(`PostHog: Survey question type: ${surveyQuestionType} not supported`)
-                        return
-                    }
-
                     const shadow = createShadow(style(survey.id, survey?.appearance), survey.id)
-
-                    addCancelListeners(posthog, surveyPopup, survey.id, survey.name)
-                    if (survey.appearance?.whiteLabel) {
-                        ;(
-                            surveyPopup.getElementsByClassName('footer-branding') as HTMLCollectionOf<HTMLElement>
-                        )[0].style.display = 'none'
+                    let surveyPopup
+                    if (survey.questions.length < 2) {
+                        surveyPopup = createSingleQuestionSurvey(
+                            posthog,
+                            survey,
+                            survey.questions[0]
+                        ) as HTMLFormElement
+                    } else {
+                        surveyPopup = createMultipleQuestionSurvey(posthog, survey)
                     }
-                    shadow.appendChild(surveyPopup)
-
+                    if (surveyPopup) {
+                        addCancelListeners(posthog, surveyPopup, survey.id, survey.name)
+                        if (survey.appearance?.whiteLabel) {
+                            ;(
+                                surveyPopup.getElementsByClassName('footer-branding')[0] as HTMLAnchorElement
+                            ).style.display = 'none'
+                        }
+                        shadow.appendChild(surveyPopup)
+                    }
+                    if (survey.questions.length > 1) {
+                        const currentQuestion = 0
+                        showQuestion(currentQuestion, survey.id)
+                    }
+                    setTextColors(shadow)
                     window.dispatchEvent(new Event('PHSurveyShown'))
                     posthog.capture('survey shown', {
                         $survey_name: survey.name,
                         $survey_id: survey.id,
-                        sessionRecordingUrl: posthog.get_session_replay_url(),
+                        sessionRecordingUrl: posthog.get_session_replay_url?.(),
                     })
                     localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
                     if (survey.appearance?.displayThankYouMessage) {
                         window.addEventListener('PHSurveySent', () => {
                             const thankYouElement = createThankYouMessage(survey)
                             shadow.appendChild(thankYouElement)
-                            window.setTimeout(() => {
-                                thankYouElement.remove()
-                            }, 2000)
+                            const cancelButtons = thankYouElement.querySelectorAll('.form-cancel, .form-submit')
+                            for (const button of cancelButtons) {
+                                button.addEventListener('click', () => {
+                                    thankYouElement.remove()
+                                })
+                            }
+                            const countdownEl = thankYouElement.querySelector('.thank-you-message-countdown')
+                            if (countdownEl) {
+                                let count = 3
+                                countdownEl.textContent = `(${count})`
+                                const countdown = setInterval(() => {
+                                    count -= 1
+                                    if (count <= 0) {
+                                        clearInterval(countdown)
+                                        thankYouElement.remove()
+                                        return
+                                    }
+                                    countdownEl.textContent = `(${count})`
+                                }, 1000)
+                            }
+                            setTextColors(shadow)
                         })
                     }
                 }
             }
         })
     }, forceReload)
+}
+
+export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) => {
+    const questions = survey.questions
+    const questionTypeMapping = {
+        open: createOpenTextOrLinkPopup,
+        link: createOpenTextOrLinkPopup,
+        rating: createRatingsPopup,
+        single_choice: createMultipleChoicePopup,
+        multiple_choice: createMultipleChoicePopup,
+    }
+    const multipleQuestionForm = Object.assign(document.createElement('form'), {
+        className: `survey-${survey.id}-form`,
+        onsubmit: (e: Event) => {
+            e.preventDefault()
+            const multipleQuestionResponses: Record<string, string | number | string[] | null> = {}
+            const allTabs = (e.target as HTMLDivElement).getElementsByClassName('tab')
+            let idx = 0
+            for (const tab of allTabs) {
+                const classes = tab.classList
+                const questionType = classes[2]
+                let response
+                if (questionType === 'open') {
+                    response = tab.querySelector('textarea')?.value
+                } else if (questionType === 'link') {
+                    response = 'link clicked'
+                } else if (questionType === 'rating') {
+                    response = parseInt((tab.querySelector('.rating-active') as HTMLButtonElement)?.value)
+                } else if (questionType === 'single_choice' || questionType === 'multiple_choice') {
+                    const selectedChoices =
+                        questionType === 'single_choice'
+                            ? (tab.querySelector('input[type=radio]:checked') as HTMLInputElement).value
+                            : [
+                                  ...(tab.querySelectorAll(
+                                      'input[type=checkbox]:checked'
+                                  ) as NodeListOf<HTMLInputElement>),
+                              ].map((choice) => choice.value)
+                    response = selectedChoices
+                }
+                if (response !== undefined) {
+                    if (idx === 0) {
+                        multipleQuestionResponses['$survey_response'] = response
+                    } else {
+                        multipleQuestionResponses[`$survey_response_${idx}`] = response
+                    }
+                }
+                idx++
+            }
+            posthog.capture('survey sent', {
+                $survey_name: survey.name,
+                $survey_id: survey.id,
+                $survey_questions: survey.questions.map((question) => question.question),
+                sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                ...multipleQuestionResponses,
+            })
+            window.setTimeout(() => {
+                window.dispatchEvent(new Event('PHSurveySent'))
+            }, 200)
+            closeSurveyPopup(survey.id, multipleQuestionForm)
+        },
+    })
+
+    questions.map((question, idx) => {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore // TODO: Fix this, error because of survey question type mapping
+        const questionElement = questionTypeMapping[question.type](posthog, survey, question)
+        const questionTab = document.createElement('div')
+        questionTab.className = `tab question-${idx} ${question.type}`
+        if (idx < questions.length - 1) {
+            const questionElementSubmitButton = questionElement.getElementsByClassName(
+                'form-submit'
+            )[0] as HTMLButtonElement
+            questionElementSubmitButton.innerText = 'Next'
+            questionElementSubmitButton.type = 'button'
+            questionElementSubmitButton.addEventListener('click', () => {
+                nextQuestion(idx, survey.id)
+            })
+        }
+        questionTab.insertAdjacentElement('beforeend', questionElement)
+
+        multipleQuestionForm.insertAdjacentElement('beforeend', questionTab)
+    })
+
+    return multipleQuestionForm
+}
+
+const createSingleQuestionSurvey = (posthog: PostHog, survey: Survey, question: SurveyQuestion) => {
+    const questionType = question.type
+    if (questionType === 'rating') {
+        return createRatingsPopup(posthog, survey, question)
+    } else if (questionType === 'open' || questionType === 'link') {
+        return createOpenTextOrLinkPopup(posthog, survey, question)
+    } else if (questionType === 'single_choice' || questionType === 'multiple_choice') {
+        return createMultipleChoicePopup(posthog, survey, question)
+    }
+    return null
+}
+
+function getTextColor(el: HTMLElement) {
+    const backgroundColor = window.getComputedStyle(el).backgroundColor
+    if (backgroundColor === 'rgba(0, 0, 0, 0)') {
+        return 'black'
+    }
+    const colorMatch = backgroundColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)$/)
+    if (!colorMatch) return 'black'
+
+    const r = parseInt(colorMatch[1])
+    const g = parseInt(colorMatch[2])
+    const b = parseInt(colorMatch[3])
+    const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
+    return hsp > 127.5 ? 'black' : 'white'
+}
+
+function setTextColors(parentEl: any) {
+    for (const el of parentEl.querySelectorAll('.auto-text-color')) {
+        el.style.color = getTextColor(el)
+    }
+}
+
+function showQuestion(n: number, surveyId: string) {
+    // This function will display the specified tab of the form...
+    const tabs = document
+        .getElementsByClassName(`PostHogSurvey${surveyId}`)[0]
+        ?.shadowRoot?.querySelectorAll('.tab') as NodeListOf<HTMLElement>
+    tabs[n].style.display = 'block'
+}
+
+function nextQuestion(currentQuestionIdx: number, surveyId: string) {
+    // figure out which tab to display
+    const tabs = document
+        .getElementsByClassName(`PostHogSurvey${surveyId}`)[0]
+        ?.shadowRoot?.querySelectorAll('.tab') as NodeListOf<HTMLElement>
+
+    tabs[currentQuestionIdx].style.display = 'none'
+    showQuestion(currentQuestionIdx + 1, surveyId)
 }
 
 export function generateSurveys(posthog: PostHog) {
