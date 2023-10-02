@@ -12,11 +12,15 @@ export interface SurveyAppearance {
     submitButtonText?: string
     descriptionTextColor?: string
     ratingButtonColor?: string
+    ratingButtonActiveColor?: string
     ratingButtonHoverColor?: string
     whiteLabel?: boolean
     displayThankYouMessage?: boolean
     thankYouMessageHeader?: string
     thankYouMessageDescription?: string
+    borderColor?: string
+    position?: 'left' | 'right' | 'center'
+    placeholder?: string
     // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
