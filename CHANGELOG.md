@@ -1,3 +1,7 @@
+## 1.82.1 - 2023-10-04
+
+- fix(surveys): multiple choice survey submit button bug (#822)
+
 ## 1.82.0 - 2023-10-04
 
 - feat: allow regex patterns and wildcards in survey url (#821)
