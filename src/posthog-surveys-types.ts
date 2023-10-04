@@ -78,6 +78,8 @@ export interface SurveyResponse {
 
 export type SurveyCallback = (surveys: Survey[]) => void
 
+export type SurveyUrlMatchType = 'regex' | 'exact' | 'icontains'
+
 export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string
@@ -88,7 +90,12 @@ export interface Survey {
     targeting_flag_key: string | null
     questions: SurveyQuestion[]
     appearance: SurveyAppearance | null
-    conditions: { url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number } | null
+    conditions: {
+        url?: string
+        selector?: string
+        seenSurveyWaitPeriodInDays?: number
+        urlMatchType?: SurveyUrlMatchType
+    } | null
     start_date: string | null
     end_date: string | null
 }

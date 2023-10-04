@@ -141,6 +141,51 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         }
+        const surveyWithRegexUrl = {
+            name: 'survey with regex url',
+            description: 'survey with regex url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with regex url?' }],
+            conditions: { url: 'regex-url', urlMatchType: 'regex' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
+        const surveyWithParamRegexUrl = {
+            name: 'survey with param regex url',
+            description: 'survey with param regex url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with param regex url?' }],
+            conditions: { url: '(\\?|\\&)(name.*)\\=([^&]+)', urlMatchType: 'regex' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
+        const surveyWithWildcardSubdomainUrl = {
+            name: 'survey with wildcard subdomain url',
+            description: 'survey with wildcard subdomain url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with wildcard subdomain url?' }],
+            conditions: { url: '(.*.)?subdomain.com', urlMatchType: 'regex' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
+        const surveyWithWildcardRouteUrl = {
+            name: 'survey with wildcard route url',
+            description: 'survey with wildcard route url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with wildcard route url?' }],
+            conditions: { url: 'wildcard.com/(.*.)', urlMatchType: 'regex' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
+        const surveyWithExactUrlMatch = {
+            name: 'survey with wildcard route url',
+            description: 'survey with wildcard route url description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with wildcard route url?' }],
+            conditions: { url: 'https://example.com/exact', urlMatchType: 'exact' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        }
         const surveyWithSelector = {
             name: 'survey with selector',
             description: 'survey with selector description',
@@ -200,7 +245,9 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on url and selector matching', () => {
-            given('surveysResponse', () => ({ surveys: [surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector] }))
+            given('surveysResponse', () => ({
+                surveys: [surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector],
+            }))
             const originalWindowLocation = window.location
             delete window.location
             // eslint-disable-next-line compat/compat
@@ -209,6 +256,7 @@ describe('surveys', () => {
                 expect(data).toEqual([surveyWithUrl])
             })
             window.location = originalWindowLocation
+
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             given.surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithSelector])
@@ -226,6 +274,55 @@ describe('surveys', () => {
             document.body.removeChild(document.querySelector('#foo'))
         })
 
+        it('returns surveys based on url with urlMatchType settings', () => {
+            given('surveysResponse', () => ({
+                surveys: [
+                    surveyWithRegexUrl,
+                    surveyWithParamRegexUrl,
+                    surveyWithWildcardRouteUrl,
+                    surveyWithWildcardSubdomainUrl,
+                    surveyWithExactUrlMatch,
+                ],
+            }))
+
+            const originalWindowLocation = window.location
+            delete window.location
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://regex-url.com/test')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithRegexUrl])
+            })
+            window.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://example.com?name=something')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithParamRegexUrl])
+            })
+            window.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://app.subdomain.com')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithWildcardSubdomainUrl])
+            })
+            window.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://wildcard.com/something/other')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithWildcardRouteUrl])
+            })
+            window.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            window.location = new URL('https://example.com/exact')
+            given.surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithExactUrlMatch])
+            })
+            window.location = originalWindowLocation
+        })
+
         given('decideResponse', () => ({
             featureFlags: {
                 'linked-flag-key': true,
@@ -234,6 +331,7 @@ describe('surveys', () => {
                 'survey-targeting-flag-key2': false,
             },
         }))
+
         it('returns surveys that match linked and targeting feature flags', () => {
             given('surveysResponse', () => ({ surveys: [activeSurvey, surveyWithFlags, surveyWithEverything] }))
             given.surveys.getActiveMatchingSurveys((data) => {

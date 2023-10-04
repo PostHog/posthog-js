@@ -1,6 +1,13 @@
 import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
-import { SurveyCallback } from './posthog-surveys-types'
+import { _isUrlMatchingRegex } from './utils'
+import { SurveyCallback, SurveyUrlMatchType } from 'posthog-surveys-types'
+
+export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
+    icontains: (conditionsUrl) => window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
+    regex: (conditionsUrl) => _isUrlMatchingRegex(window.location.href, conditionsUrl),
+    exact: (conditionsUrl) => window.location.href === conditionsUrl,
+}
 
 export class PostHogSurveys {
     instance: PostHog
@@ -36,8 +43,10 @@ export class PostHogSurveys {
                 if (!survey.conditions) {
                     return true
                 }
+
+                // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
                 const urlCheck = survey.conditions?.url
-                    ? window.location.href.indexOf(survey.conditions.url) > -1
+                    ? surveyUrlValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](survey.conditions.url)
                     : true
                 const selectorCheck = survey.conditions?.selector
                     ? document.querySelector(survey.conditions.selector)

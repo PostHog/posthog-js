@@ -5,7 +5,14 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, _info, _isBlockedUA, DEFAULT_BLOCKED_UA_STRS, loadScript } from '../utils'
+import {
+    _copyAndTruncateStrings,
+    _info,
+    _isBlockedUA,
+    DEFAULT_BLOCKED_UA_STRS,
+    loadScript,
+    _isUrlMatchingRegex,
+} from '../utils'
 
 function userAgentFor(botString) {
     const randOne = (Math.random() + 1).toString(36).substring(7)
@@ -224,5 +231,27 @@ describe('loadScript', () => {
                 expect(_isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
             }
         )
+    })
+
+    describe('_isUrlMatchingRegex', () => {
+        it('returns false when url does not match regex pattern', () => {
+            // test query params
+            expect(_isUrlMatchingRegex('https://example.com', '(\\?|\\&)(name.*)\\=([^&]+)')).toEqual(false)
+            // incorrect route
+            expect(_isUrlMatchingRegex('https://example.com/something/test', 'example.com/test')).toEqual(false)
+            // incorrect domain
+            expect(_isUrlMatchingRegex('https://example.com', 'anotherone.com')).toEqual(false)
+        })
+
+        it('returns true when url matches regex pattern', () => {
+            // match query params
+            expect(_isUrlMatchingRegex('https://example.com?name=something', '(\\?|\\&)(name.*)\\=([^&]+)')).toEqual(
+                true
+            )
+            // match subdomain wildcard
+            expect(_isUrlMatchingRegex('https://app.example.com', '(.*.)?example.com')).toEqual(true)
+            // match route wildcard
+            expect(_isUrlMatchingRegex('https://example.com/something/test', 'example.com/(.*.)/test')).toEqual(true)
+        })
     })
 })

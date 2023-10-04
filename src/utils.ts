@@ -237,6 +237,20 @@ export const _isNumber = function (obj: any): obj is number {
     return toString.call(obj) == '[object Number]'
 }
 
+export const _isValidRegex = function (str: string): boolean {
+    try {
+        new RegExp(str)
+    } catch (error) {
+        return false
+    }
+    return true
+}
+
+export const _isUrlMatchingRegex = function (url: string, pattern: string): boolean {
+    if (!_isValidRegex(pattern)) return false
+    return new RegExp(pattern).test(url)
+}
+
 export const _encodeDates = function (obj: Properties): Properties {
     _each(obj, function (v, k) {
         if (_isDate(v)) {
