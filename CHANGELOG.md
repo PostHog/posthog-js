@@ -1,3 +1,7 @@
+## 1.81.4 - 2023-10-04
+
+- fix(capture): Always update stored person props from $set (#820)
+
 ## 1.81.3 - 2023-10-02
 
 - fix(surveys): Handle filtering on undefined (#810)
