@@ -631,11 +631,11 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
     formElement.addEventListener('change', () => {
         const selectedChoices =
             singleOrMultiSelect === 'single_choice'
-                ? formElement.querySelector('input[type=radio]:checked')
+                ? formElement.querySelectorAll('input[type=radio]:checked')
                 : formElement.querySelectorAll('input[type=checkbox]:checked')
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore // TODO: Fix this, error because it doesn't recognize node list as an array
-        if ((singleOrMultiSelect === 'single_choice' && selectedChoices) || (selectedChoices.length ?? 0) > 0) {
+        if ((selectedChoices.length ?? 0) > 0) {
             ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
         } else {
             ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
