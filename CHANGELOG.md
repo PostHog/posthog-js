@@ -1,3 +1,7 @@
+## 1.82.0 - 2023-10-04
+
+- feat: allow regex patterns and wildcards in survey url (#821)
+
 ## 1.81.4 - 2023-10-04
 
 - fix(capture): Always update stored person props from $set (#820)
