@@ -7,6 +7,7 @@ import {
     _info,
     _isArray,
     _isBlockedUA,
+    _isEmptyObject,
     _isObject,
     _isUndefined,
     _register_event,
@@ -880,6 +881,13 @@ export class PostHog {
 
         data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
         data.timestamp = options.timestamp || new Date()
+
+        // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
+        // This doesn't handle $set_once, because posthog-people doesn't either
+        const finalSet = { ...data.properties['$set'], ...data['$set'] }
+        if (!_isEmptyObject(finalSet)) {
+            this.setPersonPropertiesForFlags(finalSet)
+        }
 
         if (this.config.debug) {
             logger.log('PostHog.js send', data)

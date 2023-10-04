@@ -43,6 +43,11 @@ describe('capture()', () => {
             remove_event_timer: jest.fn(),
             properties: jest.fn(),
             update_config: jest.fn(),
+            register(properties) {
+                // Simplified version of the real thing
+                Object.assign(this.props, properties)
+            },
+            props: {},
         },
         sessionPersistence: {
             update_search_keyword: jest.fn(),
@@ -167,6 +172,18 @@ describe('capture()', () => {
         expect(captureResult).toEqual(
             expect.objectContaining({ $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } })
         )
+    })
+
+    it('updates persisted person properties for feature flags if $set is present', () => {
+        given('config', () => ({
+            property_blacklist: [],
+            _onCapture: jest.fn(),
+        }))
+        given('eventProperties', () => ({
+            $set: { foo: 'bar' },
+        }))
+        given.subject()
+        expect(given.overrides.persistence.props.$stored_person_properties).toMatchObject({ foo: 'bar' })
     })
 
     it('correctly handles the "length" property', () => {
