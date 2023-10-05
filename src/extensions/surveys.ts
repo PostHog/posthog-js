@@ -661,6 +661,12 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
 
+                // safe-validate all the questions & descriptions
+                survey.questions.forEach((question) => {
+                    question.question = validateAndFixHTML(question.question) || ''
+                    question.description = validateAndFixHTML(question.description || undefined)
+                })
+
                 if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
                     const shadow = createShadow(style(survey.id, survey?.appearance), survey.id)
                     let surveyPopup
@@ -874,4 +880,14 @@ export function generateSurveys(posthog: PostHog) {
             }
         }, 1500)
     }
+}
+
+export function validateAndFixHTML(html?: string): string | undefined {
+    if (html === undefined || html === null) {
+        return undefined
+    }
+    // marks scripts as non-executable
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const body = doc.body
+    return body.innerHTML
 }

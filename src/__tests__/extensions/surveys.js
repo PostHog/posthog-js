@@ -1,4 +1,4 @@
-import { createShadow, callSurveys, generateSurveys } from '../../extensions/surveys'
+import { createShadow, callSurveys, generateSurveys, validateAndFixHTML } from '../../extensions/surveys'
 
 describe('survey display logic', () => {
     beforeEach(() => {
@@ -151,5 +151,77 @@ describe('survey display logic', () => {
         generateSurveys(mockPostHog)
         expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(1)
         expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1500)
+    })
+
+    test('survey fixes broken HTML', () => {
+        mockSurveys = [
+            {
+                id: 'testSurvey1',
+                name: 'Test survey 1',
+                appearance: null,
+                questions: [
+                    {
+                        question: 'How satisfied are you with our newest product?<li>test',
+                        description: 'This is a question description<li>break</br><br/>',
+                        type: 'rating',
+                        display: 'number',
+                        scale: 10,
+                        lower_bound_label: 'Not Satisfied',
+                        upper_bound_label: 'Very Satisfied',
+                    },
+                ],
+            },
+        ]
+
+        expect(localStorage.getItem(`seenSurvey_${mockSurveys[0].id}`)).toBe(null)
+        callSurveys(mockPostHog, false)
+        expect(mockPostHog.capture).toBeCalledTimes(1)
+        expect(mockPostHog.capture).toBeCalledWith('survey shown', {
+            $survey_id: 'testSurvey1',
+            $survey_name: 'Test survey 1',
+            sessionRecordingUrl: undefined,
+        })
+
+        expect(
+            document
+                .getElementsByClassName(`PostHogSurvey${mockSurveys[0].id}`)[0]
+                .shadowRoot.querySelectorAll('.survey-question')[0].innerHTML
+        ).toEqual('How satisfied are you with our newest product?<li>test</li>')
+        expect(
+            document
+                .getElementsByClassName(`PostHogSurvey${mockSurveys[0].id}`)[0]
+                .shadowRoot.querySelectorAll('.description')[0].innerHTML
+        ).toEqual('This is a question description<li>break<br><br></li>')
+    })
+})
+
+describe('validateAndFixHTML', () => {
+    it('should do nothing to valid HTML', () => {
+        const html = '<div><h1>Test</h1><p>Test</p></div>'
+        expect(validateAndFixHTML(html)).toEqual('<div><h1>Test</h1><p>Test</p></div>')
+    })
+
+    it('should fix broken HTML', () => {
+        const html = '<div><h1>Test</h1><p>Test</p></div'
+        expect(validateAndFixHTML(html)).toEqual('<div><h1>Test</h1><p>Test</p></div>')
+    })
+
+    it('should do nothing to regular strings', () => {
+        const html = 'Test'
+        expect(validateAndFixHTML(html)).toEqual('Test')
+    })
+
+    it('should do nothing to empty strings', () => {
+        const html = ''
+        expect(validateAndFixHTML(html)).toEqual('')
+    })
+
+    it('returns undefined when passed undefined', () => {
+        expect(validateAndFixHTML(undefined)).toEqual(undefined)
+    })
+
+    it('completes missing closing tags', () => {
+        const html = '<div><h1>Test</h1><p>Test</p>'
+        expect(validateAndFixHTML(html)).toEqual('<div><h1>Test</h1><p>Test</p></div>')
     })
 })
