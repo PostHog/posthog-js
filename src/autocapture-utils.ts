@@ -3,7 +3,7 @@
  * @param {Element} el - element to get the className of
  * @returns {string} the element's class
  */
-import { AutocaptureConfig } from 'types'
+import { AutocaptureConfig, Properties } from 'types'
 import { _each, _includes, _isUndefined, _trim } from './utils'
 
 export function getClassName(el: Element): string {
@@ -341,4 +341,90 @@ export function getNestedSpanText(target: Element): string {
         })
     }
     return text
+}
+
+/*
+Back in the day storing events in Postgres we use Elements for autocapture events.
+Now we're using elements_chain. We used to do this parsing/processing during ingestion.
+This code is just copied over from ingestion, but we should optimize it
+to create elements_chain string directly.
+*/
+export function getElementsChainString(elements: Properties[]): string {
+    return elementsToString(extractElements(elements))
+}
+
+interface Element {
+    text?: string;
+    tag_name?: string;
+    href?: string;
+    attr_id?: string;
+    attr_class?: string[];
+    nth_child?: number;
+    nth_of_type?: number;
+    attributes?: Record<string, any>;
+    event_id?: number;
+    order?: number;
+    group_id?: number;
+}
+
+function escapeQuotes(input: string): string {
+    return input.replace(/"/g, '\\"')
+}
+
+function elementsToString(elements: Element[]): string {
+    const ret = elements.map((element) => {
+        let el_string = ''
+        if (element.tag_name) {
+            el_string += element.tag_name
+        }
+        if (element.attr_class) {
+            element.attr_class.sort()
+            for (const single_class of element.attr_class) {
+                el_string += `.${single_class.replace(/"/g, '')}`
+            }
+        }
+        let attributes: Record<string, any> = {
+            ...(element.text ? { text: element.text } : {}),
+            'nth-child': element.nth_child ?? 0,
+            'nth-of-type': element.nth_of_type ?? 0,
+            ...(element.href ? { href: element.href } : {}),
+            ...(element.attr_id ? { attr_id: element.attr_id } : {}),
+            ...element.attributes,
+        }
+        attributes = Object.fromEntries(
+            Object.entries(attributes)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([key, value]) => [escapeQuotes(key.toString()), escapeQuotes(value.toString())])
+        )
+        el_string += ':'
+        el_string += Object.entries(attributes)
+            .map(([key, value]) => `${key}="${value}"`)
+            .join('')
+        return el_string
+    })
+    return ret.join(';')
+}
+
+function extractElements(elements: Properties[]): Element[] {
+    return elements.map((el) => ({
+        text: el['$el_text']?.slice(0, 400),
+        tag_name: el['tag_name'],
+        href: el['attr__href']?.slice(0, 2048),
+        attr_class: extractAttrClass(el),
+        attr_id: el['attr__id'],
+        nth_child: el['nth_child'],
+        nth_of_type: el['nth_of_type'],
+        attributes: Object.fromEntries(Object.entries(el).filter(([key]) => key.startsWith('attr__'))),
+    }))
+}
+
+function extractAttrClass(el: Properties): Element['attr_class'] {
+    const attr_class = el['attr__class']
+    if (!attr_class) {
+        return undefined
+    } else if (Array.isArray(attr_class)) {
+        return attr_class
+    } else {
+        return attr_class.split(' ')
+    }
 }
