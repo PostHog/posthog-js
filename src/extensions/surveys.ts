@@ -405,7 +405,7 @@ export const createOpenTextOrLinkPopup = (
     formElement.addEventListener('input', (e: any) => {
         if (formElement.querySelector('.form-submit')) {
             const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
-            submitButton.disabled = !e.data
+            submitButton.disabled = !e.target.value
         }
     })
 
