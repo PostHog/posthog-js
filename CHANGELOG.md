@@ -1,3 +1,7 @@
+## 1.82.2 - 2023-10-05
+
+- fix(surveys): open text value bug (#825)
+
 ## 1.82.1 - 2023-10-04
 
 - fix(surveys): multiple choice survey submit button bug (#822)
