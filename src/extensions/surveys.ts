@@ -359,9 +359,9 @@ export const createOpenTextOrLinkPopup = (
         </div>
         <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit auto-text-color" type="submit" ${
-                    surveyQuestionType === 'open' ? (isOptional ? null : 'disabled') : null
-                }>${survey.appearance?.submitButtonText || 'Submit'}</button>
+                <button class="form-submit auto-text-color" type="submit">${
+                    survey.appearance?.submitButtonText || 'Submit'
+                }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
@@ -402,13 +402,17 @@ export const createOpenTextOrLinkPopup = (
             }
         })
     }
-
-    formElement.addEventListener('input', (e: any) => {
-        if (formElement.querySelector('.form-submit')) {
-            const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
-            submitButton.disabled = !e.target.value
+    if (!isOptional) {
+        if (surveyQuestionType === 'open') {
+            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
         }
-    })
+        formElement.addEventListener('input', (e: any) => {
+            if (formElement.querySelector('.form-submit')) {
+                const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
+                submitButton.disabled = !e.target.value
+            }
+        })
+    }
 
     return formElement
 }
@@ -506,9 +510,9 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
             }
             <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit auto-text-color" type="submit" ${isOptional ? null : 'disabled'}>${
-        survey.appearance?.submitButtonText || 'Submit'
-    }</button>
+                <button class="form-submit auto-text-color" type="submit">${
+                    survey.appearance?.submitButtonText || 'Submit'
+                }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
@@ -543,7 +547,9 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
             innerHTML: ratingsForm,
         })
     }
-
+    if (!isOptional) {
+        ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
+    }
     formElement.getElementsByClassName('rating-options')[0].insertAdjacentElement('afterbegin', ratingOptionsElement)
     for (const x of Array(question.scale).keys()) {
         const ratingEl = formElement.getElementsByClassName(`rating_${x + 1}`)[0]
@@ -589,9 +595,9 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
         </div>
         <div class="bottom-section">
         <div class="buttons">
-            <button class="form-submit auto-text-color" type="submit" ${isOptional ? null : 'disabled'}>${
-        survey.appearance?.submitButtonText || 'Submit'
-    }</button>
+            <button class="form-submit auto-text-color" type="submit">${
+                survey.appearance?.submitButtonText || 'Submit'
+            }</button>
         </div>
         <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
     </div>
@@ -632,7 +638,8 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
             innerHTML: form,
         })
     }
-    if (!question.optional) {
+    if (!isOptional) {
+        ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
         formElement.addEventListener('change', () => {
             const selectedChoices =
                 singleOrMultiSelect === 'single_choice'
@@ -769,6 +776,10 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
                                   ) as NodeListOf<HTMLInputElement>),
                               ].map((choice) => choice.value)
                     response = selectedChoices
+                }
+                const isQuestionOptional = survey.questions[idx].optional
+                if (isQuestionOptional && response === undefined) {
+                    response = null
                 }
                 if (response !== undefined) {
                     if (idx === 0) {
