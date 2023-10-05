@@ -402,14 +402,13 @@ export const createOpenTextOrLinkPopup = (
             }
         })
     }
-    if (!question.optional) {
-        formElement.addEventListener('input', (e: any) => {
-            if (formElement.querySelector('.form-submit')) {
-                const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
-                submitButton.disabled = !e.data
-            }
-        })
-    }
+
+    formElement.addEventListener('input', (e: any) => {
+        if (formElement.querySelector('.form-submit')) {
+            const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
+            submitButton.disabled = !e.target.value
+        }
+    })
 
     return formElement
 }
