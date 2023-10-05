@@ -340,6 +340,7 @@ export const createOpenTextOrLinkPopup = (
     const surveyQuestionType = question.type
     const surveyDescription = question.description
     const questionText = question.question
+    const isOptional = !!question.optional
     const form = `
     <div class="survey-${survey.id}-box">
         <div class="cancel-btn-wrapper">
@@ -359,7 +360,7 @@ export const createOpenTextOrLinkPopup = (
         <div class="bottom-section">
             <div class="buttons">
                 <button class="form-submit auto-text-color" type="submit" ${
-                    surveyQuestionType === 'open' ? 'disabled' : null
+                    surveyQuestionType === 'open' ? (isOptional ? null : 'disabled') : null
                 }>${survey.appearance?.submitButtonText || 'Submit'}</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
@@ -401,13 +402,14 @@ export const createOpenTextOrLinkPopup = (
             }
         })
     }
-
-    formElement.addEventListener('input', (e: any) => {
-        if (formElement.querySelector('.form-submit')) {
-            const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
-            submitButton.disabled = !e.data
-        }
-    })
+    if (!question.optional) {
+        formElement.addEventListener('input', (e: any) => {
+            if (formElement.querySelector('.form-submit')) {
+                const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
+                submitButton.disabled = !e.data
+            }
+        })
+    }
 
     return formElement
 }
@@ -459,6 +461,7 @@ export const addCancelListeners = (
 export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: RatingSurveyQuestion) => {
     const scale = question.scale
     const displayType = question.display
+    const isOptional = !!question.optional
     const ratingOptionsElement = document.createElement('div')
     if (displayType === 'number') {
         ratingOptionsElement.className = 'rating-options-buttons'
@@ -504,9 +507,9 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
             }
             <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit auto-text-color" type="submit" disabled>${
-                    survey.appearance?.submitButtonText || 'Submit'
-                }</button>
+                <button class="form-submit auto-text-color" type="submit" ${isOptional ? null : 'disabled'}>${
+        survey.appearance?.submitButtonText || 'Submit'
+    }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
@@ -566,6 +569,8 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
     const surveyDescription = question.description
     const surveyQuestionChoices = question.choices
     const singleOrMultiSelect = question.type
+    const isOptional = !!question.optional
+
     const form = `
     <div class="survey-${survey.id}-box">
         <div class="cancel-btn-wrapper">
@@ -585,9 +590,9 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
         </div>
         <div class="bottom-section">
         <div class="buttons">
-            <button class="form-submit auto-text-color" type="submit" disabled>${
-                survey.appearance?.submitButtonText || 'Submit'
-            }</button>
+            <button class="form-submit auto-text-color" type="submit" ${isOptional ? null : 'disabled'}>${
+        survey.appearance?.submitButtonText || 'Submit'
+    }</button>
         </div>
         <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
     </div>
@@ -628,19 +633,21 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
             innerHTML: form,
         })
     }
-    formElement.addEventListener('change', () => {
-        const selectedChoices =
-            singleOrMultiSelect === 'single_choice'
-                ? formElement.querySelectorAll('input[type=radio]:checked')
-                : formElement.querySelectorAll('input[type=checkbox]:checked')
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore // TODO: Fix this, error because it doesn't recognize node list as an array
-        if ((selectedChoices.length ?? 0) > 0) {
-            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
-        } else {
-            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
-        }
-    })
+    if (!question.optional) {
+        formElement.addEventListener('change', () => {
+            const selectedChoices =
+                singleOrMultiSelect === 'single_choice'
+                    ? formElement.querySelectorAll('input[type=radio]:checked')
+                    : formElement.querySelectorAll('input[type=checkbox]:checked')
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore // TODO: Fix this, error because it doesn't recognize node list as an array
+            if ((selectedChoices.length ?? 0) > 0) {
+                ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
+            } else {
+                ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
+            }
+        })
+    }
 
     return formElement
 }
