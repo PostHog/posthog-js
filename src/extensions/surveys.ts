@@ -510,9 +510,9 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
             }
             <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit auto-text-color" type="submit">${
-                    survey.appearance?.submitButtonText || 'Submit'
-                }</button>
+                <button class="form-submit auto-text-color" type="submit" ${isOptional ? '' : 'disabled'}>${
+        survey.appearance?.submitButtonText || 'Submit'
+    }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
@@ -546,9 +546,6 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
         formElement = Object.assign(document.createElement('div'), {
             innerHTML: ratingsForm,
         })
-    }
-    if (!isOptional) {
-        ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
     }
     formElement.getElementsByClassName('rating-options')[0].insertAdjacentElement('afterbegin', ratingOptionsElement)
     for (const x of Array(question.scale).keys()) {
@@ -595,9 +592,9 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
         </div>
         <div class="bottom-section">
         <div class="buttons">
-            <button class="form-submit auto-text-color" type="submit">${
-                survey.appearance?.submitButtonText || 'Submit'
-            }</button>
+            <button class="form-submit auto-text-color" type="submit" ${isOptional ? '' : 'disabled'}>${
+        survey.appearance?.submitButtonText || 'Submit'
+    }</button>
         </div>
         <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
     </div>
@@ -639,14 +636,11 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
         })
     }
     if (!isOptional) {
-        ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
         formElement.addEventListener('change', () => {
-            const selectedChoices =
+            const selectedChoices: NodeListOf<HTMLInputElement> =
                 singleOrMultiSelect === 'single_choice'
                     ? formElement.querySelectorAll('input[type=radio]:checked')
                     : formElement.querySelectorAll('input[type=checkbox]:checked')
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore // TODO: Fix this, error because it doesn't recognize node list as an array
             if ((selectedChoices.length ?? 0) > 0) {
                 ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
             } else {
@@ -755,8 +749,7 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
             e.preventDefault()
             const multipleQuestionResponses: Record<string, string | number | string[] | null> = {}
             const allTabs = (e.target as HTMLDivElement).getElementsByClassName('tab')
-            let idx = 0
-            for (const tab of allTabs) {
+            for (const [index, tab] of [...allTabs].entries()) {
                 const classes = tab.classList
                 const questionType = classes[2]
                 let response
@@ -777,18 +770,17 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
                               ].map((choice) => choice.value)
                     response = selectedChoices
                 }
-                const isQuestionOptional = survey.questions[idx].optional
+                const isQuestionOptional = survey.questions[index].optional
                 if (isQuestionOptional && response === undefined) {
                     response = null
                 }
                 if (response !== undefined) {
-                    if (idx === 0) {
+                    if (index === 0) {
                         multipleQuestionResponses['$survey_response'] = response
                     } else {
-                        multipleQuestionResponses[`$survey_response_${idx}`] = response
+                        multipleQuestionResponses[`$survey_response_${index}`] = response
                     }
                 }
-                idx++
             }
             posthog.capture('survey sent', {
                 $survey_name: survey.name,
