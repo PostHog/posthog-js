@@ -1,3 +1,7 @@
+## 1.82.3 - 2023-10-06
+
+- fix: Typescript compilation of survey types (#827)
+
 ## 1.82.2 - 2023-10-05
 
 - fix(surveys): open text value bug (#825)
