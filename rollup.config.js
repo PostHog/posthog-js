@@ -56,7 +56,9 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins],
+        // We need to make sure DOMPurify is bundled together with the surveys code
+        // hence the no-module option resolution
+        plugins: [resolve(), ...plugins],
     },
     {
         input: 'src/loader-globals.ts',
