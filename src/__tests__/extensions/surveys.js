@@ -224,4 +224,14 @@ describe('validateAndFixHTML', () => {
         const html = '<div><h1>Test</h1><p>Test</p>'
         expect(validateAndFixHTML(html)).toEqual('<div><h1>Test</h1><p>Test</p></div>')
     })
+
+    it('should not execute script tags', () => {
+        const html = '<hr><script>alert("test?")</script>'
+        expect(validateAndFixHTML(html)).toEqual('<hr>')
+    })
+
+    it('should sanitize image tags', () => {
+        const html = '<img src="x" onerror="alert(\'test\')">'
+        expect(validateAndFixHTML(html)).toEqual('<img src="x">')
+    })
 })
