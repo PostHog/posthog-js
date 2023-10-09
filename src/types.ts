@@ -124,6 +124,7 @@ export interface PostHogConfig {
     }
     segment?: any
     __preview_measure_pageview_stats?: boolean
+    send_nms_recording: boolean
 }
 
 export interface OptInOutCapturingOptions {

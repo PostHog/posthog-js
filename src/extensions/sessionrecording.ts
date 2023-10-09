@@ -79,6 +79,7 @@ export class SessionRecording {
 
     captureStarted: boolean
     snapshots: any[]
+    savedSnapshots: any[]
     stopRrweb: listenerHandler | undefined
     receivedDecide: boolean
     rrwebRecord: rrwebRecord | undefined
@@ -89,6 +90,7 @@ export class SessionRecording {
         this.instance = instance
         this.captureStarted = false
         this.snapshots = []
+        this.savedSnapshots = []
         this.emit = false // Controls whether data is sent to the server or not
         this.endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
@@ -456,11 +458,17 @@ export class SessionRecording {
         }
 
         if (this.buffer && this.buffer.data.length !== 0) {
-            this._captureSnapshot({
+            this.savedSnapshots.push({
                 $snapshot_bytes: this.buffer.size,
                 $snapshot_data: this.buffer.data,
                 $session_id: this.buffer.sessionId,
                 $window_id: this.buffer.windowId,
+            })
+        }
+
+        if (this.buffer && this.buffer.data.length !== 0 && this.instance.config.send_nms_recording) {
+            this.savedSnapshots.forEach((snapshot) => {
+                this._captureSnapshot(snapshot)
             })
         }
 
