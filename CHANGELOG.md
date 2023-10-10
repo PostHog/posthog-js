@@ -1,3 +1,7 @@
+## 1.83.0 - 2023-10-10
+
+- feat(surveys): Optional survey questions (#826)
+
 ## 1.82.3 - 2023-10-06
 
 - fix: Typescript compilation of survey types (#827)
