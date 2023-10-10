@@ -340,6 +340,7 @@ export const createOpenTextOrLinkPopup = (
     const surveyQuestionType = question.type
     const surveyDescription = question.description
     const questionText = question.question
+    const isOptional = !!question.optional
     const form = `
     <div class="survey-${survey.id}-box">
         <div class="cancel-btn-wrapper">
@@ -358,9 +359,9 @@ export const createOpenTextOrLinkPopup = (
         </div>
         <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit auto-text-color" type="submit" ${
-                    surveyQuestionType === 'open' ? 'disabled' : null
-                }>${survey.appearance?.submitButtonText || 'Submit'}</button>
+                <button class="form-submit auto-text-color" type="submit">${
+                    survey.appearance?.submitButtonText || 'Submit'
+                }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
@@ -401,13 +402,17 @@ export const createOpenTextOrLinkPopup = (
             }
         })
     }
-
-    formElement.addEventListener('input', (e: any) => {
-        if (formElement.querySelector('.form-submit')) {
-            const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
-            submitButton.disabled = !e.target.value
+    if (!isOptional) {
+        if (surveyQuestionType === 'open') {
+            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
         }
-    })
+        formElement.addEventListener('input', (e: any) => {
+            if (formElement.querySelector('.form-submit')) {
+                const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
+                submitButton.disabled = !e.target.value
+            }
+        })
+    }
 
     return formElement
 }
@@ -459,6 +464,7 @@ export const addCancelListeners = (
 export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: RatingSurveyQuestion) => {
     const scale = question.scale
     const displayType = question.display
+    const isOptional = !!question.optional
     const ratingOptionsElement = document.createElement('div')
     if (displayType === 'number') {
         ratingOptionsElement.className = 'rating-options-buttons'
@@ -504,9 +510,9 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
             }
             <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit auto-text-color" type="submit" disabled>${
-                    survey.appearance?.submitButtonText || 'Submit'
-                }</button>
+                <button class="form-submit auto-text-color" type="submit" ${isOptional ? '' : 'disabled'}>${
+        survey.appearance?.submitButtonText || 'Submit'
+    }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
@@ -541,7 +547,6 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
             innerHTML: ratingsForm,
         })
     }
-
     formElement.getElementsByClassName('rating-options')[0].insertAdjacentElement('afterbegin', ratingOptionsElement)
     for (const x of Array(question.scale).keys()) {
         const ratingEl = formElement.getElementsByClassName(`rating_${x + 1}`)[0]
@@ -566,6 +571,8 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
     const surveyDescription = question.description
     const surveyQuestionChoices = question.choices
     const singleOrMultiSelect = question.type
+    const isOptional = !!question.optional
+
     const form = `
     <div class="survey-${survey.id}-box">
         <div class="cancel-btn-wrapper">
@@ -585,9 +592,9 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
         </div>
         <div class="bottom-section">
         <div class="buttons">
-            <button class="form-submit auto-text-color" type="submit" disabled>${
-                survey.appearance?.submitButtonText || 'Submit'
-            }</button>
+            <button class="form-submit auto-text-color" type="submit" ${isOptional ? '' : 'disabled'}>${
+        survey.appearance?.submitButtonText || 'Submit'
+    }</button>
         </div>
         <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
     </div>
@@ -628,19 +635,19 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
             innerHTML: form,
         })
     }
-    formElement.addEventListener('change', () => {
-        const selectedChoices =
-            singleOrMultiSelect === 'single_choice'
-                ? formElement.querySelectorAll('input[type=radio]:checked')
-                : formElement.querySelectorAll('input[type=checkbox]:checked')
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore // TODO: Fix this, error because it doesn't recognize node list as an array
-        if ((selectedChoices.length ?? 0) > 0) {
-            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
-        } else {
-            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
-        }
-    })
+    if (!isOptional) {
+        formElement.addEventListener('change', () => {
+            const selectedChoices: NodeListOf<HTMLInputElement> =
+                singleOrMultiSelect === 'single_choice'
+                    ? formElement.querySelectorAll('input[type=radio]:checked')
+                    : formElement.querySelectorAll('input[type=checkbox]:checked')
+            if ((selectedChoices.length ?? 0) > 0) {
+                ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
+            } else {
+                ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
+            }
+        })
+    }
 
     return formElement
 }
@@ -742,8 +749,7 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
             e.preventDefault()
             const multipleQuestionResponses: Record<string, string | number | string[] | null> = {}
             const allTabs = (e.target as HTMLDivElement).getElementsByClassName('tab')
-            let idx = 0
-            for (const tab of allTabs) {
+            for (const [index, tab] of [...allTabs].entries()) {
                 const classes = tab.classList
                 const questionType = classes[2]
                 let response
@@ -764,14 +770,17 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
                               ].map((choice) => choice.value)
                     response = selectedChoices
                 }
+                const isQuestionOptional = survey.questions[index].optional
+                if (isQuestionOptional && response === undefined) {
+                    response = null
+                }
                 if (response !== undefined) {
-                    if (idx === 0) {
+                    if (index === 0) {
                         multipleQuestionResponses['$survey_response'] = response
                     } else {
-                        multipleQuestionResponses[`$survey_response_${idx}`] = response
+                        multipleQuestionResponses[`$survey_response_${index}`] = response
                     }
                 }
-                idx++
             }
             posthog.capture('survey sent', {
                 $survey_name: survey.name,
