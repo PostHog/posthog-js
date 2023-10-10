@@ -892,7 +892,7 @@ export class PostHog {
         }
 
         if (this.config.debug) {
-            logger.info('PostHog.js send', data)
+            logger.info('send', data)
         }
         const jsonData = JSON.stringify(data)
 

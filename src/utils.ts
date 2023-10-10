@@ -30,7 +30,7 @@ export const logger = {
                     : window.console[level]
 
             // eslint-disable-next-line no-console
-            consoleLog('[PostHog]', ...args)
+            consoleLog('[PostHog.js]', ...args)
         }
     },
 
