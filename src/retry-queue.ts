@@ -100,9 +100,7 @@ export class RetryQueue extends RequestQueueScaffold {
             const { url, data, options } = requestData
 
             if (this.rateLimiter.isRateLimited(options._batchKey)) {
-                if (Config.DEBUG) {
-                    logger.warn('[PostHog RetryQueue] is quota limited. Dropping request.')
-                }
+                logger.warn('[RetryQueue] is quota limited. Dropping request.')
                 continue
             }
 

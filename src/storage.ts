@@ -269,9 +269,7 @@ export const sessionStore: PersistentStore = {
     },
 
     error: function (msg) {
-        if (Config.DEBUG) {
-            logger.error('sessionStorage error: ', msg)
-        }
+        logger.error('sessionStorage error: ', msg)
     },
 
     get: function (name) {

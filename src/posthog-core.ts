@@ -891,9 +891,7 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        if (this.config.debug) {
-            logger.info('send', data)
-        }
+        logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
         const url = this.config.api_host + (options.endpoint || '/e/')
