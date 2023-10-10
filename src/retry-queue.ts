@@ -1,6 +1,7 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
 import { QueuedRequestData, RetryQueueElement } from './types'
+import { logger } from './utils'
 import Config from './config'
 import { RateLimiter } from './rate-limiter'
 
@@ -60,7 +61,7 @@ export class RetryQueue extends RequestQueueScaffold {
         const retryAt = new Date(Date.now() + msToNextRetry)
 
         this.queue.push({ retryAt, requestData })
-        console.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
+        logger.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
         if (!this.isPolling) {
             this.isPolling = true
             this.poll()
@@ -100,7 +101,7 @@ export class RetryQueue extends RequestQueueScaffold {
 
             if (this.rateLimiter.isRateLimited(options._batchKey)) {
                 if (Config.DEBUG) {
-                    console.warn('[PostHog RetryQueue] is quota limited. Dropping request.')
+                    logger.warn('[PostHog RetryQueue] is quota limited. Dropping request.')
                 }
                 continue
             }
@@ -112,9 +113,7 @@ export class RetryQueue extends RequestQueueScaffold {
             } catch (e) {
                 // Note sendBeacon automatically retries, and after the first retry it will lose reference to contextual `this`.
                 // This means in some cases `this.getConfig` will be undefined.
-                if (Config.DEBUG) {
-                    console.error(e)
-                }
+                logger.error(e)
             }
         }
         this.queue = []

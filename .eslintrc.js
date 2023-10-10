@@ -9,6 +9,7 @@ const rules = {
     '@typescript-eslint/no-unused-vars': ['error'],
     'no-prototype-builtins': 'off',
     'no-empty': 'off',
+    'no-console': 'error',
 }
 
 const extend = [

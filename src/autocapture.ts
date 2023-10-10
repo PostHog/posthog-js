@@ -311,7 +311,7 @@ const autocapture = {
     afterDecideResponse: function (response: DecideResponse, instance: PostHog): void {
         const token = instance.config.token
         if (this._initializedTokens.indexOf(token) > -1) {
-            logger.log('autocapture already initialized for token "' + token + '"')
+            logger.info('autocapture already initialized for token "' + token + '"')
             return
         }
 

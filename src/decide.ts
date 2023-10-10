@@ -1,5 +1,5 @@
 import { autocapture } from './autocapture'
-import { _base64Encode, loadScript } from './utils'
+import { _base64Encode, loadScript, logger } from './utils'
 import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
@@ -44,11 +44,11 @@ export class Decide {
         this.instance.featureFlags._startReloadTimer()
 
         if (response?.status === 0) {
-            console.error('Failed to fetch feature flags from PostHog.')
+            logger.error('Failed to fetch feature flags from PostHog.')
             return
         }
         if (!(document && document.body)) {
-            console.log('document not ready yet, trying again in 500 milliseconds...')
+            logger.info('document not ready yet, trying again in 500 milliseconds...')
             setTimeout(() => {
                 this.parseDecideResponse(response)
             }, 500)
@@ -82,7 +82,7 @@ export class Decide {
         if (response['surveys'] && !surveysGenerator) {
             loadScript(this.instance.config.api_host + `/static/surveys.js`, (err) => {
                 if (err) {
-                    return console.error(`Could not load surveys script`, err)
+                    return logger.error(`Could not load surveys script`, err)
                 }
 
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -104,12 +104,12 @@ export class Decide {
 
                     loadScript(scriptUrl, (err) => {
                         if (err) {
-                            console.error(`Error while initializing PostHog app with config id ${id}`, err)
+                            logger.error(`Error while initializing PostHog app with config id ${id}`, err)
                         }
                     })
                 }
             } else if (response['siteApps'].length > 0) {
-                console.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
+                logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
             }
         }
     }
