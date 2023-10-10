@@ -21,6 +21,8 @@ const nativeForEach = ArrayProto.forEach,
     nativeIsArray = Array.isArray,
     breaker: Breaker = {}
 
+const LOGGER_PREFIX = '[PostHog.js]'
+
 export const logger = {
     _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => {
         if ((Config.DEBUG || (window as any).POSTHOG_DEBUG) && !_isUndefined(window.console) && window.console) {
@@ -30,7 +32,7 @@ export const logger = {
                     : window.console[level]
 
             // eslint-disable-next-line no-console
-            consoleLog('[PostHog.js]', ...args)
+            consoleLog(LOGGER_PREFIX, ...args)
         }
     },
 
@@ -43,13 +45,13 @@ export const logger = {
     },
 
     error: (...args: any[]) => {
-        logger._log('warn', ...args)
+        logger._log('error', ...args)
     },
 
     critical: (...args: any[]) => {
         // Critical errors are always logged to the console
         // eslint-disable-next-line no-console
-        console.error('[PostHog]', ...args)
+        console.error(LOGGER_PREFIX, ...args)
     },
 
     unintializedWarning: (methodName: string) => {

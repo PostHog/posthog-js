@@ -67,6 +67,7 @@ describe('featureflags', () => {
     })
 
     it('should warn if decide endpoint was not hit and no flags exist', () => {
+        window.POSTHOG_DEBUG = true
         given.featureFlags.instance.decideEndpointWasHit = false
         given.instance.persistence.unregister('$enabled_feature_flags')
         given.instance.persistence.unregister('$active_feature_flags')
@@ -74,6 +75,7 @@ describe('featureflags', () => {
         expect(given.featureFlags.getFlags()).toEqual([])
         expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
         expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
             'isFeatureEnabled for key "beta-feature" failed. Feature flags didn\'t load in time.'
         )
 
@@ -81,6 +83,7 @@ describe('featureflags', () => {
 
         expect(given.featureFlags.getFeatureFlag('beta-feature')).toEqual(undefined)
         expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
             'getFeatureFlag for key "beta-feature" failed. Feature flags didn\'t load in time.'
         )
     })
