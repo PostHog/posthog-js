@@ -13,9 +13,9 @@ import {
     _register_event,
     _safewrap_class,
     document,
-    logger,
     userAgent,
     window,
+    logger,
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -152,7 +152,7 @@ const defaultConfig = (): PostHogConfig => ({
     advanced_disable_toolbar_metrics: false,
     on_xhr_error: (req) => {
         const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
-        console.error(error)
+        logger.error(error)
     },
     get_device_id: (uuid) => uuid,
     // Used for internal testing
@@ -199,7 +199,7 @@ const create_phlib = function (
         instance = target as any
     } else {
         if (target && !_isArray(target)) {
-            console.error('You have already initialized ' + name)
+            logger.error('You have already initialized ' + name)
             // TODO: throw something instead?
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -231,10 +231,10 @@ const create_phlib = function (
         const num_enabled_buckets = 100
         if (!autocapture.enabledForProject(instance.config.token, num_buckets, num_enabled_buckets)) {
             instance.__autocapture = false
-            logger.log('Not in active bucket: disabling Automatic Event Collection.')
+            logger.info('Not in active bucket: disabling Automatic Event Collection.')
         } else if (!autocapture.isBrowserSupported()) {
             instance.__autocapture = false
-            logger.log('Disabling Automatic Event Collection because this browser is not supported')
+            logger.info('Disabling Automatic Event Collection because this browser is not supported')
         } else {
             autocapture.init(instance)
         }
@@ -354,11 +354,13 @@ export class PostHog {
      */
     init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
         if (_isUndefined(name)) {
-            console.error('You must name your new library: init(token, config, name)')
+            logger.critical('You must name your new library: init(token, config, name)')
             return
         }
         if (name === PRIMARY_INSTANCE_NAME) {
-            console.error('You must initialize the main posthog object right after you include the PostHog js snippet')
+            logger.critical(
+                'You must initialize the main posthog object right after you include the PostHog js snippet'
+            )
             return
         }
 
@@ -533,7 +535,7 @@ export class PostHog {
         try {
             this.config.loaded(this)
         } catch (err) {
-            console.error('`loaded` function failed', err)
+            logger.critical('`loaded` function failed', err)
         }
 
         this._start_queue_if_opted_in()
@@ -693,7 +695,7 @@ export class PostHog {
                     onResponse: this.rateLimiter.checkForLimiting,
                 })
             } catch (e) {
-                console.error(e)
+                logger.error(e)
             }
         } else {
             const script = document.createElement('script')
@@ -838,7 +840,7 @@ export class PostHog {
             return logger.unintializedWarning('posthog.capture')
         }
 
-        if (userOptedOut(this, false)) {
+        if (userOptedOut(this)) {
             return
         }
 
@@ -850,7 +852,7 @@ export class PostHog {
 
         // typing doesn't prevent interesting data
         if (_isUndefined(event_name) || typeof event_name !== 'string') {
-            console.error('No event name provided to posthog.capture')
+            logger.error('No event name provided to posthog.capture')
             return
         }
 
@@ -889,9 +891,7 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        if (this.config.debug) {
-            logger.log('PostHog.js send', data)
-        }
+        logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
         const url = this.config.api_host + (options.endpoint || '/e/')
@@ -989,7 +989,7 @@ export class PostHog {
                 delete properties[blacklisted_prop]
             })
         } else {
-            console.error('Invalid value for property_blacklist config: ' + property_blacklist)
+            logger.error('Invalid value for property_blacklist config: ' + property_blacklist)
         }
 
         const sanitize_properties = this.config.sanitize_properties
@@ -1260,7 +1260,7 @@ export class PostHog {
         }
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
-            console.error('Unique user id has not been set in posthog.identify')
+            logger.error('Unique user id has not been set in posthog.identify')
             return
         }
 
@@ -1350,7 +1350,7 @@ export class PostHog {
      */
     group(groupType: string, groupKey: string, groupPropertiesToSet?: Properties): void {
         if (!groupType || !groupKey) {
-            console.error('posthog.group requires a group type and group key')
+            logger.error('posthog.group requires a group type and group key')
             return
         }
 
@@ -1543,7 +1543,7 @@ export class PostHog {
             this._register_single(ALIAS_ID_KEY, alias)
             return this.capture('$create_alias', { alias: alias, distinct_id: original })
         } else {
-            console.error('alias matches current distinct_id - skipping api call.')
+            logger.warn('alias matches current distinct_id - skipping api call.')
             this.identify(alias)
             return -1
         }
@@ -2150,7 +2150,7 @@ export function init_from_snippet(): void {
 
     if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
         // lib has already been loaded at least once; we don't want to override the global object this time so bomb early
-        console.error('PostHog library has already been downloaded at least once.')
+        logger.critical('PostHog library has already been downloaded at least once.')
         return
     }
 

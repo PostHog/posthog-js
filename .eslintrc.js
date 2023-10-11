@@ -9,6 +9,7 @@ const rules = {
     '@typescript-eslint/no-unused-vars': ['error'],
     'no-prototype-builtins': 'off',
     'no-empty': 'off',
+    'no-console': 'error',
 }
 
 const extend = [
@@ -51,7 +52,7 @@ module.exports = {
             // but excluding the 'plugin:compat/recommended' rule
             // we don't mind using the latest features in our tests
             extends: extend.filter((s) => s !== 'plugin:compat/recommended'),
-            rules,
+            rules: rules.filter((s) => s !== 'no-console'),
         },
     ],
     root: true,

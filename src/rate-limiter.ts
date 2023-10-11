@@ -23,7 +23,7 @@ export class RateLimiter {
             const response: CaptureResponse = JSON.parse(xmlHttpRequest.responseText)
             const quotaLimitedProducts = response.quota_limited || []
             quotaLimitedProducts.forEach((batchKey) => {
-                logger.log(`[PostHog RateLimiter] ${batchKey || 'events'} is quota limited.`)
+                logger.info(`[RateLimiter] ${batchKey || 'events'} is quota limited.`)
                 this.limits[batchKey] = new Date().getTime() + oneMinuteInMilliseconds
             })
         } catch (e) {

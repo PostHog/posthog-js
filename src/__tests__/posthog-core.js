@@ -19,6 +19,7 @@ jest.mock('../utils', () => ({
 given('lib', () => {
     const posthog = new PostHog()
     posthog._init('testtoken', given.config, 'testhog')
+    posthog.debug()
     return Object.assign(posthog, given.overrides)
 })
 
@@ -111,7 +112,7 @@ describe('capture()', () => {
 
         expect(() => given.subject()).not.toThrow()
         expect(hook).not.toHaveBeenCalled()
-        expect(console.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
+        expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'No event name provided to posthog.capture')
     })
 
     it('errors with object event name', () => {
@@ -123,7 +124,7 @@ describe('capture()', () => {
 
         expect(() => given.subject()).not.toThrow()
         expect(hook).not.toHaveBeenCalled()
-        expect(console.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
+        expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'No event name provided to posthog.capture')
     })
 
     it('truncates long properties', () => {
@@ -509,6 +510,7 @@ describe('bootstrapping feature flags', () => {
         expect(given.lib.get_distinct_id()).not.toEqual(undefined)
         expect(given.lib.getFeatureFlag('multivariant')).toBe(undefined)
         expect(console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
             expect.stringContaining('getFeatureFlag for key "multivariant" failed')
         )
         expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
@@ -861,6 +863,7 @@ describe('group()', () => {
 
         it('handles blank keys being passed', () => {
             window.console.error = jest.fn()
+            window.console.warn = jest.fn()
 
             given.lib.group(null, 'foo')
             given.lib.group('organization', null)
@@ -931,7 +934,7 @@ describe('_loaded()', () => {
 
         given.subject()
 
-        expect(console.error).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
+        expect(console.error).toHaveBeenCalledWith('[PostHog.js]', '`loaded` function failed', expect.anything())
     })
 
     describe('/decide', () => {

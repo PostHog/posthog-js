@@ -272,6 +272,7 @@ describe('Session ID manager', () => {
         })
 
         it('uses the custom session_idle_timeout_seconds if within bounds', () => {
+            window.POSTHOG_DEBUG = true
             expect(mockSessionManager(61)._sessionTimeoutMs).toEqual(61 * 1000)
             expect(console.warn).toBeCalledTimes(0)
             expect(mockSessionManager(59)._sessionTimeoutMs).toEqual(60 * 1000)

@@ -21,66 +21,41 @@ const nativeForEach = ArrayProto.forEach,
     nativeIsArray = Array.isArray,
     breaker: Breaker = {}
 
-// Console override
-const logger = {
-    /** @type {function(...*)} */
-    log: function (...args: any[]) {
-        if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
-            // Don't log PostHog debug messages in rrweb
-            const log =
-                '__rrweb_original__' in window.console.log
-                    ? (window.console.log as any)['__rrweb_original__']
-                    : window.console.log
+const LOGGER_PREFIX = '[PostHog.js]'
 
-            try {
-                log.apply(window.console, args)
-            } catch (err) {
-                _eachArray(args, function (arg) {
-                    log(arg)
-                })
-            }
+export const logger = {
+    _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => {
+        if ((Config.DEBUG || (window as any).POSTHOG_DEBUG) && !_isUndefined(window.console) && window.console) {
+            const consoleLog =
+                '__rrweb_original__' in window.console[level]
+                    ? (window.console[level] as any)['__rrweb_original__']
+                    : window.console[level]
+
+            // eslint-disable-next-line no-console
+            consoleLog(LOGGER_PREFIX, ...args)
         }
     },
-    /** @type {function(...*)} */
-    error: function (..._args: any[]) {
-        if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
-            const args = ['PostHog error:', ..._args]
-            // Don't log PostHog debug messages in rrweb
-            const error =
-                '__rrweb_original__' in window.console.error
-                    ? (window.console.error as any)['__rrweb_original__']
-                    : window.console.error
-            try {
-                error.apply(window.console, args)
-            } catch (err) {
-                _eachArray(args, function (arg) {
-                    error(arg)
-                })
-            }
-        }
+
+    info: (...args: any[]) => {
+        logger._log('log', ...args)
     },
-    /** @type {function(...*)} */
-    critical: function (..._args: any[]) {
-        if (!_isUndefined(window.console) && window.console) {
-            const args = ['PostHog error:', ..._args]
-            // Don't log PostHog debug messages in rrweb
-            const error =
-                '__rrweb_original__' in window.console.error
-                    ? (window.console.error as any)['__rrweb_original__']
-                    : window.console.error
-            try {
-                error.apply(window.console, args)
-            } catch (err) {
-                _eachArray(args, function (arg) {
-                    error(arg)
-                })
-            }
-        }
+
+    warn: (...args: any[]) => {
+        logger._log('warn', ...args)
     },
-    unintializedWarning: function (methodName: string): void {
-        if (Config.DEBUG && !_isUndefined(window.console) && window.console) {
-            logger.error(`[PostHog] You must initialize PostHog before calling ${methodName}`)
-        }
+
+    error: (...args: any[]) => {
+        logger._log('error', ...args)
+    },
+
+    critical: (...args: any[]) => {
+        // Critical errors are always logged to the console
+        // eslint-disable-next-line no-console
+        console.error(LOGGER_PREFIX, ...args)
+    },
+
+    unintializedWarning: (methodName: string) => {
+        logger.error(`You must initialize PostHog before calling ${methodName}`)
     },
 }
 
@@ -975,4 +950,4 @@ export const _info = {
     },
 }
 
-export { win as window, userAgent, logger, document }
+export { win as window, userAgent, document }

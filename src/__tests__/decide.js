@@ -183,12 +183,13 @@ describe('Decide', () => {
 
         it('Make sure receivedFeatureFlags is not called if the decide response fails', () => {
             given('decideResponse', () => ({ status: 0 }))
+            window.POSTHOG_DEBUG = true
             console.error = jest.fn()
 
             given.subject()
 
             expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
-            expect(console.error).toHaveBeenCalledWith('Failed to fetch feature flags from PostHog.')
+            expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
         })
 
         it('Make sure receivedFeatureFlags is called with empty if advanced_disable_feature_flags_on_first_load is set', () => {
@@ -221,13 +222,14 @@ describe('Decide', () => {
         })
 
         it('does not run site apps code if not opted in', () => {
+            window.POSTHOG_DEBUG = true
             given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: false, persistence: 'memory' }))
             given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             expect(() => {
                 given.subject()
             }).toThrow(
                 // throwing only in tests, just an error in production
-                'Unexpected console.error: PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
+                'Unexpected console.error: [PostHog.js],PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
         })
     })

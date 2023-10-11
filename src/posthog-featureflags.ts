@@ -112,7 +112,7 @@ export class PostHogFeatureFlags {
             }
         }
         if (!this._override_warning) {
-            console.warn('[PostHog] Overriding feature flags!', {
+            logger.warn(' Overriding feature flags!', {
                 enabledFlags,
                 overriddenFlags,
                 finalFlags,
@@ -211,7 +211,7 @@ export class PostHogFeatureFlags {
      */
     getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
         if (!this.instance.decideEndpointWasHit && !(this.getFlags() && this.getFlags().length > 0)) {
-            console.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
         const flagValue = this.getFlagVariants()[key]
@@ -250,7 +250,7 @@ export class PostHogFeatureFlags {
      */
     isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
         if (!this.instance.decideEndpointWasHit && !(this.getFlags() && this.getFlags().length > 0)) {
-            console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            logger.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
         return !!this.getFeatureFlag(key, options)

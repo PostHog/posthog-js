@@ -102,14 +102,14 @@ export class WebPerformanceObserver {
         }
 
         if (window?.PerformanceObserver?.supportedEntryTypes === undefined) {
-            logger.log(
-                'PostHog Performance observer not started because PerformanceObserver is not supported by this browser.'
+            logger.info(
+                '[PerformanceObserver] not started because PerformanceObserver is not supported by this browser.'
             )
             return
         }
 
         if (isLocalhost() && !this._forceAllowLocalhost) {
-            logger.log('PostHog Peformance observer not started because we are on localhost.')
+            logger.info('[PerformanceObserver] not started because we are on localhost.')
             return
         }
 
@@ -130,7 +130,7 @@ export class WebPerformanceObserver {
                 this.observer?.observe({ type: entryType, buffered: true })
             })
         } catch (e) {
-            console.error('PostHog failed to start performance observer', e)
+            logger.error('PostHog failed to start performance observer', e)
             this.stopObserving()
         }
     }

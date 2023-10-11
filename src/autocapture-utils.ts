@@ -4,7 +4,7 @@
  * @returns {string} the element's class
  */
 import { AutocaptureConfig } from 'types'
-import { _each, _includes, _isUndefined, _trim } from './utils'
+import { _each, _includes, _isUndefined, _trim, logger } from './utils'
 
 export function getClassName(el: Element): string {
     switch (typeof el.className) {
@@ -335,7 +335,7 @@ export function getNestedSpanText(target: Element): string {
                         text = `${text} ${getNestedSpanText(child)}`.trim()
                     }
                 } catch (e) {
-                    console.error(e)
+                    logger.error(e)
                 }
             }
         })

@@ -1,4 +1,4 @@
-import { window } from '../../utils'
+import { logger, window } from '../../utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
@@ -19,9 +19,7 @@ export class ExceptionObserver {
     }
 
     private debugLog(...args: any[]) {
-        if (this.instance.config.debug) {
-            console.log('PostHog.js [PostHog.ExceptionObserver]', ...args)
-        }
+        logger.info('[ExceptionObserver]', ...args)
     }
 
     startCapturing() {
@@ -62,7 +60,7 @@ export class ExceptionObserver {
             }.bind(this)
             ;(window.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__ = true
         } catch (e) {
-            console.error('PostHog failed to start exception autocapture', e)
+            logger.error('PostHog failed to start exception autocapture', e)
             this.stopCapturing()
         }
     }
