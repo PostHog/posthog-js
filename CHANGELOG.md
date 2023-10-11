@@ -1,3 +1,8 @@
+## 1.83.1 - 2023-10-11
+
+- feat: Move all logs everything over to logger (#830)
+- Update DOMAIN_MATCH_REGEX (#787)
+
 ## 1.83.0 - 2023-10-10
 
 - feat(surveys): Optional survey questions (#826)
