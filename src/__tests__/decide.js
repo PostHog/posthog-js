@@ -25,7 +25,6 @@ describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))
     given('posthog', () => ({
         config: given.config,
-        debug: true,
         persistence: new PostHogPersistence(given.config),
         register: (props) => given.posthog.persistence.register(props),
         unregister: (key) => given.posthog.persistence.unregister(key),
