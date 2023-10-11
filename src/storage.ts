@@ -3,7 +3,7 @@ import { PersistentStore, Properties } from './types'
 import Config from './config'
 import { DISTINCT_ID, SESSION_ID } from './constants'
 
-const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
+const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
 
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore: PersistentStore = {
