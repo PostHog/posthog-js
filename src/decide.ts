@@ -1,7 +1,7 @@
 import { autocapture } from './autocapture'
 import { _base64Encode, loadScript, logger } from './utils'
 import { PostHog } from './posthog-core'
-import { Compression, DecideResponse } from './types'
+import { DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 export class Decide {
@@ -60,18 +60,10 @@ export class Decide {
         autocapture.afterDecideResponse(response, this.instance)
         this.instance.webPerformance?.afterDecideResponse(response)
         this.instance.exceptionAutocapture?.afterDecideResponse(response)
+        this.instance._afterDecideResponse(response)
 
         if (!this.instance.config.advanced_disable_feature_flags_on_first_load) {
             this.instance.featureFlags.receivedFeatureFlags(response)
-        }
-
-        this.instance['compression'] = {}
-        if (response['supportedCompression'] && !this.instance.config.disable_compression) {
-            const compression: Partial<Record<Compression, boolean>> = {}
-            for (const method of response['supportedCompression']) {
-                compression[method] = true
-            }
-            this.instance['compression'] = compression
         }
 
         // Check if recorder.js is already loaded

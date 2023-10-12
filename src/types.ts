@@ -171,7 +171,7 @@ export enum Compression {
 
 export interface XHROptions {
     transport?: 'XHR' | 'sendBeacon'
-    method?: 'POST' | 'GET'
+    method?: 'POST' | 'GET' | 'OPTIONS'
     urlQueryArgs?: { compression: Compression }
     verbose?: boolean
     blob?: boolean
@@ -221,6 +221,9 @@ export interface DecideResponse {
     errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
     capturePerformance?: boolean
+    analytics?: {
+        endpoint?: string
+    }
     // this is currently in development and may have breaking changes without a major version bump
     autocaptureExceptions?:
         | boolean
