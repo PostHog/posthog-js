@@ -17,7 +17,7 @@ import { PostHog } from '../posthog-core'
 import { DecideResponse, NetworkRequest, Properties } from '../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../config'
-import { logger, loadScript, _timestamp } from '../utils'
+import { logger, loadScript, _timestamp, window } from '../utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -62,12 +62,19 @@ const ACTIVE_SOURCES = [
 ]
 
 export class SessionRecording {
+    get lastActivityTimestamp(): number {
+        return this._lastActivityTimestamp
+    }
+    get endpoint(): string {
+        return this._endpoint
+    }
+
     private instance: PostHog
     private emit: boolean
-    private endpoint: string
+    private _endpoint: string
     private windowId: string | null
     private sessionId: string | null
-    private lastActivityTimestamp: number = Date.now()
+    private _lastActivityTimestamp: number = Date.now()
     private flushBufferTimer?: any
     private buffer?: {
         size: number
@@ -90,7 +97,7 @@ export class SessionRecording {
         this.captureStarted = false
         this.snapshots = []
         this.emit = false // Controls whether data is sent to the server or not
-        this.endpoint = BASE_ENDPOINT
+        this._endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
         this.windowId = null
         this.sessionId = null
@@ -158,7 +165,7 @@ export class SessionRecording {
             })
         }
         if (response.sessionRecording?.endpoint) {
-            this.endpoint = response.sessionRecording?.endpoint
+            this._endpoint = response.sessionRecording?.endpoint
         }
 
         if (response.sessionRecording?.recorderVersion) {
@@ -253,13 +260,13 @@ export class SessionRecording {
 
         if (!isUserInteraction && !this.isIdle) {
             // We check if the lastActivityTimestamp is old enough to go idle
-            if (event.timestamp - this.lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
+            if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
             }
         }
 
         if (isUserInteraction) {
-            this.lastActivityTimestamp = event.timestamp
+            this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
                 // Remove the idle state if set and trigger a full snapshot as we will have ingored previous mutations
                 this.isIdle = false
@@ -385,7 +392,7 @@ export class SessionRecording {
         })
 
         // We reset the last activity timestamp, resetting the idle timer
-        this.lastActivityTimestamp = Date.now()
+        this._lastActivityTimestamp = Date.now()
         this.isIdle = false
     }
 
@@ -499,7 +506,7 @@ export class SessionRecording {
         this.instance.capture('$snapshot', properties, {
             transport: 'XHR',
             method: 'POST',
-            endpoint: this.endpoint,
+            endpoint: this._endpoint,
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
             _metrics: {
