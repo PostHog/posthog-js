@@ -52,7 +52,10 @@ module.exports = {
             // but excluding the 'plugin:compat/recommended' rule
             // we don't mind using the latest features in our tests
             extends: extend.filter((s) => s !== 'plugin:compat/recommended'),
-            rules: rules.filter((s) => s !== 'no-console'),
+            rules: {
+                ...rules,
+                'no-console': 'off',
+            },
         },
     ],
     root: true,
