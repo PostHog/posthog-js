@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable compat/compat */
 

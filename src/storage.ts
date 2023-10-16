@@ -1,6 +1,5 @@
 import { _extend, logger } from './utils'
 import { PersistentStore, Properties } from './types'
-import Config from './config'
 import { DISTINCT_ID, SESSION_ID } from './constants'
 
 const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
