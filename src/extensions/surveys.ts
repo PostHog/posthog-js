@@ -463,13 +463,14 @@ export const addCancelListeners = (
 
 export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: RatingSurveyQuestion) => {
     const scale = question.scale
+    const starting = question.scale === 10 ? 0 : 1
     const displayType = question.display
     const isOptional = !!question.optional
     const ratingOptionsElement = document.createElement('div')
     if (displayType === 'number') {
         ratingOptionsElement.className = 'rating-options-buttons'
-        ratingOptionsElement.style.gridTemplateColumns = `repeat(${scale}, minmax(0, 1fr))`
-        for (let i = 1; i <= scale; i++) {
+        ratingOptionsElement.style.gridTemplateColumns = `repeat(${scale - starting + 1}, minmax(0, 1fr))`
+        for (let i = starting; i <= scale; i++) {
             const buttonElement = document.createElement('button')
             buttonElement.className = `ratings-number rating_${i} auto-text-color`
             buttonElement.type = 'submit'
