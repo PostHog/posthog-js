@@ -537,16 +537,8 @@ export class PostHog {
             this.compression = compression
         }
 
-        // Allow the backend to override the `/e/` endpoint, check that it's reachable before using
-        // We can only run the check if XHR is available.
-        if (response.analytics?.endpoint && USE_XHR) {
-            const endpoint = response.analytics?.endpoint
-            this._send_request(
-                this.config.api_host + endpoint,
-                {},
-                { method: 'OPTIONS' },
-                () => (this.analyticsDefaultEndpoint = endpoint)
-            )
+        if (response.analytics?.endpoint) {
+            this.analyticsDefaultEndpoint = response.analytics.endpoint
         }
     }
 
