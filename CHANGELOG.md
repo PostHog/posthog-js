@@ -1,3 +1,7 @@
+## 1.83.3 - 2023-10-17
+
+- fix(surveys): add listener to 0th element (#837)
+
 ## 1.83.2 - 2023-10-17
 
 - chore: Make ratings start at 0 (#834)
