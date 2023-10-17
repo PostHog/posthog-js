@@ -549,8 +549,9 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
         })
     }
     formElement.getElementsByClassName('rating-options')[0].insertAdjacentElement('afterbegin', ratingOptionsElement)
-    for (const x of Array(question.scale).keys()) {
-        const ratingEl = formElement.getElementsByClassName(`rating_${x + 1}`)[0]
+    const allElements = question.scale === 10 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : [1, 2, 3, 4, 5]
+    for (const x of allElements) {
+        const ratingEl = formElement.getElementsByClassName(`rating_${x}`)[0]
         ratingEl.addEventListener('click', (e) => {
             e.preventDefault()
             for (const activeRatingEl of formElement.getElementsByClassName('rating-active')) {
