@@ -231,6 +231,24 @@ describe('loadScript', () => {
                 expect(_isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
             }
         )
+
+        it('should block googlebot desktop', () => {
+            expect(
+                _isBlockedUA(
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
+                    []
+                )
+            ).toBe(true)
+        })
+
+        it('should block openai bot', () => {
+            expect(
+                _isBlockedUA(
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)',
+                    []
+                )
+            ).toBe(true)
+        })
     })
 
     describe('_isUrlMatchingRegex', () => {

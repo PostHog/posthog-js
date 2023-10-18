@@ -501,12 +501,17 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 // This is to block various web spiders from executing our JS and
 // sending false capturing data
 export const _isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
-    return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents).some((blockedUA) => {
-        if (ua.includes) {
-            return ua.includes(blockedUA)
+    if (!ua) {
+        return false
+    }
+    const uaLower = ua.toLowerCase()
+    return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents || []).some((blockedUA) => {
+        const blockedUaLower = blockedUA.toLowerCase()
+        if (uaLower.includes) {
+            return uaLower.includes(blockedUaLower)
         } else {
             // IE 11 :/
-            return ua.indexOf(blockedUA) !== -1
+            return uaLower.indexOf(blockedUaLower) !== -1
         }
     })
 }
