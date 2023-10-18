@@ -232,6 +232,7 @@ export interface DecideResponse {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
         recorderVersion?: 'v1' | 'v2'
+        sampleRate?: number
     }
     surveys?: boolean
     toolbarParams: ToolbarParams

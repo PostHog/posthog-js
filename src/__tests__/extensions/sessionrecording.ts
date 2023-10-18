@@ -11,6 +11,8 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
+    SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_SAMPLING_EXCLUDED,
 } from '../../constants'
 import { SessionIdManager } from '../../sessionid'
 import {
@@ -48,6 +50,8 @@ describe('SessionRecording', () => {
     let session_recording_recorder_version_server_side: 'v1' | 'v2' | undefined
     let session_recording_enabled_server_side: boolean
     let console_log_enabled_server_side: boolean
+    let session_recording_sample_rate: number | undefined
+    let session_recording_sampling_excluded: string | null | undefined
     let checkAndGetSessionAndWindowIdMock: Mock
 
     beforeEach(() => {
@@ -59,6 +63,8 @@ describe('SessionRecording', () => {
         session_recording_enabled_server_side = true
         console_log_enabled_server_side = false
         session_recording_recorder_version_server_side = 'v2'
+        session_recording_sample_rate = undefined
+        session_recording_sampling_excluded = undefined
 
         config = {
             api_host: 'https://test.com',
@@ -80,19 +86,49 @@ describe('SessionRecording', () => {
 
         posthog = {
             get_property: (property_key: string): Property | undefined => {
-                if (property_key === SESSION_RECORDING_ENABLED_SERVER_SIDE) {
-                    return session_recording_enabled_server_side
-                } else if (property_key === SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE) {
-                    return session_recording_recorder_version_server_side
-                } else if (property_key === CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE) {
-                    return console_log_enabled_server_side
-                } else {
-                    throw new Error('config has not been mocked for this property key: ' + property_key)
+                switch (property_key) {
+                    case SESSION_RECORDING_ENABLED_SERVER_SIDE:
+                        return session_recording_enabled_server_side
+                    case SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE:
+                        return session_recording_recorder_version_server_side
+                    case CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE:
+                        return console_log_enabled_server_side
+                    case SESSION_RECORDING_SAMPLE_RATE:
+                        return session_recording_sample_rate
+                    case SESSION_RECORDING_SAMPLING_EXCLUDED:
+                        return session_recording_sampling_excluded
+                    default:
+                        throw new Error('config has not been mocked for this property key: ' + property_key)
                 }
             },
             config: config,
             capture: jest.fn(),
-            persistence: { register: jest.fn() } as unknown as PostHogPersistence,
+            persistence: {
+                register: jest.fn().mockImplementation((props) => {
+                    Object.entries(props).forEach(([property_key, value]) => {
+                        switch (property_key) {
+                            case SESSION_RECORDING_ENABLED_SERVER_SIDE:
+                                session_recording_enabled_server_side = <boolean>value
+                                break
+                            case SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE:
+                                session_recording_recorder_version_server_side = <'v1' | 'v2' | undefined>value
+                                break
+                            case CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE:
+                                console_log_enabled_server_side = <boolean>value
+                                break
+                            case SESSION_RECORDING_SAMPLE_RATE:
+                                session_recording_sample_rate = <number>value
+                                break
+                            case SESSION_RECORDING_SAMPLING_EXCLUDED:
+                                session_recording_sampling_excluded = <string | undefined>value
+                                break
+                            default:
+                                throw new Error('config has not been mocked for this property key: ' + property_key)
+                        }
+                    })
+                }),
+            } as unknown as PostHogPersistence,
+
             sessionManager: sessionManager,
             _addCaptureHook: jest.fn(),
         } as unknown as PostHog
@@ -192,13 +228,13 @@ describe('SessionRecording', () => {
             ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
         })
 
-        it('emit is not set to true until decide is called', () => {
+        it('emit is not active until decide is called', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
-            expect((sessionRecording as any).emit).toBe(false)
+            expect(sessionRecording.emit).toBe('buffering')
 
             sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
-            expect((sessionRecording as any).emit).toBe(true)
+            expect(sessionRecording.emit).toBe('active')
         })
 
         it('stores true in persistence if recording is enabled from the server', () => {
@@ -213,6 +249,19 @@ describe('SessionRecording', () => {
             sessionRecording.afterDecideResponse({} as unknown as DecideResponse)
             expect(posthog.persistence?.register).toHaveBeenCalledWith({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false,
+            })
+        })
+
+        it('stores sample rate in persistence', () => {
+            sessionRecording.afterDecideResponse({
+                sessionRecording: { endpoint: '/s/', sampleRate: 0.7 },
+            } as unknown as DecideResponse)
+
+            expect(posthog.persistence?.register).toHaveBeenCalledWith({
+                [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: undefined,
+                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
+                [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: undefined,
+                [SESSION_RECORDING_SAMPLE_RATE]: 0.7,
             })
         })
 
@@ -239,6 +288,77 @@ describe('SessionRecording', () => {
             })
             ;(window as any).rrwebRecord.takeFullSnapshot = mockFullSnapshot
             ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
+        })
+
+        describe('sampling', () => {
+            it('does not emit to capture if the sample rate is 0', () => {
+                sessionRecording.startRecordingIfEnabled()
+
+                sessionRecording.afterDecideResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: 0 },
+                } as unknown as DecideResponse)
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(posthog.capture).not.toHaveBeenCalled()
+                expect(sessionRecording.emit).toBe(false)
+            })
+
+            it('stores excluded session when excluded', () => {
+                sessionRecording.startRecordingIfEnabled()
+
+                sessionRecording.afterDecideResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: 0 },
+                } as unknown as DecideResponse)
+
+                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toBe(sessionRecording['sessionId'])
+            })
+
+            it('does emit to capture if the sample rate is 1', () => {
+                sessionRecording.startRecordingIfEnabled()
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(posthog.capture).not.toHaveBeenCalled()
+
+                sessionRecording.afterDecideResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: 1 },
+                } as unknown as DecideResponse)
+                expect(sessionRecording.emit).toBe('sampled')
+                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toBe(null)
+
+                // don't wait two seconds for the flush timer
+                sessionRecording['_flushBuffer']()
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(posthog.capture).toHaveBeenCalled()
+            })
+
+            it('sets emit as expected when sample rate is 0.5', () => {
+                sessionRecording.startRecordingIfEnabled()
+
+                sessionRecording.afterDecideResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: 0.5 },
+                } as unknown as DecideResponse)
+                const emitValues = []
+                let lastSessionId = sessionRecording['sessionId']
+
+                for (let i = 0; i < 100; i++) {
+                    // this will change the session id
+                    checkAndGetSessionAndWindowIdMock.mockImplementation(() => ({
+                        sessionId: 'newSessionId' + i,
+                        windowId: 'windowId',
+                    }))
+                    _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                    expect(sessionRecording['sessionId']).not.toBe(lastSessionId)
+                    lastSessionId = sessionRecording['sessionId']
+
+                    emitValues.push(sessionRecording.emit)
+                }
+
+                // the random number generator won't always be exactly 0.5, but it should be close
+                expect(emitValues.filter((v) => v === 'sampled').length).toBeGreaterThan(40)
+                expect(emitValues.filter((v) => v === false).length).toBeGreaterThan(40)
+            })
         })
 
         it('calls rrweb.record with the right options', () => {
@@ -273,7 +393,7 @@ describe('SessionRecording', () => {
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(posthog.capture).not.toHaveBeenCalled()
 
-            sessionRecording.afterDecideResponse({ endpoint: '/s/' } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
             // access private method 🤯
@@ -283,6 +403,8 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
+                    $emit_reason: 'active',
+                    $sample_rate: undefined,
                     $snapshot_bytes: 60,
                     $snapshot_data: [
                         { type: 3, data: { source: 1 } },
@@ -303,7 +425,7 @@ describe('SessionRecording', () => {
         })
 
         it('buffers emitted events', () => {
-            sessionRecording.afterDecideResponse({ endpoint: '/s/' } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
 
@@ -320,6 +442,8 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
+                    $emit_reason: 'active',
+                    $sample_rate: undefined,
                     $session_id: 'sessionId',
                     $window_id: 'windowId',
                     $snapshot_bytes: 60,
@@ -340,7 +464,7 @@ describe('SessionRecording', () => {
         })
 
         it('flushes buffer if the size of the buffer hits the limit', () => {
-            sessionRecording.afterDecideResponse({ endpoint: '/s/' } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
             const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
@@ -360,7 +484,7 @@ describe('SessionRecording', () => {
         })
 
         it('flushes buffer if the session_id changes', () => {
-            sessionRecording.afterDecideResponse({ endpoint: '/s/' } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
             sessionRecording.startRecordingIfEnabled()
 
             _emit(createIncrementalSnapshot())
@@ -373,6 +497,8 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
+                    $emit_reason: 'active',
+                    $sample_rate: undefined,
                     $session_id: 'otherSessionId',
                     $window_id: 'windowId',
                     $snapshot_data: [{ type: 3, data: { source: 1 } }],

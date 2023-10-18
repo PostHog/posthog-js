@@ -2,6 +2,8 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
+    SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_SAMPLING_EXCLUDED,
 } from '../constants'
 import {
     ensureMaxMessageSize,
@@ -62,6 +64,9 @@ const ACTIVE_SOURCES = [
 ]
 
 export class SessionRecording {
+    get emit(): false | 'sampled' | 'active' | 'buffering' {
+        return this._emit
+    }
     get lastActivityTimestamp(): number {
         return this._lastActivityTimestamp
     }
@@ -70,7 +75,13 @@ export class SessionRecording {
     }
 
     private instance: PostHog
-    private emit: boolean
+    /**
+     * Session recording starts in buffering mode while waiting for decide response
+     * Once the response is received it might be disabled (false), enabled (active) or sampled (sampled)
+     * When sampled that means a sample rate is set and the last time the session id rotated
+     * the sample rate determined this session should be sent to the server.
+     */
+    private _emit: false | 'sampled' | 'active' | 'buffering'
     private _endpoint: string
     private windowId: string | null
     private sessionId: string | null
@@ -96,7 +107,7 @@ export class SessionRecording {
         this.instance = instance
         this.captureStarted = false
         this.snapshots = []
-        this.emit = false // Controls whether data is sent to the server or not
+        this._emit = 'buffering' // Controls whether data is sent to the server or not
         this._endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
         this.windowId = null
@@ -155,15 +166,20 @@ export class SessionRecording {
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
+    getSampleRate(): number | undefined {
+        return this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
+    }
+
     afterDecideResponse(response: DecideResponse) {
-        this.receivedDecide = true
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
+                [SESSION_RECORDING_SAMPLE_RATE]: response.sessionRecording?.sampleRate,
             })
         }
+
         if (response.sessionRecording?.endpoint) {
             this._endpoint = response.sessionRecording?.endpoint
         }
@@ -171,6 +187,12 @@ export class SessionRecording {
         if (response.sessionRecording?.recorderVersion) {
             this.recorderVersion = response.sessionRecording.recorderVersion
         }
+
+        this.receivedDecide = true
+        this._emit = this.isRecordingEnabled() ? 'active' : 'buffering'
+        // We call this to ensure that the first session is sampled if it should be
+        this._isSampled()
+
         this.startRecordingIfEnabled()
     }
 
@@ -182,7 +204,7 @@ export class SessionRecording {
                 payload: {
                     level,
                     trace: [],
-                    // Even though it is a string we stringify it as thats what rrweb expects
+                    // Even though it is a string we stringify it as that's what rrweb expects
                     payload: [JSON.stringify(message)],
                 },
             },
@@ -194,7 +216,6 @@ export class SessionRecording {
         // Only submit data after we've received a decide response to account for
         // changing endpoints and the feature being disabled on the server side.
         if (this.receivedDecide) {
-            this.emit = true
             this.snapshots.forEach((properties) => this._captureSnapshotBuffered(properties))
         }
         this._startCapture()
@@ -268,7 +289,7 @@ export class SessionRecording {
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
-                // Remove the idle state if set and trigger a full snapshot as we will have ingored previous mutations
+                // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
                 this.isIdle = false
                 this._tryTakeFullSnapshot()
             }
@@ -283,6 +304,10 @@ export class SessionRecording {
             !isUserInteraction,
             event.timestamp
         )
+
+        if (this.sessionId !== sessionId) {
+            this._isSampled()
+        }
 
         if (
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
@@ -377,7 +402,8 @@ export class SessionRecording {
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
         //   Dropping the initial event is fine (it's always captured by rrweb).
         this.instance._addCaptureHook((eventName) => {
-            // If anything could go wrong here it has the potential to block the main loop so we catch all errors.
+            // If anything could go wrong here it has the potential to block the main loop,
+            // so we catch all errors.
             try {
                 if (eventName === '$pageview') {
                     const href = this._maskUrl(window.location.href)
@@ -433,9 +459,9 @@ export class SessionRecording {
             $window_id: this.windowId,
         }
 
-        if (this.emit) {
+        if (this._emit === 'sampled' || this._emit === 'active') {
             this._captureSnapshotBuffered(properties)
-        } else {
+        } else if (this._emit === 'buffering') {
             this.snapshots.push(properties)
         }
     }
@@ -468,6 +494,10 @@ export class SessionRecording {
                 $snapshot_data: this.buffer.data,
                 $session_id: this.buffer.sessionId,
                 $window_id: this.buffer.windowId,
+                $sample_rate: this.getSampleRate(),
+                // We use this to determine whether the session was sampled or not.
+                // it is logically impossible to get here without sampled or active as the state but 🤷️
+                $emit_reason: this._emit === 'sampled' ? 'sampled' : this._emit ? 'active' : 'inactive',
             })
         }
 
@@ -513,5 +543,40 @@ export class SessionRecording {
                 rrweb_full_snapshot: properties.$snapshot_data.type === FULL_SNAPSHOT_EVENT_TYPE,
             },
         })
+    }
+
+    /**
+     * Checks if a session should be sampled.
+     * a sample rate of 0.2 means only 20% of sessions will be sent to the server.
+     */
+    private _isSampled() {
+        const sampleRate = this.getSampleRate()
+        if (sampleRate === undefined) {
+            return
+        }
+
+        let shouldSample: boolean = false
+        // if the session has previously been marked as excluded by sample rate
+        // then we respect that setting
+        const excludedSession = this.instance.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)
+        if (excludedSession !== this.sessionId) {
+            const randomNumber = Math.random()
+            shouldSample = randomNumber < sampleRate
+        }
+
+        this._emit = shouldSample ? 'sampled' : false
+
+        if (shouldSample) {
+            this.instance.persistence?.register({
+                [SESSION_RECORDING_SAMPLING_EXCLUDED]: null,
+            })
+        } else {
+            this.instance.persistence?.register({
+                [SESSION_RECORDING_SAMPLING_EXCLUDED]: this.sessionId,
+            })
+            logger.warn(
+                `Sample rate ${sampleRate} has determined that sessionId ${this.sessionId} will not be sent to the server.`
+            )
+        }
     }
 }
