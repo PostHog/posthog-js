@@ -192,8 +192,6 @@ export class SessionRecording {
 
         this.receivedDecide = true
         this._emit = this.isRecordingEnabled() ? 'active' : 'buffering'
-        // We call this to ensure that the first session is sampled if it should be
-        this._isSampled()
 
         this.startRecordingIfEnabled()
     }
@@ -307,18 +305,21 @@ export class SessionRecording {
             event.timestamp
         )
 
-        if (this.sessionId !== sessionId) {
+        const sessionIdChanged = this.sessionId !== sessionId
+        const windowIdChanged = this.windowId !== windowId
+        this.windowId = windowId
+        this.sessionId = sessionId
+
+        if (sessionIdChanged) {
             this._isSampled()
         }
 
         if (
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-            (this.windowId !== windowId || this.sessionId !== sessionId)
+            (windowIdChanged || sessionIdChanged)
         ) {
             this._tryTakeFullSnapshot()
         }
-        this.windowId = windowId
-        this.sessionId = sessionId
     }
 
     private _tryTakeFullSnapshot(): boolean {
@@ -448,6 +449,9 @@ export class SessionRecording {
         const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(throttledEvent))
 
         this._updateWindowAndSessionIds(event)
+        // this is the earliest point that there is a session ID available,
+        // and we can check whether to sample this recording
+        this._isSampled()
 
         if (this.isIdle) {
             // When in an idle state we keep recording, but don't capture the events
@@ -557,25 +561,24 @@ export class SessionRecording {
             return
         }
 
-        let shouldSample: boolean = false
+        let shouldSample: boolean
         // if the session has previously been marked as excluded by sample rate
         // then we respect that setting
-        const excludedSession = this.instance.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)
-        if (excludedSession !== this.sessionId) {
+        const sessionStatus = this.instance.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)
+        if (sessionStatus?.sessionId !== this.sessionId) {
             const randomNumber = Math.random()
             shouldSample = randomNumber < sampleRate
+        } else {
+            shouldSample = sessionStatus?.sampled
         }
 
         this._emit = shouldSample ? 'sampled' : false
 
-        if (shouldSample) {
-            this.instance.persistence?.register({
-                [SESSION_RECORDING_SAMPLING_EXCLUDED]: null,
-            })
-        } else {
-            this.instance.persistence?.register({
-                [SESSION_RECORDING_SAMPLING_EXCLUDED]: this.sessionId,
-            })
+        this.instance.persistence?.register({
+            [SESSION_RECORDING_SAMPLING_EXCLUDED]: { sessionId: this.sessionId, sampled: shouldSample },
+        })
+
+        if (!shouldSample) {
             logger.warn(
                 `Sample rate ${sampleRate} has determined that sessionId ${this.sessionId} will not be sent to the server.`
             )

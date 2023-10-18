@@ -23,6 +23,7 @@ import {
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../types'
 import Mock = jest.Mock
+import { uuidv7 } from '../../uuidv7'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -44,7 +45,7 @@ describe('SessionRecording', () => {
     let _emit: any
     let posthog: PostHog
     let sessionRecording: SessionRecording
-    const incomingSessionAndWindowId = { sessionId: 'sessionId', windowId: 'windowId' }
+    let sessionId: string
     let sessionManager: SessionIdManager
     let config: PostHogConfig
     let session_recording_recorder_version_server_side: 'v1' | 'v2' | undefined
@@ -60,6 +61,7 @@ describe('SessionRecording', () => {
             getRecordConsolePlugin: jest.fn(),
         }
 
+        sessionId = 'sessionId' + uuidv7()
         session_recording_enabled_server_side = true
         console_log_enabled_server_side = false
         session_recording_recorder_version_server_side = 'v2'
@@ -78,7 +80,10 @@ describe('SessionRecording', () => {
         } as unknown as PostHogConfig
 
         checkAndGetSessionAndWindowIdMock = jest.fn()
-        checkAndGetSessionAndWindowIdMock.mockImplementation(() => incomingSessionAndWindowId)
+        checkAndGetSessionAndWindowIdMock.mockImplementation(() => ({
+            sessionId: sessionId,
+            windowId: 'windowId',
+        }))
 
         sessionManager = {
             checkAndGetSessionAndWindowId: checkAndGetSessionAndWindowIdMock,
@@ -309,8 +314,13 @@ describe('SessionRecording', () => {
                 sessionRecording.afterDecideResponse({
                     sessionRecording: { endpoint: '/s/', sampleRate: 0 },
                 } as unknown as DecideResponse)
+                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toStrictEqual(undefined)
 
-                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toBe(sessionRecording['sessionId'])
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toStrictEqual({
+                    sessionId: sessionId,
+                    sampled: false,
+                })
             })
 
             it('does emit to capture if the sample rate is 1', () => {
@@ -322,8 +332,13 @@ describe('SessionRecording', () => {
                 sessionRecording.afterDecideResponse({
                     sessionRecording: { endpoint: '/s/', sampleRate: 1 },
                 } as unknown as DecideResponse)
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
                 expect(sessionRecording.emit).toBe('sampled')
-                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toBe(null)
+                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toStrictEqual({
+                    sampled: true,
+                    sessionId: sessionId,
+                })
 
                 // don't wait two seconds for the flush timer
                 sessionRecording['_flushBuffer']()
@@ -410,7 +425,7 @@ describe('SessionRecording', () => {
                         { type: 3, data: { source: 1 } },
                         { type: 3, data: { source: 2 } },
                     ],
-                    $session_id: 'sessionId',
+                    $session_id: sessionId,
                     $window_id: 'windowId',
                 },
                 {
@@ -444,7 +459,7 @@ describe('SessionRecording', () => {
                 {
                     $emit_reason: 'active',
                     $sample_rate: undefined,
-                    $session_id: 'sessionId',
+                    $session_id: sessionId,
                     $window_id: 'windowId',
                     $snapshot_bytes: 60,
                     $snapshot_data: [
@@ -489,7 +504,7 @@ describe('SessionRecording', () => {
 
             _emit(createIncrementalSnapshot())
             expect(posthog.capture).not.toHaveBeenCalled()
-            expect(sessionRecording['buffer']?.sessionId).toEqual('sessionId')
+            expect(sessionRecording['buffer']?.sessionId).toEqual(sessionId)
             // Not exactly right but easier to test than rotating the session id
             sessionRecording['buffer']!.sessionId = 'otherSessionId'
             _emit(createIncrementalSnapshot())
