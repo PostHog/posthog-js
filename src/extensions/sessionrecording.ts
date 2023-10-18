@@ -63,8 +63,10 @@ const ACTIVE_SOURCES = [
     IncrementalSource.Drag,
 ]
 
+type SessionRecordingStatus = false | 'sampled' | 'active' | 'buffering'
+
 export class SessionRecording {
-    get emit(): false | 'sampled' | 'active' | 'buffering' {
+    get emit(): SessionRecordingStatus {
         return this._emit
     }
     get lastActivityTimestamp(): number {
@@ -81,7 +83,7 @@ export class SessionRecording {
      * When sampled that means a sample rate is set and the last time the session id rotated
      * the sample rate determined this session should be sent to the server.
      */
-    private _emit: false | 'sampled' | 'active' | 'buffering'
+    private _emit: SessionRecordingStatus
     private _endpoint: string
     private windowId: string | null
     private sessionId: string | null
