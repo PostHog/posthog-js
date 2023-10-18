@@ -1,3 +1,7 @@
+## 1.84.0 - 2023-10-18
+
+- Fix bot user agent detection (#840)
+
 ## 1.83.3 - 2023-10-17
 
 - fix(surveys): add listener to 0th element (#837)
