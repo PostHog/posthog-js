@@ -63,6 +63,12 @@ const ACTIVE_SOURCES = [
     IncrementalSource.Drag,
 ]
 
+/**
+ * Session recording starts in buffering mode while waiting for decide response
+ * Once the response is received it might be disabled (false), enabled (active) or sampled (sampled)
+ * When sampled that means a sample rate is set and the last time the session id was rotated
+ * the sample rate determined this session should be sent to the server.
+ */
 type SessionRecordingStatus = false | 'sampled' | 'active' | 'buffering'
 
 export class SessionRecording {
@@ -77,12 +83,6 @@ export class SessionRecording {
     }
 
     private instance: PostHog
-    /**
-     * Session recording starts in buffering mode while waiting for decide response
-     * Once the response is received it might be disabled (false), enabled (active) or sampled (sampled)
-     * When sampled that means a sample rate is set and the last time the session id rotated
-     * the sample rate determined this session should be sent to the server.
-     */
     private _emit: SessionRecordingStatus
     private _endpoint: string
     private windowId: string | null
