@@ -3,13 +3,23 @@ import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuidv7 } from './uuidv7'
-import { logger } from './utils'
+import { logger, window } from './utils'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 mins
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
+    get checkSampling(): () => boolean | null {
+        return this._checkSampling
+    }
+
+    set checkSampling(value: () => boolean | null) {
+        this._checkSampling = value
+    }
+
+    private _sessionIdGenerator: () => string
+    private _windowIdGenerator: () => string
     private config: Partial<PostHogConfig>
     private persistence: PostHogPersistence
     private _windowId: string | null | undefined
@@ -17,17 +27,31 @@ export class SessionIdManager {
     private _window_id_storage_key: string
     private _primary_window_exists_storage_key: string
     private _sessionStartTimestamp: number | null
+
+    // when sampling is active this is set to true or false
+    // true means a sessionId can be sent to the API, false that it cannot
+    private _isSampled: boolean | null
+    private _checkSampling: () => boolean | null = () => null
+
     private _sessionActivityTimestamp: number | null
     private _sessionTimeoutMs: number
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
 
-    constructor(config: Partial<PostHogConfig>, persistence: PostHogPersistence) {
+    constructor(
+        config: Partial<PostHogConfig>,
+        persistence: PostHogPersistence,
+        sessionIdGenerator?: () => string,
+        windowIdGenerator?: () => string
+    ) {
         this.config = config
         this.persistence = persistence
         this._windowId = undefined
         this._sessionId = undefined
         this._sessionStartTimestamp = null
         this._sessionActivityTimestamp = null
+        this._isSampled = null
+        this._sessionIdGenerator = sessionIdGenerator || uuidv7
+        this._windowIdGenerator = windowIdGenerator || uuidv7
 
         const persistenceName = config['persistence_name'] || config['token']
         let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
@@ -116,25 +140,29 @@ export class SessionIdManager {
     private _setSessionId(
         sessionId: string | null,
         sessionActivityTimestamp: number | null,
-        sessionStartTimestamp: number | null
+        sessionStartTimestamp: number | null,
+        isSampled: boolean | null
     ): void {
         if (
             sessionId !== this._sessionId ||
             sessionActivityTimestamp !== this._sessionActivityTimestamp ||
-            sessionStartTimestamp !== this._sessionStartTimestamp
+            sessionStartTimestamp !== this._sessionStartTimestamp ||
+            isSampled !== this._isSampled
         ) {
             this._sessionStartTimestamp = sessionStartTimestamp
             this._sessionActivityTimestamp = sessionActivityTimestamp
             this._sessionId = sessionId
+            this._isSampled = isSampled
+
             this.persistence.register({
-                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
+                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp, isSampled],
             })
         }
     }
 
-    private _getSessionId(): [number, string, number] {
-        if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
-            return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
+    private _getSessionId(): [number, string, number, boolean | null] {
+        if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp && this._isSampled) {
+            return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp, this._isSampled]
         }
         const sessionId = this.persistence.props[SESSION_ID]
 
@@ -143,13 +171,13 @@ export class SessionIdManager {
             sessionId.push(sessionId[0])
         }
 
-        return sessionId || [0, null, 0]
+        return sessionId || [0, null, 0, null]
     }
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
     // new ids will be generated.
     resetSessionId(): void {
-        this._setSessionId(null, null, null)
+        this._setSessionId(null, null, null, null)
     }
 
     /*
@@ -186,7 +214,7 @@ export class SessionIdManager {
         const timestamp = _timestamp || new Date().getTime()
 
         // eslint-disable-next-line prefer-const
-        let [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
+        let [lastTimestamp, sessionId, startTimestamp, isSampled] = this._getSessionId()
         let windowId = this._getWindowId()
 
         const sessionPastMaximumLength =
@@ -198,12 +226,13 @@ export class SessionIdManager {
             (!readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs) ||
             sessionPastMaximumLength
         ) {
-            sessionId = uuidv7()
-            windowId = uuidv7()
+            sessionId = this._sessionIdGenerator()
+            windowId = this._windowIdGenerator()
             startTimestamp = timestamp
             valuesChanged = true
+            isSampled = this._checkSampling()
         } else if (!windowId) {
-            windowId = uuidv7()
+            windowId = this._windowIdGenerator()
             valuesChanged = true
         }
 
@@ -211,7 +240,7 @@ export class SessionIdManager {
         const sessionStartTimestamp = startTimestamp === 0 ? new Date().getTime() : startTimestamp
 
         this._setWindowId(windowId)
-        this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
+        this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp, isSampled)
 
         if (valuesChanged) {
             this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId))
@@ -221,6 +250,7 @@ export class SessionIdManager {
             sessionId,
             windowId,
             sessionStartTimestamp,
+            isSampled,
         }
     }
 }

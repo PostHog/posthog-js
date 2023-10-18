@@ -9,21 +9,17 @@ import {
 import { PostHogPersistence } from '../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_ID,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
-    SESSION_RECORDING_SAMPLING_EXCLUDED,
 } from '../../constants'
 import { SessionIdManager } from '../../sessionid'
-import {
-    INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    META_EVENT_TYPE,
-    MUTATION_SOURCE_TYPE,
-} from '../../extensions/sessionrecording-utils'
+import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../extensions/sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../types'
-import Mock = jest.Mock
 import { uuidv7 } from '../../uuidv7'
+import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -52,8 +48,8 @@ describe('SessionRecording', () => {
     let session_recording_enabled_server_side: boolean
     let console_log_enabled_server_side: boolean
     let session_recording_sample_rate: number | undefined
-    let session_recording_sampling_excluded: string | null | undefined
-    let checkAndGetSessionAndWindowIdMock: Mock
+    let sessionIdGeneratorMock: Mock
+    let windowIdGeneratorMock: Mock
 
     beforeEach(() => {
         ;(window as any).rrwebRecord = jest.fn()
@@ -66,7 +62,6 @@ describe('SessionRecording', () => {
         console_log_enabled_server_side = false
         session_recording_recorder_version_server_side = 'v2'
         session_recording_sample_rate = undefined
-        session_recording_sampling_excluded = undefined
 
         config = {
             api_host: 'https://test.com',
@@ -79,15 +74,41 @@ describe('SessionRecording', () => {
             persistence: 'memory',
         } as unknown as PostHogConfig
 
-        checkAndGetSessionAndWindowIdMock = jest.fn()
-        checkAndGetSessionAndWindowIdMock.mockImplementation(() => ({
-            sessionId: sessionId,
-            windowId: 'windowId',
-        }))
+        sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
+        windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
 
-        sessionManager = {
-            checkAndGetSessionAndWindowId: checkAndGetSessionAndWindowIdMock,
-        } as unknown as SessionIdManager
+        const fakePersistence: PostHogPersistence = {
+            props: { SESSION_ID: sessionId },
+            register: jest.fn().mockImplementation((props) => {
+                Object.entries(props).forEach(([property_key, value]) => {
+                    switch (property_key) {
+                        case SESSION_RECORDING_ENABLED_SERVER_SIDE:
+                            session_recording_enabled_server_side = <boolean>value
+                            break
+                        case SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE:
+                            session_recording_recorder_version_server_side = <'v1' | 'v2' | undefined>value
+                            break
+                        case CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE:
+                            console_log_enabled_server_side = <boolean>value
+                            break
+                        case SESSION_RECORDING_SAMPLE_RATE:
+                            session_recording_sample_rate = <number>value
+                            break
+                        case SESSION_ID:
+                            // eslint-disable-next-line no-case-declarations
+                            const providedId = <string>(<Array<any>>value)[1]
+                            if (providedId !== null) {
+                                sessionId = providedId
+                            }
+                            break
+                        default:
+                            throw new Error('config has not been mocked for this property key: ' + property_key)
+                    }
+                })
+            }),
+        } as unknown as PostHogPersistence
+
+        sessionManager = new SessionIdManager(config, fakePersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
         posthog = {
             get_property: (property_key: string): Property | undefined => {
@@ -100,39 +121,15 @@ describe('SessionRecording', () => {
                         return console_log_enabled_server_side
                     case SESSION_RECORDING_SAMPLE_RATE:
                         return session_recording_sample_rate
-                    case SESSION_RECORDING_SAMPLING_EXCLUDED:
-                        return session_recording_sampling_excluded
+                    case SESSION_ID:
+                        return sessionId
                     default:
                         throw new Error('config has not been mocked for this property key: ' + property_key)
                 }
             },
             config: config,
             capture: jest.fn(),
-            persistence: {
-                register: jest.fn().mockImplementation((props) => {
-                    Object.entries(props).forEach(([property_key, value]) => {
-                        switch (property_key) {
-                            case SESSION_RECORDING_ENABLED_SERVER_SIDE:
-                                session_recording_enabled_server_side = <boolean>value
-                                break
-                            case SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE:
-                                session_recording_recorder_version_server_side = <'v1' | 'v2' | undefined>value
-                                break
-                            case CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE:
-                                console_log_enabled_server_side = <boolean>value
-                                break
-                            case SESSION_RECORDING_SAMPLE_RATE:
-                                session_recording_sample_rate = <number>value
-                                break
-                            case SESSION_RECORDING_SAMPLING_EXCLUDED:
-                                session_recording_sampling_excluded = <string | undefined>value
-                                break
-                            default:
-                                throw new Error('config has not been mocked for this property key: ' + property_key)
-                        }
-                    })
-                }),
-            } as unknown as PostHogPersistence,
+            persistence: fakePersistence,
 
             sessionManager: sessionManager,
             _addCaptureHook: jest.fn(),
@@ -314,13 +311,10 @@ describe('SessionRecording', () => {
                 sessionRecording.afterDecideResponse({
                     sessionRecording: { endpoint: '/s/', sampleRate: 0 },
                 } as unknown as DecideResponse)
-                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toStrictEqual(undefined)
 
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toStrictEqual({
-                    sessionId: sessionId,
-                    sampled: false,
-                })
+                const { isSampled, sessionId: storedSessionId } = sessionManager.checkAndGetSessionAndWindowId(true)
+                expect(isSampled).toStrictEqual(false)
+                expect(storedSessionId).toStrictEqual(sessionId)
             })
 
             it('does emit to capture if the sample rate is 1', () => {
@@ -335,8 +329,8 @@ describe('SessionRecording', () => {
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
 
                 expect(sessionRecording.emit).toBe('sampled')
-                expect(posthog.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)).toStrictEqual({
-                    sampled: true,
+                expect(sessionManager.checkAndGetSessionAndWindowId(true)).toMatchObject({
+                    isSampled: true,
                     sessionId: sessionId,
                 })
 
@@ -357,11 +351,9 @@ describe('SessionRecording', () => {
                 let lastSessionId = sessionRecording['sessionId']
 
                 for (let i = 0; i < 100; i++) {
-                    // this will change the session id
-                    checkAndGetSessionAndWindowIdMock.mockImplementation(() => ({
-                        sessionId: 'newSessionId' + i,
-                        windowId: 'windowId',
-                    }))
+                    // force change the session ID
+                    sessionManager.resetSessionId()
+                    sessionId = 'session-id-' + uuidv7()
                     _emit(createIncrementalSnapshot({ data: { source: 1 } }))
 
                     expect(sessionRecording['sessionId']).not.toBe(lastSessionId)
@@ -590,14 +582,13 @@ describe('SessionRecording', () => {
 
             sessionRecording.startRecordingIfEnabled()
 
-            expect(sessionRecording.started()).toEqual(true)
-            expect(sessionRecording.captureStarted).toEqual(true)
+            expect(sessionRecording.started).toEqual(true)
             expect(sessionRecording.stopRrweb).not.toEqual(undefined)
 
             sessionRecording.stopRecording()
 
             expect(sessionRecording.stopRrweb).toEqual(undefined)
-            expect(sessionRecording.captureStarted).toEqual(false)
+            expect(sessionRecording.started).toEqual(false)
         })
 
         it('session recording can be turned on after being turned off', () => {
@@ -605,14 +596,13 @@ describe('SessionRecording', () => {
 
             sessionRecording.startRecordingIfEnabled()
 
-            expect(sessionRecording.started()).toEqual(true)
-            expect(sessionRecording.captureStarted).toEqual(true)
+            expect(sessionRecording.started).toEqual(true)
             expect(sessionRecording.stopRrweb).not.toEqual(undefined)
 
             sessionRecording.stopRecording()
 
             expect(sessionRecording.stopRrweb).toEqual(undefined)
-            expect(sessionRecording.captureStarted).toEqual(false)
+            expect(sessionRecording.started).toEqual(false)
         })
 
         describe('console logs', () => {
@@ -643,49 +633,31 @@ describe('SessionRecording', () => {
             })
 
             it('sends a full snapshot if there is a new session/window id and the event is not type FullSnapshot or Meta', () => {
-                checkAndGetSessionAndWindowIdMock.mockImplementation(() => ({
-                    sessionId: 'new-session-id',
-                    windowId: 'new-window-id',
-                }))
+                sessionIdGeneratorMock.mockImplementation(() => 'newSessionId')
+                windowIdGeneratorMock.mockImplementation(() => 'newWindowId')
                 _emit(createIncrementalSnapshot())
                 expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('sends a full snapshot if there is a new window id and the event is not type FullSnapshot or Meta', () => {
-                checkAndGetSessionAndWindowIdMock.mockImplementation(() => ({
-                    sessionId: 'old-session-id',
-                    windowId: 'new-window-id',
-                }))
+                sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
+                windowIdGeneratorMock.mockImplementation(() => 'newWindowId')
                 _emit(createIncrementalSnapshot())
                 expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is a new session/window id and the event is type FullSnapshot or Meta', () => {
-                checkAndGetSessionAndWindowIdMock.mockImplementation(() => ({
-                    sessionId: 'new-session-id',
-                    windowId: 'new-window-id',
-                }))
+                sessionIdGeneratorMock.mockImplementation(() => 'newSessionId')
+                windowIdGeneratorMock.mockImplementation(() => 'newWindowId')
                 _emit(createIncrementalSnapshot({ type: META_EVENT_TYPE }))
                 expect((window as any).rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is not a new session or window id', () => {
-                checkAndGetSessionAndWindowIdMock.mockImplementation(() => ({
-                    sessionId: 'old-session-id',
-                    windowId: 'old-window-id',
-                }))
+                sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
+                windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
                 _emit(createIncrementalSnapshot())
                 expect((window as any).rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
-            })
-
-            it('it calls checkAndGetSessionAndWindowId with readOnly as true if it not a user interaction', () => {
-                _emit(createIncrementalSnapshot({ data: { source: MUTATION_SOURCE_TYPE, adds: [{ id: 1 }] } }))
-                expect(checkAndGetSessionAndWindowIdMock).toHaveBeenCalledWith(true, undefined)
-            })
-
-            it('it calls checkAndGetSessionAndWindowId with readOnly as false if it is a user interaction', () => {
-                _emit(createIncrementalSnapshot())
-                expect(checkAndGetSessionAndWindowIdMock).toHaveBeenCalledWith(false, undefined)
             })
         })
 

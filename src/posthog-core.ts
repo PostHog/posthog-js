@@ -1737,7 +1737,7 @@ export class PostHog {
      * is currently running
      */
     sessionRecordingStarted(): boolean {
-        return !!this.sessionRecording?.started()
+        return !!this.sessionRecording?.started
     }
 
     /**

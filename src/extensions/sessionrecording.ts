@@ -3,7 +3,6 @@ import {
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
-    SESSION_RECORDING_SAMPLING_EXCLUDED,
 } from '../constants'
 import {
     ensureMaxMessageSize,
@@ -19,7 +18,7 @@ import { PostHog } from '../posthog-core'
 import { DecideResponse, NetworkRequest, Properties } from '../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../config'
-import { logger, loadScript, _timestamp, window } from '../utils'
+import { logger, loadScript, _timestamp, window, _isBoolean } from '../utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -71,6 +70,17 @@ const ACTIVE_SOURCES = [
  */
 type SessionRecordingStatus = false | 'sampled' | 'active' | 'buffering'
 
+function currySamplingChecked(rate: number) {
+    return () => {
+        const randomNumber = Math.random()
+        const shouldSample = randomNumber < rate
+        if (!shouldSample) {
+            logger.warn(`Sample rate ${rate} has determined that this sessionId will not be sent to the server.`)
+        }
+        return shouldSample
+    }
+}
+
 export class SessionRecording {
     get emit(): SessionRecordingStatus {
         return this._emit
@@ -80,6 +90,9 @@ export class SessionRecording {
     }
     get endpoint(): string {
         return this._endpoint
+    }
+    get started(): boolean {
+        return this.captureStarted
     }
 
     private instance: PostHog
@@ -96,8 +109,8 @@ export class SessionRecording {
         windowId: string | null
     }
     private mutationRateLimiter?: MutationRateLimiter
+    private captureStarted: boolean
 
-    captureStarted: boolean
     snapshots: any[]
     stopRrweb: listenerHandler | undefined
     receivedDecide: boolean
@@ -138,10 +151,6 @@ export class SessionRecording {
         }
     }
 
-    started() {
-        return this.captureStarted
-    }
-
     stopRecording() {
         if (this.captureStarted && this.stopRrweb) {
             this.stopRrweb()
@@ -180,6 +189,14 @@ export class SessionRecording {
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
                 [SESSION_RECORDING_SAMPLE_RATE]: response.sessionRecording?.sampleRate,
             })
+        }
+
+        if (response.sessionRecording?.sampleRate !== undefined) {
+            const rate = response.sessionRecording?.sampleRate
+            const sessionManager = this.getSessionManager()
+            if (sessionManager !== undefined) {
+                sessionManager.checkSampling = currySamplingChecked(rate)
+            }
         }
 
         if (response.sessionRecording?.endpoint) {
@@ -300,7 +317,7 @@ export class SessionRecording {
         }
 
         // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = sessionManager.checkAndGetSessionAndWindowId(
+        const { windowId, sessionId, isSampled } = sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
             event.timestamp
         )
@@ -310,8 +327,8 @@ export class SessionRecording {
         this.windowId = windowId
         this.sessionId = sessionId
 
-        if (sessionIdChanged) {
-            this._isSampled()
+        if (_isBoolean(isSampled)) {
+            this._emit = isSampled ? 'sampled' : false
         }
 
         if (
@@ -449,9 +466,6 @@ export class SessionRecording {
         const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(throttledEvent))
 
         this._updateWindowAndSessionIds(event)
-        // this is the earliest point that there is a session ID available,
-        // and we can check whether to sample this recording
-        this._isSampled()
 
         if (this.isIdle) {
             // When in an idle state we keep recording, but don't capture the events
@@ -549,39 +563,5 @@ export class SessionRecording {
                 rrweb_full_snapshot: properties.$snapshot_data.type === FULL_SNAPSHOT_EVENT_TYPE,
             },
         })
-    }
-
-    /**
-     * Checks if a session should be sampled.
-     * a sample rate of 0.2 means only 20% of sessions will be sent to the server.
-     */
-    private _isSampled() {
-        const sampleRate = this.getSampleRate()
-        if (sampleRate === undefined) {
-            return
-        }
-
-        let shouldSample: boolean
-        // if the session has previously been marked as excluded by sample rate
-        // then we respect that setting
-        const sessionStatus = this.instance.get_property(SESSION_RECORDING_SAMPLING_EXCLUDED)
-        if (sessionStatus?.sessionId !== this.sessionId) {
-            const randomNumber = Math.random()
-            shouldSample = randomNumber < sampleRate
-        } else {
-            shouldSample = sessionStatus?.sampled
-        }
-
-        this._emit = shouldSample ? 'sampled' : false
-
-        this.instance.persistence?.register({
-            [SESSION_RECORDING_SAMPLING_EXCLUDED]: { sessionId: this.sessionId, sampled: shouldSample },
-        })
-
-        if (!shouldSample) {
-            logger.warn(
-                `Sample rate ${sampleRate} has determined that sessionId ${this.sessionId} will not be sent to the server.`
-            )
-        }
     }
 }
