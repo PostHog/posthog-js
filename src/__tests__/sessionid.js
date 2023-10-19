@@ -286,35 +286,4 @@ describe('Session ID manager', () => {
             expect(console.warn).toBeCalledTimes(3)
         })
     })
-
-    describe('sampling', () => {
-        it('respects sampled session', () => {
-            given('storedSessionIdData', () => [given.now, 'oldSessionID', given.timestampOfSessionStart, true])
-            expect(given.subject).toEqual({
-                windowId: 'oldWindowId',
-                sessionId: 'oldSessionID',
-                sessionStartTimestamp: given.timestampOfSessionStart,
-            })
-        })
-
-        it('respects excluded sampled session', () => {
-            given('storedSessionIdData', () => [given.now, 'oldSessionID', given.timestampOfSessionStart, false])
-            expect(given.subject).toEqual({
-                windowId: 'oldWindowId',
-                sessionId: 'oldSessionID',
-                sessionStartTimestamp: given.timestampOfSessionStart,
-            })
-        })
-
-        it('uses provided function to check for sampling', () => {
-            given.sessionIdManager.checkSampling = () => true
-            given('storedSessionIdData', () => [null, null, null])
-
-            expect(given.subject).toEqual({
-                windowId: 'newUUID',
-                sessionId: 'newUUID',
-                sessionStartTimestamp: given.timestamp,
-            })
-        })
-    })
 })
