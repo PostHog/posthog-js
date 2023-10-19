@@ -1,4 +1,4 @@
-import { createShadow, callSurveys, generateSurveys } from '../../extensions/surveys'
+import { createShadow, callSurveys, generateSurveys, createMultipleQuestionSurvey } from '../../extensions/surveys'
 
 describe('survey display logic', () => {
     beforeEach(() => {
@@ -83,7 +83,7 @@ describe('survey display logic', () => {
         // submit the survey
         const ratingButton = document
             .getElementsByClassName(`PostHogSurvey${mockSurveys[0].id}`)[0]
-            .shadowRoot.querySelectorAll('.rating_1')[0]
+            .shadowRoot.querySelectorAll('.question-0-rating-1')[0]
         ratingButton.click()
         const submitButton = document
             .getElementsByClassName(`PostHogSurvey${mockSurveys[0].id}`)[0]
@@ -151,5 +151,37 @@ describe('survey display logic', () => {
         generateSurveys(mockPostHog)
         expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(1)
         expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1500)
+    })
+
+    test('multiple choice type question elements are unique', () => {
+        mockSurveys = [
+            {
+                id: 'testSurvey2',
+                name: 'Test survey 2',
+                appearance: null,
+                conditions: { seenSurveyWaitPeriodInDays: 10 },
+                questions: [
+                    {
+                        question: 'Which types of content would you like to see more of?',
+                        description: 'This is a question description',
+                        type: 'multiple_choice',
+                        choices: ['Tutorials', 'Product Updates', 'Events', 'Other'],
+                    },
+                    {
+                        question: 'Which features do you use the most?',
+                        description: 'This is a question description',
+                        type: 'multiple_choice',
+                        choices: ['Surveys', 'Feature flags', 'Analytics'],
+                    },
+                ],
+            },
+        ]
+        const multipleQuestionSurveyForm = createMultipleQuestionSurvey(mockPostHog, mockSurveys[0])
+        const allSelectOptions = multipleQuestionSurveyForm.querySelectorAll('input[type=checkbox]')
+        const uniqueIds = new Set()
+        allSelectOptions.forEach((element) => {
+            uniqueIds.add(element.id)
+        })
+        expect(uniqueIds.size).toBe(allSelectOptions.length)
     })
 })
