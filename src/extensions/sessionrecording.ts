@@ -182,16 +182,8 @@ export class SessionRecording {
 
     private makeSamplingDecision(sessionId: string): void {
         const sessionIdChanged = this.sessionId !== sessionId
-        // TODO what if the session id hasn't changed?
-
-        // eslint-disable-next-line no-console
-        console.log('[makeSamplingDecision] called for session id', sessionId)
-        // eslint-disable-next-line no-console
-        console.log('[makeSamplingDecision] while session id is ', this.sessionId)
 
         const sampleRate = this.getSampleRate()
-        // eslint-disable-next-line no-console
-        console.log('[makeSamplingDecision] sample rate is', sampleRate)
 
         if (typeof sampleRate !== 'number') {
             return
@@ -212,8 +204,7 @@ export class SessionRecording {
                 `[SessionSampling] Sample rate (${sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
             )
         }
-        // eslint-disable-next-line no-console
-        console.log('[makeSamplingDecision] shouldSample is', shouldSample)
+
         this.instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
         })
@@ -358,10 +349,6 @@ export class SessionRecording {
 
         const sessionIdChanged = this.sessionId !== sessionId
         const windowIdChanged = this.windowId !== windowId
-        if (sessionIdChanged && this.sessionId === null) {
-            // eslint-disable-next-line no-console
-            console.log('[emit] marking session id as changed because it was null', event.type)
-        }
         this.windowId = windowId
         this.sessionId = sessionId
 

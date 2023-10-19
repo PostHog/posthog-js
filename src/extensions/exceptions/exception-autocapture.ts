@@ -105,11 +105,6 @@ export class ExceptionObserver {
         if (this.isEnabled()) {
             this.startCapturing()
             this.debugLog('Remote config for exception autocapture is enabled, starting', autocaptureExceptionsResponse)
-        } else {
-            this.debugLog(
-                'Remote config for exception autocapture is disabled, not starting',
-                autocaptureExceptionsResponse
-            )
         }
     }
 
