@@ -223,11 +223,6 @@ export class SessionIdManager {
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
 
         if (valuesChanged) {
-            logger.info('[session id manager] rotating session id', {
-                noSessionId,
-                activityTimeout,
-                sessionPastMaximumLength,
-            })
             this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId))
         }
 
