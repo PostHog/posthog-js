@@ -1,3 +1,7 @@
+## 1.84.1 - 2023-10-19
+
+- fix(surveys): fix multiple choice input unique ID bug (#841)
+
 ## 1.84.0 - 2023-10-18
 
 - Fix bot user agent detection (#840)
