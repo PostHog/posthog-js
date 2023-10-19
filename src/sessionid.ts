@@ -10,14 +10,6 @@ const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 mins
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
-    get checkSampling(): () => boolean | null {
-        return this._checkSampling
-    }
-
-    set checkSampling(value: () => boolean | null) {
-        this._checkSampling = value
-    }
-
     private _sessionIdGenerator: () => string
     private _windowIdGenerator: () => string
     private config: Partial<PostHogConfig>
@@ -27,11 +19,6 @@ export class SessionIdManager {
     private _window_id_storage_key: string
     private _primary_window_exists_storage_key: string
     private _sessionStartTimestamp: number | null
-
-    // when sampling is active this is set to true or false
-    // true means a sessionId can be sent to the API, false that it cannot
-    private _isSampled: boolean | null
-    private _checkSampling: () => boolean | null = () => null
 
     private _sessionActivityTimestamp: number | null
     private _sessionTimeoutMs: number
@@ -49,7 +36,6 @@ export class SessionIdManager {
         this._sessionId = undefined
         this._sessionStartTimestamp = null
         this._sessionActivityTimestamp = null
-        this._isSampled = null
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
 
