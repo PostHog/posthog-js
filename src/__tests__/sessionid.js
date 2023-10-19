@@ -211,7 +211,7 @@ describe('Session ID manager', () => {
 
     describe('session id storage', () => {
         it('stores and retrieves a session id and timestamp', () => {
-            given.sessionIdManager._setSessionId('newSessionId', 1603107460000, 1603107460000, null)
+            given.sessionIdManager._setSessionId('newSessionId', 1603107460000, 1603107460000)
             expect(given.persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [1603107460000, 'newSessionId', 1603107460000],
             })
