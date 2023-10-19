@@ -1,6 +1,7 @@
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
 } from '../constants'
@@ -18,7 +19,7 @@ import { PostHog } from '../posthog-core'
 import { DecideResponse, NetworkRequest, Properties } from '../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../config'
-import { logger, loadScript, _timestamp, window, _isBoolean } from '../utils'
+import { _timestamp, loadScript, logger, window } from '../utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -70,17 +71,6 @@ const ACTIVE_SOURCES = [
  */
 type SessionRecordingStatus = false | 'sampled' | 'active' | 'buffering'
 
-function currySamplingChecked(rate: number) {
-    return () => {
-        const randomNumber = Math.random()
-        const shouldSample = randomNumber < rate
-        if (!shouldSample) {
-            logger.warn(`Sample rate ${rate} has determined that this sessionId will not be sent to the server.`)
-        }
-        return shouldSample
-    }
-}
-
 export class SessionRecording {
     get emit(): SessionRecordingStatus {
         return this._emit
@@ -125,19 +115,20 @@ export class SessionRecording {
         this._emit = 'buffering' // Controls whether data is sent to the server or not
         this._endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
-        this.windowId = null
-        this.sessionId = null
         this.receivedDecide = false
 
         window.addEventListener('beforeunload', () => {
             this._flushBuffer()
         })
+        const { sessionId, windowId } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
+        this.windowId = windowId
+        this.sessionId = sessionId
     }
 
     private getSessionManager() {
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
-            return
+            throw new Error('Session recording started without valid sessionManager. This is a bug.')
         }
 
         return this.instance.sessionManager
@@ -181,23 +172,67 @@ export class SessionRecording {
         return this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
     }
 
+    getIsSampled(): boolean | undefined {
+        if (typeof this.getSampleRate() === 'number') {
+            return this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        } else {
+            return undefined
+        }
+    }
+
+    private makeSamplingDecision(sessionId: string): void {
+        const sessionIdChanged = this.sessionId !== sessionId
+        // TODO what if the session id hasn't changed?
+
+        // eslint-disable-next-line no-console
+        console.log('[makeSamplingDecision] called for session id', sessionId)
+        // eslint-disable-next-line no-console
+        console.log('[makeSamplingDecision] while session id is ', this.sessionId)
+
+        const sampleRate = this.getSampleRate()
+        // eslint-disable-next-line no-console
+        console.log('[makeSamplingDecision] sample rate is', sampleRate)
+
+        if (typeof sampleRate !== 'number') {
+            return
+        }
+
+        const storedIsSampled = this.getIsSampled()
+
+        let shouldSample: boolean
+        if (!sessionIdChanged && typeof storedIsSampled === 'boolean') {
+            shouldSample = storedIsSampled
+        } else {
+            const randomNumber = Math.random()
+            shouldSample = randomNumber < sampleRate
+        }
+
+        if (!shouldSample) {
+            logger.warn(
+                `[SessionSampling] Sample rate (${sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+            )
+        }
+        // eslint-disable-next-line no-console
+        console.log('[makeSamplingDecision] shouldSample is', shouldSample)
+        this.instance.persistence?.register({
+            [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
+        })
+        this._emit = shouldSample ? 'sampled' : false
+    }
+
     afterDecideResponse(response: DecideResponse) {
+        const sampleRate: number | undefined =
+            response.sessionRecording?.sampleRate === undefined
+                ? undefined
+                : parseFloat(response.sessionRecording?.sampleRate)
+
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
-                [SESSION_RECORDING_SAMPLE_RATE]: response.sessionRecording?.sampleRate,
+                [SESSION_RECORDING_SAMPLE_RATE]: sampleRate,
             })
-        }
-
-        if (response.sessionRecording?.sampleRate !== undefined) {
-            const rate = response.sessionRecording?.sampleRate
-            const sessionManager = this.getSessionManager()
-            if (sessionManager !== undefined) {
-                sessionManager.checkSampling = currySamplingChecked(rate)
-                sessionManager.makeSamplingDecision()
-            }
         }
 
         if (response.sessionRecording?.endpoint) {
@@ -209,7 +244,13 @@ export class SessionRecording {
         }
 
         this.receivedDecide = true
-        this._emit = this.isRecordingEnabled() ? 'active' : 'buffering'
+        this._emit = this.isRecordingEnabled() ? 'active' : false
+
+        if (typeof sampleRate === 'number') {
+            this.getSessionManager().onSessionId((sessionId) => {
+                this.makeSamplingDecision(sessionId)
+            })
+        }
 
         this.startRecordingIfEnabled()
     }
@@ -240,10 +281,6 @@ export class SessionRecording {
     }
 
     private _startCapture() {
-        const sessionManager = this.getSessionManager()
-        if (!sessionManager) {
-            return
-        }
         if (typeof Object.assign === 'undefined') {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
             // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
@@ -262,7 +299,7 @@ export class SessionRecording {
 
         this.captureStarted = true
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
-        sessionManager.checkAndGetSessionAndWindowId()
+        this.getSessionManager().checkAndGetSessionAndWindowId()
 
         const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
@@ -287,10 +324,6 @@ export class SessionRecording {
     }
 
     private _updateWindowAndSessionIds(event: eventWithTime) {
-        const sessionManager = this.getSessionManager()
-        if (!sessionManager) {
-            return
-        }
         // Some recording events are triggered by non-user events (e.g. "X minutes ago" text updating on the screen).
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
@@ -318,19 +351,19 @@ export class SessionRecording {
         }
 
         // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId, isSampled } = sessionManager.checkAndGetSessionAndWindowId(
+        const { windowId, sessionId } = this.getSessionManager().checkAndGetSessionAndWindowId(
             !isUserInteraction,
             event.timestamp
         )
 
         const sessionIdChanged = this.sessionId !== sessionId
         const windowIdChanged = this.windowId !== windowId
+        if (sessionIdChanged && this.sessionId === null) {
+            // eslint-disable-next-line no-console
+            console.log('[emit] marking session id as changed because it was null', event.type)
+        }
         this.windowId = windowId
         this.sessionId = sessionId
-
-        if (_isBoolean(isSampled)) {
-            this._emit = isSampled ? 'sampled' : false
-        }
 
         if (
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
@@ -341,6 +374,7 @@ export class SessionRecording {
     }
 
     private _tryTakeFullSnapshot(): boolean {
+        // TODO this should ignore based on emit?
         if (!this.captureStarted) {
             return false
         }
@@ -379,7 +413,7 @@ export class SessionRecording {
         // @ts-ignore
         this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
 
-        // only allows user to set our 'allowlisted' options
+        // only allows user to set our allow-listed options
         const userSessionRecordingOptions = this.instance.config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
@@ -466,18 +500,18 @@ export class SessionRecording {
 
         const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(throttledEvent))
 
-        this._updateWindowAndSessionIds(event)
-
-        if (this.isIdle) {
-            // When in an idle state we keep recording, but don't capture the events
-            return
-        }
-
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: event,
             $session_id: this.sessionId,
             $window_id: this.windowId,
+        }
+
+        this._updateWindowAndSessionIds(event)
+
+        if (this.isIdle) {
+            // When in an idle state we keep recording, but don't capture the events
+            return
         }
 
         if (this._emit === 'sampled' || this._emit === 'active') {
@@ -518,7 +552,7 @@ export class SessionRecording {
                 $sample_rate: this.getSampleRate(),
                 // We use this to determine whether the session was sampled or not.
                 // it is logically impossible to get here without sampled or active as the state but 🤷️
-                $emit_reason: this._emit === 'sampled' ? 'sampled' : this._emit ? 'active' : 'inactive',
+                $emit_reason: this._emit || 'disabled',
             })
         }
 

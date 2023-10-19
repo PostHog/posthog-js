@@ -140,34 +140,26 @@ export class SessionIdManager {
     private _setSessionId(
         sessionId: string | null,
         sessionActivityTimestamp: number | null,
-        sessionStartTimestamp: number | null,
-        isSampled: boolean | null
+        sessionStartTimestamp: number | null
     ): void {
         if (
             sessionId !== this._sessionId ||
             sessionActivityTimestamp !== this._sessionActivityTimestamp ||
-            sessionStartTimestamp !== this._sessionStartTimestamp ||
-            isSampled !== this._isSampled
+            sessionStartTimestamp !== this._sessionStartTimestamp
         ) {
             this._sessionStartTimestamp = sessionStartTimestamp
             this._sessionActivityTimestamp = sessionActivityTimestamp
             this._sessionId = sessionId
-            this._isSampled = isSampled
 
             this.persistence.register({
-                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp, isSampled],
+                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
             })
         }
     }
 
-    private _getSessionId(): [number, string, number, boolean | null] {
-        if (
-            this._sessionId &&
-            this._sessionActivityTimestamp &&
-            this._sessionStartTimestamp &&
-            this._isSampled !== undefined
-        ) {
-            return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp, this._isSampled]
+    private _getSessionId(): [number, string, number] {
+        if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
+            return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
         const sessionId = this.persistence.props[SESSION_ID]
 
@@ -176,13 +168,13 @@ export class SessionIdManager {
             sessionId.push(sessionId[0])
         }
 
-        return sessionId || [0, null, 0, null]
+        return sessionId || [0, null, 0]
     }
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
     // new ids will be generated.
     resetSessionId(): void {
-        this._setSessionId(null, null, null, null)
+        this._setSessionId(null, null, null)
     }
 
     /*
@@ -219,26 +211,20 @@ export class SessionIdManager {
         const timestamp = _timestamp || new Date().getTime()
 
         // eslint-disable-next-line prefer-const
-        let [lastTimestamp, sessionId, startTimestamp, isSampled] = this._getSessionId()
+        let [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
         let windowId = this._getWindowId()
 
         const sessionPastMaximumLength =
             startTimestamp && startTimestamp > 0 && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT
 
-        // isSampled isn't necessarily in storage and if not will be undefined, which we don't want
-        isSampled = isSampled === undefined ? null : isSampled
-
         let valuesChanged = false
-        if (
-            !sessionId ||
-            (!readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs) ||
-            sessionPastMaximumLength
-        ) {
+        const noSessionId = !sessionId
+        const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs
+        if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
             startTimestamp = timestamp
             valuesChanged = true
-            isSampled = this._checkSampling()
         } else if (!windowId) {
             windowId = this._windowIdGenerator()
             valuesChanged = true
@@ -248,9 +234,14 @@ export class SessionIdManager {
         const sessionStartTimestamp = startTimestamp === 0 ? new Date().getTime() : startTimestamp
 
         this._setWindowId(windowId)
-        this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp, isSampled)
+        this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
 
         if (valuesChanged) {
+            logger.info('[session id manager] rotating session id', {
+                noSessionId,
+                activityTimeout,
+                sessionPastMaximumLength,
+            })
             this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId))
         }
 
@@ -258,25 +249,6 @@ export class SessionIdManager {
             sessionId,
             windowId,
             sessionStartTimestamp,
-            isSampled,
         }
-    }
-
-    /** this decision is also made during check and get window id
-     * but sometimes (e.g. immediately after decide it is necessary to force a decision to be made
-     * even if the session id is not being reset
-     */
-    public makeSamplingDecision(): boolean | null {
-        // eslint-disable-next-line prefer-const
-        let [lastTimestamp, sessionId, startTimestamp, isSampled] = this._getSessionId()
-        // isSampled isn't necessarily in storage and if not will be undefined, which we don't want
-        isSampled = isSampled === undefined ? null : isSampled
-        if (isSampled !== null) {
-            return isSampled
-        }
-        isSampled = this._checkSampling()
-        this._setSessionId(sessionId, lastTimestamp, startTimestamp, isSampled)
-
-        return isSampled
     }
 }

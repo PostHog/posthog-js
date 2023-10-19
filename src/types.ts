@@ -232,7 +232,8 @@ export interface DecideResponse {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
         recorderVersion?: 'v1' | 'v2'
-        sampleRate?: number
+        // the API returns a decimal between 0 and 1 as a string
+        sampleRate?: string
     }
     surveys?: boolean
     toolbarParams: ToolbarParams

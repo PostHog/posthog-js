@@ -1,6 +1,6 @@
 import { _extend, logger } from './utils'
 import { PersistentStore, Properties } from './types'
-import { DISTINCT_ID, SESSION_ID } from './constants'
+import { DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constants'
 
 const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
 
@@ -161,7 +161,7 @@ export const localStore: PersistentStore = {
 // Use localstorage for most data but still use cookie for COOKIE_PERSISTED_PROPERTIES
 // This solves issues with cookies having too much data in them causing headers too large
 // Also makes sure we don't have to send a ton of data to the server
-const COOKIE_PERSISTED_PROPERTIES = [DISTINCT_ID, SESSION_ID]
+const COOKIE_PERSISTED_PROPERTIES = [DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED]
 
 export const localPlusCookieStore: PersistentStore = {
     ...localStore,
