@@ -654,8 +654,12 @@ describe('SessionRecording', () => {
             })
 
             it('does not send a full snapshot if there is not a new session or window id', () => {
+                ;(window as any).rrwebRecord.takeFullSnapshot.mockClear()
+
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
                 windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
+                sessionManager.resetSessionId()
+
                 _emit(createIncrementalSnapshot())
                 expect((window as any).rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })

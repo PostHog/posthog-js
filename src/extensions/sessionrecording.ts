@@ -196,6 +196,7 @@ export class SessionRecording {
             const sessionManager = this.getSessionManager()
             if (sessionManager !== undefined) {
                 sessionManager.checkSampling = currySamplingChecked(rate)
+                sessionManager.makeSamplingDecision()
             }
         }
 

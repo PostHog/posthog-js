@@ -261,4 +261,22 @@ export class SessionIdManager {
             isSampled,
         }
     }
+
+    /** this decision is also made during check and get window id
+     * but sometimes (e.g. immediately after decide it is necessary to force a decision to be made
+     * even if the session id is not being reset
+     */
+    public makeSamplingDecision(): boolean | null {
+        // eslint-disable-next-line prefer-const
+        let [lastTimestamp, sessionId, startTimestamp, isSampled] = this._getSessionId()
+        // isSampled isn't necessarily in storage and if not will be undefined, which we don't want
+        isSampled = isSampled === undefined ? null : isSampled
+        if (isSampled !== null) {
+            return isSampled
+        }
+        isSampled = this._checkSampling()
+        this._setSessionId(sessionId, lastTimestamp, startTimestamp, isSampled)
+
+        return isSampled
+    }
 }
