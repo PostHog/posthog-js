@@ -224,7 +224,6 @@ describe('Session ID manager', () => {
             given.sessionIdManager.resetSessionId()
             expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
         })
-
         it('a new session id is generated when called', () => {
             given('storedSessionIdData', () => [null, null, null])
             expect(given.sessionIdManager._getSessionId()).toEqual([null, null, null])
