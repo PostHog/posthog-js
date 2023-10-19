@@ -161,7 +161,12 @@ export class SessionIdManager {
     }
 
     private _getSessionId(): [number, string, number, boolean | null] {
-        if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp && this._isSampled) {
+        if (
+            this._sessionId &&
+            this._sessionActivityTimestamp &&
+            this._sessionStartTimestamp &&
+            this._isSampled !== undefined
+        ) {
             return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp, this._isSampled]
         }
         const sessionId = this.persistence.props[SESSION_ID]
@@ -219,6 +224,9 @@ export class SessionIdManager {
 
         const sessionPastMaximumLength =
             startTimestamp && startTimestamp > 0 && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT
+
+        // isSampled isn't necessarily in storage and if not will be undefined, which we don't want
+        isSampled = isSampled === undefined ? null : isSampled
 
         let valuesChanged = false
         if (
