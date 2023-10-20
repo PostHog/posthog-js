@@ -9,7 +9,6 @@ import {
 import { PostHogPersistence } from '../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
-    SESSION_ID,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
@@ -45,11 +44,6 @@ describe('SessionRecording', () => {
     let sessionId: string
     let sessionManager: SessionIdManager
     let config: PostHogConfig
-    let session_recording_recorder_version_server_side: 'v1' | 'v2' | undefined
-    let session_recording_enabled_server_side: boolean
-    let console_log_enabled_server_side: boolean
-    let session_recording_sample_rate: number | undefined
-    let session_is_sampled: boolean | null
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
 
@@ -60,11 +54,6 @@ describe('SessionRecording', () => {
         }
 
         sessionId = 'sessionId' + uuidv7()
-        session_recording_enabled_server_side = true
-        console_log_enabled_server_side = false
-        session_recording_recorder_version_server_side = 'v2'
-        session_recording_sample_rate = undefined
-        session_is_sampled = null
 
         config = {
             api_host: 'https://test.com',
@@ -80,60 +69,48 @@ describe('SessionRecording', () => {
         sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
         windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
 
-        const fakePersistence: PostHogPersistence = {
-            props: { SESSION_ID: sessionId },
-            register: jest.fn().mockImplementation((props) => {
-                Object.entries(props).forEach(([property_key, value]) => {
-                    switch (property_key) {
-                        case SESSION_RECORDING_ENABLED_SERVER_SIDE:
-                            session_recording_enabled_server_side = <boolean>value
-                            break
-                        case SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE:
-                            session_recording_recorder_version_server_side = <'v1' | 'v2' | undefined>value
-                            break
-                        case CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE:
-                            console_log_enabled_server_side = <boolean>value
-                            break
-                        case SESSION_RECORDING_SAMPLE_RATE:
-                            session_recording_sample_rate = <number>value
-                            break
-                        case SESSION_ID:
-                            // eslint-disable-next-line no-case-declarations
-                            const providedId = <string>(<Array<any>>value)[1]
-                            if (providedId !== null) {
-                                sessionId = providedId
-                            }
-                            break
-                        case SESSION_RECORDING_IS_SAMPLED:
-                            session_is_sampled = <boolean | null>value
-                            break
-                        default:
-                            throw new Error('config has not been mocked for this property key: ' + property_key)
-                    }
-                })
-            }),
-        } as unknown as PostHogPersistence
+        const fakePersistence = new PostHogPersistence(config)
+        fakePersistence.clear()
+
+        // const fakePersistence: PostHogPersistence = {
+        //     props: { SESSION_ID: sessionId },
+        //     register: jest.fn().mockImplementation((props) => {
+        //         Object.entries(props).forEach(([property_key, value]) => {
+        //             switch (property_key) {
+        //                 case SESSION_RECORDING_ENABLED_SERVER_SIDE:
+        //                     session_recording_enabled_server_side = <boolean>value
+        //                     break
+        //                 case SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE:
+        //                     session_recording_recorder_version_server_side = <'v1' | 'v2' | undefined>value
+        //                     break
+        //                 case CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE:
+        //                     console_log_enabled_server_side = <boolean>value
+        //                     break
+        //                 case SESSION_RECORDING_SAMPLE_RATE:
+        //                     session_recording_sample_rate = <number>value
+        //                     break
+        //                 case SESSION_ID:
+        //                     // eslint-disable-next-line no-case-declarations
+        //                     const providedId = <string>(<Array<any>>value)[1]
+        //                     if (providedId !== null) {
+        //                         sessionId = providedId
+        //                     }
+        //                     break
+        //                 case SESSION_RECORDING_IS_SAMPLED:
+        //                     session_is_sampled = <boolean | null>value
+        //                     break
+        //                 default:
+        //                     throw new Error('config has not been mocked for this property key: ' + property_key)
+        //             }
+        //         })
+        //     }),
+        // } as unknown as PostHogPersistence
 
         sessionManager = new SessionIdManager(config, fakePersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
         posthog = {
             get_property: (property_key: string): Property | undefined => {
-                switch (property_key) {
-                    case SESSION_RECORDING_ENABLED_SERVER_SIDE:
-                        return session_recording_enabled_server_side
-                    case SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE:
-                        return session_recording_recorder_version_server_side
-                    case CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE:
-                        return console_log_enabled_server_side
-                    case SESSION_RECORDING_SAMPLE_RATE:
-                        return session_recording_sample_rate
-                    case SESSION_ID:
-                        return sessionId
-                    case SESSION_RECORDING_IS_SAMPLED:
-                        return session_is_sampled
-                    default:
-                        throw new Error('config has not been mocked for this property key: ' + property_key)
-                }
+                return fakePersistence?.['props'][property_key]
             },
             config: config,
             capture: jest.fn(),
@@ -143,17 +120,26 @@ describe('SessionRecording', () => {
             _addCaptureHook: jest.fn(),
         } as unknown as PostHog
 
+        // defaults
+        posthog.persistence?.register({
+            [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
+            [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2',
+            [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false,
+            [SESSION_RECORDING_SAMPLE_RATE]: undefined,
+            [SESSION_RECORDING_IS_SAMPLED]: undefined,
+        })
+
         sessionRecording = new SessionRecording(posthog)
     })
 
     describe('isRecordingEnabled', () => {
         it('is enabled if both the server and client config says enabled', () => {
-            session_recording_enabled_server_side = true
+            posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true })
             expect(sessionRecording.isRecordingEnabled()).toBeTruthy()
         })
 
         it('is disabled if the server is disabled', () => {
-            session_recording_enabled_server_side = false
+            posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false })
             expect(sessionRecording.isRecordingEnabled()).toBe(false)
         })
 
@@ -165,36 +151,36 @@ describe('SessionRecording', () => {
 
     describe('isConsoleLogCaptureEnabled', () => {
         it('uses client side setting when set to false', () => {
-            console_log_enabled_server_side = true
+            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: true })
             posthog.config.enable_recording_console_log = false
             expect(sessionRecording.isConsoleLogCaptureEnabled()).toBe(false)
         })
 
         it('uses client side setting when set to true', () => {
-            console_log_enabled_server_side = false
+            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
             posthog.config.enable_recording_console_log = true
             expect(sessionRecording.isConsoleLogCaptureEnabled()).toBe(true)
         })
 
         it('uses server side setting if client side setting is not set', () => {
             posthog.config.enable_recording_console_log = undefined
-            console_log_enabled_server_side = false
+            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
             expect(sessionRecording.isConsoleLogCaptureEnabled()).toBe(false)
 
-            console_log_enabled_server_side = true
+            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: true })
             expect(sessionRecording.isConsoleLogCaptureEnabled()).toBe(true)
         })
     })
 
     describe('getRecordingVersion', () => {
         it('uses client side setting v2 over server side', () => {
-            session_recording_recorder_version_server_side = 'v1'
+            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v1' })
             posthog.config.session_recording.recorderVersion = 'v2'
             expect(sessionRecording.getRecordingVersion()).toBe('v2')
         })
 
         it('uses client side setting v1 over server side', () => {
-            session_recording_recorder_version_server_side = 'v2'
+            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             posthog.config.session_recording.recorderVersion = 'v1'
             expect(sessionRecording.getRecordingVersion()).toBe('v1')
         })
@@ -202,13 +188,13 @@ describe('SessionRecording', () => {
         it('uses server side setting if client side setting is not set', () => {
             posthog.config.session_recording.recorderVersion = undefined
 
-            session_recording_recorder_version_server_side = 'v1'
+            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v1' })
             expect(sessionRecording.getRecordingVersion()).toBe('v1')
 
-            session_recording_recorder_version_server_side = 'v2'
+            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             expect(sessionRecording.getRecordingVersion()).toBe('v2')
 
-            session_recording_recorder_version_server_side = undefined
+            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: undefined })
             expect(sessionRecording.getRecordingVersion()).toBe('v1')
         })
     })
@@ -257,43 +243,40 @@ describe('SessionRecording', () => {
         })
 
         it('stores true in persistence if recording is enabled from the server', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
+
             sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
 
-            expect(posthog.persistence?.register).toHaveBeenCalledWith({
-                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
-            })
+            expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(true)
         })
 
         it('stores false in persistence if recording is not enabled from the server', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
+
             sessionRecording.afterDecideResponse({} as unknown as DecideResponse)
-            expect(posthog.persistence?.register).toHaveBeenCalledWith({
-                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false,
-            })
+
+            expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(false)
         })
 
         it('stores sample rate in persistence', () => {
+            posthog.persistence?.register({ SESSION_RECORDING_SAMPLE_RATE: undefined })
+
             sessionRecording.afterDecideResponse({
-                sessionRecording: { endpoint: '/s/', sampleRate: 0.7 },
+                sessionRecording: { endpoint: '/s/', sampleRate: '0.70' },
             } as unknown as DecideResponse)
 
-            expect(posthog.persistence?.register).toHaveBeenCalledWith({
-                [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: undefined,
-                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
-                [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: undefined,
-                [SESSION_RECORDING_SAMPLE_RATE]: 0.7,
-            })
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(0.7)
         })
 
         it('starts session recording, saves setting and endpoint when enabled', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
             sessionRecording.afterDecideResponse({
                 sessionRecording: { endpoint: '/ses/' },
             } as unknown as DecideResponse)
 
             expect(sessionRecording.startRecordingIfEnabled).toHaveBeenCalled()
             expect(loadScript).toHaveBeenCalled()
-            expect(posthog.persistence?.register).toHaveBeenCalledWith({
-                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
-            })
+            expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(true)
             expect(sessionRecording.endpoint).toEqual('/ses/')
         })
     })
@@ -314,7 +297,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startRecordingIfEnabled()
 
                 sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: 0 },
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
                 } as unknown as DecideResponse)
                 expect(sessionRecording.emit).toBe(false)
 
@@ -327,7 +310,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startRecordingIfEnabled()
 
                 sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: 0 },
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
                 } as unknown as DecideResponse)
 
                 expect(sessionRecording.getIsSampled()).toStrictEqual(false)
@@ -340,7 +323,7 @@ describe('SessionRecording', () => {
                 expect(posthog.capture).not.toHaveBeenCalled()
 
                 sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: 1 },
+                    sessionRecording: { endpoint: '/s/', sampleRate: '1.00' },
                 } as unknown as DecideResponse)
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
 
@@ -358,7 +341,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startRecordingIfEnabled()
 
                 sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: 0.5 },
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.50' },
                 } as unknown as DecideResponse)
                 const emitValues = []
                 let lastSessionId = sessionRecording['sessionId']
@@ -382,7 +365,7 @@ describe('SessionRecording', () => {
         })
 
         it('calls rrweb.record with the right options', () => {
-            console_log_enabled_server_side = false
+            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
             // access private method 🤯
             sessionRecording['_onScriptLoaded']()
 
@@ -550,7 +533,7 @@ describe('SessionRecording', () => {
         })
 
         it('loads recording v2 script from right place', () => {
-            session_recording_recorder_version_server_side = 'v2'
+            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             sessionRecording.startRecordingIfEnabled()
 
             expect(loadScript).toHaveBeenCalledWith(
@@ -561,7 +544,7 @@ describe('SessionRecording', () => {
 
         it('load correct recording version if there is a cached mismatch', () => {
             posthog.__loaded_recorder_version = 'v1'
-            session_recording_recorder_version_server_side = 'v2'
+            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             sessionRecording.startRecordingIfEnabled()
 
             expect(loadScript).toHaveBeenCalledWith(
@@ -571,7 +554,7 @@ describe('SessionRecording', () => {
         })
 
         it('loads script after `startCaptureAndTrySendingQueuedSnapshots` if not previously loaded', () => {
-            session_recording_enabled_server_side = false
+            posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false })
 
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).not.toHaveBeenCalled()
