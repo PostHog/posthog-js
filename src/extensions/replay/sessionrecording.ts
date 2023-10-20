@@ -5,7 +5,7 @@ import {
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
-} from '../constants'
+} from '../../constants'
 import {
     ensureMaxMessageSize,
     FULL_SNAPSHOT_EVENT_TYPE,
@@ -16,11 +16,11 @@ import {
     rrwebRecord,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
-import { PostHog } from '../posthog-core'
-import { DecideResponse, NetworkRequest, Properties } from '../types'
+import { PostHog } from '../../posthog-core'
+import { DecideResponse, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
-import Config from '../config'
-import { _timestamp, loadScript, logger, window } from '../utils'
+import Config from '../../config'
+import { _timestamp, loadScript, logger, window } from '../../utils'
 
 const BASE_ENDPOINT = '/s/'
 

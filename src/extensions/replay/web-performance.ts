@@ -1,6 +1,6 @@
-import { isLocalhost, logger } from '../utils'
-import { PostHog } from '../posthog-core'
-import { DecideResponse, NetworkRequest } from '../types'
+import { isLocalhost, logger } from '../../utils'
+import { PostHog } from '../../posthog-core'
+import { DecideResponse, NetworkRequest } from '../../types'
 
 const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     // BASE_PERFORMANCE_EVENT_COLUMNS

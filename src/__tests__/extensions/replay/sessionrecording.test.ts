@@ -1,33 +1,33 @@
 /// <reference lib="dom" />
 
-import { loadScript } from '../../utils'
+import { loadScript } from '../../../utils'
 import {
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
-} from '../../extensions/sessionrecording'
-import { PostHogPersistence } from '../../posthog-persistence'
+} from '../../../extensions/replay/sessionrecording'
+import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
-} from '../../constants'
-import { SessionIdManager } from '../../sessionid'
-import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../extensions/sessionrecording-utils'
-import { PostHog } from '../../posthog-core'
-import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../types'
-import { uuidv7 } from '../../uuidv7'
+} from '../../../constants'
+import { SessionIdManager } from '../../../sessionid'
+import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/sessionrecording-utils'
+import { PostHog } from '../../../posthog-core'
+import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../../types'
+import { uuidv7 } from '../../../uuidv7'
 import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
 
-jest.mock('../../utils', () => ({
-    ...jest.requireActual('../../utils'),
+jest.mock('../../../utils', () => ({
+    ...jest.requireActual('../../../utils'),
     loadScript: jest.fn((_path, callback) => callback()),
 }))
-jest.mock('../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
+jest.mock('../../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
 
 const createIncrementalSnapshot = (event = {}) => ({
     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
