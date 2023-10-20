@@ -569,6 +569,12 @@ export class SessionRecording {
             bufferedDuration < minimumDuration
 
         if (this.emit === 'buffering' || isBelowMinimumDuration) {
+            logger.info('[replay buffer] delayed flushing buffer', {
+                status: this.emit,
+                isBelowMinimumDuration,
+                bufferedDuration,
+                minimumDuration,
+            })
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
