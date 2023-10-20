@@ -343,8 +343,6 @@ describe('SessionRecording', () => {
                     })
                 )
 
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-                expect(posthog.capture).toHaveBeenCalled()
                 expect(sessionRecording.emit).toBe('active')
             })
 
@@ -1023,9 +1021,17 @@ describe('SessionRecording', () => {
             })
         })
 
+        it('can report no duration when no data', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording.emit).toBe('buffering')
+            expect(sessionRecording.getBufferedDuration()).toBe(null)
+        })
+
         it('can report zero duration', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording.emit).toBe('buffering')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp }))
             expect(sessionRecording.getBufferedDuration()).toBe(0)
         })
 

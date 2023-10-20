@@ -127,12 +127,14 @@ export class SessionRecording {
         const { sessionId, windowId } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
         this.windowId = windowId
         this.sessionId = sessionId
+
+        this.buffer = this.clearBuffer()
     }
 
-    public getBufferedDuration(): number {
+    public getBufferedDuration(): number | null {
         const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
         const { sessionStartTimestamp } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
-        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : 0
+        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 
     getMinimumDuration(): number | undefined {
@@ -560,10 +562,13 @@ export class SessionRecording {
         }
 
         const minimumDuration = this.getMinimumDuration()
+        const bufferedDuration = this.getBufferedDuration()
         const isBelowMinimumDuration =
-            typeof minimumDuration === 'number' && this.getBufferedDuration() < minimumDuration
+            typeof minimumDuration === 'number' &&
+            typeof bufferedDuration === 'number' &&
+            bufferedDuration < minimumDuration
+
         if (this.emit === 'buffering' || isBelowMinimumDuration) {
-            logger.info('[replay buffer] delayed flushing buffer', { status: this.emit, isBelowMinimumDuration })
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -577,9 +582,11 @@ export class SessionRecording {
                 $session_id: this.buffer.sessionId,
                 $window_id: this.buffer.windowId,
             })
-        }
 
-        return this.clearBuffer()
+            return this.clearBuffer()
+        } else {
+            return this.buffer || this.clearBuffer()
+        }
     }
 
     private _captureSnapshotBuffered(properties: Properties) {
