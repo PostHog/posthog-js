@@ -238,11 +238,11 @@ describe('SessionRecording', () => {
             expect(sessionRecording.emit).toBe('buffering')
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-            expect(sessionRecording.snapshots.length).toEqual(1)
+            expect(sessionRecording.bufferLength).toEqual(1)
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: undefined }))
             expect(sessionRecording.emit).toBe('disabled')
-            expect(sessionRecording.snapshots.length).toEqual(0)
+            expect(sessionRecording.bufferLength).toEqual(0)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
@@ -429,13 +429,15 @@ describe('SessionRecording', () => {
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording.bufferLength).toEqual(1)
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
-            // access private method 🤯
+            // access private method 🤯so we don't need to wait for the timer
             sessionRecording['_flushBuffer']()
 
+            expect(sessionRecording.bufferLength).toEqual(0)
             expect(posthog.capture).toHaveBeenCalledTimes(1)
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
@@ -518,6 +520,30 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording['buffer']?.data.length).toEqual(1) // The new event
             expect(sessionRecording['buffer']).toMatchObject({ size: 755017 })
+        })
+
+        it('maintains the buffer if the recording is buffering', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+
+            const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            expect(sessionRecording['buffer']).toMatchObject({ size: 755017 }) // the size of the big data event
+
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['buffer']).toMatchObject({ size: 755101 })
+
+            // Another big event means the old data will be flushed
+            _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
+            // but the recording is still buffering
+            expect(sessionRecording.emit).toBe('buffering')
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['buffer']?.data.length).toEqual(4) // The new event
+            expect(sessionRecording['buffer']).toMatchObject({ size: 755017 + 755101 }) // the size of the big data event
         })
 
         it('flushes buffer if the session_id changes', () => {
@@ -1015,6 +1041,26 @@ describe('SessionRecording', () => {
                 })
             )
             expect(sessionRecording.getMinimumDuration()).toBe(1500)
+        })
+
+        it('does not flush if below the minimum duration', () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording.emit).toBe('active')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+            expect(sessionRecording.getBufferedDuration()).toBe(100)
+            expect(sessionRecording.getMinimumDuration()).toBe(1500)
+
+            expect(sessionRecording.bufferLength).toBe(1)
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
     })
 })

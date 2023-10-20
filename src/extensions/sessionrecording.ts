@@ -72,6 +72,13 @@ const ACTIVE_SOURCES = [
  */
 type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering'
 
+interface SnapshotBuffer {
+    size: number
+    data: any[]
+    sessionId: string | null
+    windowId: string | null
+}
+
 export class SessionRecording {
     get emit(): SessionRecordingStatus {
         return this._emit
@@ -85,6 +92,9 @@ export class SessionRecording {
     get started(): boolean {
         return this.captureStarted
     }
+    get bufferLength(): number {
+        return this.buffer?.data.length || 0
+    }
 
     private instance: PostHog
     private _emit: SessionRecordingStatus
@@ -93,16 +103,10 @@ export class SessionRecording {
     private sessionId: string | null
     private _lastActivityTimestamp: number = Date.now()
     private flushBufferTimer?: any
-    private buffer?: {
-        size: number
-        data: any[]
-        sessionId: string | null
-        windowId: string | null
-    }
+    private buffer?: SnapshotBuffer
     private mutationRateLimiter?: MutationRateLimiter
     private captureStarted: boolean
 
-    snapshots: any[]
     stopRrweb: listenerHandler | undefined
     receivedDecide: boolean
     rrwebRecord: rrwebRecord | undefined
@@ -112,7 +116,6 @@ export class SessionRecording {
     constructor(instance: PostHog) {
         this.instance = instance
         this.captureStarted = false
-        this.snapshots = []
         this._emit = 'buffering' // Controls whether data is sent to the server or not
         this._endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
@@ -127,9 +130,9 @@ export class SessionRecording {
     }
 
     public getBufferedDuration(): number {
-        const mostRecentSnapshot = this.snapshots[this.snapshots.length - 1]
+        const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
         const { sessionStartTimestamp } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
-        return mostRecentSnapshot ? mostRecentSnapshot.$snapshot_data.timestamp - sessionStartTimestamp : 0
+        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : 0
     }
 
     getMinimumDuration(): number | undefined {
@@ -150,7 +153,7 @@ export class SessionRecording {
             this.startCaptureAndTrySendingQueuedSnapshots()
         } else {
             this.stopRecording()
-            this.snapshots.length = 0
+            this.clearBuffer()
         }
     }
 
@@ -276,11 +279,6 @@ export class SessionRecording {
     }
 
     private startCaptureAndTrySendingQueuedSnapshots() {
-        // Only submit data after we've received a decide response to account for
-        // changing endpoints and the feature being disabled on the server side.
-        if (this.receivedDecide) {
-            this.snapshots.forEach((properties) => this._captureSnapshotBuffered(properties))
-        }
         this._startCapture()
     }
 
@@ -514,12 +512,10 @@ export class SessionRecording {
             return
         }
 
-        if (this._emit === 'sampled' || this._emit === 'active') {
+        if (this._emit !== 'disabled') {
             this._captureSnapshotBuffered(properties)
-        } else if (this._emit === 'buffering') {
-            this.snapshots.push(properties)
         } else {
-            this.snapshots = []
+            this.clearBuffer()
         }
     }
 
@@ -539,10 +535,37 @@ export class SessionRecording {
         return url
     }
 
+    private clearBuffer(): SnapshotBuffer {
+        this.buffer = undefined
+
+        return {
+            size: 0,
+            data: [],
+            sessionId: this.sessionId,
+            windowId: this.windowId,
+        }
+    }
+
+    // the intention is a buffer that (currently) is used only after a decide response enables session recording
+    // it is called ever X seconds using the flushBufferTimer so that we don't have to wait for the buffer to fill up
+    // when it is called on a timer it assumes that it can definitely flush
+    // it is flushed when the session id changes or the size of the buffered data gets too great (1mb by default)
+    // first change: if the recording is in buffering mode,
+    //  flush buffer simply resets the timer and returns the existing flush buffer
     private _flushBuffer() {
         if (this.flushBufferTimer) {
             clearTimeout(this.flushBufferTimer)
             this.flushBufferTimer = undefined
+        }
+
+        const minimumDuration = this.getMinimumDuration()
+        const isBelowMinimumDuration =
+            typeof minimumDuration === 'number' && this.getBufferedDuration() < minimumDuration
+        if (this.emit === 'buffering' || isBelowMinimumDuration) {
+            this.flushBufferTimer = setTimeout(() => {
+                this._flushBuffer()
+            }, RECORDING_BUFFER_TIMEOUT)
+            return this.buffer || this.clearBuffer()
         }
 
         if (this.buffer && this.buffer.data.length !== 0) {
@@ -558,14 +581,7 @@ export class SessionRecording {
             })
         }
 
-        this.buffer = undefined
-
-        return {
-            size: 0,
-            data: [],
-            sessionId: this.sessionId,
-            windowId: this.windowId,
-        }
+        return this.clearBuffer()
     }
 
     private _captureSnapshotBuffered(properties: Properties) {
