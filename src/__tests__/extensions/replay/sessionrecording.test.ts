@@ -1076,5 +1076,43 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).not.toHaveBeenCalled()
         })
+
+        it('does not stay buffering after the minimum duration', () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording.emit).toBe('active')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+            expect(sessionRecording.getBufferedDuration()).toBe(100)
+            expect(sessionRecording.getMinimumDuration()).toBe(1500)
+
+            expect(sessionRecording.bufferLength).toBe(1)
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1501 }))
+
+            expect(sessionRecording.bufferLength).toBe(2)
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalled()
+            expect(sessionRecording.bufferLength).toBe(0)
+            expect(sessionRecording.getBufferedDuration()).toBe(null)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1502 }))
+            expect(sessionRecording.bufferLength).toBe(1)
+            expect(sessionRecording.getBufferedDuration()).toBe(1502)
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalled()
+            expect(sessionRecording.bufferLength).toBe(0)
+        })
     })
 })
