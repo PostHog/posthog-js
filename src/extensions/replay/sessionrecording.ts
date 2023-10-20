@@ -574,10 +574,6 @@ export class SessionRecording {
                 $snapshot_data: this.buffer.data,
                 $session_id: this.buffer.sessionId,
                 $window_id: this.buffer.windowId,
-                $sample_rate: this.getSampleRate(),
-                // We use this to determine whether the session was sampled or not.
-                // it is logically impossible to get here without sampled or active as the state but 🤷️
-                $emit_reason: this._emit || 'disabled',
             })
         }
 

@@ -442,8 +442,6 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $emit_reason: 'active',
-                    $sample_rate: undefined,
                     $snapshot_bytes: 60,
                     $snapshot_data: [
                         { type: 3, data: { source: 1 } },
@@ -481,8 +479,6 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $emit_reason: 'active',
-                    $sample_rate: undefined,
                     $session_id: sessionId,
                     $window_id: 'windowId',
                     $snapshot_bytes: 60,
@@ -560,8 +556,6 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $emit_reason: 'active',
-                    $sample_rate: undefined,
                     $session_id: 'otherSessionId',
                     $window_id: 'windowId',
                     $snapshot_data: [{ type: 3, data: { source: 1 } }],
