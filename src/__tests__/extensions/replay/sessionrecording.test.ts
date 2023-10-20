@@ -334,6 +334,20 @@ describe('SessionRecording', () => {
                 expect(sessionRecording.emit).toBe('disabled')
             })
 
+            it('does emit to capture if the sample rate is null', () => {
+                sessionRecording.startRecordingIfEnabled()
+
+                sessionRecording.afterDecideResponse(
+                    makeDecideResponse({
+                        sessionRecording: { endpoint: '/s/', sampleRate: null },
+                    })
+                )
+
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+                expect(posthog.capture).toHaveBeenCalled()
+                expect(sessionRecording.emit).toBe('active')
+            })
+
             it('stores excluded session when excluded', () => {
                 sessionRecording.startRecordingIfEnabled()
 

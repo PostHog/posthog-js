@@ -228,7 +228,8 @@ export class SessionRecording {
 
     afterDecideResponse(response: DecideResponse) {
         const sampleRate: number | undefined =
-            response.sessionRecording?.sampleRate === undefined
+            // lazy check for undefined or null
+            response.sessionRecording?.sampleRate == undefined
                 ? undefined
                 : parseFloat(response.sessionRecording?.sampleRate)
 
@@ -562,6 +563,7 @@ export class SessionRecording {
         const isBelowMinimumDuration =
             typeof minimumDuration === 'number' && this.getBufferedDuration() < minimumDuration
         if (this.emit === 'buffering' || isBelowMinimumDuration) {
+            logger.info('[replay buffer] delayed flushing buffer', { status: this.emit, isBelowMinimumDuration })
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
