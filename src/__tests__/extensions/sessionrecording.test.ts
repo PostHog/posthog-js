@@ -37,6 +37,10 @@ const createIncrementalSnapshot = (event = {}) => ({
     ...event,
 })
 
+function makeDecideResponse(partialResponse: Partial<DecideResponse>) {
+    return partialResponse as unknown as DecideResponse
+}
+
 describe('SessionRecording', () => {
     let _emit: any
     let posthog: PostHog
@@ -236,7 +240,7 @@ describe('SessionRecording', () => {
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(sessionRecording.snapshots.length).toEqual(1)
 
-            sessionRecording.afterDecideResponse({ sessionRecording: false } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: undefined }))
             expect(sessionRecording.emit).toBe('disabled')
             expect(sessionRecording.snapshots.length).toEqual(0)
             expect(posthog.capture).not.toHaveBeenCalled()
@@ -247,7 +251,7 @@ describe('SessionRecording', () => {
             expect(loadScript).toHaveBeenCalled()
             expect(sessionRecording.emit).toBe('buffering')
 
-            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             expect(sessionRecording.emit).toBe('active')
         })
 
@@ -256,14 +260,14 @@ describe('SessionRecording', () => {
             expect(loadScript).toHaveBeenCalled()
             expect(sessionRecording.getIsSampled()).toBe(undefined)
 
-            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             expect(sessionRecording.getIsSampled()).toBe(undefined)
         })
 
         it('stores true in persistence if recording is enabled from the server', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
 
-            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
 
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(true)
         })
@@ -271,7 +275,7 @@ describe('SessionRecording', () => {
         it('stores false in persistence if recording is not enabled from the server', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
 
-            sessionRecording.afterDecideResponse({} as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({}))
 
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(false)
         })
@@ -279,18 +283,22 @@ describe('SessionRecording', () => {
         it('stores sample rate in persistence', () => {
             posthog.persistence?.register({ SESSION_RECORDING_SAMPLE_RATE: undefined })
 
-            sessionRecording.afterDecideResponse({
-                sessionRecording: { endpoint: '/s/', sampleRate: '0.70' },
-            } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', sampleRate: '0.70' },
+                })
+            )
 
             expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(0.7)
         })
 
         it('starts session recording, saves setting and endpoint when enabled', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
-            sessionRecording.afterDecideResponse({
-                sessionRecording: { endpoint: '/ses/' },
-            } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/ses/' },
+                })
+            )
 
             expect(sessionRecording.startRecordingIfEnabled).toHaveBeenCalled()
             expect(loadScript).toHaveBeenCalled()
@@ -314,9 +322,11 @@ describe('SessionRecording', () => {
             it('does not emit to capture if the sample rate is 0', () => {
                 sessionRecording.startRecordingIfEnabled()
 
-                sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
-                } as unknown as DecideResponse)
+                sessionRecording.afterDecideResponse(
+                    makeDecideResponse({
+                        sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
+                    })
+                )
                 expect(sessionRecording.emit).toBe('disabled')
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
@@ -327,9 +337,11 @@ describe('SessionRecording', () => {
             it('stores excluded session when excluded', () => {
                 sessionRecording.startRecordingIfEnabled()
 
-                sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
-                } as unknown as DecideResponse)
+                sessionRecording.afterDecideResponse(
+                    makeDecideResponse({
+                        sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
+                    })
+                )
 
                 expect(sessionRecording.getIsSampled()).toStrictEqual(false)
             })
@@ -340,9 +352,11 @@ describe('SessionRecording', () => {
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
 
-                sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: '1.00' },
-                } as unknown as DecideResponse)
+                sessionRecording.afterDecideResponse(
+                    makeDecideResponse({
+                        sessionRecording: { endpoint: '/s/', sampleRate: '1.00' },
+                    })
+                )
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
 
                 expect(sessionRecording.emit).toBe('sampled')
@@ -358,9 +372,11 @@ describe('SessionRecording', () => {
             it('sets emit as expected when sample rate is 0.5', () => {
                 sessionRecording.startRecordingIfEnabled()
 
-                sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/', sampleRate: '0.50' },
-                } as unknown as DecideResponse)
+                sessionRecording.afterDecideResponse(
+                    makeDecideResponse({
+                        sessionRecording: { endpoint: '/s/', sampleRate: '0.50' },
+                    })
+                )
                 const emitValues = []
                 let lastSessionId = sessionRecording['sessionId']
 
@@ -414,7 +430,7 @@ describe('SessionRecording', () => {
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(posthog.capture).not.toHaveBeenCalled()
 
-            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
             // access private method 🤯
@@ -446,7 +462,7 @@ describe('SessionRecording', () => {
         })
 
         it('buffers emitted events', () => {
-            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
 
@@ -485,7 +501,7 @@ describe('SessionRecording', () => {
         })
 
         it('flushes buffer if the size of the buffer hits the limit', () => {
-            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
             const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
@@ -505,7 +521,7 @@ describe('SessionRecording', () => {
         })
 
         it('flushes buffer if the session_id changes', () => {
-            sessionRecording.afterDecideResponse({ sessionRecording: { endpoint: '/s/' } } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startRecordingIfEnabled()
 
             _emit(createIncrementalSnapshot())
@@ -643,9 +659,11 @@ describe('SessionRecording', () => {
                 sessionRecording['windowId'] = 'old-window-id'
 
                 sessionRecording.startRecordingIfEnabled()
-                sessionRecording.afterDecideResponse({
-                    sessionRecording: { endpoint: '/s/' },
-                } as unknown as DecideResponse)
+                sessionRecording.afterDecideResponse(
+                    makeDecideResponse({
+                        sessionRecording: { endpoint: '/s/' },
+                    })
+                )
                 sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
             })
 
@@ -991,9 +1009,11 @@ describe('SessionRecording', () => {
         })
 
         it('can set minimum duration from decide response', () => {
-            sessionRecording.afterDecideResponse({
-                sessionRecording: { minimumDurationMilliseconds: 1500 },
-            } as unknown as DecideResponse)
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
             expect(sessionRecording.getMinimumDuration()).toBe(1500)
         })
     })
