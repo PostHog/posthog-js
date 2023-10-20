@@ -2,6 +2,7 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
 } from '../constants'
@@ -65,11 +66,11 @@ const ACTIVE_SOURCES = [
 
 /**
  * Session recording starts in buffering mode while waiting for decide response
- * Once the response is received it might be disabled (false), enabled (active) or sampled (sampled)
+ * Once the response is received it might be disabled, active or sampled
  * When sampled that means a sample rate is set and the last time the session id was rotated
  * the sample rate determined this session should be sent to the server.
  */
-type SessionRecordingStatus = false | 'sampled' | 'active' | 'buffering'
+type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering'
 
 export class SessionRecording {
     get emit(): SessionRecordingStatus {
@@ -125,6 +126,16 @@ export class SessionRecording {
         this.sessionId = sessionId
     }
 
+    public getBufferedDuration(): number {
+        const mostRecentSnapshot = this.snapshots[this.snapshots.length - 1]
+        const { sessionStartTimestamp } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
+        return mostRecentSnapshot ? mostRecentSnapshot.$snapshot_data.timestamp - sessionStartTimestamp : 0
+    }
+
+    getMinimumDuration(): number | undefined {
+        return this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
+    }
+
     private getSessionManager() {
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
@@ -139,6 +150,7 @@ export class SessionRecording {
             this.startCaptureAndTrySendingQueuedSnapshots()
         } else {
             this.stopRecording()
+            this.snapshots.length = 0
         }
     }
 
@@ -208,7 +220,7 @@ export class SessionRecording {
         this.instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
         })
-        this._emit = shouldSample ? 'sampled' : false
+        this._emit = shouldSample ? 'sampled' : 'disabled'
     }
 
     afterDecideResponse(response: DecideResponse) {
@@ -223,6 +235,7 @@ export class SessionRecording {
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
                 [SESSION_RECORDING_SAMPLE_RATE]: sampleRate,
+                [SESSION_RECORDING_MINIMUM_DURATION]: response.sessionRecording?.minimumDurationMilliseconds,
             })
         }
 
@@ -235,7 +248,7 @@ export class SessionRecording {
         }
 
         this.receivedDecide = true
-        this._emit = this.isRecordingEnabled() ? 'active' : false
+        this._emit = this.isRecordingEnabled() ? 'active' : 'disabled'
 
         if (typeof sampleRate === 'number') {
             this.getSessionManager().onSessionId((sessionId) => {
@@ -505,6 +518,8 @@ export class SessionRecording {
             this._captureSnapshotBuffered(properties)
         } else if (this._emit === 'buffering') {
             this.snapshots.push(properties)
+        } else {
+            this.snapshots = []
         }
     }
 

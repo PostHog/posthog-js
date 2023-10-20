@@ -222,6 +222,24 @@ describe('SessionRecording', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording, 'startRecordingIfEnabled')
             ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
+            ;(window as any).rrwebRecord = jest.fn(({ emit }) => {
+                _emit = emit
+                return () => {}
+            })
+        })
+
+        it('buffers snapshots until decide is received and drops them if disabled', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+            expect(sessionRecording.emit).toBe('buffering')
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(sessionRecording.snapshots.length).toEqual(1)
+
+            sessionRecording.afterDecideResponse({ sessionRecording: false } as unknown as DecideResponse)
+            expect(sessionRecording.emit).toBe('disabled')
+            expect(sessionRecording.snapshots.length).toEqual(0)
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('emit is not active until decide is called', () => {
@@ -299,11 +317,11 @@ describe('SessionRecording', () => {
                 sessionRecording.afterDecideResponse({
                     sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
                 } as unknown as DecideResponse)
-                expect(sessionRecording.emit).toBe(false)
+                expect(sessionRecording.emit).toBe('disabled')
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
-                expect(sessionRecording.emit).toBe(false)
+                expect(sessionRecording.emit).toBe('disabled')
             })
 
             it('stores excluded session when excluded', () => {
@@ -360,7 +378,7 @@ describe('SessionRecording', () => {
 
                 // the random number generator won't always be exactly 0.5, but it should be close
                 expect(emitValues.filter((v) => v === 'sampled').length).toBeGreaterThan(30)
-                expect(emitValues.filter((v) => v === false).length).toBeGreaterThan(30)
+                expect(emitValues.filter((v) => v === 'disabled').length).toBeGreaterThan(30)
             })
         })
 
@@ -942,6 +960,41 @@ describe('SessionRecording', () => {
                     expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
                 })
             })
+        })
+    })
+
+    describe('buffering minimum duration', () => {
+        beforeEach(() => {
+            ;(window as any).rrwebRecord = jest.fn(({ emit }) => {
+                _emit = emit
+                return () => {}
+            })
+        })
+
+        it('can report zero duration', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording.emit).toBe('buffering')
+            expect(sessionRecording.getBufferedDuration()).toBe(0)
+        })
+
+        it('can report a duration', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording.emit).toBe('buffering')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
+            expect(sessionRecording.getBufferedDuration()).toBe(100)
+        })
+
+        it('starts with an undefined minimum duration', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording.getMinimumDuration()).toBe(undefined)
+        })
+
+        it('can set minimum duration from decide response', () => {
+            sessionRecording.afterDecideResponse({
+                sessionRecording: { minimumDurationMilliseconds: 1500 },
+            } as unknown as DecideResponse)
+            expect(sessionRecording.getMinimumDuration()).toBe(1500)
         })
     })
 })

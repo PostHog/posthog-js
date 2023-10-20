@@ -234,6 +234,7 @@ export interface DecideResponse {
         recorderVersion?: 'v1' | 'v2'
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string
+        minimumDurationMilliseconds?: number
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
