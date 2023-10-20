@@ -569,6 +569,7 @@ export class SessionRecording {
             bufferedDuration < minimumDuration
 
         if (this.emit === 'buffering' || isBelowMinimumDuration) {
+            // TODO this is too noisy for real release
             logger.info('[replay buffer] delayed flushing buffer', {
                 status: this.emit,
                 isBelowMinimumDuration,
