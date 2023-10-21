@@ -235,13 +235,13 @@ describe('SessionRecording', () => {
         it('buffers snapshots until decide is received and drops them if disabled', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
-            expect(sessionRecording.emit).toBe('buffering')
+            expect(sessionRecording.status).toBe('buffering')
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(sessionRecording.bufferLength).toEqual(1)
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: undefined }))
-            expect(sessionRecording.emit).toBe('disabled')
+            expect(sessionRecording.status).toBe('disabled')
             expect(sessionRecording.bufferLength).toEqual(0)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
@@ -249,19 +249,19 @@ describe('SessionRecording', () => {
         it('emit is not active until decide is called', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
-            expect(sessionRecording.emit).toBe('buffering')
+            expect(sessionRecording.status).toBe('buffering')
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            expect(sessionRecording.emit).toBe('active')
+            expect(sessionRecording.status).toBe('active')
         })
 
-        it('sample rate is undefined when decide does not return it', () => {
+        it('sample rate is null when decide does not return it', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).toHaveBeenCalled()
-            expect(sessionRecording.getIsSampled()).toBe(undefined)
+            expect(sessionRecording.isSampled).toBe(null)
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            expect(sessionRecording.getIsSampled()).toBe(undefined)
+            expect(sessionRecording.isSampled).toBe(null)
         })
 
         it('stores true in persistence if recording is enabled from the server', () => {
@@ -289,7 +289,8 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(0.7)
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe('0.70')
+            expect(sessionRecording.sampleRate).toBe(0.7)
         })
 
         it('starts session recording, saves setting and endpoint when enabled', () => {
@@ -327,11 +328,11 @@ describe('SessionRecording', () => {
                         sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
                     })
                 )
-                expect(sessionRecording.emit).toBe('disabled')
+                expect(sessionRecording.status).toBe('disabled')
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
-                expect(sessionRecording.emit).toBe('disabled')
+                expect(sessionRecording.status).toBe('disabled')
             })
 
             it('does emit to capture if the sample rate is null', () => {
@@ -343,7 +344,7 @@ describe('SessionRecording', () => {
                     })
                 )
 
-                expect(sessionRecording.emit).toBe('active')
+                expect(sessionRecording.status).toBe('active')
             })
 
             it('stores excluded session when excluded', () => {
@@ -355,7 +356,7 @@ describe('SessionRecording', () => {
                     })
                 )
 
-                expect(sessionRecording.getIsSampled()).toStrictEqual(false)
+                expect(sessionRecording.isSampled).toStrictEqual(false)
             })
 
             it('does emit to capture if the sample rate is 1', () => {
@@ -371,8 +372,8 @@ describe('SessionRecording', () => {
                 )
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
 
-                expect(sessionRecording.emit).toBe('sampled')
-                expect(sessionRecording.getIsSampled()).toStrictEqual(true)
+                expect(sessionRecording.status).toBe('sampled')
+                expect(sessionRecording.isSampled).toStrictEqual(true)
 
                 // don't wait two seconds for the flush timer
                 sessionRecording['_flushBuffer']()
@@ -401,7 +402,7 @@ describe('SessionRecording', () => {
                     expect(sessionRecording['sessionId']).not.toBe(lastSessionId)
                     lastSessionId = sessionRecording['sessionId']
 
-                    emitValues.push(sessionRecording.emit)
+                    emitValues.push(sessionRecording.status)
                 }
 
                 // the random number generator won't always be exactly 0.5, but it should be close
@@ -548,7 +549,7 @@ describe('SessionRecording', () => {
             // Another big event means the old data will be flushed
             _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
             // but the recording is still buffering
-            expect(sessionRecording.emit).toBe('buffering')
+            expect(sessionRecording.status).toBe('buffering')
             expect(posthog.capture).not.toHaveBeenCalled()
             expect(sessionRecording['buffer']?.data.length).toEqual(4) // The new event
             expect(sessionRecording['buffer']).toMatchObject({ size: 755017 + 755101 }) // the size of the big data event
@@ -1023,13 +1024,13 @@ describe('SessionRecording', () => {
 
         it('can report no duration when no data', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording.emit).toBe('buffering')
+            expect(sessionRecording.status).toBe('buffering')
             expect(sessionRecording.getBufferedDuration()).toBe(null)
         })
 
         it('can report zero duration', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording.emit).toBe('buffering')
+            expect(sessionRecording.status).toBe('buffering')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp }))
             expect(sessionRecording.getBufferedDuration()).toBe(0)
@@ -1037,7 +1038,7 @@ describe('SessionRecording', () => {
 
         it('can report a duration', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording.emit).toBe('buffering')
+            expect(sessionRecording.status).toBe('buffering')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording.getBufferedDuration()).toBe(100)
@@ -1064,7 +1065,7 @@ describe('SessionRecording', () => {
                 })
             )
             sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording.emit).toBe('active')
+            expect(sessionRecording.status).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording.getBufferedDuration()).toBe(100)
@@ -1084,7 +1085,7 @@ describe('SessionRecording', () => {
                 })
             )
             sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording.emit).toBe('active')
+            expect(sessionRecording.status).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording.getBufferedDuration()).toBe(100)

@@ -5,6 +5,7 @@ import {
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_TRIGGER_FLAG,
 } from '../../constants'
 import {
     ensureMaxMessageSize,
@@ -20,7 +21,7 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../../config'
-import { _timestamp, loadScript, logger, window } from '../../utils'
+import { _isBoolean, _isNumber, _isObject, _timestamp, loadScript, logger, window } from '../../utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -80,9 +81,6 @@ interface SnapshotBuffer {
 }
 
 export class SessionRecording {
-    get emit(): SessionRecordingStatus {
-        return this._emit
-    }
     get lastActivityTimestamp(): number {
         return this._lastActivityTimestamp
     }
@@ -96,8 +94,39 @@ export class SessionRecording {
         return this.buffer?.data.length || 0
     }
 
+    get sampleRate(): number | null {
+        const storedValue = this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
+        return storedValue == undefined ? null : parseFloat(storedValue)
+    }
+
+    get isSampled(): boolean | null {
+        if (_isNumber(this.sampleRate)) {
+            return this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        } else {
+            return null
+        }
+    }
+
+    /**
+     * defaults to buffering mode until a decide response is received
+     * once a decide response is received status can be disabled, active or sampled
+     */
+    get status(): SessionRecordingStatus {
+        const isEnabled = this.isRecordingEnabled()
+        const isSampled = this.isSampled
+
+        if (this.receivedDecide && !isEnabled) {
+            return 'disabled'
+        }
+
+        if (_isBoolean(isSampled)) {
+            return isSampled ? 'sampled' : 'disabled'
+        } else {
+            return this.receivedDecide ? 'active' : 'buffering'
+        }
+    }
+
     private instance: PostHog
-    private _emit: SessionRecordingStatus
     private _endpoint: string
     private windowId: string | null
     private sessionId: string | null
@@ -116,7 +145,6 @@ export class SessionRecording {
     constructor(instance: PostHog) {
         this.instance = instance
         this.captureStarted = false
-        this._emit = 'buffering' // Controls whether data is sent to the server or not
         this._endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
         this.receivedDecide = false
@@ -185,63 +213,46 @@ export class SessionRecording {
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
-    getSampleRate(): number | undefined {
-        return this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
-    }
-
-    getIsSampled(): boolean | undefined {
-        if (typeof this.getSampleRate() === 'number') {
-            return this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        } else {
-            return undefined
-        }
-    }
-
     private makeSamplingDecision(sessionId: string): void {
         const sessionIdChanged = this.sessionId !== sessionId
 
-        const sampleRate = this.getSampleRate()
-
-        if (typeof sampleRate !== 'number') {
+        if (!_isNumber(this.sampleRate)) {
+            this.instance.persistence?.register({
+                [SESSION_RECORDING_IS_SAMPLED]: null,
+            })
             return
         }
 
-        const storedIsSampled = this.getIsSampled()
+        const storedIsSampled = this.isSampled
 
         let shouldSample: boolean
-        if (!sessionIdChanged && typeof storedIsSampled === 'boolean') {
+        if (!sessionIdChanged && _isBoolean(storedIsSampled)) {
             shouldSample = storedIsSampled
         } else {
             const randomNumber = Math.random()
-            shouldSample = randomNumber < sampleRate
+            shouldSample = randomNumber < this.sampleRate
         }
 
         if (!shouldSample) {
             logger.warn(
-                `[SessionSampling] Sample rate (${sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                `[SessionSampling] Sample rate (${this.sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
             )
         }
 
         this.instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
         })
-        this._emit = shouldSample ? 'sampled' : 'disabled'
     }
 
     afterDecideResponse(response: DecideResponse) {
-        const sampleRate: number | undefined =
-            // lazy check for undefined or null
-            response.sessionRecording?.sampleRate == undefined
-                ? undefined
-                : parseFloat(response.sessionRecording?.sampleRate)
-
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
-                [SESSION_RECORDING_SAMPLE_RATE]: sampleRate,
+                [SESSION_RECORDING_SAMPLE_RATE]: response.sessionRecording?.sampleRate,
                 [SESSION_RECORDING_MINIMUM_DURATION]: response.sessionRecording?.minimumDurationMilliseconds,
+                [SESSION_RECORDING_TRIGGER_FLAG]: response.sessionRecording?.linkedFlag,
             })
         }
 
@@ -254,9 +265,8 @@ export class SessionRecording {
         }
 
         this.receivedDecide = true
-        this._emit = this.isRecordingEnabled() ? 'active' : 'disabled'
 
-        if (typeof sampleRate === 'number') {
+        if (_isNumber(this.sampleRate)) {
             this.getSessionManager().onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
@@ -479,7 +489,7 @@ export class SessionRecording {
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
-        if (!rawEvent || typeof rawEvent !== 'object') {
+        if (!rawEvent || !_isObject(rawEvent)) {
             return
         }
 
@@ -515,7 +525,7 @@ export class SessionRecording {
             return
         }
 
-        if (this._emit !== 'disabled') {
+        if (this.status !== 'disabled') {
             this._captureSnapshotBuffered(properties)
         } else {
             this.clearBuffer()
@@ -564,11 +574,9 @@ export class SessionRecording {
         const minimumDuration = this.getMinimumDuration()
         const bufferedDuration = this.getBufferedDuration()
         const isBelowMinimumDuration =
-            typeof minimumDuration === 'number' &&
-            typeof bufferedDuration === 'number' &&
-            bufferedDuration < minimumDuration
+            _isNumber(minimumDuration) && _isNumber(bufferedDuration) && bufferedDuration < minimumDuration
 
-        if (this.emit === 'buffering' || isBelowMinimumDuration) {
+        if (this.status === 'buffering' || isBelowMinimumDuration) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)

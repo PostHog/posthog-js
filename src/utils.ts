@@ -180,14 +180,14 @@ export function _entries<T = any>(obj: Record<string, T>): [string, T][] {
 }
 
 // Underscore Addons
-export const _isObject = function (obj: any): obj is Record<string, any> {
-    return obj === Object(obj) && !_isArray(obj)
+export const _isObject = function (x: unknown): x is Record<string, any> {
+    return x === Object(x) && !_isArray(x)
 }
 
-export const _isEmptyObject = function (obj: any): obj is Record<string, any> {
-    if (_isObject(obj)) {
-        for (const key in obj) {
-            if (hasOwnProperty.call(obj, key)) {
+export const _isEmptyObject = function (x: unknown): x is Record<string, any> {
+    if (_isObject(x)) {
+        for (const key in x) {
+            if (hasOwnProperty.call(x, key)) {
                 return false
             }
         }
@@ -196,20 +196,24 @@ export const _isEmptyObject = function (obj: any): obj is Record<string, any> {
     return false
 }
 
-export const _isUndefined = function (obj: any): obj is undefined {
-    return obj === void 0
+export const _isUndefined = function (x: unknown): x is undefined {
+    return x === void 0
 }
 
-export const _isString = function (obj: any): obj is string {
-    return toString.call(obj) == '[object String]'
+export const _isString = function (x: unknown): x is string {
+    return toString.call(x) == '[object String]'
 }
 
-export const _isDate = function (obj: any): obj is Date {
-    return toString.call(obj) == '[object Date]'
+export const _isDate = function (x: unknown): x is Date {
+    return toString.call(x) == '[object Date]'
 }
 
-export const _isNumber = function (obj: any): obj is number {
-    return toString.call(obj) == '[object Number]'
+export const _isNumber = function (x: unknown): x is number {
+    return toString.call(x) == '[object Number]'
+}
+
+export const _isBoolean = function (x: unknown): x is boolean {
+    return toString.call(x) === '[object Boolean]'
 }
 
 export const _isValidRegex = function (str: string): boolean {

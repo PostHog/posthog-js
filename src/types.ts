@@ -235,6 +235,7 @@ export interface DecideResponse {
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
+        linkedFlag?: string | null
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
