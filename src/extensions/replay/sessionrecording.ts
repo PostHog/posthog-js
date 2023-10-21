@@ -5,7 +5,7 @@ import {
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
-    SESSION_RECORDING_TRIGGER_FLAG,
+    SESSION_RECORDING_LINKED_FLAG,
 } from '../../constants'
 import {
     ensureMaxMessageSize,
@@ -21,7 +21,7 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../../config'
-import { _isBoolean, _isNumber, _isObject, _timestamp, loadScript, logger, window } from '../../utils'
+import { _isBoolean, _isNumber, _isObject, _isString, _timestamp, loadScript, logger, window } from '../../utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -81,6 +81,10 @@ interface SnapshotBuffer {
 }
 
 export class SessionRecording {
+    get linkedFlagSeen(): boolean {
+        return this._linkedFlagSeen
+    }
+
     get lastActivityTimestamp(): number {
         return this._lastActivityTimestamp
     }
@@ -107,6 +111,20 @@ export class SessionRecording {
         }
     }
 
+    get bufferedDuration(): number | null {
+        const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
+        const { sessionStartTimestamp } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
+        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
+    }
+
+    get minimumDuration(): number | undefined {
+        return this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
+    }
+
+    get linkedFlag(): string | undefined {
+        return this.instance.get_property(SESSION_RECORDING_LINKED_FLAG)
+    }
+
     /**
      * defaults to buffering mode until a decide response is received
      * once a decide response is received status can be disabled, active or sampled
@@ -115,17 +133,26 @@ export class SessionRecording {
         const isEnabled = this.isRecordingEnabled()
         const isSampled = this.isSampled
 
-        if (this.receivedDecide && !isEnabled) {
+        if (!this.receivedDecide) {
+            return 'buffering'
+        }
+
+        if (!isEnabled) {
             return 'disabled'
+        }
+
+        if (_isString(this.linkedFlag) && !this._linkedFlagSeen) {
+            return 'buffering'
         }
 
         if (_isBoolean(isSampled)) {
             return isSampled ? 'sampled' : 'disabled'
         } else {
-            return this.receivedDecide ? 'active' : 'buffering'
+            return 'active'
         }
     }
 
+    private _linkedFlagSeen: boolean = false
     private instance: PostHog
     private _endpoint: string
     private windowId: string | null
@@ -157,16 +184,6 @@ export class SessionRecording {
         this.sessionId = sessionId
 
         this.buffer = this.clearBuffer()
-    }
-
-    public getBufferedDuration(): number | null {
-        const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
-        const { sessionStartTimestamp } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
-        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
-    }
-
-    getMinimumDuration(): number | undefined {
-        return this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
     }
 
     private getSessionManager() {
@@ -252,7 +269,7 @@ export class SessionRecording {
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
                 [SESSION_RECORDING_SAMPLE_RATE]: response.sessionRecording?.sampleRate,
                 [SESSION_RECORDING_MINIMUM_DURATION]: response.sessionRecording?.minimumDurationMilliseconds,
-                [SESSION_RECORDING_TRIGGER_FLAG]: response.sessionRecording?.linkedFlag,
+                [SESSION_RECORDING_LINKED_FLAG]: response.sessionRecording?.linkedFlag,
             })
         }
 
@@ -269,6 +286,13 @@ export class SessionRecording {
         if (_isNumber(this.sampleRate)) {
             this.getSessionManager().onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
+            })
+        }
+
+        if (_isString(this.linkedFlag)) {
+            const linkedFlag = this.linkedFlag
+            this.instance.onFeatureFlags((flags) => {
+                this._linkedFlagSeen = flags.includes(linkedFlag)
             })
         }
 
@@ -571,8 +595,8 @@ export class SessionRecording {
             this.flushBufferTimer = undefined
         }
 
-        const minimumDuration = this.getMinimumDuration()
-        const bufferedDuration = this.getBufferedDuration()
+        const minimumDuration = this.minimumDuration
+        const bufferedDuration = this.bufferedDuration
         const isBelowMinimumDuration =
             _isNumber(minimumDuration) && _isNumber(bufferedDuration) && bufferedDuration < minimumDuration
 

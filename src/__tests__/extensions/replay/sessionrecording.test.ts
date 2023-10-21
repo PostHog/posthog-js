@@ -50,6 +50,7 @@ describe('SessionRecording', () => {
     let config: PostHogConfig
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
+    let onFeatureFlagsCallback: ((flags: string[]) => void) | null
 
     beforeEach(() => {
         ;(window as any).rrwebRecord = jest.fn()
@@ -73,53 +74,21 @@ describe('SessionRecording', () => {
         sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
         windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
 
-        const fakePersistence = new PostHogPersistence(config)
-        fakePersistence.clear()
+        const postHogPersistence = new PostHogPersistence(config)
+        postHogPersistence.clear()
 
-        // const fakePersistence: PostHogPersistence = {
-        //     props: { SESSION_ID: sessionId },
-        //     register: jest.fn().mockImplementation((props) => {
-        //         Object.entries(props).forEach(([property_key, value]) => {
-        //             switch (property_key) {
-        //                 case SESSION_RECORDING_ENABLED_SERVER_SIDE:
-        //                     session_recording_enabled_server_side = <boolean>value
-        //                     break
-        //                 case SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE:
-        //                     session_recording_recorder_version_server_side = <'v1' | 'v2' | undefined>value
-        //                     break
-        //                 case CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE:
-        //                     console_log_enabled_server_side = <boolean>value
-        //                     break
-        //                 case SESSION_RECORDING_SAMPLE_RATE:
-        //                     session_recording_sample_rate = <number>value
-        //                     break
-        //                 case SESSION_ID:
-        //                     // eslint-disable-next-line no-case-declarations
-        //                     const providedId = <string>(<Array<any>>value)[1]
-        //                     if (providedId !== null) {
-        //                         sessionId = providedId
-        //                     }
-        //                     break
-        //                 case SESSION_RECORDING_IS_SAMPLED:
-        //                     session_is_sampled = <boolean | null>value
-        //                     break
-        //                 default:
-        //                     throw new Error('config has not been mocked for this property key: ' + property_key)
-        //             }
-        //         })
-        //     }),
-        // } as unknown as PostHogPersistence
-
-        sessionManager = new SessionIdManager(config, fakePersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
+        sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
         posthog = {
             get_property: (property_key: string): Property | undefined => {
-                return fakePersistence?.['props'][property_key]
+                return postHogPersistence?.['props'][property_key]
             },
             config: config,
             capture: jest.fn(),
-            persistence: fakePersistence,
-
+            persistence: postHogPersistence,
+            onFeatureFlags: (cb: (flags: string[]) => void) => {
+                onFeatureFlagsCallback = cb
+            },
             sessionManager: sessionManager,
             _addCaptureHook: jest.fn(),
         } as unknown as PostHog
@@ -1014,6 +983,31 @@ describe('SessionRecording', () => {
         })
     })
 
+    describe('linked flags', () => {
+        it('stores the linked flag on decide response', () => {
+            expect(sessionRecording.linkedFlag).toEqual(undefined)
+            expect(sessionRecording.linkedFlagSeen).toEqual(false)
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording.linkedFlag).toEqual('the-flag-key')
+            expect(sessionRecording.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'])
+            expect(sessionRecording.linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
+
+            onFeatureFlagsCallback?.(['different', 'keys'])
+            expect(sessionRecording.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+        })
+    })
+
     describe('buffering minimum duration', () => {
         beforeEach(() => {
             ;(window as any).rrwebRecord = jest.fn(({ emit }) => {
@@ -1025,7 +1019,7 @@ describe('SessionRecording', () => {
         it('can report no duration when no data', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording.status).toBe('buffering')
-            expect(sessionRecording.getBufferedDuration()).toBe(null)
+            expect(sessionRecording.bufferedDuration).toBe(null)
         })
 
         it('can report zero duration', () => {
@@ -1033,7 +1027,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('buffering')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp }))
-            expect(sessionRecording.getBufferedDuration()).toBe(0)
+            expect(sessionRecording.bufferedDuration).toBe(0)
         })
 
         it('can report a duration', () => {
@@ -1041,12 +1035,12 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('buffering')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording.getBufferedDuration()).toBe(100)
+            expect(sessionRecording.bufferedDuration).toBe(100)
         })
 
         it('starts with an undefined minimum duration', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording.getMinimumDuration()).toBe(undefined)
+            expect(sessionRecording.minimumDuration).toBe(undefined)
         })
 
         it('can set minimum duration from decide response', () => {
@@ -1055,7 +1049,7 @@ describe('SessionRecording', () => {
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
-            expect(sessionRecording.getMinimumDuration()).toBe(1500)
+            expect(sessionRecording.minimumDuration).toBe(1500)
         })
 
         it('does not flush if below the minimum duration', () => {
@@ -1068,8 +1062,8 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording.getBufferedDuration()).toBe(100)
-            expect(sessionRecording.getMinimumDuration()).toBe(1500)
+            expect(sessionRecording.bufferedDuration).toBe(100)
+            expect(sessionRecording.minimumDuration).toBe(1500)
 
             expect(sessionRecording.bufferLength).toBe(1)
             // call the private method to avoid waiting for the timer
@@ -1088,8 +1082,8 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording.getBufferedDuration()).toBe(100)
-            expect(sessionRecording.getMinimumDuration()).toBe(1500)
+            expect(sessionRecording.bufferedDuration).toBe(100)
+            expect(sessionRecording.minimumDuration).toBe(1500)
 
             expect(sessionRecording.bufferLength).toBe(1)
             // call the private method to avoid waiting for the timer
@@ -1105,10 +1099,10 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording.bufferLength).toBe(0)
-            expect(sessionRecording.getBufferedDuration()).toBe(null)
+            expect(sessionRecording.bufferedDuration).toBe(null)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1502 }))
             expect(sessionRecording.bufferLength).toBe(1)
-            expect(sessionRecording.getBufferedDuration()).toBe(1502)
+            expect(sessionRecording.bufferedDuration).toBe(1502)
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 
