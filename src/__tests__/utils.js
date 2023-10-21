@@ -12,6 +12,7 @@ import {
     DEFAULT_BLOCKED_UA_STRS,
     loadScript,
     _isUrlMatchingRegex,
+    isCrossDomainCookie,
 } from '../utils'
 
 function userAgentFor(botString) {
@@ -270,6 +271,18 @@ describe('loadScript', () => {
             expect(_isUrlMatchingRegex('https://app.example.com', '(.*.)?example.com')).toEqual(true)
             // match route wildcard
             expect(_isUrlMatchingRegex('https://example.com/something/test', 'example.com/(.*.)/test')).toEqual(true)
+        })
+    })
+
+    describe('check for cross domain cookies', () => {
+        it.each([
+            [false, 'https://test.herokuapp.com'],
+            // ensure it isn't matching herokuapp anywhere in the domain
+            [true, 'https://test.herokuapp.com.impersonator.io'],
+            [false, undefined],
+            [true, 'https://bbc.co.uk'],
+        ])('should return %s when hostname is %s', (expectedResult, hostname) => {
+            expect(isCrossDomainCookie(hostname)).toEqual(expectedResult)
         })
     })
 })
