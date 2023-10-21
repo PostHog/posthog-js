@@ -108,17 +108,17 @@ describe('SessionRecording', () => {
     describe('isRecordingEnabled', () => {
         it('is enabled if both the server and client config says enabled', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true })
-            expect(sessionRecording.isRecordingEnabled()).toBeTruthy()
+            expect(sessionRecording.isRecordingEnabled).toBeTruthy()
         })
 
         it('is disabled if the server is disabled', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false })
-            expect(sessionRecording.isRecordingEnabled()).toBe(false)
+            expect(sessionRecording.isRecordingEnabled).toBe(false)
         })
 
         it('is disabled if the client config is disabled', () => {
             posthog.config.disable_session_recording = true
-            expect(sessionRecording.isRecordingEnabled()).toBe(false)
+            expect(sessionRecording.isRecordingEnabled).toBe(false)
         })
     })
 
@@ -126,22 +126,22 @@ describe('SessionRecording', () => {
         it('uses client side setting when set to false', () => {
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: true })
             posthog.config.enable_recording_console_log = false
-            expect(sessionRecording.isConsoleLogCaptureEnabled()).toBe(false)
+            expect(sessionRecording.isConsoleLogCaptureEnabled).toBe(false)
         })
 
         it('uses client side setting when set to true', () => {
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
             posthog.config.enable_recording_console_log = true
-            expect(sessionRecording.isConsoleLogCaptureEnabled()).toBe(true)
+            expect(sessionRecording.isConsoleLogCaptureEnabled).toBe(true)
         })
 
         it('uses server side setting if client side setting is not set', () => {
             posthog.config.enable_recording_console_log = undefined
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
-            expect(sessionRecording.isConsoleLogCaptureEnabled()).toBe(false)
+            expect(sessionRecording.isConsoleLogCaptureEnabled).toBe(false)
 
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: true })
-            expect(sessionRecording.isConsoleLogCaptureEnabled()).toBe(true)
+            expect(sessionRecording.isConsoleLogCaptureEnabled).toBe(true)
         })
     })
 
@@ -149,26 +149,26 @@ describe('SessionRecording', () => {
         it('uses client side setting v2 over server side', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v1' })
             posthog.config.session_recording.recorderVersion = 'v2'
-            expect(sessionRecording.getRecordingVersion()).toBe('v2')
+            expect(sessionRecording.recordingVersion).toBe('v2')
         })
 
         it('uses client side setting v1 over server side', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             posthog.config.session_recording.recorderVersion = 'v1'
-            expect(sessionRecording.getRecordingVersion()).toBe('v1')
+            expect(sessionRecording.recordingVersion).toBe('v1')
         })
 
         it('uses server side setting if client side setting is not set', () => {
             posthog.config.session_recording.recorderVersion = undefined
 
             posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v1' })
-            expect(sessionRecording.getRecordingVersion()).toBe('v1')
+            expect(sessionRecording.recordingVersion).toBe('v1')
 
             posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
-            expect(sessionRecording.getRecordingVersion()).toBe('v2')
+            expect(sessionRecording.recordingVersion).toBe('v2')
 
             posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: undefined })
-            expect(sessionRecording.getRecordingVersion()).toBe('v1')
+            expect(sessionRecording.recordingVersion).toBe('v1')
         })
     })
 
@@ -964,7 +964,7 @@ describe('SessionRecording', () => {
                     expect(sessionRecording.lastActivityTimestamp).toEqual(lastActivityTimestamp + 100)
                     expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
 
-                    // this triggers idle state _and_ is a user interaction so we take a full snapshot
+                    // this triggers idle state _and_ is a user interaction, so we take a full snapshot
                     _emit({
                         event: 123,
                         type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,

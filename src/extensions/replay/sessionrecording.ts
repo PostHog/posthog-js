@@ -2,10 +2,10 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_LINKED_FLAG,
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
     SESSION_RECORDING_SAMPLE_RATE,
-    SESSION_RECORDING_LINKED_FLAG,
 } from '../../constants'
 import {
     ensureMaxMessageSize,
@@ -125,19 +125,34 @@ export class SessionRecording {
         return this.instance.get_property(SESSION_RECORDING_LINKED_FLAG)
     }
 
+    get isRecordingEnabled() {
+        const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_client_side = !this.instance.config.disable_session_recording
+        return enabled_server_side && enabled_client_side
+    }
+
+    get isConsoleLogCaptureEnabled() {
+        const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_client_side = this.instance.config.enable_recording_console_log
+        return enabled_client_side ?? enabled_server_side
+    }
+
+    get recordingVersion() {
+        const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
+        const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
+        return recordingVersion_client_side || recordingVersion_server_side || 'v1'
+    }
+
     /**
      * defaults to buffering mode until a decide response is received
      * once a decide response is received status can be disabled, active or sampled
      */
     get status(): SessionRecordingStatus {
-        const isEnabled = this.isRecordingEnabled()
-        const isSampled = this.isSampled
-
         if (!this.receivedDecide) {
             return 'buffering'
         }
 
-        if (!isEnabled) {
+        if (!this.isRecordingEnabled) {
             return 'disabled'
         }
 
@@ -145,8 +160,8 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (_isBoolean(isSampled)) {
-            return isSampled ? 'sampled' : 'disabled'
+        if (_isBoolean(this.isSampled)) {
+            return this.isSampled ? 'sampled' : 'disabled'
         } else {
             return 'active'
         }
@@ -196,7 +211,7 @@ export class SessionRecording {
     }
 
     startRecordingIfEnabled() {
-        if (this.isRecordingEnabled()) {
+        if (this.isRecordingEnabled) {
             this.startCaptureAndTrySendingQueuedSnapshots()
         } else {
             this.stopRecording()
@@ -210,24 +225,6 @@ export class SessionRecording {
             this.stopRrweb = undefined
             this.captureStarted = false
         }
-    }
-
-    isRecordingEnabled() {
-        const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = !this.instance.config.disable_session_recording
-        return enabled_server_side && enabled_client_side
-    }
-
-    isConsoleLogCaptureEnabled() {
-        const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = this.instance.config.enable_recording_console_log
-        return enabled_client_side ?? enabled_server_side
-    }
-
-    getRecordingVersion() {
-        const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
-        const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
-        return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
     private makeSamplingDecision(sessionId: string): void {
@@ -340,12 +337,12 @@ export class SessionRecording {
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
         this.getSessionManager().checkAndGetSessionAndWindowId()
 
-        const recorderJS = this.getRecordingVersion() === 'v2' ? 'recorder-v2.js' : 'recorder.js'
+        const recorderJS = this.recordingVersion === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
-        if (this.instance.__loaded_recorder_version !== this.getRecordingVersion()) {
+        if (this.instance.__loaded_recorder_version !== this.recordingVersion) {
             loadScript(this.instance.config.api_host + `/static/${recorderJS}?v=${Config.LIB_VERSION}`, (err) => {
                 if (err) {
                     return logger.error(`Could not load ${recorderJS}`, err)
@@ -483,7 +480,7 @@ export class SessionRecording {
                 this.onRRwebEmit(event)
             },
             plugins:
-                (window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled()
+                (window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled
                     ? [(window as any).rrwebConsoleRecord.getRecordConsolePlugin()]
                     : [],
             ...sessionRecordingOptions,
