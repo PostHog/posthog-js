@@ -22,6 +22,7 @@ import { DecideResponse, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../../config'
 import { _isBoolean, _isNumber, _isObject, _isString, _timestamp, loadScript, logger, window } from '../../utils'
+import { SessionIdManager } from '../../sessionid'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -81,6 +82,23 @@ interface SnapshotBuffer {
 }
 
 export class SessionRecording {
+    private _linkedFlagSeen: boolean = false
+    private instance: PostHog
+    private _endpoint: string
+    private windowId: string | null
+    private sessionId: string | null
+    private _lastActivityTimestamp: number = Date.now()
+    private flushBufferTimer?: any
+    private buffer?: SnapshotBuffer
+    private mutationRateLimiter?: MutationRateLimiter
+    private captureStarted: boolean
+    private sessionManager: SessionIdManager
+    stopRrweb: listenerHandler | undefined
+    receivedDecide: boolean
+    rrwebRecord: rrwebRecord | undefined
+    recorderVersion?: string
+    isIdle = false
+
     get linkedFlagSeen(): boolean {
         return this._linkedFlagSeen
     }
@@ -88,12 +106,15 @@ export class SessionRecording {
     get lastActivityTimestamp(): number {
         return this._lastActivityTimestamp
     }
+
     get endpoint(): string {
         return this._endpoint
     }
+
     get started(): boolean {
         return this.captureStarted
     }
+
     get bufferLength(): number {
         return this.buffer?.data.length || 0
     }
@@ -113,7 +134,7 @@ export class SessionRecording {
 
     get bufferedDuration(): number | null {
         const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
-        const { sessionStartTimestamp } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
+        const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 
@@ -167,23 +188,6 @@ export class SessionRecording {
         }
     }
 
-    private _linkedFlagSeen: boolean = false
-    private instance: PostHog
-    private _endpoint: string
-    private windowId: string | null
-    private sessionId: string | null
-    private _lastActivityTimestamp: number = Date.now()
-    private flushBufferTimer?: any
-    private buffer?: SnapshotBuffer
-    private mutationRateLimiter?: MutationRateLimiter
-    private captureStarted: boolean
-
-    stopRrweb: listenerHandler | undefined
-    receivedDecide: boolean
-    rrwebRecord: rrwebRecord | undefined
-    recorderVersion?: string
-    isIdle = false
-
     constructor(instance: PostHog) {
         this.instance = instance
         this.captureStarted = false
@@ -194,20 +198,19 @@ export class SessionRecording {
         window.addEventListener('beforeunload', () => {
             this._flushBuffer()
         })
-        const { sessionId, windowId } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
-        this.windowId = windowId
-        this.sessionId = sessionId
 
-        this.buffer = this.clearBuffer()
-    }
-
-    private getSessionManager() {
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
         }
 
-        return this.instance.sessionManager
+        this.sessionManager = this.instance.sessionManager
+
+        const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(true)
+        this.windowId = windowId
+        this.sessionId = sessionId
+
+        this.buffer = this.clearBuffer()
     }
 
     startRecordingIfEnabled() {
@@ -281,7 +284,7 @@ export class SessionRecording {
         this.receivedDecide = true
 
         if (_isNumber(this.sampleRate)) {
-            this.getSessionManager().onSessionId((sessionId) => {
+            this.sessionManager.onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
         }
@@ -335,7 +338,7 @@ export class SessionRecording {
 
         this.captureStarted = true
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
-        this.getSessionManager().checkAndGetSessionAndWindowId()
+        this.sessionManager.checkAndGetSessionAndWindowId()
 
         const recorderJS = this.recordingVersion === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
@@ -387,7 +390,7 @@ export class SessionRecording {
         }
 
         // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this.getSessionManager().checkAndGetSessionAndWindowId(
+        const { windowId, sessionId } = this.sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
             event.timestamp
         )
