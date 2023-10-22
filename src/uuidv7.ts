@@ -9,7 +9,7 @@
  */
 
 // polyfill for IE11
-import { _isNumber, _isUndefined } from './utils'
+import { _isNumber, _isUndefined, window } from './utils'
 
 if (!Math.trunc) {
     Math.trunc = function (v) {
@@ -205,7 +205,8 @@ declare const UUIDV7_DENY_WEAK_RNG: boolean
 /** Stores `crypto.getRandomValues()` available in the environment. */
 let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buffer) => {
     // fall back on Math.random() unless the flag is set to true
-    if (!_isUndefined(UUIDV7_DENY_WEAK_RNG) && UUIDV7_DENY_WEAK_RNG) {
+    // TRICKY: don't use the _isUndefined method here as can't pass the reference
+    if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {
         throw new Error('no cryptographically strong RNG available')
     }
 
@@ -216,7 +217,7 @@ let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buf
 }
 
 // detect Web Crypto API
-if (!_isUndefined(crypto) && crypto.getRandomValues) {
+if (!_isUndefined(window.crypto) && crypto.getRandomValues) {
     getRandomValues = (buffer) => crypto.getRandomValues(buffer)
 }
 
