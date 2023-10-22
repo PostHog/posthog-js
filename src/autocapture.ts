@@ -3,6 +3,7 @@ import {
     _each,
     _extend,
     _includes,
+    _isBoolean,
     _isFunction,
     _isUndefined,
     _register_event,
@@ -28,7 +29,6 @@ import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
-import { _isBoolean } from '../lib/src/utils'
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {
