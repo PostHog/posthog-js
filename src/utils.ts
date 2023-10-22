@@ -67,7 +67,7 @@ export const _trim = function (str: string): string {
 
 export const _bind_instance_methods = function (obj: Record<string, any>): void {
     for (const func in obj) {
-        if (typeof obj[func] === 'function') {
+        if (_isFunction(obj[func])) {
             obj[func] = obj[func].bind(obj)
         }
     }
@@ -288,7 +288,7 @@ export const _safewrap_class = function (klass: Function, functions: string[]): 
 
 export const _safewrap_instance_methods = function (obj: Record<string, any>): void {
     for (const func in obj) {
-        if (typeof obj[func] === 'function') {
+        if (_isFunction(obj[func])) {
             obj[func] = _safewrap(obj[func])
         }
     }
@@ -354,7 +354,7 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
         if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key as string) > -1) {
             return value
         }
-        if (typeof value === 'string' && maxStringLength !== null) {
+        if (_isString(value) && maxStringLength !== null) {
             return (value as string).slice(0, maxStringLength)
         }
         return value
@@ -541,7 +541,7 @@ export const _getQueryParam = function (url: string, param: string): string {
     const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
     const regex = new RegExp(regexS)
     const results = regex.exec(url)
-    if (results === null || (results && typeof results[1] !== 'string' && (results[1] as any).length)) {
+    if (results === null || (results && !_isString(results[1]) && (results[1] as any).length)) {
         return ''
     } else {
         let result = results[1]
@@ -808,7 +808,7 @@ export const _info = {
             Mozilla: /rv:(\d+(\.\d+)?)/,
         }
         const regex: RegExp | undefined = versionRegexs[browser as keyof typeof versionRegexs]
-        if (regex === undefined) {
+        if (_isUndefined(regex)) {
             return null
         }
         const matches = userAgent.match(regex)

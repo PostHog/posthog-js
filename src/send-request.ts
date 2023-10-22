@@ -1,4 +1,4 @@
-import { _each, _HTTPBuildQuery, logger } from './utils'
+import { _each, _HTTPBuildQuery, _isFunction, logger } from './utils'
 import Config from './config'
 import { PostData, XHROptions, XHRParams } from './types'
 
@@ -102,7 +102,7 @@ export const xhr = ({
                     callback(response)
                 }
             } else {
-                if (typeof onXHRError === 'function') {
+                if (_isFunction(onXHRError)) {
                     onXHRError(req)
                 }
 

@@ -17,7 +17,7 @@ import { PostHog } from '../posthog-core'
 import { DecideResponse, NetworkRequest, Properties } from '../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../config'
-import { logger, loadScript, _timestamp, window } from '../utils'
+import { logger, loadScript, _timestamp, window, _isUndefined, _isObject } from '../utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -205,7 +205,7 @@ export class SessionRecording {
         if (!sessionManager) {
             return
         }
-        if (typeof Object.assign === 'undefined') {
+        if (_isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
             // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
             // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
@@ -397,7 +397,7 @@ export class SessionRecording {
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
-        if (!rawEvent || typeof rawEvent !== 'object') {
+        if (!rawEvent || !_isObject(rawEvent)) {
             return
         }
 

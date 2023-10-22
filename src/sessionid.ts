@@ -3,7 +3,7 @@ import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuidv7 } from './uuidv7'
-import { logger } from './utils'
+import { _isNumber, logger } from './utils'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 mins
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 mins
@@ -32,7 +32,7 @@ export class SessionIdManager {
         const persistenceName = config['persistence_name'] || config['token']
         let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
 
-        if (typeof desiredTimeout !== 'number') {
+        if (!_isNumber(desiredTimeout)) {
             logger.warn('session_idle_timeout_seconds must be a number. Defaulting to 30 minutes.')
             desiredTimeout = MAX_SESSION_IDLE_TIMEOUT
         } else if (desiredTimeout > MAX_SESSION_IDLE_TIMEOUT) {

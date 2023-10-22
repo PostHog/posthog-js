@@ -1,4 +1,4 @@
-import { _extend, logger } from './utils'
+import { _extend, _isUndefined, logger } from './utils'
 import { PersistentStore, Properties } from './types'
 import { DISTINCT_ID, SESSION_ID } from './constants'
 
@@ -96,7 +96,7 @@ export const localStore: PersistentStore = {
         }
 
         let supported = true
-        if (typeof window !== 'undefined') {
+        if (!_isUndefined(window)) {
             try {
                 const key = '__mplssupport__',
                     val = 'xyz'
@@ -249,7 +249,7 @@ export const sessionStore: PersistentStore = {
             return sessionStorageSupported
         }
         sessionStorageSupported = true
-        if (typeof window !== 'undefined') {
+        if (!_isUndefined(window)) {
             try {
                 const key = '__support__',
                     val = 'xyz'

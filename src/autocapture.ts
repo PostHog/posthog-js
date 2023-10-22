@@ -28,6 +28,7 @@ import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
+import { _isBoolean } from '../lib/src/utils'
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {
@@ -173,7 +174,7 @@ const autocapture = {
 
     _getEventTarget: function (e: Event): Element | null {
         // https://developer.mozilla.org/en-US/docs/Web/API/Event/target#Compatibility_notes
-        if (typeof e.target === 'undefined') {
+        if (_isUndefined(e.target)) {
             return (e.srcElement as Element) || null
         } else {
             if ((e.target as HTMLElement)?.shadowRoot) {
@@ -296,7 +297,7 @@ const autocapture = {
     config: undefined as AutocaptureConfig | undefined,
 
     init: function (instance: PostHog): void {
-        if (typeof instance.__autocapture !== 'boolean') {
+        if (!_isBoolean(instance.__autocapture)) {
             this.config = instance.__autocapture
         }
 
