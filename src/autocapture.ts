@@ -346,7 +346,7 @@ const autocapture = {
 
     // this is a mechanism to ramp up CE with no server-side interaction.
     // when CE is active, every page load results in a decide request. we
-    // need to gently ramp this up so we don't overload decide. this decides
+    // need to gently ramp this up, so we don't overload decide. this decides
     // deterministically if CE is enabled for this project by modding the char
     // value of the project token.
     enabledForProject: function (

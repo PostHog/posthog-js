@@ -212,6 +212,10 @@ export const _isNumber = function (obj: any): obj is number {
     return toString.call(obj) == '[object Number]'
 }
 
+export const _isBoolean = function (obj: any): obj is boolean {
+    return toString.call(obj) == '[object Boolean]'
+}
+
 export const _isValidRegex = function (str: string): boolean {
     try {
         new RegExp(str)
