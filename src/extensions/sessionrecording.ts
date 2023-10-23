@@ -404,17 +404,6 @@ export class SessionRecording {
             return
         }
 
-        const typeLookup = {
-            0: 'DomContentLoaded',
-            1: 'Load',
-            2: 'FullSnapshot',
-            3: 'IncrementalSnapshot',
-            4: 'Meta',
-            5: 'Custom',
-            6: 'Plugin',
-        }
-        logger.info('[onRRwebEmit] event type', { type: rawEvent.type, name: typeLookup[rawEvent.type] })
-
         if (rawEvent.type === EventType.Meta) {
             const href = this._maskUrl(rawEvent.data.href)
             if (!href) {
