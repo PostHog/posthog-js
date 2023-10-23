@@ -964,7 +964,7 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     // split and slice isn't a great way to match arbitrary domains,
     // but it's good enough for ensuring we only match herokuapp.com when it is the TLD
     // for the hostname
-    return hostname.split('.').slice(-2).join('.').indexOf('herokuapp.com') === -1
+    return hostname.split('.').slice(-2).join('.') !== 'herokuapp.com'
 }
 
 export { win as window, userAgent, document }

@@ -279,9 +279,10 @@ describe('loadScript', () => {
             [false, 'https://test.herokuapp.com'],
             [false, 'test.herokuapp.com'],
             [false, 'herokuapp.com'],
+            [false, undefined],
             // ensure it isn't matching herokuapp anywhere in the domain
             [true, 'https://test.herokuapp.com.impersonator.io'],
-            [false, undefined],
+            [true, 'mysite-herokuapp.com'],
             [true, 'https://bbc.co.uk'],
             [true, 'bbc.co.uk'],
             [true, 'www.bbc.co.uk'],
