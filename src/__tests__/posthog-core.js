@@ -193,6 +193,48 @@ describe('capture()', () => {
     })
 })
 
+describe('_afterDecideResponse', () => {
+    given('subject', () => () => given.lib._afterDecideResponse(given.decideResponse))
+
+    it('enables compression from decide response', () => {
+        given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+        given.subject()
+
+        expect(given.lib.compression['gzip']).toBe(true)
+        expect(given.lib.compression['lz64']).toBe(true)
+    })
+
+    it('enables compression from decide response when only one received', () => {
+        given('decideResponse', () => ({ supportedCompression: ['lz64'] }))
+        given.subject()
+
+        expect(given.lib.compression).not.toHaveProperty('gzip')
+        expect(given.lib.compression['lz64']).toBe(true)
+    })
+
+    it('does not enable compression from decide response if compression is disabled', () => {
+        given('config', () => ({ disable_compression: true, persistence: 'memory' }))
+        given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+        given.subject()
+
+        expect(given.lib.compression).toEqual({})
+    })
+
+    it('defaults to /e if no endpoint is given', () => {
+        given('decideResponse', () => ({}))
+        given.subject()
+
+        expect(given.lib.analyticsDefaultEndpoint).toEqual('/e/')
+    })
+
+    it('uses the specified analytics endpoint if given', () => {
+        given('decideResponse', () => ({ analytics: { endpoint: '/i/v0/e/' } }))
+        given.subject()
+
+        expect(given.lib.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
+    })
+})
+
 describe('_calculate_event_properties()', () => {
     given('subject', () =>
         given.lib._calculate_event_properties(given.event_name, given.properties, given.start_timestamp, given.options)
