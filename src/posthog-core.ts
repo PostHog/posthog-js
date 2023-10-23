@@ -110,7 +110,7 @@ const defaultConfig = (): PostHogConfig => ({
     token: '',
     autocapture: true,
     rageclick: true,
-    cross_subdomain_cookie: isCrossDomainCookie(document?.location?.hostname),
+    cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'cookie',
     persistence_name: '',
     cookie_name: '',

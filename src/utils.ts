@@ -955,7 +955,9 @@ export const _info = {
     },
 }
 
-export function isCrossDomainCookie(hostname: string | undefined) {
+export function isCrossDomainCookie(documentLocation: Location | undefined) {
+    const hostname = documentLocation?.hostname
+
     if (!_isString(hostname)) {
         return false
     }

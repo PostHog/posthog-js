@@ -282,7 +282,7 @@ describe('loadScript', () => {
             [false, undefined],
             [true, 'https://bbc.co.uk'],
         ])('should return %s when hostname is %s', (expectedResult, hostname) => {
-            expect(isCrossDomainCookie(hostname)).toEqual(expectedResult)
+            expect(isCrossDomainCookie({ hostname })).toEqual(expectedResult)
         })
     })
 })
