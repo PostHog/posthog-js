@@ -171,7 +171,7 @@ export enum Compression {
 
 export interface XHROptions {
     transport?: 'XHR' | 'sendBeacon'
-    method?: 'POST' | 'GET' | 'OPTIONS'
+    method?: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
     verbose?: boolean
     blob?: boolean
