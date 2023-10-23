@@ -277,10 +277,14 @@ describe('loadScript', () => {
     describe('check for cross domain cookies', () => {
         it.each([
             [false, 'https://test.herokuapp.com'],
+            [false, 'test.herokuapp.com'],
+            [false, 'herokuapp.com'],
             // ensure it isn't matching herokuapp anywhere in the domain
             [true, 'https://test.herokuapp.com.impersonator.io'],
             [false, undefined],
             [true, 'https://bbc.co.uk'],
+            [true, 'bbc.co.uk'],
+            [true, 'www.bbc.co.uk'],
         ])('should return %s when hostname is %s', (expectedResult, hostname) => {
             expect(isCrossDomainCookie({ hostname })).toEqual(expectedResult)
         })
