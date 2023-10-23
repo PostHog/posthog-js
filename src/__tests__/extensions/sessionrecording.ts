@@ -5,6 +5,7 @@ import {
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
+    TEN_MINUTES_IN_MS,
 } from '../../extensions/sessionrecording'
 import { PostHogPersistence } from '../../posthog-persistence'
 import {
@@ -263,6 +264,7 @@ describe('SessionRecording', () => {
                 plugins: [],
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
+                checkoutEveryNms: TEN_MINUTES_IN_MS,
             })
         })
 
