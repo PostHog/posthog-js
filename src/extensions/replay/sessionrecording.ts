@@ -97,6 +97,15 @@ export class SessionRecording {
     recorderVersion?: string
     isIdle = false
 
+    get sessionManager() {
+        if (!this.instance.sessionManager) {
+            logger.error('Session recording started without valid sessionManager')
+            throw new Error('Session recording started without valid sessionManager. This is a bug.')
+        }
+
+        return this.instance.sessionManager
+    }
+
     get linkedFlagSeen(): boolean {
         return this._linkedFlagSeen
     }
@@ -132,7 +141,7 @@ export class SessionRecording {
 
     get bufferedDuration(): number | null {
         const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
-        const { sessionStartTimestamp } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
+        const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 
@@ -202,20 +211,11 @@ export class SessionRecording {
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
         }
 
-        const { sessionId, windowId } = this.getSessionManager().checkAndGetSessionAndWindowId(true)
+        const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(true)
         this.windowId = windowId
         this.sessionId = sessionId
 
         this.buffer = this.clearBuffer()
-    }
-
-    private getSessionManager() {
-        if (!this.instance.sessionManager) {
-            logger.error('Session recording started without valid sessionManager')
-            throw new Error('Session recording started without valid sessionManager. This is a bug.')
-        }
-
-        return this.instance.sessionManager
     }
 
     startRecordingIfEnabled() {
@@ -289,7 +289,7 @@ export class SessionRecording {
         this.receivedDecide = true
 
         if (_isNumber(this.sampleRate)) {
-            this.getSessionManager().onSessionId((sessionId) => {
+            this.sessionManager.onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
         }
@@ -343,7 +343,7 @@ export class SessionRecording {
 
         this.captureStarted = true
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
-        this.getSessionManager().checkAndGetSessionAndWindowId()
+        this.sessionManager.checkAndGetSessionAndWindowId()
 
         const recorderJS = this.recordingVersion === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
@@ -395,7 +395,7 @@ export class SessionRecording {
         }
 
         // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this.getSessionManager().checkAndGetSessionAndWindowId(
+        const { windowId, sessionId } = this.sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
             event.timestamp
         )
