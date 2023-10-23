@@ -22,6 +22,7 @@ import { logger, loadScript, _timestamp, window } from '../utils'
 const BASE_ENDPOINT = '/s/'
 
 export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+export const THIRTY_MINUTES_IN_MS = 30 * 60 * 1000
 export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -326,6 +327,8 @@ export class SessionRecording {
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            //take a full snapshot after every N ms
+            checkoutEveryNms: THIRTY_MINUTES_IN_MS,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
@@ -400,6 +403,17 @@ export class SessionRecording {
         if (!rawEvent || typeof rawEvent !== 'object') {
             return
         }
+
+        const typeLookup = {
+            0: 'DomContentLoaded',
+            1: 'Load',
+            2: 'FullSnapshot',
+            3: 'IncrementalSnapshot',
+            4: 'Meta',
+            5: 'Custom',
+            6: 'Plugin',
+        }
+        logger.info('[onRRwebEmit] event type', { type: rawEvent.type, name: typeLookup[rawEvent.type] })
 
         if (rawEvent.type === EventType.Meta) {
             const href = this._maskUrl(rawEvent.data.href)
