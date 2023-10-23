@@ -16,6 +16,7 @@ import {
     userAgent,
     window,
     logger,
+    isCrossDomainCookie,
     _isString,
     _isFunction,
 } from './utils'
@@ -111,7 +112,7 @@ const defaultConfig = (): PostHogConfig => ({
     token: '',
     autocapture: true,
     rageclick: true,
-    cross_subdomain_cookie: document?.location?.hostname?.indexOf('herokuapp.com') === -1,
+    cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'cookie',
     persistence_name: '',
     cookie_name: '',

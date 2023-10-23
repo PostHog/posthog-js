@@ -1,3 +1,7 @@
+## 1.84.2 - 2023-10-23
+
+- fix: heroku subdomain check (#842)
+
 ## 1.84.1 - 2023-10-19
 
 - fix(surveys): fix multiple choice input unique ID bug (#841)
