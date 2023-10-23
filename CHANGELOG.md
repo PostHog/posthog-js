@@ -1,3 +1,15 @@
+## 1.84.2 - 2023-10-23
+
+- fix: heroku subdomain check (#842)
+
+## 1.84.1 - 2023-10-19
+
+- fix(surveys): fix multiple choice input unique ID bug (#841)
+
+## 1.84.0 - 2023-10-18
+
+- Fix bot user agent detection (#840)
+
 ## 1.83.3 - 2023-10-17
 
 - fix(surveys): add listener to 0th element (#837)

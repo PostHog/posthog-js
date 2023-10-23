@@ -505,12 +505,17 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 // This is to block various web spiders from executing our JS and
 // sending false capturing data
 export const _isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
-    return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents).some((blockedUA) => {
-        if (ua.includes) {
-            return ua.includes(blockedUA)
+    if (!ua) {
+        return false
+    }
+    const uaLower = ua.toLowerCase()
+    return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents || []).some((blockedUA) => {
+        const blockedUaLower = blockedUA.toLowerCase()
+        if (uaLower.includes) {
+            return uaLower.includes(blockedUaLower)
         } else {
             // IE 11 :/
-            return ua.indexOf(blockedUA) !== -1
+            return uaLower.indexOf(blockedUaLower) !== -1
         }
     })
 }
@@ -952,6 +957,18 @@ export const _info = {
             }
         )
     },
+}
+
+export function isCrossDomainCookie(documentLocation: Location | undefined) {
+    const hostname = documentLocation?.hostname
+
+    if (!_isString(hostname)) {
+        return false
+    }
+    // split and slice isn't a great way to match arbitrary domains,
+    // but it's good enough for ensuring we only match herokuapp.com when it is the TLD
+    // for the hostname
+    return hostname.split('.').slice(-2).join('.') !== 'herokuapp.com'
 }
 
 export { win as window, userAgent, document }
