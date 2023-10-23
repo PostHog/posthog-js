@@ -1,4 +1,4 @@
-import { _isFunction, _isObject, _isUndefined } from '../../utils'
+import { _isFunction, _isNull, _isObject, _isUndefined } from '../../utils'
 
 export function isEvent(candidate: unknown): candidate is Event {
     return !_isUndefined(Event) && isInstanceOf(candidate, Event)
@@ -19,7 +19,7 @@ export function isInstanceOf(candidate: unknown, base: any): boolean {
 export function isPrimitive(
     candidate: unknown
 ): candidate is number | string | boolean | bigint | symbol | null | undefined {
-    return candidate === null || (!_isObject(candidate) && !_isFunction(candidate))
+    return _isNull(candidate) || (!_isObject(candidate) && !_isFunction(candidate))
 }
 
 export function isError(candidate: unknown): candidate is Error {

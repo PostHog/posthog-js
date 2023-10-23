@@ -97,10 +97,10 @@ export function _eachArray<E = any>(
  * @param {Object=} thisArg
  */
 export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
-    if (obj === null || obj === undefined) {
+    if (_isNull(obj) || _isUndefined(obj)) {
         return
     }
-    if (Array.isArray(obj)) {
+    if (_isArray(obj)) {
         return _eachArray(obj, iterator, thisArg)
     }
     for (const key in obj) {
@@ -145,7 +145,7 @@ export const _include = function (
     target: any
 ): boolean | Breaker {
     let found = false
-    if (obj === null) {
+    if (_isNull(obj)) {
         return found
     }
     if (nativeIndexOf && obj.indexOf === nativeIndexOf) {
@@ -198,6 +198,10 @@ export const _isEmptyObject = function (obj: any): obj is Record<string, any> {
 
 export const _isUndefined = function (obj: any): obj is undefined {
     return obj === void 0
+}
+
+export const _isNull = function (obj: any): obj is null {
+    return obj === null
 }
 
 export const _isString = function (obj: any): obj is string {
@@ -545,7 +549,7 @@ export const _getQueryParam = function (url: string, param: string): string {
     const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
     const regex = new RegExp(regexS)
     const results = regex.exec(url)
-    if (results === null || (results && !_isString(results[1]) && (results[1] as any).length)) {
+    if (_isNull(results) || (results && !_isString(results[1]) && (results[1] as any).length)) {
         return ''
     } else {
         let result = results[1]

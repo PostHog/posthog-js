@@ -5,6 +5,7 @@ import {
     _includes,
     _isBoolean,
     _isFunction,
+    _isNull,
     _isUndefined,
     _register_event,
     _safewrap_instance_methods,
@@ -43,10 +44,9 @@ const autocapture = {
     _isAutocaptureEnabled: false as boolean,
 
     _setIsAutocaptureEnabled: function (instance: PostHog): void {
-        const disabled_server_side =
-            this._isDisabledServerSide === null
-                ? !!instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
-                : this._isDisabledServerSide
+        const disabled_server_side = _isNull(this._isDisabledServerSide)
+            ? !!instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+            : this._isDisabledServerSide
         const enabled_client_side = !!instance.config.autocapture
         this._isAutocaptureEnabled = enabled_client_side && !disabled_server_side
     },

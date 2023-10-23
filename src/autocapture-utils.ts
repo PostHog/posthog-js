@@ -4,7 +4,7 @@
  * @returns {string} the element's class
  */
 import { AutocaptureConfig } from 'types'
-import { _each, _includes, _isString, _isUndefined, _trim, logger } from './utils'
+import { _each, _includes, _isNull, _isString, _isUndefined, _trim, logger } from './utils'
 
 export function getClassName(el: Element): string {
     switch (typeof el.className) {
@@ -264,7 +264,7 @@ export function isSensitiveElement(el: Element): boolean {
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureValue(value: string): boolean {
-    if (value === null || _isUndefined(value)) {
+    if (_isNull(value) || _isUndefined(value)) {
         return false
     }
 
