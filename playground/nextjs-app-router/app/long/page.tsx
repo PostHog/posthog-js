@@ -1,14 +1,12 @@
-import Head from 'next/head'
 import Link from 'next/link'
-import React from 'react'
 
-export default function Home() {
+export const metadata = {
+    title: 'PostHog',
+}
+
+export default function Page() {
     return (
         <>
-            <Head>
-                <title>PostHog</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-            </Head>
             <main>
                 <h1>A long page</h1>
                 <div className="buttons">

@@ -1,68 +1,30 @@
-import Head from 'next/head'
-import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
-import React, { useEffect, useState } from 'react'
-import Link from 'next/link'
+import Home from './content'
+import { cookies } from 'next/headers'
+import { PostHog } from 'posthog-node'
+import { PostHogCapture } from './providers'
 
-export default function Home() {
-    const posthog = usePostHog()
-    const result = useFeatureFlagEnabled('test')
+function PostHogClient() {
+    const posthog = new PostHog(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
+        host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://app.posthog.com',
+    })
+    return posthog
+}
 
-    const [time, setTime] = useState('')
+export const metadata = {
+    title: 'PostHog',
+}
 
-    useEffect(() => {
-        const t = setInterval(() => {
-            setTime(new Date().toISOString().split('T')[1].split('.')[0])
-        }, 1000)
-
-        return () => {
-            clearInterval(t)
-        }
-    }, [])
-
+export default async function Page() {
     const randomID = () => Math.round(Math.random() * 10000)
-
+    const posthog = PostHogClient()
+    const cookieName = `ph_${process.env.NEXT_PUBLIC_POSTHOG_KEY || ''}_posthog`
+    const cookieStore = cookies()
+    const cookie = cookieStore.get(cookieName)
+    const distinctId = !cookie || !cookie.value ? randomID() : JSON.parse(cookie.value).distinct_id
+    const flags = await posthog.getAllFlags(distinctId)
     return (
-        <>
-            <Head>
-                <title>PostHog</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-            </Head>
-            <main>
-                <h1>PostHog React</h1>
-
-                <p>The current time is {time}</p>
-
-                <div className="buttons">
-                    <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
-                    <button data-attr="autocapture-button">Autocapture buttons</button>
-                    <a data-attr="autocapture-button" href="#">
-                        <span>Autocapture a &gt; span</span>
-                    </a>
-
-                    <button className="ph-no-capture">Ignore certain elements</button>
-
-                    <button onClick={() => posthog?.identify('user-' + randomID())}>Identify</button>
-
-                    <button
-                        onClick={() =>
-                            posthog?.setPersonProperties({
-                                email: `user-${randomID()}@posthog.com`,
-                            })
-                        }
-                    >
-                        Set user properties
-                    </button>
-                </div>
-
-                <div className="buttons">
-                    <Link href="/animations">Animations</Link>
-                    <Link href="/iframe">Iframe</Link>
-                    <Link href="/media">Media</Link>
-                    <Link href="/long">Long</Link>
-                </div>
-
-                <p>Feature flag response: {JSON.stringify(result)}</p>
-            </main>
-        </>
+        <PostHogCapture distinctId={distinctId}>
+            <Home flags={flags} />
+        </PostHogCapture>
     )
 }

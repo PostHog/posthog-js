@@ -1,22 +1,12 @@
-import Head from 'next/head'
-import { usePostHog } from 'posthog-js/react'
-import { useEffect, useState } from 'react'
+import Content from './content'
 
-export default function Home() {
-    const posthog = usePostHog()
+export const metadata = {
+    title: 'PostHog',
+}
 
-    const [otherHost, setOtherHost] = useState('')
-
-    useEffect(() => {
-        setOtherHost(window.location.origin.includes('other-localhost') ? 'localhost' : 'other-localhost')
-    })
-
+export default function Page() {
     return (
         <>
-            <Head>
-                <title>PostHog</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-            </Head>
             <main>
                 <h1>Iframes</h1>
 
@@ -25,15 +15,7 @@ export default function Home() {
                     This loads the same page but from <b>other-localhost</b> which you need to add to your hosts file.
                 </p>
 
-                {otherHost && (
-                    <iframe
-                        src={`http://${otherHost}:3000/`}
-                        style={{ width: '100%', height: '500px' }}
-                        onLoad={() => {
-                            posthog.capture('iframe loaded')
-                        }}
-                    />
-                )}
+                <Content />
             </main>
         </>
     )
