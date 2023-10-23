@@ -216,7 +216,7 @@ describe('capture()', () => {
         )
     })
 
-    it('sends payloads to given endpoint if given', () => {
+    it('sends payloads to overriden endpoint if given', () => {
         given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
         expect(given.lib._send_request).toHaveBeenCalledWith(
             'https://app.posthog.com/s/',
@@ -226,7 +226,7 @@ describe('capture()', () => {
         )
     })
 
-    it('sends payloads to given endpoint, even if alternative endpoint is set', () => {
+    it('sends payloads to overriden endpoint, even if alternative endpoint is set', () => {
         given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
         given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
         expect(given.lib._send_request).toHaveBeenCalledWith(
