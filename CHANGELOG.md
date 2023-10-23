@@ -1,3 +1,8 @@
+## 1.84.3 - 2023-10-23
+
+- fix: full snapshot every 10 minutes (#847)
+- fix: really fix subdomain check to satisfy codeql (#845)
+
 ## 1.84.2 - 2023-10-23
 
 - fix: heroku subdomain check (#842)
