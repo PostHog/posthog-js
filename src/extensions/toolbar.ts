@@ -5,9 +5,7 @@ import { POSTHOG_MANAGED_HOSTS } from './cloud'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
-const STATE_FROM_WINDOW = window.location
-    ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
-    : null
+const STATE_FROM_WINDOW = window.location ? _getHashParam(window.location.hash, '__posthog') : null
 
 export class Toolbar {
     instance: PostHog
@@ -63,8 +61,7 @@ export class Toolbar {
              * 3. Base64 encoding is preferred and will gradually be rolled out everywhere
              */
 
-            const stateHash =
-                STATE_FROM_WINDOW || _getHashParam(location.hash, '__posthog') || _getHashParam(location.hash, 'state')
+            const stateHash = STATE_FROM_WINDOW || _getHashParam(location.hash, '__posthog')
 
             let toolbarParams: ToolbarParams
             const state = stateHash
