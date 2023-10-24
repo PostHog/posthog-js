@@ -19,6 +19,7 @@ const extend = [
     'plugin:react-hooks/recommended',
     'prettier',
     'plugin:compat/recommended',
+    'plugin:posthog-js/all',
 ]
 
 module.exports = {
@@ -44,6 +45,12 @@ module.exports = {
         react: {
             version: '17.0',
         },
+        'import/resolver': {
+            node: {
+                paths: ['eslint-rules'], // Add the directory containing your custom rules
+                extensions: ['.js', '.jsx', '.ts', '.tsx'], // Ensure ESLint resolves both JS and TS files
+            },
+        },
     },
     overrides: [
         {
@@ -55,6 +62,18 @@ module.exports = {
             rules: {
                 ...rules,
                 'no-console': 'off',
+            },
+        },
+        {
+            files: 'eslint-rules/**/*',
+            extends: ['eslint:recommended', 'prettier'],
+            rules: {
+                'prettier/prettier': 'error',
+                '@typescript-eslint/no-var-requires': 'off',
+                'posthog-js/no-direct-null-check': 'off',
+            },
+            env: {
+                node: true,
             },
         },
     ],

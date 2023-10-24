@@ -88,7 +88,7 @@ export class PostHogPersistence {
         const p: Properties = {}
         // Filter out reserved properties
         _each(this.props, function (v, k) {
-            if (k === ENABLED_FEATURE_FLAGS && typeof v === 'object') {
+            if (k === ENABLED_FEATURE_FLAGS && _isObject(v)) {
                 const keys = Object.keys(v)
                 for (let i = 0; i < keys.length; i++) {
                     p[`$feature/${keys[i]}`] = v[keys[i]]
@@ -146,10 +146,10 @@ export class PostHogPersistence {
 
     register_once(props: Properties, default_value: any, days?: number): boolean {
         if (_isObject(props)) {
-            if (typeof default_value === 'undefined') {
+            if (_isUndefined(default_value)) {
                 default_value = 'None'
             }
-            this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
+            this.expire_days = _isUndefined(days) ? this.default_expiry : days
 
             let hasChanges = false
 
@@ -175,7 +175,7 @@ export class PostHogPersistence {
 
     register(props: Properties, days?: number): boolean {
         if (_isObject(props)) {
-            this.expire_days = typeof days === 'undefined' ? this.default_expiry : days
+            this.expire_days = _isUndefined(days) ? this.default_expiry : days
 
             let hasChanges = false
 

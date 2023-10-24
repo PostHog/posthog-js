@@ -67,7 +67,7 @@ export const _trim = function (str: string): string {
 
 export const _bind_instance_methods = function (obj: Record<string, any>): void {
     for (const func in obj) {
-        if (typeof obj[func] === 'function') {
+        if (_isFunction(obj[func])) {
             obj[func] = obj[func].bind(obj)
         }
     }
@@ -97,10 +97,10 @@ export function _eachArray<E = any>(
  * @param {Object=} thisArg
  */
 export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
-    if (obj === null || obj === undefined) {
+    if (_isNull(obj) || _isUndefined(obj)) {
         return
     }
-    if (Array.isArray(obj)) {
+    if (_isArray(obj)) {
         return _eachArray(obj, iterator, thisArg)
     }
     for (const key in obj) {
@@ -145,7 +145,7 @@ export const _include = function (
     target: any
 ): boolean | Breaker {
     let found = false
-    if (obj === null) {
+    if (_isNull(obj)) {
         return found
     }
     if (nativeIndexOf && obj.indexOf === nativeIndexOf) {
@@ -200,6 +200,10 @@ export const _isUndefined = function (obj: any): obj is undefined {
     return obj === void 0
 }
 
+export const _isNull = function (obj: any): obj is null {
+    return obj === null
+}
+
 export const _isString = function (obj: any): obj is string {
     return toString.call(obj) == '[object String]'
 }
@@ -210,6 +214,10 @@ export const _isDate = function (obj: any): obj is Date {
 
 export const _isNumber = function (obj: any): obj is number {
     return toString.call(obj) == '[object Number]'
+}
+
+export const _isBoolean = function (obj: any): obj is boolean {
+    return toString.call(obj) == '[object Boolean]'
 }
 
 export const _isValidRegex = function (str: string): boolean {
@@ -288,7 +296,7 @@ export const _safewrap_class = function (klass: Function, functions: string[]): 
 
 export const _safewrap_instance_methods = function (obj: Record<string, any>): void {
     for (const func in obj) {
-        if (typeof obj[func] === 'function') {
+        if (_isFunction(obj[func])) {
             obj[func] = _safewrap(obj[func])
         }
     }
@@ -354,7 +362,7 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
         if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key as string) > -1) {
             return value
         }
-        if (typeof value === 'string' && maxStringLength !== null) {
+        if (_isString(value) && maxStringLength !== null) {
             return (value as string).slice(0, maxStringLength)
         }
         return value
@@ -541,7 +549,7 @@ export const _getQueryParam = function (url: string, param: string): string {
     const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
     const regex = new RegExp(regexS)
     const results = regex.exec(url)
-    if (results === null || (results && typeof results[1] !== 'string' && (results[1] as any).length)) {
+    if (_isNull(results) || (results && !_isString(results[1]) && (results[1] as any).length)) {
         return ''
     } else {
         let result = results[1]
@@ -808,7 +816,7 @@ export const _info = {
             Mozilla: /rv:(\d+(\.\d+)?)/,
         }
         const regex: RegExp | undefined = versionRegexs[browser as keyof typeof versionRegexs]
-        if (regex === undefined) {
+        if (_isUndefined(regex)) {
             return null
         }
         const matches = userAgent.match(regex)

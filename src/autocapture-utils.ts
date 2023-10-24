@@ -4,7 +4,7 @@
  * @returns {string} the element's class
  */
 import { AutocaptureConfig } from 'types'
-import { _each, _includes, _isUndefined, _trim, logger } from './utils'
+import { _each, _includes, _isNull, _isString, _isUndefined, _trim, logger } from './utils'
 
 export function getClassName(el: Element): string {
     switch (typeof el.className) {
@@ -210,7 +210,7 @@ export function shouldCaptureElement(el: Element): boolean {
 
     // don't include hidden or password fields
     const type = (el as HTMLInputElement).type || ''
-    if (typeof type === 'string') {
+    if (_isString(type)) {
         // it's possible for el.type to be a DOM element if el is a form with a child input[name="type"]
         switch (type.toLowerCase()) {
             case 'hidden':
@@ -225,7 +225,7 @@ export function shouldCaptureElement(el: Element): boolean {
     // See https://github.com/posthog/posthog-js/issues/165
     // Under specific circumstances a bug caused .replace to be called on a DOM element
     // instead of a string, removing the element from the page. Ensure this issue is mitigated.
-    if (typeof name === 'string') {
+    if (_isString(name)) {
         // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
         const sensitiveNameRegex =
             /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
@@ -264,11 +264,11 @@ export function isSensitiveElement(el: Element): boolean {
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureValue(value: string): boolean {
-    if (value === null || _isUndefined(value)) {
+    if (_isNull(value) || _isUndefined(value)) {
         return false
     }
 
-    if (typeof value === 'string') {
+    if (_isString(value)) {
         value = _trim(value)
 
         // check to see if input value looks like a credit card number
@@ -297,7 +297,7 @@ export function shouldCaptureValue(value: string): boolean {
  * @returns {boolean} whether the element is an angular tag
  */
 export function isAngularStyleAttr(attributeName: string): boolean {
-    if (typeof attributeName === 'string') {
+    if (_isString(attributeName)) {
         return attributeName.substring(0, 10) === '_ngcontent' || attributeName.substring(0, 7) === '_nghost'
     }
     return false

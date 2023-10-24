@@ -1,5 +1,7 @@
+import { _isFunction, _isNull, _isObject, _isUndefined } from '../../utils'
+
 export function isEvent(candidate: unknown): candidate is Event {
-    return typeof Event !== 'undefined' && isInstanceOf(candidate, Event)
+    return !_isUndefined(Event) && isInstanceOf(candidate, Event)
 }
 
 export function isPlainObject(candidate: unknown): candidate is Record<string, unknown> {
@@ -17,7 +19,7 @@ export function isInstanceOf(candidate: unknown, base: any): boolean {
 export function isPrimitive(
     candidate: unknown
 ): candidate is number | string | boolean | bigint | symbol | null | undefined {
-    return candidate === null || (typeof candidate !== 'object' && typeof candidate !== 'function')
+    return _isNull(candidate) || (!_isObject(candidate) && !_isFunction(candidate))
 }
 
 export function isError(candidate: unknown): candidate is Error {
