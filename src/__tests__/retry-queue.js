@@ -3,7 +3,7 @@
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
 import * as SendRequest from '../send-request'
 import { RateLimiter } from '../rate-limiter'
-import { SESSION_RECORDING_BATCH_KEY } from '../extensions/sessionrecording'
+import { SESSION_RECORDING_BATCH_KEY } from '../extensions/replay/sessionrecording'
 
 const EPOCH = 1_600_000_000
 const defaultRequestOptions = {
