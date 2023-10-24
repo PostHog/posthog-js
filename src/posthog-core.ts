@@ -58,7 +58,6 @@ import {
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
-import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
@@ -224,7 +223,7 @@ const create_phlib = function (
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
-    instance.exceptionAutocapture = new ExceptionObserver(instance)
+    // instance.exceptionAutocapture = new ExceptionObserver(instance)
 
     instance.__autocapture = instance.config.autocapture
     autocapture._setIsAutocaptureEnabled(instance)
@@ -284,7 +283,7 @@ export class PostHog {
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
     webPerformance?: WebPerformanceObserver
-    exceptionAutocapture?: ExceptionObserver
+    // exceptionAutocapture?: ExceptionObserver
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
@@ -793,23 +792,6 @@ export class PostHog {
      */
     push(item: SnippetArrayItem): void {
         this._execute_array([item])
-    }
-
-    /*
-     * PostHog supports exception autocapture, however, this function
-     * is used to manually capture an exception
-     * and can be used to add more context to that exception
-     *
-     * Properties passed as the second option will be merged with the properties
-     * of the exception event.
-     * Where there is a key in both generated exception and passed properties,
-     * the generated exception property takes precedence.
-     */
-    captureException(exception: Error, properties?: Properties): void {
-        this.exceptionAutocapture?.captureException(
-            [exception.name, undefined, undefined, undefined, exception],
-            properties
-        )
     }
 
     /**

@@ -17,7 +17,6 @@
  */
 
 import { PostHog } from '../posthog-core'
-import { ErrorProperties } from './exceptions/error-conversion'
 
 // NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
 // We only use a small subset of the types, so we can just define the integration overall and use any for the rest
@@ -73,7 +72,13 @@ export class SentryIntegration implements _SentryIntegration {
 
                 const exceptions = event.exception?.values || []
 
-                const data: SentryExceptionProperties & ErrorProperties = {
+                const data: SentryExceptionProperties & {
+                    // two properties added to match any exception auto-capture
+                    // added manually to avoid any dependency on the lazily loaded content
+                    $exception_message: any
+                    $exception_type: any
+                    $exception_personURL: string
+                } = {
                     // PostHog Exception Properties,
                     $exception_message: exceptions[0]?.value,
                     $exception_type: exceptions[0]?.type,
