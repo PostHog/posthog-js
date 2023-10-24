@@ -248,11 +248,17 @@ export class SessionRecording {
 
         const storedIsSampled = this.isSampled
 
+        /**
+         * if we get this far then we should make a sampling decision.
+         * When the session id changes or there is no stored sampling decision for this session id
+         * then we should make a new decision.
+         *
+         * Otherwise, we should use the stored decision.
+         */
         let shouldSample: boolean
         if (sessionIdChanged || !_isBoolean(storedIsSampled)) {
             const randomNumber = Math.random()
             shouldSample = randomNumber < this.sampleRate
-
         } else {
             shouldSample = storedIsSampled
         }
