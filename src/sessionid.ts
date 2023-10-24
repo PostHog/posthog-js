@@ -3,25 +3,25 @@ import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuidv7 } from './uuidv7'
-import { logger, window } from './utils'
+import { _isArray, _isNumber, _isUndefined, logger, window } from './utils'
 
-const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 mins
-const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 mins
+const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 minutes
+const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 minute
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
-    private _sessionIdGenerator: () => string
-    private _windowIdGenerator: () => string
+    private readonly _sessionIdGenerator: () => string
+    private readonly _windowIdGenerator: () => string
     private config: Partial<PostHogConfig>
     private persistence: PostHogPersistence
     private _windowId: string | null | undefined
     private _sessionId: string | null | undefined
-    private _window_id_storage_key: string
-    private _primary_window_exists_storage_key: string
+    private readonly _window_id_storage_key: string
+    private readonly _primary_window_exists_storage_key: string
     private _sessionStartTimestamp: number | null
 
     private _sessionActivityTimestamp: number | null
-    private _sessionTimeoutMs: number
+    private readonly _sessionTimeoutMs: number
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
 
     constructor(
@@ -42,7 +42,7 @@ export class SessionIdManager {
         const persistenceName = config['persistence_name'] || config['token']
         let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
 
-        if (typeof desiredTimeout !== 'number') {
+        if (!_isNumber(desiredTimeout)) {
             logger.warn('session_idle_timeout_seconds must be a number. Defaulting to 30 minutes.')
             desiredTimeout = MAX_SESSION_IDLE_TIMEOUT
         } else if (desiredTimeout > MAX_SESSION_IDLE_TIMEOUT) {
@@ -79,7 +79,7 @@ export class SessionIdManager {
     onSessionId(callback: SessionIdChangedCallback): () => void {
         // KLUDGE: when running in tests the handlers array was always undefined
         // it's yucky but safe to set it here so that it's always definitely available
-        if (this._sessionIdChangedHandlers === undefined) {
+        if (_isUndefined(this._sessionIdChangedHandlers)) {
             this._sessionIdChangedHandlers = []
         }
 
@@ -149,7 +149,7 @@ export class SessionIdManager {
         }
         const sessionId = this.persistence.props[SESSION_ID]
 
-        if (Array.isArray(sessionId) && sessionId.length === 2) {
+        if (_isArray(sessionId) && sessionId.length === 2) {
             // Storage does not yet have a session start time. Add the last activity timestamp as the start time
             sessionId.push(sessionId[0])
         }
@@ -179,8 +179,8 @@ export class SessionIdManager {
 
     /*
      * This function returns the current sessionId and windowId. It should be used to
-     * access these values over directly calling `._sessionId` or `._windowId`. In addition
-     * to returning the sessionId and windowId, this function also manages cycling the
+     * access these values over directly calling `._sessionId` or `._windowId`.
+     * In addition to returning the sessionId and windowId, this function also manages cycling the
      * sessionId and windowId when appropriate by doing the following:
      *
      * 1. If the sessionId or windowId is not set, it will generate a new one and store it.

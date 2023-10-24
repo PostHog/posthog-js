@@ -1,4 +1,4 @@
-import { isLocalhost, logger } from '../../utils'
+import { _isUndefined, isLocalhost, logger } from '../../utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, NetworkRequest } from '../../types'
 
@@ -101,7 +101,7 @@ export class WebPerformanceObserver {
             return
         }
 
-        if (window?.PerformanceObserver?.supportedEntryTypes === undefined) {
+        if (_isUndefined(window?.PerformanceObserver?.supportedEntryTypes)) {
             logger.info(
                 '[PerformanceObserver] not started because PerformanceObserver is not supported by this browser.'
             )
@@ -197,7 +197,7 @@ export class WebPerformanceObserver {
         // (in this case representing fractions of a millisecond we don't care about anyway)
         properties[PERFORMANCE_EVENTS_MAPPING['timestamp']] = Math.floor(timeOrigin + event.startTime)
         for (const key in PERFORMANCE_EVENTS_MAPPING) {
-            if (eventJson[key] !== undefined) {
+            if (!_isUndefined(eventJson[key])) {
                 properties[PERFORMANCE_EVENTS_MAPPING[key]] = eventJson[key]
             }
         }

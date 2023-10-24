@@ -1,4 +1,4 @@
-import { _extend, logger } from './utils'
+import { _extend, _isNull, _isUndefined, logger } from './utils'
 import { PersistentStore, Properties } from './types'
 import { DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constants'
 
@@ -91,12 +91,12 @@ let _localStorage_supported: boolean | null = null
 
 export const localStore: PersistentStore = {
     is_supported: function () {
-        if (_localStorage_supported !== null) {
+        if (!_isNull(_localStorage_supported)) {
             return _localStorage_supported
         }
 
         let supported = true
-        if (typeof window !== 'undefined') {
+        if (!_isUndefined(window)) {
             try {
                 const key = '__mplssupport__',
                     val = 'xyz'
@@ -245,11 +245,11 @@ export const resetSessionStorageSupported = () => {
 // Storage that only lasts the length of a tab/window. Survives page refreshes
 export const sessionStore: PersistentStore = {
     is_supported: function () {
-        if (sessionStorageSupported !== null) {
+        if (!_isNull(sessionStorageSupported)) {
             return sessionStorageSupported
         }
         sessionStorageSupported = true
-        if (typeof window !== 'undefined') {
+        if (!_isUndefined(window)) {
             try {
                 const key = '__support__',
                     val = 'xyz'

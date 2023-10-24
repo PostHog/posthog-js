@@ -17,6 +17,8 @@ import {
     window,
     logger,
     isCrossDomainCookie,
+    _isString,
+    _isFunction,
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -247,7 +249,7 @@ const create_phlib = function (
 
     // if target is not defined, we called init after the lib already
     // loaded, so there won't be an array of things to execute
-    if (typeof target !== 'undefined' && _isArray(target)) {
+    if (!_isUndefined(target) && _isArray(target)) {
         // Crunch through the people queue first - we queue this data up &
         // flush on identify, so it's better to do all these operations first
         instance._execute_array.call(instance.people, (target as any).people)
@@ -323,12 +325,12 @@ export class PostHog {
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = typeof prop === 'string' ? { [prop]: to } : prop
+                const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(setProps)
                 callback?.({})
             },
             set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = typeof prop === 'string' ? { [prop]: to } : prop
+                const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(undefined, setProps)
                 callback?.({})
             },
@@ -466,6 +468,8 @@ export class PostHog {
             updateInitComplete('segmentRegister')()
         }
 
+        // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
+        // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.config.get_device_id(uuidv7())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
@@ -731,15 +735,11 @@ export class PostHog {
                 fn_name = item[0]
                 if (_isArray(fn_name)) {
                     capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
-                } else if (typeof item === 'function') {
+                } else if (_isFunction(item)) {
                     ;(item as any).call(this)
                 } else if (_isArray(item) && fn_name === 'alias') {
                     alias_calls.push(item)
-                } else if (
-                    _isArray(item) &&
-                    fn_name.indexOf('capture') !== -1 &&
-                    typeof (this as any)[fn_name] === 'function'
-                ) {
+                } else if (_isArray(item) && fn_name.indexOf('capture') !== -1 && _isFunction((this as any)[fn_name])) {
                     capturing_calls.push(item)
                 } else {
                     other_calls.push(item)
@@ -852,7 +852,7 @@ export class PostHog {
         }
 
         // typing doesn't prevent interesting data
-        if (_isUndefined(event_name) || typeof event_name !== 'string') {
+        if (_isUndefined(event_name) || !_isString(event_name)) {
             logger.error('No event name provided to posthog.capture')
             return
         }
@@ -966,7 +966,7 @@ export class PostHog {
         }
 
         // set $duration if time_event was previously called for this event
-        if (typeof start_timestamp !== 'undefined') {
+        if (!_isUndefined(start_timestamp)) {
             const duration_in_ms = new Date().getTime() - start_timestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
@@ -1705,7 +1705,7 @@ export class PostHog {
                 Config.DEBUG = true
             }
 
-            if (this.sessionRecording && typeof config.disable_session_recording !== 'undefined') {
+            if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
                 if (oldConfig.disable_session_recording !== config.disable_session_recording) {
                     if (config.disable_session_recording) {
                         this.sessionRecording.stopRecording()

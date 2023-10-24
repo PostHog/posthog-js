@@ -1,4 +1,4 @@
-import { _each, _HTTPBuildQuery, logger } from './utils'
+import { _each, _HTTPBuildQuery, _isArray, _isFunction, logger } from './utils'
 import Config from './config'
 import { PostData, XHROptions, XHRParams } from './types'
 
@@ -43,7 +43,7 @@ export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHR
 
     let body_data
     const isUint8Array = (d: unknown): d is Uint8Array => Object.prototype.toString.call(d) === '[object Uint8Array]'
-    if (Array.isArray(data) || isUint8Array(data)) {
+    if (_isArray(data) || isUint8Array(data)) {
         // TODO: eh? passing an Array here?
         body_data = 'data=' + encodeURIComponent(data as any)
     } else {
@@ -102,7 +102,7 @@ export const xhr = ({
                     callback(response)
                 }
             } else {
-                if (typeof onXHRError === 'function') {
+                if (_isFunction(onXHRError)) {
                     onXHRError(req)
                 }
 
