@@ -249,11 +249,12 @@ export class SessionRecording {
         const storedIsSampled = this.isSampled
 
         let shouldSample: boolean
-        if (!sessionIdChanged && _isBoolean(storedIsSampled)) {
-            shouldSample = storedIsSampled
-        } else {
+        if (sessionIdChanged || !_isBoolean(storedIsSampled)) {
             const randomNumber = Math.random()
             shouldSample = randomNumber < this.sampleRate
+
+        } else {
+            shouldSample = storedIsSampled
         }
 
         if (!shouldSample) {
