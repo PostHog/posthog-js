@@ -62,7 +62,7 @@ describe('Toolbar', () => {
         }))
         given('hashParams', () => ({
             access_token: given.accessToken,
-            state: encodeURIComponent(JSON.stringify(given.hashState)),
+            __posthog: encodeURIComponent(JSON.stringify(given.hashState)),
             expires_in: 3600,
         }))
 
@@ -115,7 +115,7 @@ describe('Toolbar', () => {
         it('should return false when parsing invalid JSON from fragment state', () => {
             given('hashParams', () => ({
                 access_token: 'test_access_token',
-                state: 'literally',
+                __posthog: 'literally',
                 expires_in: 3600,
             }))
 

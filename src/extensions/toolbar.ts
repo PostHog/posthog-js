@@ -55,10 +55,9 @@ export class Toolbar {
 
             /**
              * Info about the state
-             * The state is a json object
-             * 1. (Legacy) The state can be `state={}` as a urlencoded object of info. In this case
-             * 2. The state should now be found in `__posthog={}` and can be base64 encoded or urlencoded.
-             * 3. Base64 encoding is preferred and will gradually be rolled out everywhere
+             *
+             * 1. The state is a json object found in `#__posthog={}` and can be a base64 or url encoded object.
+             * 2. Base64 encoding is preferred and will gradually be rolled out everywhere
              */
 
             const stateHash = STATE_FROM_WINDOW || _getHashParam(location.hash, '__posthog')
