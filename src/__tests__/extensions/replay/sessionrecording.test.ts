@@ -7,7 +7,6 @@ import {
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
-    SESSION_RECORDING_SAMPLE_RATE,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/sessionrecording-utils'
@@ -99,7 +98,6 @@ describe('SessionRecording', () => {
             [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
             [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2',
             [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false,
-            [SESSION_RECORDING_SAMPLE_RATE]: undefined,
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
 
@@ -250,7 +248,7 @@ describe('SessionRecording', () => {
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(false)
         })
 
-        it('stores sample rate in persistence', () => {
+        it('stores sample rate', () => {
             posthog.persistence?.register({ SESSION_RECORDING_SAMPLE_RATE: undefined })
 
             sessionRecording.afterDecideResponse(
@@ -259,8 +257,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe('0.70')
-            expect(sessionRecording['sampleRate']).toBe(0.7)
+            expect(sessionRecording['_sampleRate']).toBe(0.7)
         })
 
         it('starts session recording, saves setting and endpoint when enabled', () => {
@@ -616,13 +613,13 @@ describe('SessionRecording', () => {
 
             sessionRecording.startRecordingIfEnabled()
 
-            expect(sessionRecording.started).toEqual(true)
+            expect(sessionRecording['_captureStarted']).toEqual(true)
             expect(sessionRecording['stopRrweb']).not.toEqual(undefined)
 
             sessionRecording.stopRecording()
 
             expect(sessionRecording['stopRrweb']).toEqual(undefined)
-            expect(sessionRecording.started).toEqual(false)
+            expect(sessionRecording['_captureStarted']).toEqual(false)
         })
 
         it('session recording can be turned on after being turned off', () => {
@@ -630,13 +627,13 @@ describe('SessionRecording', () => {
 
             sessionRecording.startRecordingIfEnabled()
 
-            expect(sessionRecording.started).toEqual(true)
+            expect(sessionRecording['_captureStarted']).toEqual(true)
             expect(sessionRecording['stopRrweb']).not.toEqual(undefined)
 
             sessionRecording.stopRecording()
 
             expect(sessionRecording['stopRrweb']).toEqual(undefined)
-            expect(sessionRecording.started).toEqual(false)
+            expect(sessionRecording['_captureStarted']).toEqual(false)
         })
 
         describe('console logs', () => {
@@ -987,14 +984,14 @@ describe('SessionRecording', () => {
 
     describe('linked flags', () => {
         it('stores the linked flag on decide response', () => {
-            expect(sessionRecording['linkedFlag']).toEqual(undefined)
+            expect(sessionRecording['_linkedFlag']).toEqual(null)
             expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
 
             sessionRecording.afterDecideResponse(
                 makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
             )
 
-            expect(sessionRecording['linkedFlag']).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlag']).toEqual('the-flag-key')
             expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
             expect(sessionRecording['status']).toEqual('buffering')
 
@@ -1042,7 +1039,7 @@ describe('SessionRecording', () => {
 
         it('starts with an undefined minimum duration', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording['minimumDuration']).toBe(undefined)
+            expect(sessionRecording['_minimumDuration']).toBe(null)
         })
 
         it('can set minimum duration from decide response', () => {
@@ -1051,7 +1048,7 @@ describe('SessionRecording', () => {
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
-            expect(sessionRecording['minimumDuration']).toBe(1500)
+            expect(sessionRecording['_minimumDuration']).toBe(1500)
         })
 
         it('does not flush if below the minimum duration', () => {
@@ -1065,7 +1062,7 @@ describe('SessionRecording', () => {
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording['sessionDuration']).toBe(100)
-            expect(sessionRecording['minimumDuration']).toBe(1500)
+            expect(sessionRecording['_minimumDuration']).toBe(1500)
 
             expect(sessionRecording['buffer']?.data.length).toBe(1)
             // call the private method to avoid waiting for the timer
@@ -1085,7 +1082,7 @@ describe('SessionRecording', () => {
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording['sessionDuration']).toBe(100)
-            expect(sessionRecording['minimumDuration']).toBe(1500)
+            expect(sessionRecording['_minimumDuration']).toBe(1500)
 
             expect(sessionRecording['buffer']?.data.length).toBe(1)
             // call the private method to avoid waiting for the timer

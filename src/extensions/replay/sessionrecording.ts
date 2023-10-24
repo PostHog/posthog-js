@@ -2,10 +2,7 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
-    SESSION_RECORDING_LINKED_FLAG,
-    SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
-    SESSION_RECORDING_SAMPLE_RATE,
 } from '../../constants'
 import {
     ensureMaxMessageSize,
@@ -21,7 +18,17 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../../config'
-import { _isBoolean, _isNumber, _isObject, _isString, _isUndefined, _timestamp, loadScript, logger } from '../../utils'
+import {
+    _isBoolean,
+    _isNull,
+    _isNumber,
+    _isObject,
+    _isString,
+    _isUndefined,
+    _timestamp,
+    loadScript,
+    logger,
+} from '../../utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -95,8 +102,10 @@ export class SessionRecording {
     private stopRrweb: listenerHandler | undefined
     private receivedDecide: boolean
     private rrwebRecord: rrwebRecord | undefined
-    private recorderVersion?: string
     private isIdle = false
+    private _linkedFlag: string | null = null
+    private _sampleRate: number | null = null
+    private _minimumDuration: number | null = null
 
     private get sessionManager() {
         if (!this.instance.sessionManager) {
@@ -107,17 +116,8 @@ export class SessionRecording {
         return this.instance.sessionManager
     }
 
-    get started(): boolean {
-        return this._captureStarted
-    }
-
-    private get sampleRate(): number | null {
-        const storedValue = this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
-        return storedValue == undefined ? null : parseFloat(storedValue)
-    }
-
     private get isSampled(): boolean | null {
-        if (_isNumber(this.sampleRate)) {
+        if (_isNumber(this._sampleRate)) {
             return this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
         } else {
             return null
@@ -128,14 +128,6 @@ export class SessionRecording {
         const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
         const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
-    }
-
-    private get minimumDuration(): number | undefined {
-        return this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
-    }
-
-    private get linkedFlag(): string | undefined {
-        return this.instance.get_property(SESSION_RECORDING_LINKED_FLAG)
     }
 
     private get isRecordingEnabled() {
@@ -169,7 +161,7 @@ export class SessionRecording {
             return 'disabled'
         }
 
-        if (_isString(this.linkedFlag) && !this._linkedFlagSeen) {
+        if (_isString(this._linkedFlag) && !this._linkedFlagSeen) {
             return 'buffering'
         }
 
@@ -223,7 +215,7 @@ export class SessionRecording {
     private makeSamplingDecision(sessionId: string): void {
         const sessionIdChanged = this.sessionId !== sessionId
 
-        if (!_isNumber(this.sampleRate)) {
+        if (!_isNumber(this._sampleRate)) {
             this.instance.persistence?.register({
                 [SESSION_RECORDING_IS_SAMPLED]: null,
             })
@@ -242,14 +234,14 @@ export class SessionRecording {
         let shouldSample: boolean
         if (sessionIdChanged || !_isBoolean(storedIsSampled)) {
             const randomNumber = Math.random()
-            shouldSample = randomNumber < this.sampleRate
+            shouldSample = randomNumber < this._sampleRate
         } else {
             shouldSample = storedIsSampled
         }
 
         if (!shouldSample) {
             logger.warn(
-                `[SessionSampling] Sample rate (${this.sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                `[SessionSampling] Sample rate (${this._sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
             )
         }
 
@@ -264,35 +256,36 @@ export class SessionRecording {
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
-                [SESSION_RECORDING_SAMPLE_RATE]: response.sessionRecording?.sampleRate,
-                [SESSION_RECORDING_MINIMUM_DURATION]: response.sessionRecording?.minimumDurationMilliseconds,
-                [SESSION_RECORDING_LINKED_FLAG]: response.sessionRecording?.linkedFlag,
             })
         }
+
+        const receivedSampleRate = response.sessionRecording?.sampleRate
+        this._sampleRate =
+            _isUndefined(receivedSampleRate) || _isNull(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+
+        const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
+        this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
+
+        this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
         if (response.sessionRecording?.endpoint) {
             this._endpoint = response.sessionRecording?.endpoint
         }
 
-        if (response.sessionRecording?.recorderVersion) {
-            this.recorderVersion = response.sessionRecording.recorderVersion
-        }
-
-        this.receivedDecide = true
-
-        if (_isNumber(this.sampleRate)) {
+        if (_isNumber(this._sampleRate)) {
             this.sessionManager.onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
         }
 
-        if (_isString(this.linkedFlag)) {
-            const linkedFlag = this.linkedFlag
+        if (_isString(this._linkedFlag)) {
+            const linkedFlag = this._linkedFlag
             this.instance.onFeatureFlags((flags) => {
                 this._linkedFlagSeen = flags.includes(linkedFlag)
             })
         }
 
+        this.receivedDecide = true
         this.startRecordingIfEnabled()
     }
 
@@ -594,7 +587,7 @@ export class SessionRecording {
             this.flushBufferTimer = undefined
         }
 
-        const minimumDuration = this.minimumDuration
+        const minimumDuration = this._minimumDuration
         const sessionDuration = this.sessionDuration
         const isBelowMinimumDuration =
             _isNumber(minimumDuration) && _isNumber(sessionDuration) && sessionDuration < minimumDuration
