@@ -68,7 +68,8 @@ export class Toolbar {
 
             let toolbarParams: ToolbarParams
             const state = stateHash
-                ? _try(() => JSON.parse(atob(stateHash))) || _try(() => JSON.parse(decodeURIComponent(stateHash)))
+                ? _try(() => JSON.parse(atob(decodeURIComponent(stateHash)))) ||
+                  _try(() => JSON.parse(decodeURIComponent(stateHash)))
                 : null
 
             const parseFromUrl = state && state['action'] === 'ph_authorize'
