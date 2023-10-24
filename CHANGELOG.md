@@ -4,7 +4,7 @@
 
 ## 1.85.0 - 2023-10-24
 
-
+- feat: allow sampling based on decide response (#839)
 
 ## 1.84.4 - 2023-10-24
 
