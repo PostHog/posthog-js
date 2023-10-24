@@ -1,3 +1,9 @@
+## 1.85.2 - 2023-10-24
+
+- fix(surveys): cancel listener should be on all questions (#854)
+- Fix changelog.md (#853)
+- fix: eslint does not fail build (#852)
+
 ## 1.85.1 - 2023-10-24
 
 - fix: Disable the string reduction code until we can battle test it more. (#851)
