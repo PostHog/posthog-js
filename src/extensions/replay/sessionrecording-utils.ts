@@ -75,6 +75,7 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
     // Note: with compression, this limit may be able to be increased
     // but we're assuming most of the size is from a data uri which
     // is unlikely to be compressed further
+
     if (stringifiedData.length > MAX_MESSAGE_SIZE) {
         // Regex that matches the pattern for a dataURI with the shape 'data:{mime type};{encoding},{data}'. It:
         // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
