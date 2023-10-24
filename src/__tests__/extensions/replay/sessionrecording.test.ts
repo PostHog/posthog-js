@@ -613,13 +613,13 @@ describe('SessionRecording', () => {
 
             sessionRecording.startRecordingIfEnabled()
 
-            expect(sessionRecording['_captureStarted']).toEqual(true)
+            expect(sessionRecording.started).toEqual(true)
             expect(sessionRecording['stopRrweb']).not.toEqual(undefined)
 
             sessionRecording.stopRecording()
 
             expect(sessionRecording['stopRrweb']).toEqual(undefined)
-            expect(sessionRecording['_captureStarted']).toEqual(false)
+            expect(sessionRecording.started).toEqual(false)
         })
 
         it('session recording can be turned on after being turned off', () => {
@@ -627,13 +627,13 @@ describe('SessionRecording', () => {
 
             sessionRecording.startRecordingIfEnabled()
 
-            expect(sessionRecording['_captureStarted']).toEqual(true)
+            expect(sessionRecording.started).toEqual(true)
             expect(sessionRecording['stopRrweb']).not.toEqual(undefined)
 
             sessionRecording.stopRecording()
 
             expect(sessionRecording['stopRrweb']).toEqual(undefined)
-            expect(sessionRecording['_captureStarted']).toEqual(false)
+            expect(sessionRecording.started).toEqual(false)
         })
 
         describe('console logs', () => {

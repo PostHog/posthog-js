@@ -107,6 +107,11 @@ export class SessionRecording {
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
 
+    public get started(): boolean {
+        // TODO could we use status instead of _captureStarted?
+        return this._captureStarted
+    }
+
     private get sessionManager() {
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
