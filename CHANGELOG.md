@@ -1,3 +1,8 @@
+## 1.84.4 - 2023-10-24
+
+- log when browser offline (#850)
+- chore: type checking in one place makes bundle smaller (#843)
+
 ## 1.84.3 - 2023-10-23
 
 - fix: full snapshot every 10 minutes (#847)
