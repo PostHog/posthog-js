@@ -1021,7 +1021,7 @@ describe('SessionRecording', () => {
         it('can report no duration when no data', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording.status).toBe('buffering')
-            expect(sessionRecording.bufferedDuration).toBe(null)
+            expect(sessionRecording.sessionDuration).toBe(null)
         })
 
         it('can report zero duration', () => {
@@ -1029,7 +1029,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('buffering')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp }))
-            expect(sessionRecording.bufferedDuration).toBe(0)
+            expect(sessionRecording.sessionDuration).toBe(0)
         })
 
         it('can report a duration', () => {
@@ -1037,7 +1037,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('buffering')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording.bufferedDuration).toBe(100)
+            expect(sessionRecording.sessionDuration).toBe(100)
         })
 
         it('starts with an undefined minimum duration', () => {
@@ -1064,7 +1064,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording.bufferedDuration).toBe(100)
+            expect(sessionRecording.sessionDuration).toBe(100)
             expect(sessionRecording.minimumDuration).toBe(1500)
 
             expect(sessionRecording.bufferLength).toBe(1)
@@ -1084,7 +1084,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording.bufferedDuration).toBe(100)
+            expect(sessionRecording.sessionDuration).toBe(100)
             expect(sessionRecording.minimumDuration).toBe(1500)
 
             expect(sessionRecording.bufferLength).toBe(1)
@@ -1101,10 +1101,10 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording.bufferLength).toBe(0)
-            expect(sessionRecording.bufferedDuration).toBe(null)
+            expect(sessionRecording.sessionDuration).toBe(null)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1502 }))
             expect(sessionRecording.bufferLength).toBe(1)
-            expect(sessionRecording.bufferedDuration).toBe(1502)
+            expect(sessionRecording.sessionDuration).toBe(1502)
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 

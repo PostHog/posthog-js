@@ -140,7 +140,7 @@ export class SessionRecording {
         }
     }
 
-    get bufferedDuration(): number | null {
+    get sessionDuration(): number | null {
         const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
         const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
@@ -611,9 +611,9 @@ export class SessionRecording {
         }
 
         const minimumDuration = this.minimumDuration
-        const bufferedDuration = this.bufferedDuration
+        const sessionDuration = this.sessionDuration
         const isBelowMinimumDuration =
-            _isNumber(minimumDuration) && _isNumber(bufferedDuration) && bufferedDuration < minimumDuration
+            _isNumber(minimumDuration) && _isNumber(sessionDuration) && sessionDuration < minimumDuration
 
         if (this.status === 'buffering' || isBelowMinimumDuration) {
             this.flushBufferTimer = setTimeout(() => {
