@@ -223,8 +223,6 @@ const create_phlib = function (
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
-    // instance.exceptionAutocapture = new ExceptionObserver(instance)
-
     instance.__autocapture = instance.config.autocapture
     autocapture._setIsAutocaptureEnabled(instance)
     if (autocapture._isAutocaptureEnabled) {
@@ -283,7 +281,6 @@ export class PostHog {
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
     webPerformance?: WebPerformanceObserver
-    // exceptionAutocapture?: ExceptionObserver
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
