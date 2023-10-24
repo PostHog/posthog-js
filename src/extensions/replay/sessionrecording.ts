@@ -5,7 +5,6 @@ import {
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../constants'
 import {
-    ensureMaxMessageSize,
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
@@ -530,6 +529,7 @@ export class SessionRecording {
             return
         }
 
+        // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
         const size = JSON.stringify(event).length
 
