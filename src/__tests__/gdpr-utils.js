@@ -1,6 +1,7 @@
 import sinon from 'sinon'
 
 import * as gdpr from '../gdpr-utils'
+import { _isNull } from '../utils'
 
 const TOKENS = [
     `test-token`,
@@ -29,13 +30,13 @@ function forPersistenceTypes(runTests) {
 
 function assertPersistenceValue(persistenceType, token, value, persistencePrefix = DEFAULT_PERSISTENCE_PREFIX) {
     if (persistenceType === `cookie`) {
-        if (value === null) {
+        if (_isNull(value)) {
             expect(document.cookie).not.toContain(token)
         } else {
             expect(document.cookie).toContain(token + `=${value}`)
         }
     } else {
-        if (value === null) {
+        if (_isNull(value)) {
             expect(window.localStorage.getItem(persistencePrefix + token)).toBeNull()
         } else {
             expect(window.localStorage.getItem(persistencePrefix + token)).toBe(`${value}`)

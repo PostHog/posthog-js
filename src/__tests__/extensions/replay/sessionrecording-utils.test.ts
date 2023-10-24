@@ -5,8 +5,8 @@ import {
     CONSOLE_LOG_PLUGIN_NAME,
     PLUGIN_EVENT_TYPE,
     FULL_SNAPSHOT_EVENT_TYPE,
-} from '../../extensions/sessionrecording-utils'
-import { largeString, threeMBAudioURI, threeMBImageURI } from './test_data/sessionrecording-utils-test-data'
+} from '../../../extensions/replay/sessionrecording-utils'
+import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
 import { eventWithTime } from '@rrweb/types'
 
 describe(`SessionRecording utility functions`, () => {

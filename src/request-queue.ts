@@ -1,5 +1,5 @@
 import { RequestQueueScaffold } from './base-request-queue'
-import { _each } from './utils'
+import { _each, _isUndefined } from './utils'
 import { Properties, QueuedRequestData, XHROptions } from './types'
 
 export class RequestQueue extends RequestQueueScaffold {
@@ -77,7 +77,7 @@ export class RequestQueue extends RequestQueueScaffold {
         _each(this._event_queue, (request) => {
             const { url, data, options } = request
             const key = (options ? options._batchKey : null) || url
-            if (requests[key] === undefined) {
+            if (_isUndefined(requests[key])) {
                 requests[key] = { data: [], url, options }
             }
 

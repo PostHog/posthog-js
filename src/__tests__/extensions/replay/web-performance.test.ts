@@ -3,9 +3,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable compat/compat */
 
-import { WebPerformanceObserver } from '../../extensions/web-performance'
-import { PostHog } from '../../posthog-core'
-import { NetworkRequest, PostHogConfig } from '../../types'
+import { WebPerformanceObserver } from '../../../extensions/replay/web-performance'
+import { PostHog } from '../../../posthog-core'
+import { NetworkRequest, PostHogConfig } from '../../../types'
 
 const createMockPerformanceEntry = (overrides: Partial<PerformanceEntry> = {}): PerformanceEntry => {
     const entry = {

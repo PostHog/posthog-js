@@ -142,13 +142,13 @@ class V7Generator {
      */
     generate(): UUID {
         const value = this.generateOrAbort()
-        if (value !== undefined) {
+        if (!_isUndefined(value)) {
             return value
         } else {
             // reset state and resume
             this.timestamp = 0
             const valueAfterReset = this.generateOrAbort()
-            if (valueAfterReset === undefined) {
+            if (_isUndefined(valueAfterReset)) {
                 throw new Error('Could not generate UUID after timestamp reset')
             }
             return valueAfterReset

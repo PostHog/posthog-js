@@ -24,8 +24,8 @@ import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
-import { SessionRecording } from './extensions/sessionrecording'
-import { WebPerformanceObserver } from './extensions/web-performance'
+import { SessionRecording } from './extensions/replay/sessionrecording'
+import { WebPerformanceObserver } from './extensions/replay/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -468,6 +468,8 @@ export class PostHog {
             updateInitComplete('segmentRegister')()
         }
 
+        // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
+        // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.config.get_device_id(uuidv7())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
@@ -1736,7 +1738,7 @@ export class PostHog {
      * is currently running
      */
     sessionRecordingStarted(): boolean {
-        return !!this.sessionRecording?.started()
+        return !!this.sessionRecording?.started
     }
 
     /**
