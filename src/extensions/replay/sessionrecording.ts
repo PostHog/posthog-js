@@ -598,6 +598,10 @@ export class SessionRecording {
         const isBelowMinimumDuration =
             _isNumber(minimumDuration) && _isNumber(sessionDuration) && sessionDuration < minimumDuration
 
+        if (minimumDuration === null || sessionDuration === null) {
+            logger.warn(`ESLint should fail in CI`)
+        }
+
         if (this.status === 'buffering' || isBelowMinimumDuration) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
