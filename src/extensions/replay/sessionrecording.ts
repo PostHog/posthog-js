@@ -91,12 +91,12 @@ export class SessionRecording {
     private flushBufferTimer?: any
     private buffer?: SnapshotBuffer
     private mutationRateLimiter?: MutationRateLimiter
-    private captureStarted: boolean
-    stopRrweb: listenerHandler | undefined
-    receivedDecide: boolean
-    rrwebRecord: rrwebRecord | undefined
-    recorderVersion?: string
-    isIdle = false
+    private _captureStarted: boolean
+    private stopRrweb: listenerHandler | undefined
+    private receivedDecide: boolean
+    private rrwebRecord: rrwebRecord | undefined
+    private recorderVersion?: string
+    private isIdle = false
 
     private get sessionManager() {
         if (!this.instance.sessionManager) {
@@ -107,32 +107,16 @@ export class SessionRecording {
         return this.instance.sessionManager
     }
 
-    get linkedFlagSeen(): boolean {
-        return this._linkedFlagSeen
-    }
-
-    get lastActivityTimestamp(): number {
-        return this._lastActivityTimestamp
-    }
-
-    get endpoint(): string {
-        return this._endpoint
-    }
-
     get started(): boolean {
-        return this.captureStarted
+        return this._captureStarted
     }
 
-    get bufferLength(): number {
-        return this.buffer?.data.length || 0
-    }
-
-    get sampleRate(): number | null {
+    private get sampleRate(): number | null {
         const storedValue = this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
         return storedValue == undefined ? null : parseFloat(storedValue)
     }
 
-    get isSampled(): boolean | null {
+    private get isSampled(): boolean | null {
         if (_isNumber(this.sampleRate)) {
             return this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
         } else {
@@ -140,33 +124,33 @@ export class SessionRecording {
         }
     }
 
-    get sessionDuration(): number | null {
+    private get sessionDuration(): number | null {
         const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
         const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 
-    get minimumDuration(): number | undefined {
+    private get minimumDuration(): number | undefined {
         return this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
     }
 
-    get linkedFlag(): string | undefined {
+    private get linkedFlag(): string | undefined {
         return this.instance.get_property(SESSION_RECORDING_LINKED_FLAG)
     }
 
-    get isRecordingEnabled() {
+    private get isRecordingEnabled() {
         const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = !this.instance.config.disable_session_recording
         return enabled_server_side && enabled_client_side
     }
 
-    get isConsoleLogCaptureEnabled() {
+    private get isConsoleLogCaptureEnabled() {
         const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = this.instance.config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
     }
 
-    get recordingVersion() {
+    private get recordingVersion() {
         const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
         const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
@@ -176,7 +160,7 @@ export class SessionRecording {
      * defaults to buffering mode until a decide response is received
      * once a decide response is received status can be disabled, active or sampled
      */
-    get status(): SessionRecordingStatus {
+    private get status(): SessionRecordingStatus {
         if (!this.receivedDecide) {
             return 'buffering'
         }
@@ -198,7 +182,7 @@ export class SessionRecording {
 
     constructor(instance: PostHog) {
         this.instance = instance
-        this.captureStarted = false
+        this._captureStarted = false
         this._endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
         this.receivedDecide = false
@@ -229,10 +213,10 @@ export class SessionRecording {
     }
 
     stopRecording() {
-        if (this.captureStarted && this.stopRrweb) {
+        if (this._captureStarted && this.stopRrweb) {
             this.stopRrweb()
             this.stopRrweb = undefined
-            this.captureStarted = false
+            this._captureStarted = false
         }
     }
 
@@ -345,11 +329,11 @@ export class SessionRecording {
         }
 
         // We do not switch recorder versions midway through a recording.
-        if (this.captureStarted || this.instance.config.disable_session_recording) {
+        if (this._captureStarted || this.instance.config.disable_session_recording) {
             return
         }
 
-        this.captureStarted = true
+        this._captureStarted = true
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
         this.sessionManager.checkAndGetSessionAndWindowId()
 
@@ -423,7 +407,7 @@ export class SessionRecording {
 
     private _tryTakeFullSnapshot(): boolean {
         // TODO this should ignore based on emit?
-        if (!this.captureStarted) {
+        if (!this._captureStarted) {
             return false
         }
         try {
