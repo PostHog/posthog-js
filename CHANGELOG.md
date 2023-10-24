@@ -1,3 +1,7 @@
+## 1.85.1 - 2023-10-24
+
+- fix: Disable the string reduction code until we can battle test it more. (#851)
+
 ## 1.85.0 - 2023-10-24
 
 
