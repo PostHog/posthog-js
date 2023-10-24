@@ -530,7 +530,8 @@ export class SessionRecording {
             return
         }
 
-        const { event, size } = ensureMaxMessageSize(truncateLargeConsoleLogs(throttledEvent))
+        const event = truncateLargeConsoleLogs(throttledEvent)
+        const size = JSON.stringify(event).length
 
         const properties = {
             $snapshot_bytes: size,
