@@ -98,7 +98,7 @@ export class SessionRecording {
     recorderVersion?: string
     isIdle = false
 
-    get sessionManager() {
+    private get sessionManager() {
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
