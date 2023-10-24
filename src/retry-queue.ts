@@ -60,7 +60,13 @@ export class RetryQueue extends RequestQueueScaffold {
         const retryAt = new Date(Date.now() + msToNextRetry)
 
         this.queue.push({ retryAt, requestData })
-        logger.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
+
+        let logMessage = `Enqueued failed request for retry in ${msToNextRetry}`
+        if (!navigator.onLine) {
+            logMessage += ' (Browser is offline)'
+        }
+        logger.warn(logMessage)
+
         if (!this.isPolling) {
             this.isPolling = true
             this.poll()
