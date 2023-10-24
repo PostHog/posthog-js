@@ -448,19 +448,19 @@ export const addCancelListeners = (
     surveyId: string,
     surveyEventName: string
 ) => {
-    const cancelButton = surveyPopup.getElementsByClassName('form-cancel')?.[0] as HTMLButtonElement
-
-    cancelButton.addEventListener('click', (e) => {
-        e.preventDefault()
-        Object.assign(surveyPopup.style, { display: 'none' })
-        localStorage.setItem(`seenSurvey_${surveyId}`, 'true')
-        posthog.capture('survey dismissed', {
-            $survey_name: surveyEventName,
-            $survey_id: surveyId,
-            sessionRecordingUrl: posthog.get_session_replay_url(),
+    const cancelButtons = surveyPopup.getElementsByClassName('form-cancel')
+    for (const button of cancelButtons) {
+        button.addEventListener('click', (e) => {
+            e.preventDefault()
+            closeSurveyPopup(surveyId, surveyPopup)
+            posthog.capture('survey dismissed', {
+                $survey_name: surveyEventName,
+                $survey_id: surveyId,
+                sessionRecordingUrl: posthog.get_session_replay_url?.(),
+            })
         })
-        window.dispatchEvent(new Event('PHSurveyClosed'))
-    })
+    }
+    window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
 export const createRatingsPopup = (
