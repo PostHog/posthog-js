@@ -274,6 +274,14 @@ export const _formatDate = function (d: Date): string {
     )
 }
 
+export const _try = function <T>(fn: () => T): T | undefined {
+    try {
+        return fn()
+    } catch (e) {
+        return undefined
+    }
+}
+
 export const _safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {
     return function (...args) {
         try {
