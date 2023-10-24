@@ -20,7 +20,8 @@
         "inlineSources": true,
         "resolveJsonModule": true,
         "downlevelIteration": true,
-        "declaration": true
+        "declaration": true,
+        "importHelpers": true
     },
     "include": ["src/*.ts"]
 }
