@@ -1,3 +1,7 @@
+## 1.85.3 - 2023-10-25
+
+- feat: Toolbar loading from state faster (#849)
+
 ## 1.85.2 - 2023-10-24
 
 - fix(surveys): cancel listener should be on all questions (#854)
