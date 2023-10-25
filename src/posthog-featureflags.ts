@@ -1,4 +1,4 @@
-import { _base64Encode, _entries, _extend, logger } from './utils'
+import { _base64Encode, _entries, _extend, _isArray, logger } from './utils'
 import { PostHog } from './posthog-core'
 import {
     DecideResponse,
@@ -43,7 +43,7 @@ export const parseFeatureFlagDecideResponse = (
     const flagPayloads = response['featureFlagPayloads']
     if (flags) {
         // using the v1 api
-        if (Array.isArray(flags)) {
+        if (_isArray(flags)) {
             const $enabled_feature_flags: Record<string, boolean> = {}
             if (flags) {
                 for (let i = 0; i < flags.length; i++) {
@@ -220,7 +220,7 @@ export class PostHogFeatureFlags {
 
         if (options.send_event || !('send_event' in options)) {
             if (!(key in flagCallReported) || !flagCallReported[key].includes(flagReportValue)) {
-                if (Array.isArray(flagCallReported[key])) {
+                if (_isArray(flagCallReported[key])) {
                     flagCallReported[key].push(flagReportValue)
                 } else {
                     flagCallReported[key] = [flagReportValue]
@@ -295,7 +295,7 @@ export class PostHogFeatureFlags {
 
         if (flags === false) {
             this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-        } else if (Array.isArray(flags)) {
+        } else if (_isArray(flags)) {
             const flagsObj: Record<string, string | boolean> = {}
             for (let i = 0; i < flags.length; i++) {
                 flagsObj[flags[i]] = true

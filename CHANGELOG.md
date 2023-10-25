@@ -1,3 +1,31 @@
+## 1.85.3 - 2023-10-25
+
+- feat: Toolbar loading from state faster (#849)
+
+## 1.85.2 - 2023-10-24
+
+- fix(surveys): cancel listener should be on all questions (#854)
+- Fix changelog.md (#853)
+- fix: eslint does not fail build (#852)
+
+## 1.85.1 - 2023-10-24
+
+- fix: Disable the string reduction code until we can battle test it more. (#851)
+
+## 1.85.0 - 2023-10-24
+
+- feat: allow sampling based on decide response (#839)
+
+## 1.84.4 - 2023-10-24
+
+- log when browser offline (#850)
+- chore: type checking in one place makes bundle smaller (#843)
+
+## 1.84.3 - 2023-10-23
+
+- fix: full snapshot every 10 minutes (#847)
+- fix: really fix subdomain check to satisfy codeql (#845)
+
 ## 1.84.2 - 2023-10-23
 
 - fix: heroku subdomain check (#842)

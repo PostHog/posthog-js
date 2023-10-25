@@ -1,4 +1,4 @@
-import { logger, window } from '../../utils'
+import { _isArray, _isUndefined, logger, window } from '../../utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
@@ -66,13 +66,13 @@ export class ExceptionObserver {
     }
 
     stopCapturing() {
-        if (this.originalOnErrorHandler !== undefined) {
+        if (!_isUndefined(this.originalOnErrorHandler)) {
             window.onerror = this.originalOnErrorHandler
             this.originalOnErrorHandler = null
         }
         delete (window.onerror as any)?.__POSTHOG_INSTRUMENTED__
 
-        if (this.originalOnUnhandledRejectionHandler !== undefined) {
+        if (!_isUndefined(this.originalOnUnhandledRejectionHandler)) {
             window.onunhandledrejection = this.originalOnUnhandledRejectionHandler
             this.originalOnUnhandledRejectionHandler = null
         }
@@ -93,7 +93,7 @@ export class ExceptionObserver {
         if (
             !isPrimitive(autocaptureExceptionsResponse) &&
             'errors_to_ignore' in autocaptureExceptionsResponse &&
-            Array.isArray(autocaptureExceptionsResponse.errors_to_ignore)
+            _isArray(autocaptureExceptionsResponse.errors_to_ignore)
         ) {
             const dropRules = autocaptureExceptionsResponse.errors_to_ignore
 
@@ -105,11 +105,6 @@ export class ExceptionObserver {
         if (this.isEnabled()) {
             this.startCapturing()
             this.debugLog('Remote config for exception autocapture is enabled, starting', autocaptureExceptionsResponse)
-        } else {
-            this.debugLog(
-                'Remote config for exception autocapture is disabled, not starting',
-                autocaptureExceptionsResponse
-            )
         }
     }
 

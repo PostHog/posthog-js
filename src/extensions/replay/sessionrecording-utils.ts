@@ -11,6 +11,7 @@ import type {
     mutationCallbackParam,
 } from '@rrweb/types'
 import type { Mirror, MaskInputOptions, MaskInputFn, MaskTextFn, SlimDOMOptions, DataURLOptions } from 'rrweb-snapshot'
+import { _isObject } from '../../utils'
 
 export const replacementImageURI =
     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNOCAwSDE2TDAgMTZWOEw4IDBaIiBmaWxsPSIjMkQyRDJEIi8+CjxwYXRoIGQ9Ik0xNiA4VjE2SDhMMTYgOFoiIGZpbGw9IiMyRDJEMkQiLz4KPC9zdmc+Cg=='
@@ -74,6 +75,7 @@ export function ensureMaxMessageSize(data: eventWithTime): { event: eventWithTim
     // Note: with compression, this limit may be able to be increased
     // but we're assuming most of the size is from a data uri which
     // is unlikely to be compressed further
+
     if (stringifiedData.length > MAX_MESSAGE_SIZE) {
         // Regex that matches the pattern for a dataURI with the shape 'data:{mime type};{encoding},{data}'. It:
         // 1) Checks if the pattern starts with 'data:' (potentially, not at the start of the string)
@@ -106,9 +108,9 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
 
     if (
         event &&
-        typeof event === 'object' &&
+        _isObject(event) &&
         event.type === PLUGIN_EVENT_TYPE &&
-        typeof event.data === 'object' &&
+        _isObject(event.data) &&
         event.data.plugin === CONSOLE_LOG_PLUGIN_NAME
     ) {
         // Note: event.data.payload.payload comes from rr-web, and is an array of strings
