@@ -148,12 +148,16 @@ describe('survey display logic', () => {
         expect(mockPostHog.capture).toBeCalledTimes(1)
     })
 
-    test('when url changes, callSurveys runs again', () => {
+    test('callSurveys runs on interval irrespective of url change', () => {
         jest.useFakeTimers()
         jest.spyOn(global, 'setInterval')
         generateSurveys(mockPostHog)
         expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(1)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1500)
+        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 3000)
+
+        jest.advanceTimersByTime(3000)
+        expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(2)
+        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 3000)
     })
 
     test('multiple choice type question elements are unique', () => {
