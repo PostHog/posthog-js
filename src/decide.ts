@@ -104,7 +104,7 @@ export class Decide {
 
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
-                window.extendPostHogWithExceptionAutocapture(this.instance)
+                window.extendPostHogWithExceptionAutocapture(this.instance, response)
             })
         }
 
