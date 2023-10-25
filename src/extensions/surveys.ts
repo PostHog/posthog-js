@@ -894,8 +894,8 @@ function nextQuestion(currentQuestionIdx: number, surveyId: string) {
 export function generateSurveys(posthog: PostHog) {
     callSurveys(posthog, true)
 
-    // recalculate surveys every 1.5 seconds to check if URL or selectors have changed
+    // recalculate surveys every 3 seconds to check if URL or selectors have changed
     setInterval(() => {
         callSurveys(posthog, false)
-    }, 1500)
+    }, 3000)
 }
