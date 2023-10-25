@@ -1,7 +1,13 @@
-import { _getHashParam, _register_event, loadScript, logger } from '../utils'
+import { _getHashParam, _register_event, _try, loadScript, logger, window } from '../utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, ToolbarParams } from '../types'
 import { POSTHOG_MANAGED_HOSTS } from './cloud'
+
+// TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
+// To get ahead of this we grab it as soon as the posthog-js is parsed
+const STATE_FROM_WINDOW = window.location
+    ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
+    : null
 
 export class Toolbar {
     instance: PostHog
@@ -49,10 +55,24 @@ export class Toolbar {
                 localStorage = window.localStorage
             }
 
-            const stateHash = _getHashParam(location.hash, '__posthog') || _getHashParam(location.hash, 'state')
-            const state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
-            const parseFromUrl = state && state['action'] === 'ph_authorize'
+            /**
+             * Info about the state
+             * The state is a json object
+             * 1. (Legacy) The state can be `state={}` as a urlencoded object of info. In this case
+             * 2. The state should now be found in `__posthog={}` and can be base64 encoded or urlencoded.
+             * 3. Base64 encoding is preferred and will gradually be rolled out everywhere
+             */
+
+            const stateHash =
+                STATE_FROM_WINDOW || _getHashParam(location.hash, '__posthog') || _getHashParam(location.hash, 'state')
+
             let toolbarParams: ToolbarParams
+            const state = stateHash
+                ? _try(() => JSON.parse(atob(decodeURIComponent(stateHash)))) ||
+                  _try(() => JSON.parse(decodeURIComponent(stateHash)))
+                : null
+
+            const parseFromUrl = state && state['action'] === 'ph_authorize'
 
             if (parseFromUrl) {
                 // happens if they are initializing the toolbar using an old snippet
