@@ -1,3 +1,7 @@
+## 1.87.1 - 2023-10-26
+
+- fix(surveys): clearer user property names (#861)
+
 ## 1.87.0 - 2023-10-26
 
 - feat(surveys): Make selector targeting work, add user props (#858)
