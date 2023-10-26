@@ -59,14 +59,12 @@ export class Decide {
         this.instance.sessionRecording?.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
         this.instance.webPerformance?.afterDecideResponse(response)
-        this.instance.exceptionAutocapture?.afterDecideResponse(response)
         this.instance._afterDecideResponse(response)
 
         if (!this.instance.config.advanced_disable_feature_flags_on_first_load) {
             this.instance.featureFlags.receivedFeatureFlags(response)
         }
 
-        // Check if recorder.js is already loaded
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const surveysGenerator = window?.extendPostHogWithSurveys
