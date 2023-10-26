@@ -383,6 +383,9 @@ export const createOpenTextOrLinkPopup = (
                     $survey_question: survey.questions[0].question,
                     $survey_response: surveyQuestionType === 'open' ? e.target.survey.value : 'link clicked',
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                    $set: {
+                        [`$survey_response/${survey.id}`]: true,
+                    },
                 })
                 if (surveyQuestionType === 'link') {
                     window.open(question.link || undefined)
@@ -457,6 +460,9 @@ export const addCancelListeners = (
                 $survey_name: surveyEventName,
                 $survey_id: surveyId,
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                $set: {
+                    [`$survey_dismiss/${surveyId}`]: true,
+                },
             })
         })
     }
@@ -888,13 +894,8 @@ function nextQuestion(currentQuestionIdx: number, surveyId: string) {
 export function generateSurveys(posthog: PostHog) {
     callSurveys(posthog, true)
 
-    let currentUrl = location.href
-    if (location.href) {
-        setInterval(() => {
-            if (location.href !== currentUrl) {
-                currentUrl = location.href
-                callSurveys(posthog, false)
-            }
-        }, 1500)
-    }
+    // recalculate surveys every 3 seconds to check if URL or selectors have changed
+    setInterval(() => {
+        callSurveys(posthog, false)
+    }, 3000)
 }
