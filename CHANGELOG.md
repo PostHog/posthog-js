@@ -1,3 +1,7 @@
+## 1.87.0 - 2023-10-26
+
+- feat(surveys): Make selector targeting work, add user props (#858)
+
 ## 1.86.0 - 2023-10-26
 
 - feat: allow backend to specify a custom analytics endpoint (#831)
