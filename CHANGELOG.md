@@ -1,3 +1,7 @@
+## 1.86.0 - 2023-10-26
+
+- feat: allow backend to specify a custom analytics endpoint (#831)
+
 ## 1.85.4 - 2023-10-26
 
 - fix: checkout every X minutes (#860)
