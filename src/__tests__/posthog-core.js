@@ -32,6 +32,7 @@ describe('capture()', () => {
     )
 
     given('config', () => ({
+        api_host: 'https://app.posthog.com',
         property_blacklist: [],
         _onCapture: jest.fn(),
         get_device_id: jest.fn().mockReturnValue('device-id'),
@@ -57,6 +58,7 @@ describe('capture()', () => {
             update_config: jest.fn(),
             properties: jest.fn(),
         },
+        _send_request: jest.fn(),
         compression: {},
         __captureHooks: [],
         rateLimiter: {
@@ -190,6 +192,91 @@ describe('capture()', () => {
     it('correctly handles the "length" property', () => {
         const captureResult = given.lib.capture('event-name', { foo: 'bar', length: 0 })
         expect(captureResult.properties).toEqual(expect.objectContaining({ foo: 'bar', length: 0 }))
+    })
+
+    it('sends payloads to /e/ by default', () => {
+        given.lib.capture('event-name', { foo: 'bar', length: 0 })
+        expect(given.lib._send_request).toHaveBeenCalledWith(
+            'https://app.posthog.com/e/',
+            expect.any(Object),
+            expect.any(Object),
+            undefined
+        )
+    })
+
+    it('sends payloads to alternative endpoint if given', () => {
+        given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
+        given.lib.capture('event-name', { foo: 'bar', length: 0 })
+
+        expect(given.lib._send_request).toHaveBeenCalledWith(
+            'https://app.posthog.com/i/v0/e/',
+            expect.any(Object),
+            expect.any(Object),
+            undefined
+        )
+    })
+
+    it('sends payloads to overriden endpoint if given', () => {
+        given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
+        expect(given.lib._send_request).toHaveBeenCalledWith(
+            'https://app.posthog.com/s/',
+            expect.any(Object),
+            expect.any(Object),
+            undefined
+        )
+    })
+
+    it('sends payloads to overriden endpoint, even if alternative endpoint is set', () => {
+        given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
+        given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
+        expect(given.lib._send_request).toHaveBeenCalledWith(
+            'https://app.posthog.com/s/',
+            expect.any(Object),
+            expect.any(Object),
+            undefined
+        )
+    })
+})
+
+describe('_afterDecideResponse', () => {
+    given('subject', () => () => given.lib._afterDecideResponse(given.decideResponse))
+
+    it('enables compression from decide response', () => {
+        given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+        given.subject()
+
+        expect(given.lib.compression['gzip']).toBe(true)
+        expect(given.lib.compression['lz64']).toBe(true)
+    })
+
+    it('enables compression from decide response when only one received', () => {
+        given('decideResponse', () => ({ supportedCompression: ['lz64'] }))
+        given.subject()
+
+        expect(given.lib.compression).not.toHaveProperty('gzip')
+        expect(given.lib.compression['lz64']).toBe(true)
+    })
+
+    it('does not enable compression from decide response if compression is disabled', () => {
+        given('config', () => ({ disable_compression: true, persistence: 'memory' }))
+        given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+        given.subject()
+
+        expect(given.lib.compression).toEqual({})
+    })
+
+    it('defaults to /e if no endpoint is given', () => {
+        given('decideResponse', () => ({}))
+        given.subject()
+
+        expect(given.lib.analyticsDefaultEndpoint).toEqual('/e/')
+    })
+
+    it('uses the specified analytics endpoint if given', () => {
+        given('decideResponse', () => ({ analytics: { endpoint: '/i/v0/e/' } }))
+        given.subject()
+
+        expect(given.lib.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
     })
 })
 

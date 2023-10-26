@@ -1,8 +1,4 @@
-import sinon from 'sinon'
-import { autocapture } from '../autocapture'
 import { decideCompression, compressData } from '../compression'
-import { Decide } from '../decide'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 
 describe('decideCompression()', () => {
     given('subject', () => decideCompression(given.compressionSupport))
@@ -44,70 +40,5 @@ describe('compressData()', () => {
         given('compression', () => 'gzip-js')
 
         expect(given.subject).toMatchSnapshot()
-    })
-})
-
-describe('Payload Compression', () => {
-    afterEach(() => {
-        document.getElementsByTagName('html')[0].innerHTML = ''
-    })
-
-    describe('compression', () => {
-        let lib, sandbox
-
-        beforeEach(() => {
-            document.title = 'test page'
-            sandbox = sinon.createSandbox()
-            autocapture._initializedTokens = []
-            lib = {
-                debug: true,
-                _prepare_callback: sandbox.spy((callback) => callback),
-                _send_request: sandbox.spy((url, params, options, callback) => {
-                    if (url === 'https://test.com/decide/?v=3') {
-                        callback({ config: { enable_collect_everything: true }, supportedCompression: ['gzip-js'] })
-                    } else {
-                        throw new Error('Should not get here')
-                    }
-                }),
-                config: {
-                    api_host: 'https://test.com',
-                    token: 'testtoken',
-                },
-                token: 'testtoken',
-                get_distinct_id() {
-                    return 'distinctid'
-                },
-                getGroups: () => ({}),
-
-                toolbar: {
-                    maybeLoadToolbar: jest.fn(),
-                    afterDecideResponse: jest.fn(),
-                },
-                sessionRecording: {
-                    afterDecideResponse: jest.fn(),
-                },
-                featureFlags: {
-                    receivedFeatureFlags: jest.fn(),
-                    setReloadingPaused: jest.fn(),
-                    _startReloadTimer: jest.fn(),
-                },
-                _hasBootstrappedFeatureFlags: jest.fn(),
-                get_property: (property_key) =>
-                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE
-                        ? given.$autocapture_disabled_server_side
-                        : undefined,
-            }
-        })
-        given('$autocapture_disabled_server_side', () => false)
-
-        afterEach(() => {
-            sandbox.restore()
-        })
-
-        it('should save supported compression in instance', () => {
-            new Decide(lib).call()
-            autocapture.init(lib)
-            expect(lib.compression).toEqual({ 'gzip-js': true })
-        })
     })
 })

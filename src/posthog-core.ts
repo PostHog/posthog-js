@@ -40,6 +40,7 @@ import {
     CaptureOptions,
     CaptureResult,
     Compression,
+    DecideResponse,
     EarlyAccessFeatureCallback,
     GDPROptions,
     isFeatureEnabledOptions,
@@ -289,6 +290,7 @@ export class PostHog {
     __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
+    analyticsDefaultEndpoint: string
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
@@ -311,6 +313,7 @@ export class PostHog {
         this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
+        this.analyticsDefaultEndpoint = '/e/'
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -523,6 +526,21 @@ export class PostHog {
     }
 
     // Private methods
+
+    _afterDecideResponse(response: DecideResponse) {
+        this.compression = {}
+        if (response.supportedCompression && !this.config.disable_compression) {
+            const compression: Partial<Record<Compression, boolean>> = {}
+            for (const method of response['supportedCompression']) {
+                compression[method] = true
+            }
+            this.compression = compression
+        }
+
+        if (response.analytics?.endpoint) {
+            this.analyticsDefaultEndpoint = response.analytics.endpoint
+        }
+    }
 
     _loaded(): void {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
@@ -874,7 +892,7 @@ export class PostHog {
         logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
-        const url = this.config.api_host + (options.endpoint || '/e/')
+        const url = this.config.api_host + (options.endpoint || this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 
