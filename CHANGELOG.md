@@ -1,3 +1,8 @@
+## 1.85.4 - 2023-10-26
+
+- fix: checkout every X minutes (#860)
+- feat: lazily load exception autocapture (#856)
+
 ## 1.85.3 - 2023-10-25
 
 - feat: Toolbar loading from state faster (#849)
