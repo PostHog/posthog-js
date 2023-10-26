@@ -384,7 +384,7 @@ export const createOpenTextOrLinkPopup = (
                     $survey_response: surveyQuestionType === 'open' ? e.target.survey.value : 'link clicked',
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                     $set: {
-                        [`$survey_response/${survey.id}`]: true,
+                        [`$survey_responded/${survey.id}`]: true,
                     },
                 })
                 if (surveyQuestionType === 'link') {
@@ -461,7 +461,7 @@ export const addCancelListeners = (
                 $survey_id: surveyId,
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 $set: {
-                    [`$survey_dismiss/${surveyId}`]: true,
+                    [`$survey_dismissed/${surveyId}`]: true,
                 },
             })
         })
