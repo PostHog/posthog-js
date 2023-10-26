@@ -1,7 +1,7 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
 import { QueuedRequestData, RetryQueueElement } from './types'
-import { logger } from './utils'
+import { _isUndefined, logger } from './utils'
 import { RateLimiter } from './rate-limiter'
 
 const thirtyMinutes = 30 * 60 * 1000
@@ -40,7 +40,7 @@ export class RetryQueue extends RequestQueueScaffold {
         this.onXHRError = onXHRError
         this.rateLimiter = rateLimiter
 
-        if (typeof window !== 'undefined' && 'onLine' in window.navigator) {
+        if (!_isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
                 this._handleWeAreNowOnline()
@@ -60,7 +60,13 @@ export class RetryQueue extends RequestQueueScaffold {
         const retryAt = new Date(Date.now() + msToNextRetry)
 
         this.queue.push({ retryAt, requestData })
-        logger.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
+
+        let logMessage = `Enqueued failed request for retry in ${msToNextRetry}`
+        if (!navigator.onLine) {
+            logMessage += ' (Browser is offline)'
+        }
+        logger.warn(logMessage)
+
         if (!this.isPolling) {
             this.isPolling = true
             this.poll()

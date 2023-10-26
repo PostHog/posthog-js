@@ -15,6 +15,7 @@ export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
 export const SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE = '$session_recording_recorder_version_server_side' // follows rrweb versioning
 export const SESSION_ID = '$sesid'
+export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'

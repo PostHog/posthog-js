@@ -26,6 +26,8 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+import { _isUndefined } from '../../utils'
+
 const WEBPACK_ERROR_REGEXP = /\(error: (.*)\)/
 const STACKTRACE_FRAME_LIMIT = 50
 
@@ -62,11 +64,11 @@ function createFrame(filename: string, func: string, lineno?: number, colno?: nu
         in_app: true, // All browser frames are considered in_app
     }
 
-    if (lineno !== undefined) {
+    if (!_isUndefined(lineno)) {
         frame.lineno = lineno
     }
 
-    if (colno !== undefined) {
+    if (!_isUndefined(colno)) {
         frame.colno = colno
     }
 

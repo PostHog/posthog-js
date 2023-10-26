@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { PostHog } from '../../../posthog-core'
 import { DecideResponse, PostHogConfig } from '../../../types'
-import { ExceptionObserver } from '../../../extensions/exceptions/exception-autocapture'
+import { ExceptionObserver } from '../../../extensions/exception-autocapture'
+import { window } from '../../../utils'
 
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver

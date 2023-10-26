@@ -3,7 +3,9 @@ import {
     _each,
     _extend,
     _includes,
+    _isBoolean,
     _isFunction,
+    _isNull,
     _isUndefined,
     _register_event,
     _safewrap_instance_methods,
@@ -42,10 +44,9 @@ const autocapture = {
     _isAutocaptureEnabled: false as boolean,
 
     _setIsAutocaptureEnabled: function (instance: PostHog): void {
-        const disabled_server_side =
-            this._isDisabledServerSide === null
-                ? !!instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
-                : this._isDisabledServerSide
+        const disabled_server_side = _isNull(this._isDisabledServerSide)
+            ? !!instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+            : this._isDisabledServerSide
         const enabled_client_side = !!instance.config.autocapture
         this._isAutocaptureEnabled = enabled_client_side && !disabled_server_side
     },
@@ -173,7 +174,7 @@ const autocapture = {
 
     _getEventTarget: function (e: Event): Element | null {
         // https://developer.mozilla.org/en-US/docs/Web/API/Event/target#Compatibility_notes
-        if (typeof e.target === 'undefined') {
+        if (_isUndefined(e.target)) {
             return (e.srcElement as Element) || null
         } else {
             if ((e.target as HTMLElement)?.shadowRoot) {
@@ -296,7 +297,7 @@ const autocapture = {
     config: undefined as AutocaptureConfig | undefined,
 
     init: function (instance: PostHog): void {
-        if (typeof instance.__autocapture !== 'boolean') {
+        if (!_isBoolean(instance.__autocapture)) {
             this.config = instance.__autocapture
         }
 
@@ -345,7 +346,7 @@ const autocapture = {
 
     // this is a mechanism to ramp up CE with no server-side interaction.
     // when CE is active, every page load results in a decide request. we
-    // need to gently ramp this up so we don't overload decide. this decides
+    // need to gently ramp this up, so we don't overload decide. this decides
     // deterministically if CE is enabled for this project by modding the char
     // value of the project token.
     enabledForProject: function (

@@ -18,6 +18,7 @@ const localDomains = ['localhost', '127.0.0.1']
 
 const nativeForEach = ArrayProto.forEach,
     nativeIndexOf = ArrayProto.indexOf,
+    // eslint-disable-next-line posthog-js/no-direct-array-check
     nativeIsArray = Array.isArray,
     breaker: Breaker = {}
 
@@ -67,7 +68,7 @@ export const _trim = function (str: string): string {
 
 export const _bind_instance_methods = function (obj: Record<string, any>): void {
     for (const func in obj) {
-        if (typeof obj[func] === 'function') {
+        if (_isFunction(obj[func])) {
             obj[func] = obj[func].bind(obj)
         }
     }
@@ -78,7 +79,7 @@ export function _eachArray<E = any>(
     iterator: (value: E, key: number) => void | Breaker,
     thisArg?: any
 ): void {
-    if (Array.isArray(obj)) {
+    if (_isArray(obj)) {
         if (nativeForEach && obj.forEach === nativeForEach) {
             obj.forEach(iterator, thisArg)
         } else if ('length' in obj && obj.length === +obj.length) {
@@ -97,10 +98,10 @@ export function _eachArray<E = any>(
  * @param {Object=} thisArg
  */
 export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
-    if (obj === null || obj === undefined) {
+    if (_isNull(obj) || _isUndefined(obj)) {
         return
     }
-    if (Array.isArray(obj)) {
+    if (_isArray(obj)) {
         return _eachArray(obj, iterator, thisArg)
     }
     for (const key in obj) {
@@ -134,6 +135,7 @@ export const _isArray =
 // let bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
 export const _isFunction = function (f: any): f is (...args: any[]) => any {
     try {
+        // eslint-disable-next-line posthog-js/no-direct-function-check
         return /^\s*\bfunction\b/.test(f)
     } catch (x) {
         return false
@@ -145,7 +147,7 @@ export const _include = function (
     target: any
 ): boolean | Breaker {
     let found = false
-    if (obj === null) {
+    if (_isNull(obj)) {
         return found
     }
     if (nativeIndexOf && obj.indexOf === nativeIndexOf) {
@@ -180,14 +182,15 @@ export function _entries<T = any>(obj: Record<string, T>): [string, T][] {
 }
 
 // Underscore Addons
-export const _isObject = function (obj: any): obj is Record<string, any> {
-    return obj === Object(obj) && !_isArray(obj)
+export const _isObject = function (x: unknown): x is Record<string, any> {
+    // eslint-disable-next-line posthog-js/no-direct-object-check
+    return x === Object(x) && !_isArray(x)
 }
 
-export const _isEmptyObject = function (obj: any): obj is Record<string, any> {
-    if (_isObject(obj)) {
-        for (const key in obj) {
-            if (hasOwnProperty.call(obj, key)) {
+export const _isEmptyObject = function (x: unknown): x is Record<string, any> {
+    if (_isObject(x)) {
+        for (const key in x) {
+            if (hasOwnProperty.call(x, key)) {
                 return false
             }
         }
@@ -196,20 +199,32 @@ export const _isEmptyObject = function (obj: any): obj is Record<string, any> {
     return false
 }
 
-export const _isUndefined = function (obj: any): obj is undefined {
-    return obj === void 0
+export const _isUndefined = function (x: unknown): x is undefined {
+    return x === void 0
 }
 
-export const _isString = function (obj: any): obj is string {
-    return toString.call(obj) == '[object String]'
+export const _isString = function (x: unknown): x is string {
+    // eslint-disable-next-line posthog-js/no-direct-string-check
+    return toString.call(x) == '[object String]'
 }
 
-export const _isDate = function (obj: any): obj is Date {
-    return toString.call(obj) == '[object Date]'
+export const _isNull = function (x: unknown): x is null {
+    // eslint-disable-next-line posthog-js/no-direct-null-check
+    return x === null
 }
 
-export const _isNumber = function (obj: any): obj is number {
-    return toString.call(obj) == '[object Number]'
+export const _isDate = function (x: unknown): x is Date {
+    // eslint-disable-next-line posthog-js/no-direct-date-check
+    return toString.call(x) == '[object Date]'
+}
+export const _isNumber = function (x: unknown): x is number {
+    // eslint-disable-next-line posthog-js/no-direct-number-check
+    return toString.call(x) == '[object Number]'
+}
+
+export const _isBoolean = function (x: unknown): x is boolean {
+    // eslint-disable-next-line posthog-js/no-direct-boolean-check
+    return toString.call(x) === '[object Boolean]'
 }
 
 export const _isValidRegex = function (str: string): boolean {
@@ -266,6 +281,14 @@ export const _formatDate = function (d: Date): string {
     )
 }
 
+export const _try = function <T>(fn: () => T): T | undefined {
+    try {
+        return fn()
+    } catch (e) {
+        return undefined
+    }
+}
+
 export const _safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {
     return function (...args) {
         try {
@@ -288,7 +311,7 @@ export const _safewrap_class = function (klass: Function, functions: string[]): 
 
 export const _safewrap_instance_methods = function (obj: Record<string, any>): void {
     for (const func in obj) {
-        if (typeof obj[func] === 'function') {
+        if (_isFunction(obj[func])) {
             obj[func] = _safewrap(obj[func])
         }
     }
@@ -354,7 +377,7 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
         if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key as string) > -1) {
             return value
         }
-        if (typeof value === 'string' && maxStringLength !== null) {
+        if (_isString(value) && !_isNull(maxStringLength)) {
             return (value as string).slice(0, maxStringLength)
         }
         return value
@@ -439,7 +462,7 @@ export const _utf8Encode = function (string: string): string {
         } else {
             enc = String.fromCharCode((c1 >> 12) | 224, ((c1 >> 6) & 63) | 128, (c1 & 63) | 128)
         }
-        if (enc !== null) {
+        if (!_isNull(enc)) {
             if (end > start) {
                 utftext += string.substring(start, end)
             }
@@ -516,10 +539,6 @@ export const _isBlockedUA = function (ua: string, customBlockedUserAgents: strin
     })
 }
 
-/**
- * @param {Object=} formdata
- * @param {string=} arg_separator
- */
 export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_separator = '&'): string {
     let use_val: string
     let use_key: string
@@ -541,7 +560,7 @@ export const _getQueryParam = function (url: string, param: string): string {
     const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
     const regex = new RegExp(regexS)
     const results = regex.exec(url)
-    if (results === null || (results && typeof results[1] !== 'string' && (results[1] as any).length)) {
+    if (_isNull(results) || (results && !_isString(results[1]) && (results[1] as any).length)) {
         return ''
     } else {
         let result = results[1]
@@ -719,7 +738,7 @@ export const _info = {
             param = search != 'yahoo' ? 'q' : 'p',
             ret: Record<string, any> = {}
 
-        if (search !== null) {
+        if (!_isNull(search)) {
             ret['$search_engine'] = search
 
             const keyword = _getQueryParam(document.referrer, param)
@@ -808,7 +827,7 @@ export const _info = {
             Mozilla: /rv:(\d+(\.\d+)?)/,
         }
         const regex: RegExp | undefined = versionRegexs[browser as keyof typeof versionRegexs]
-        if (regex === undefined) {
+        if (_isUndefined(regex)) {
             return null
         }
         const matches = userAgent.match(regex)
