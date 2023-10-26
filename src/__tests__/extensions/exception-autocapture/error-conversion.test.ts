@@ -4,7 +4,7 @@ import {
     errorToProperties,
     ErrorProperties,
     unhandledRejectionToProperties,
-} from '../../../extensions/exceptions/error-conversion'
+} from '../../../extensions/exception-autocapture/error-conversion'
 import { _isNull } from '../../../utils'
 
 // ugh, jest

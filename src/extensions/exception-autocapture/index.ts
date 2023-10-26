@@ -1,10 +1,16 @@
-import { _isArray, _isUndefined, logger, window } from '../../utils'
+import { _isArray, _isObject, _isUndefined, logger, window } from '../../utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
 import { isPrimitive } from './type-checking'
 
 const EXCEPTION_INGESTION_ENDPOINT = '/e/'
+
+export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
+    const exceptionObserver = new ExceptionObserver(instance)
+    exceptionObserver.afterDecideResponse(response)
+    return exceptionObserver
+}
 
 export class ExceptionObserver {
     instance: PostHog
@@ -16,10 +22,6 @@ export class ExceptionObserver {
 
     constructor(instance: PostHog) {
         this.instance = instance
-    }
-
-    private debugLog(...args: any[]) {
-        logger.info('[ExceptionObserver]', ...args)
     }
 
     startCapturing() {
@@ -104,7 +106,10 @@ export class ExceptionObserver {
 
         if (this.isEnabled()) {
             this.startCapturing()
-            this.debugLog('Remote config for exception autocapture is enabled, starting', autocaptureExceptionsResponse)
+            logger.info(
+                '[Exception Capture] Remote config for exception autocapture is enabled, starting with config: ',
+                _isObject(autocaptureExceptionsResponse) ? autocaptureExceptionsResponse : {}
+            )
         }
     }
 
@@ -112,7 +117,7 @@ export class ExceptionObserver {
         const errorProperties = errorToProperties(args)
 
         if (this.errorsToIgnore.some((regex) => regex.test(errorProperties.$exception_message || ''))) {
-            this.debugLog('Ignoring exception based on remote config', errorProperties)
+            logger.info('[Exception Capture] Ignoring exception based on remote config', errorProperties)
             return
         }
 
