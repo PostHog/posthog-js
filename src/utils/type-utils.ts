@@ -2,6 +2,7 @@
 const nativeIsArray = Array.isArray
 const ObjProto = Object.prototype
 export const hasOwnProperty = ObjProto.hasOwnProperty
+const toString = Object.prototype.toString
 
 export const _isArray =
     nativeIsArray ||
@@ -9,7 +10,7 @@ export const _isArray =
         return toString.call(obj) === '[object Array]'
     }
 export const _isUint8Array = function (x: unknown): x is Uint8Array {
-    return Object.prototype.toString.call(x) === '[object Uint8Array]'
+    return toString.call(x) === '[object Uint8Array]'
 }
 // from a comment on http://dbj.org/dbj/?p=286
 // fails on only one very rare and deliberate custom object:
@@ -43,7 +44,7 @@ export const _isUndefined = function (x: unknown): x is undefined {
 }
 export const _isString = function (x: unknown): x is string {
     // eslint-disable-next-line posthog-js/no-direct-string-check
-    return Object.prototype.toString.call(x) == '[object String]'
+    return toString.call(x) == '[object String]'
 }
 export const _isNull = function (x: unknown): x is null {
     // eslint-disable-next-line posthog-js/no-direct-null-check
