@@ -1,3 +1,7 @@
+## 1.87.2 - 2023-10-27
+
+- fix(surveys): Publish types in module (#863)
+
 ## 1.87.1 - 2023-10-26
 
 - fix(surveys): clearer user property names (#861)
