@@ -11,7 +11,7 @@
 // polyfill for IE11
 import { window } from './utils'
 
-import { _isNumber, _isUndefined } from './type-utils'
+import { _isNumber, _isUndefined } from './utils/type-utils'
 
 if (!Math.trunc) {
     Math.trunc = function (v) {

@@ -8,7 +8,7 @@ import rrwebRecord from 'rrweb-v1/es/rrweb/packages/rrweb/src/record'
 // @ts-ignore
 import { getRecordConsolePlugin } from 'rrweb-v1/es/rrweb/packages/rrweb/src/plugins/console/record'
 
-import { _isUndefined } from './type-utils'
+import { _isUndefined } from './utils/type-utils'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 

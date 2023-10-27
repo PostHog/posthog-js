@@ -10,7 +10,7 @@ import {
 } from './type-checking'
 import { defaultStackParser, StackFrame } from './stack-trace'
 
-import { _isNumber, _isString, _isUndefined } from '../../type-utils'
+import { _isNumber, _isString, _isUndefined } from '../../utils/type-utils'
 
 /**
  * based on the very wonderful MIT licensed Sentry SDK

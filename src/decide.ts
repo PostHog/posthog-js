@@ -4,7 +4,7 @@ import { PostHog } from './posthog-core'
 import { DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
-import { _isUndefined } from './type-utils'
+import { _isUndefined } from './utils/type-utils'
 
 export class Decide {
     instance: PostHog

@@ -1,4 +1,4 @@
-import { _isFunction, _isNull, _isObject, _isUndefined } from '../../type-utils'
+import { _isFunction, _isNull, _isObject, _isUndefined } from '../../utils/type-utils'
 
 export function isEvent(candidate: unknown): candidate is Event {
     return !_isUndefined(Event) && isInstanceOf(candidate, Event)

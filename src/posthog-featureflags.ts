@@ -19,7 +19,7 @@ import {
     FLAG_CALL_REPORTED,
 } from './constants'
 
-import { _isArray } from './type-utils'
+import { _isArray } from './utils/type-utils'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'

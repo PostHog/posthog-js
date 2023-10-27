@@ -1,4 +1,4 @@
-import { _HTTPBuildQuery, _isUrlMatchingRegex } from '../request-utils'
+import { _HTTPBuildQuery, _isUrlMatchingRegex } from '../utils/request-utils'
 
 describe('request utils', () => {
     describe('_HTTPBuildQuery', () => {

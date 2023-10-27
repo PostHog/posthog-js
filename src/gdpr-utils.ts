@@ -16,7 +16,7 @@ import { cookieStore, localStore, localPlusCookieStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
 import { PostHog } from './posthog-core'
 
-import { _isNumber, _isString } from './type-utils'
+import { _isNumber, _isString } from './utils/type-utils'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)

@@ -1,6 +1,6 @@
 import { generateSurveys } from './extensions/surveys'
 
-import { _isUndefined } from './type-utils'
+import { _isUndefined } from './utils/type-utils'
 
 const win: Window & typeof globalThis = _isUndefined(window) ? ({} as typeof window) : window
 

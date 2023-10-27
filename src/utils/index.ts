@@ -1,5 +1,5 @@
-import Config from './config'
-import { Breaker, EventHandler, Properties } from './types'
+import Config from '../config'
+import { Breaker, EventHandler, Properties } from '../types'
 import { _getQueryParam } from './request-utils'
 import {
     _isArray,

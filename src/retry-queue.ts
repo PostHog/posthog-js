@@ -4,7 +4,7 @@ import { QueuedRequestData, RetryQueueElement } from './types'
 import { logger } from './utils'
 import { RateLimiter } from './rate-limiter'
 
-import { _isUndefined } from './type-utils'
+import { _isUndefined } from './utils/type-utils'
 
 const thirtyMinutes = 30 * 60 * 1000
 

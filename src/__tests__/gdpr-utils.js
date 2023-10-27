@@ -2,7 +2,7 @@ import sinon from 'sinon'
 
 import * as gdpr from '../gdpr-utils'
 
-import { _isNull } from '../type-utils'
+import { _isNull } from '../utils/type-utils'
 
 const TOKENS = [
     `test-token`,

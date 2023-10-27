@@ -8,7 +8,7 @@ import rrwebRecord from 'rrweb/es/rrweb/packages/rrweb/src/record'
 // @ts-ignore
 import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugins/console/record'
 
-import { _isUndefined } from './type-utils'
+import { _isUndefined } from './utils/type-utils'
 
 const win: Window & typeof globalThis = _isUndefined(window) ? ({} as typeof window) : window
 

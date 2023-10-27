@@ -11,7 +11,7 @@ import {
     USER_STATE,
 } from './constants'
 
-import { _isObject, _isUndefined } from './type-utils'
+import { _isObject, _isUndefined } from './utils/type-utils'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',

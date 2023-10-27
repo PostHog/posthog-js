@@ -1,9 +1,9 @@
 import { _each, logger } from './utils'
 import Config from './config'
 import { PostData, XHROptions, XHRParams } from './types'
-import { _HTTPBuildQuery } from './request-utils'
+import { _HTTPBuildQuery } from './utils/request-utils'
 
-import { _isArray, _isFunction, _isUint8Array } from './type-utils'
+import { _isArray, _isFunction, _isUint8Array } from './utils/type-utils'
 
 export const addParamsToURL = (
     url: string,

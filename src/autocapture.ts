@@ -27,7 +27,7 @@ import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Propertie
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { _isBoolean, _isFunction, _isNull, _isUndefined } from './type-utils'
+import { _isBoolean, _isFunction, _isNull, _isUndefined } from './utils/type-utils'
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {

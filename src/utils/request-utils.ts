@@ -1,4 +1,4 @@
-import { _each, _isValidRegex, logger } from './utils'
+import { _each, _isValidRegex, logger } from './'
 
 import { _isNull, _isString, _isUndefined } from './type-utils'
 

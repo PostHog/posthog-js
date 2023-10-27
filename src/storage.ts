@@ -2,7 +2,7 @@ import { _extend, logger } from './utils'
 import { PersistentStore, Properties } from './types'
 import { DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constants'
 
-import { _isNull, _isUndefined } from './type-utils'
+import { _isNull, _isUndefined } from './utils/type-utils'
 
 const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
 

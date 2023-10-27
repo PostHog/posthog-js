@@ -19,7 +19,7 @@ import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/type
 import Config from '../../config'
 import { _timestamp, loadScript, logger } from '../../utils'
 
-import { _isBoolean, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../type-utils'
+import { _isBoolean, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 
 const BASE_ENDPOINT = '/s/'
 

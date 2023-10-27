@@ -57,7 +57,7 @@ import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
 import { document } from './utils'
-import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './type-utils'
+import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
 
 /*
 SIMPLE STYLE GUIDE:
