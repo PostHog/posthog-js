@@ -50,12 +50,4 @@ jobs:
         run: yarn build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browserstack }}" --attempts 3
-
-      - name: Archive the tested code
-        # if there are JS errors there's no way to know _where_ the error is because you see minified stack trace
-        uses: actions/upload-artifact@v3
-        with:
-            name: JS
-            path: /dist
-        if: ${{ failure() }}
+        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browserstack }}" --attempts 3 --debug-mode
