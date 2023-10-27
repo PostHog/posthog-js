@@ -28,9 +28,6 @@ export interface SurveyAppearance {
 
 export enum SurveyType {
     Popover = 'popover',
-    Button = 'button',
-    FullScreen = 'full_screen',
-    Email = 'email',
     API = 'api',
 }
 
