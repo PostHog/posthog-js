@@ -1,5 +1,6 @@
 import Config from './config'
 import { Breaker, EventHandler, Properties } from './types'
+import { _getQueryParam } from './request-utils'
 
 /*
  * Saved references to long variable names, so that closure compiler can
@@ -14,7 +15,6 @@ const win: Window & typeof globalThis = typeof window !== 'undefined' ? window :
 const navigator = win.navigator || { userAgent: '' }
 const document = win.document || {}
 const userAgent = navigator.userAgent
-const localDomains = ['localhost', '127.0.0.1']
 
 const nativeForEach = ArrayProto.forEach,
     nativeIndexOf = ArrayProto.indexOf,
@@ -221,6 +221,7 @@ export const _isDate = function (x: unknown): x is Date {
     // eslint-disable-next-line posthog-js/no-direct-date-check
     return toString.call(x) == '[object Date]'
 }
+
 export const _isNumber = function (x: unknown): x is number {
     // eslint-disable-next-line posthog-js/no-direct-number-check
     return toString.call(x) == '[object Number]'
@@ -238,11 +239,6 @@ export const _isValidRegex = function (str: string): boolean {
         return false
     }
     return true
-}
-
-export const _isUrlMatchingRegex = function (url: string, pattern: string): boolean {
-    if (!_isValidRegex(pattern)) return false
-    return new RegExp(pattern).test(url)
 }
 
 export const _encodeDates = function (obj: Properties): Properties {
@@ -543,45 +539,6 @@ export const _isBlockedUA = function (ua: string, customBlockedUserAgents: strin
     })
 }
 
-export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_separator = '&'): string {
-    let use_val: string
-    let use_key: string
-    const tph_arr: string[] = []
-
-    _each(formdata, function (val, key) {
-        use_val = encodeURIComponent(val.toString())
-        use_key = encodeURIComponent(key)
-        tph_arr[tph_arr.length] = use_key + '=' + use_val
-    })
-
-    return tph_arr.join(arg_separator)
-}
-
-export const _getQueryParam = function (url: string, param: string): string {
-    // Expects a raw URL
-
-    const cleanParam = param.replace(/[[]/, '\\[').replace(/[\]]/, '\\]')
-    const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
-    const regex = new RegExp(regexS)
-    const results = regex.exec(url)
-    if (_isNull(results) || (results && !_isString(results[1]) && (results[1] as any).length)) {
-        return ''
-    } else {
-        let result = results[1]
-        try {
-            result = decodeURIComponent(result)
-        } catch (err) {
-            logger.error('Skipping decoding for malformed query param: ' + result)
-        }
-        return result.replace(/\+/g, ' ')
-    }
-}
-
-export const _getHashParam = function (hash: string, param: string): string | null {
-    const matches = hash.match(new RegExp(param + '=([^&]*)'))
-    return matches ? matches[1] : null
-}
-
 export const _register_event = (function () {
     // written by Dean Edwards, 2005
     // with input from Tino Zijdel - crisp@xs4all.nl
@@ -667,10 +624,6 @@ export const _register_event = (function () {
 
     return register_event
 })()
-
-export const isLocalhost = (): boolean => {
-    return localDomains.includes(location.hostname)
-}
 
 export function loadScript(scriptUrlToLoad: string, callback: (error?: string | Event, event?: Event) => void): void {
     const addScript = () => {
