@@ -7,12 +7,12 @@
 
 import {
     _copyAndTruncateStrings,
-    _info,
     _isBlockedUA,
     DEFAULT_BLOCKED_UA_STRS,
     loadScript,
     isCrossDomainCookie,
 } from '../utils'
+import { _info } from '../utils/event-utils'
 
 function userAgentFor(botString) {
     const randOne = (Math.random() + 1).toString(36).substring(7)

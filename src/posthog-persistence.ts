@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { _each, _extend, _include, _info, _strip_empty_properties, logger } from './utils'
+import { _each, _extend, _include, _strip_empty_properties, logger } from './utils'
 import { cookieStore, localStore, localPlusCookieStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
@@ -12,6 +12,7 @@ import {
 } from './constants'
 
 import { _isObject, _isUndefined } from './utils/type-utils'
+import { _info } from './utils/event-utils'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',

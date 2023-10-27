@@ -4,7 +4,6 @@ import {
     _each,
     _eachArray,
     _extend,
-    _info,
     _isBlockedUA,
     _register_event,
     _safewrap_class,
@@ -58,6 +57,7 @@ import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
 import { document } from './utils'
 import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
+import { _info } from './utils/event-utils'
 
 /*
 SIMPLE STYLE GUIDE:

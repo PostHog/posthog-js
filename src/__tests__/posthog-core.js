@@ -2,9 +2,10 @@ import { init_as_module, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
-import { _info, window, document } from '../utils'
+import { window, document } from '../utils'
 
 import { truth } from './helpers/truth'
+import { _info } from '../utils/event-utils'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
