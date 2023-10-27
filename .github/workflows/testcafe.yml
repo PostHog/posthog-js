@@ -50,4 +50,4 @@ jobs:
         run: yarn build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browserstack }}" --attempts 3 --debug-mode
+        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browserstack }}" --attempts 3
