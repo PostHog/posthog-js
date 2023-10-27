@@ -1,8 +1,10 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
 import { QueuedRequestData, RetryQueueElement } from './types'
-import { _isUndefined, logger } from './utils'
+import { logger } from './utils'
 import { RateLimiter } from './rate-limiter'
+
+import { _isUndefined } from './type-utils'
 
 const thirtyMinutes = 30 * 60 * 1000
 

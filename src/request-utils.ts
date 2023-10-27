@@ -1,4 +1,6 @@
-import { _each, _isNull, _isString, _isUndefined, _isValidRegex, logger } from './utils'
+import { _each, _isValidRegex, logger } from './utils'
+
+import { _isNull, _isString, _isUndefined } from './type-utils'
 
 const localDomains = ['localhost', '127.0.0.1']
 

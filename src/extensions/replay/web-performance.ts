@@ -1,7 +1,9 @@
-import { _isUndefined, logger } from '../../utils'
+import { logger } from '../../utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, NetworkRequest } from '../../types'
 import { isLocalhost } from '../../request-utils'
+
+import { _isUndefined } from '../../type-utils'
 
 const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     // BASE_PERFORMANCE_EVENT_COLUMNS

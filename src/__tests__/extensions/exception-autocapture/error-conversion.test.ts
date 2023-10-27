@@ -5,7 +5,8 @@ import {
     ErrorProperties,
     unhandledRejectionToProperties,
 } from '../../../extensions/exception-autocapture/error-conversion'
-import { _isNull } from '../../../utils'
+
+import { _isNull } from '../../../type-utils'
 
 // ugh, jest
 // can't reference PromiseRejectionEvent to construct it 🤷

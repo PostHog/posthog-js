@@ -5,20 +5,13 @@ import {
     _eachArray,
     _extend,
     _info,
-    _isArray,
     _isBlockedUA,
-    _isEmptyObject,
-    _isObject,
-    _isUndefined,
     _register_event,
     _safewrap_class,
-    document,
     userAgent,
     window,
     logger,
     isCrossDomainCookie,
-    _isString,
-    _isFunction,
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -63,6 +56,8 @@ import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
+import { document } from './utils'
+import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './type-utils'
 
 /*
 SIMPLE STYLE GUIDE:

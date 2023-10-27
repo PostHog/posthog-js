@@ -17,17 +17,9 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../../config'
-import {
-    _isBoolean,
-    _isNull,
-    _isNumber,
-    _isObject,
-    _isString,
-    _isUndefined,
-    _timestamp,
-    loadScript,
-    logger,
-} from '../../utils'
+import { _timestamp, loadScript, logger } from '../../utils'
+
+import { _isBoolean, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../type-utils'
 
 const BASE_ENDPOINT = '/s/'
 

@@ -3,7 +3,8 @@
 import { addParamsToURL, encodePostData, xhr } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 import { Compression, PostData, XHROptions, XHRParams } from '../types'
-import { _isUndefined } from '../utils'
+
+import { _isUndefined } from '../type-utils'
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 

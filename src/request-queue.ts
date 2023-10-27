@@ -1,6 +1,8 @@
 import { RequestQueueScaffold } from './base-request-queue'
-import { _each, _isUndefined } from './utils'
+import { _each } from './utils'
 import { Properties, QueuedRequestData, XHROptions } from './types'
+
+import { _isUndefined } from './type-utils'
 
 export class RequestQueue extends RequestQueueScaffold {
     handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void
