@@ -21,12 +21,12 @@ import 'given2/setup'
 // require('./commands')
 
 // Add console errors into cypress logs.
-Cypress.on('window:before:load', (win) => {
-    cy.spy(win.console, 'error')
-    cy.spy(win.console, 'warn')
-    cy.spy(win.console, 'log')
-    cy.spy(win.console, 'debug')
-})
+// Cypress.on('window:before:load', (win) => {
+//     cy.spy(win.console, 'error')
+//     cy.spy(win.console, 'warn')
+//     cy.spy(win.console, 'log')
+//     cy.spy(win.console, 'debug')
+// })
 
 beforeEach(() => {
     cy.server()
