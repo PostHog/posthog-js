@@ -1,4 +1,4 @@
-import { _each, _HTTPBuildQuery, _isArray, _isFunction, logger } from './utils'
+import { _each, _HTTPBuildQuery, _isArray, _isFunction, _isUint8Array, logger } from './utils'
 import Config from './config'
 import { PostData, XHROptions, XHRParams } from './types'
 
@@ -29,7 +29,7 @@ export const addParamsToURL = (
 
 export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHROptions>): string | BlobPart | null => {
     if (options.blob && data.buffer) {
-        return new Blob([data.buffer], { type: 'text/plain' })
+        return new Blob([_isUint8Array(data) ? data : data.buffer], { type: 'text/plain' })
     }
 
     if (options.sendBeacon || options.blob) {
@@ -42,8 +42,8 @@ export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHR
     }
 
     let body_data
-    const isUint8Array = (d: unknown): d is Uint8Array => Object.prototype.toString.call(d) === '[object Uint8Array]'
-    if (_isArray(data) || isUint8Array(data)) {
+
+    if (_isArray(data) || _isUint8Array(data)) {
         // TODO: eh? passing an Array here?
         body_data = 'data=' + encodeURIComponent(data as any)
     } else {
