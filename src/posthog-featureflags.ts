@@ -290,7 +290,7 @@ export class PostHogFeatureFlags {
      */
     override(flags: boolean | string[] | Record<string, string | boolean>): void {
         if (!this.instance.__loaded || !this.instance.persistence) {
-            return logger.unintializedWarning('posthog.feature_flags.override')
+            return logger.uninitializedWarning('posthog.feature_flags.override')
         }
 
         this._override_warning = false

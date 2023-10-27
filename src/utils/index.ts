@@ -57,7 +57,7 @@ export const logger = {
         console.error(LOGGER_PREFIX, ...args)
     },
 
-    unintializedWarning: (methodName: string) => {
+    uninitializedWarning: (methodName: string) => {
         logger.error(`You must initialize PostHog before calling ${methodName}`)
     },
 }

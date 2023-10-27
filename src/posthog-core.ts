@@ -830,7 +830,7 @@ export class PostHog {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
-            return logger.unintializedWarning('posthog.capture')
+            return logger.uninitializedWarning('posthog.capture')
         }
 
         if (userOptedOut(this)) {
@@ -1249,7 +1249,7 @@ export class PostHog {
      */
     identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
         if (!this.__loaded || !this.persistence) {
-            return logger.unintializedWarning('posthog.identify')
+            return logger.uninitializedWarning('posthog.identify')
         }
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
@@ -1418,7 +1418,7 @@ export class PostHog {
      */
     reset(reset_device_id?: boolean): void {
         if (!this.__loaded) {
-            return logger.unintializedWarning('posthog.reset')
+            return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property('$device_id')
         this.persistence?.clear()
