@@ -53,6 +53,7 @@
             var li = document.createElement("li");
             li.innerHTML = message + "<br/>" + source + " <br/>" + lineno + "<br/> " + colno + " <br/>" + error;
             document.getElementById("exception-holder").appendChild(li);
+            debugger
             console.log(message, source, lineno, colno, error);
         };
     </script>
