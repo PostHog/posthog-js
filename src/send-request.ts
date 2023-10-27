@@ -3,7 +3,7 @@ import Config from './config'
 import { PostData, XHROptions, XHRParams } from './types'
 import { _HTTPBuildQuery } from './utils/request-utils'
 
-import { _isArray, _isFunction, _isUint8Array } from './utils/type-utils'
+import { _isArray, _isFunction, _isUint8Array, _isUndefined } from './utils/type-utils'
 
 export const addParamsToURL = (
     url: string,
@@ -20,7 +20,7 @@ export const addParamsToURL = (
         const params = halves[1].split('&')
         for (const p of params) {
             const key = p.split('=')[0]
-            if (key in args) {
+            if (!_isUndefined(args[key])) {
                 delete args[key]
             }
         }
