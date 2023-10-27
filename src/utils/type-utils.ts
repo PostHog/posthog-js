@@ -2,7 +2,7 @@
 const nativeIsArray = Array.isArray
 const ObjProto = Object.prototype
 export const hasOwnProperty = ObjProto.hasOwnProperty
-const toString = Object.prototype.toString
+const toString = ObjProto.toString
 
 export const _isArray =
     nativeIsArray ||
