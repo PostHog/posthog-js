@@ -1,4 +1,4 @@
-import { _each, _isNull, _isString, _isValidRegex, logger } from './utils'
+import { _each, _isNull, _isString, _isUndefined, _isValidRegex, logger } from './utils'
 
 const localDomains = ['localhost', '127.0.0.1']
 
@@ -13,6 +13,11 @@ export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_sepa
     const tph_arr: string[] = []
 
     _each(formdata, function (val, key) {
+        // the key might be literally the string undefined for e.g. if {undefined: 'something'}
+        if (_isUndefined(val) || _isUndefined(key) || key === 'undefined') {
+            return
+        }
+
         use_val = encodeURIComponent(val.toString())
         use_key = encodeURIComponent(key)
         tph_arr[tph_arr.length] = use_key + '=' + use_val

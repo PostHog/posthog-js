@@ -18,7 +18,7 @@ export const addParamsToURL = (
         const params = halves[1].split('&')
         for (const p of params) {
             const key = p.split('=')[0]
-            if (args[key]) {
+            if (key in args) {
                 delete args[key]
             }
         }
@@ -70,6 +70,8 @@ export const xhr = ({
     timeout = 60000,
     onResponse,
 }: XHRParams) => {
+    url = addParamsToURL(url, { retry_count: retriesPerformedSoFar }, {})
+
     const req = new XMLHttpRequest()
     req.open(options.method || 'GET', url, true)
 

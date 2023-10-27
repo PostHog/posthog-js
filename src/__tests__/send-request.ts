@@ -10,7 +10,7 @@ jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 describe('send-request', () => {
     describe('xhr', () => {
         let mockXHR: XMLHttpRequest
-        let xhrParams: () => XHRParams
+        let xhrParams: (overrides?: Partial<XHRParams>) => XHRParams
         let onXHRError: XHRParams['onXHRError']
         let checkForLimiting: XHRParams['onResponse']
         let xhrOptions: XHRParams['options']
@@ -29,24 +29,42 @@ describe('send-request', () => {
             onXHRError = jest.fn()
             checkForLimiting = jest.fn()
             xhrOptions = {}
-            xhrParams = () => ({
-                url: 'https://any.posthog-instance.com',
-                data: {},
-                headers: {},
-                options: xhrOptions,
-                callback: () => {},
-                retriesPerformedSoFar: undefined,
-                retryQueue: {
-                    enqueue: () => {},
-                } as Partial<XHRParams['retryQueue']> as XHRParams['retryQueue'],
-                onXHRError,
-                onResponse: checkForLimiting,
-            })
+            xhrParams = (overrides?: Partial<XHRParams>) => {
+                return {
+                    url: 'https://any.posthog-instance.com?ver=1.23.45',
+                    data: {},
+                    headers: {},
+                    options: xhrOptions,
+                    callback: () => {},
+                    retriesPerformedSoFar: undefined,
+                    retryQueue: {
+                        enqueue: () => {},
+                    } as Partial<XHRParams['retryQueue']> as XHRParams['retryQueue'],
+                    onXHRError,
+                    onResponse: checkForLimiting,
+                    ...overrides,
+                }
+            }
 
             // ignore TS complaining about us cramming a fake in here
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             window.XMLHttpRequest = jest.fn(() => mockXHR) as unknown as XMLHttpRequest
+        })
+
+        test('it adds the retry count to the URL', () => {
+            const retryCount = Math.floor(Math.random() * 100)
+            xhr(
+                xhrParams({
+                    retriesPerformedSoFar: retryCount,
+                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
+                })
+            )
+            expect(mockXHR.open).toHaveBeenCalledWith(
+                'GET',
+                `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278&retry_count=${retryCount}`,
+                true
+            )
         })
 
         describe('when xhr requests fail', () => {
@@ -100,7 +118,6 @@ describe('send-request', () => {
             // eslint-disable-next-line compat/compat
             expect(new URL(alteredURL).search).toContain('&ver=1.23.45')
         })
-
         it('adds i as 1 when IP in config', () => {
             const alteredURL = addParamsToURL(
                 posthogURL,
@@ -129,7 +146,6 @@ describe('send-request', () => {
             // eslint-disable-next-line compat/compat
             expect(new URL(alteredURL).search).toMatch(/_=\d+/)
         })
-
         it('does not add a query parameter if it already exists in the URL', () => {
             posthogURL = 'https://test.com/'
             const whenItShouldAddParam = addParamsToURL(
@@ -151,6 +167,41 @@ describe('send-request', () => {
             )
             expect(whenItShouldNotAddParam).not.toContain('ver=1.23.45')
             expect(whenItShouldNotAddParam).toContain('ver=2')
+        })
+
+        it('does not add the i query parameter if it already exists in the URL', () => {
+            posthogURL = 'https://test.com/'
+            expect(
+                addParamsToURL(
+                    'https://test.com/',
+                    {},
+                    {
+                        ip: true,
+                    }
+                )
+            ).toContain('ip=1')
+
+            expect(
+                addParamsToURL(
+                    'https://test.com/',
+                    {},
+                    {
+                        ip: false,
+                    }
+                )
+            ).toContain('ip=0')
+
+            expect(addParamsToURL('https://test.com/', {}, {})).toContain('ip=0')
+
+            const whenItShouldNotAddParam = addParamsToURL(
+                'https://test.com/decide/?ip=7',
+                {},
+                {
+                    ip: true,
+                }
+            )
+            expect(whenItShouldNotAddParam).not.toContain('ip=1')
+            expect(whenItShouldNotAddParam).toContain('ip=7')
         })
     })
 
