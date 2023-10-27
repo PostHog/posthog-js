@@ -1,6 +1,6 @@
 import { _each, _isValidRegex, logger } from './'
 
-import { _isNull, _isString, _isUndefined } from './type-utils'
+import { _isArray, _isUndefined } from './type-utils'
 
 const localDomains = ['localhost', '127.0.0.1']
 
@@ -29,13 +29,15 @@ export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_sepa
 }
 
 export const _getQueryParam = function (url: string, param: string): string {
-    // Expects a raw URL
+    const withoutHash: string = url.split('#')[0] || ''
+    const queryParams: string = withoutHash.split('?')[1] || ''
+    const results =
+        queryParams
+            .split('&')
+            .map((part) => part.split('='))
+            .find(([key]) => key === param) || []
 
-    const cleanParam = param.replace(/[[]/, '\\[').replace(/[\]]/, '\\]')
-    const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
-    const regex = new RegExp(regexS)
-    const results = regex.exec(url)
-    if (_isNull(results) || (results && !_isString(results[1]) && (results[1] as any).length)) {
+    if (!_isArray(results) || results.length < 2) {
         return ''
     } else {
         let result = results[1]
