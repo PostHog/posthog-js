@@ -31,16 +31,22 @@ export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_sepa
 export const _getQueryParam = function (url: string, param: string): string {
     const withoutHash: string = url.split('#')[0] || ''
     const queryParams: string = withoutHash.split('?')[1] || ''
-    const results =
-        queryParams
-            .split('&')
-            .map((part) => part.split('='))
-            .find(([key]) => key === param) || []
 
-    if (!_isArray(results) || results.length < 2) {
+    const queryParts = queryParams.split('&')
+    let keyValuePair
+
+    for (let i = 0; i < queryParts.length; i++) {
+        const parts = queryParts[i].split('=')
+        if (parts[0] === param) {
+            keyValuePair = parts
+            break
+        }
+    }
+
+    if (!_isArray(keyValuePair) || keyValuePair.length < 2) {
         return ''
     } else {
-        let result = results[1]
+        let result = keyValuePair[1]
         try {
             result = decodeURIComponent(result)
         } catch (err) {
