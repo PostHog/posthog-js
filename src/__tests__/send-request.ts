@@ -1,17 +1,19 @@
-/* eslint-disable compat/compat */
+/// <reference lib="dom" />
 
 import { addParamsToURL, encodePostData, xhr } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
+import { Compression, PostData, XHROptions, XHRParams } from '../types'
+import { _isUndefined } from '../utils'
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
 describe('send-request', () => {
     describe('xhr', () => {
-        let mockXHR
-        let xhrParams
-        let onXHRError
-        let checkForLimiting
-        let xhrOptions
+        let mockXHR: XMLHttpRequest
+        let xhrParams: () => XHRParams
+        let onXHRError: XHRParams['onXHRError']
+        let checkForLimiting: XHRParams['onResponse']
+        let xhrOptions: XHRParams['options']
 
         beforeEach(() => {
             mockXHR = {
@@ -22,33 +24,37 @@ describe('send-request', () => {
                 readyState: 4,
                 responseText: JSON.stringify('something here'),
                 status: 502,
-            }
+            } as Partial<XMLHttpRequest> as XMLHttpRequest
+
             onXHRError = jest.fn()
             checkForLimiting = jest.fn()
             xhrOptions = {}
             xhrParams = () => ({
                 url: 'https://any.posthog-instance.com',
-                data: '',
+                data: {},
                 headers: {},
                 options: xhrOptions,
                 callback: () => {},
-                retriesPerformedSoFar: null,
+                retriesPerformedSoFar: undefined,
                 retryQueue: {
                     enqueue: () => {},
-                },
+                } as Partial<XHRParams['retryQueue']> as XHRParams['retryQueue'],
                 onXHRError,
                 onResponse: checkForLimiting,
             })
 
-            window.XMLHttpRequest = jest.fn(() => mockXHR)
+            // ignore TS complaining about us cramming a fake in here
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            window.XMLHttpRequest = jest.fn(() => mockXHR) as unknown as XMLHttpRequest
         })
 
         describe('when xhr requests fail', () => {
             it('does not error if the configured onXHRError is not a function', () => {
-                onXHRError = 'not a function'
+                onXHRError = 'not a function' as unknown as XHRParams['onXHRError']
                 expect(() => {
                     xhr(xhrParams())
-                    mockXHR.onreadystatechange()
+                    mockXHR.onreadystatechange?.({} as Event)
                 }).not.toThrow()
             })
 
@@ -59,22 +65,27 @@ describe('send-request', () => {
                     requestFromError = req
                 }
                 xhr(xhrParams())
-                mockXHR.onreadystatechange()
+                mockXHR.onreadystatechange?.({} as Event)
                 expect(requestFromError).toHaveProperty('status', 502)
             })
 
             it('calls the on response handler - regardless of status', () => {
+                // a bunch of comments to suppress a warning
+                // we shouldn't really be able to assign to status but JS is weird
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                // noinspection JSConstantReassignment
                 mockXHR.status = Math.floor(Math.random() * 100)
                 xhr(xhrParams())
-                mockXHR.onreadystatechange()
+                mockXHR.onreadystatechange?.({} as Event)
                 expect(checkForLimiting).toHaveBeenCalledWith(mockXHR)
             })
         })
     })
 
     describe('adding query params to posthog API calls', () => {
-        let posthogURL
-        let parameterOptions
+        let posthogURL: string
+        let parameterOptions: { ip?: boolean }
 
         posthogURL = 'https://any.posthog-instance.com'
 
@@ -86,6 +97,7 @@ describe('send-request', () => {
                     ip: true,
                 }
             )
+            // eslint-disable-next-line compat/compat
             expect(new URL(alteredURL).search).toContain('&ver=1.23.45')
         })
 
@@ -97,11 +109,13 @@ describe('send-request', () => {
                     ip: true,
                 }
             )
+            // eslint-disable-next-line compat/compat
             expect(new URL(alteredURL).search).toContain('ip=1')
         })
         it('adds i as 0 when IP not in config', () => {
             parameterOptions = {}
             const alteredURL = addParamsToURL(posthogURL, {}, parameterOptions)
+            // eslint-disable-next-line compat/compat
             expect(new URL(alteredURL).search).toContain('ip=0')
         })
         it('adds timestamp', () => {
@@ -112,6 +126,7 @@ describe('send-request', () => {
                     ip: true,
                 }
             )
+            // eslint-disable-next-line compat/compat
             expect(new URL(alteredURL).search).toMatch(/_=\d+/)
         })
 
@@ -144,8 +159,7 @@ describe('send-request', () => {
             assert(
                 property(uint8Array(), boolean(), boolean(), (data, blob, sendBeacon) => {
                     const encodedData = encodePostData(data, { blob, sendBeacon, method: 'POST' })
-                    // returns blob or string - ignore when it is not a string response
-                    return encodedData.indexOf && encodedData.indexOf('undefined') < 0
+                    return !_isUndefined(encodedData)
                 }),
                 { numRuns: 1000, verbose: VerbosityLevel.VeryVerbose }
             )
@@ -159,24 +173,29 @@ describe('send-request', () => {
     })
 
     describe('encodePostData()', () => {
-        let data
-        let options
+        let data: Uint8Array | PostData
+        let options: Partial<XHROptions>
 
         beforeEach(() => {
             data = { data: 'content' }
             options = { method: 'POST' }
 
+            // let the spy return things that don't technically ,atch the signature
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
             jest.spyOn(global, 'Blob').mockImplementation((...args) => ['Blob', ...args])
         })
 
-        test.each([
+        type TestType = [string, Uint8Array | PostData, Partial<XHROptions>, string | BlobPart | null]
+        test.each<TestType>([
             ['handles objects', { data: 'content' }, { method: 'POST' }, 'data=content'],
-            ['handles arrays', ['foo', 'bar'], { method: 'POST' }, 'data=foo%2Cbar'],
+            // JS can pass unexpected types - force the shape here
+            ['handles arrays', ['foo', 'bar'] as unknown as Uint8Array, { method: 'POST' }, 'data=foo%2Cbar'],
             [
                 'handles data with compression',
-                { data: 'content', compression: 'lz64' },
+                { data: 'content', compression: Compression.GZipJS },
                 { method: 'POST' },
-                'data=content&compression=lz64',
+                'data=content&compression=gzip-js',
             ],
             [
                 'handles string buffer as a blob',
@@ -188,7 +207,7 @@ describe('send-request', () => {
                     {
                         type: 'text/plain',
                     },
-                ],
+                ] as unknown as BlobPart, // the mock sends more info than the real Blob
             ],
             [
                 'handles sendBeacon',
@@ -200,7 +219,7 @@ describe('send-request', () => {
                     {
                         type: 'application/x-www-form-urlencoded',
                     },
-                ],
+                ] as unknown as BlobPart, // the mock sends more info than the real Blob,
             ],
             [
                 'handles sendBeacon when data is not a typed array and blob is also true',
@@ -212,7 +231,7 @@ describe('send-request', () => {
                     {
                         type: 'application/x-www-form-urlencoded',
                     },
-                ],
+                ] as unknown as BlobPart, // the mock sends more info than the real Blob
             ],
             [
                 'handles sendBeacon when data is a typed array and blob is also true',
@@ -226,7 +245,7 @@ describe('send-request', () => {
                     {
                         type: 'text/plain',
                     },
-                ],
+                ] as unknown as BlobPart, // the mock sends more info than the real Blob,,
             ],
         ])('handles %s', (_, data, options, expected) => {
             expect(encodePostData(data, options)).toEqual(expected)
