@@ -12,3 +12,4 @@ jobs:
         with:
           build-script: "build-rollup"
           compression: "none"
+          exclude: "{./dist/es.js,./dist/module.js,./dist/array.full.js}"
