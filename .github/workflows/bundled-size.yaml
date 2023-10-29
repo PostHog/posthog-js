@@ -13,6 +13,6 @@ jobs:
           build-script: "build-rollup"
           compression: "none"
           # no need to report on files that aren't the interesting ones
-          exclude: "{./dist/es.js,./dist/module.js,./dist/array.full.js,./node_modules/*}"
-          # no need to report on very small byte changes which show as 0% changed
+          exclude: "{./dist/es.js,./dist/module.js,./dist/array.full.js,**/*.map,**/node_modules/**}"
+          # no need to report on very small byte changes which show as 0% change
           minimum-change-threshold: 300
