@@ -54,7 +54,7 @@ describe('send-request', () => {
         })
 
         test('it adds the retry count to the URL', () => {
-            const retryCount = Math.floor(Math.random() * 100)
+            const retryCount = Math.floor(Math.random() * 100) + 1 // make sure it is never 0
             xhr(
                 xhrParams({
                     retriesPerformedSoFar: retryCount,
@@ -64,6 +64,20 @@ describe('send-request', () => {
             expect(mockXHR.open).toHaveBeenCalledWith(
                 'GET',
                 `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278&retry_count=${retryCount}`,
+                true
+            )
+        })
+
+        test('does not add retry count when it is 0', () => {
+            xhr(
+                xhrParams({
+                    retriesPerformedSoFar: 0,
+                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
+                })
+            )
+            expect(mockXHR.open).toHaveBeenCalledWith(
+                'GET',
+                'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
                 true
             )
         })

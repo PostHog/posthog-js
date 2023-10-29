@@ -3,7 +3,7 @@ import Config from './config'
 import { PostData, XHROptions, XHRParams } from './types'
 import { _HTTPBuildQuery } from './utils/request-utils'
 
-import { _isArray, _isFunction, _isUint8Array, _isUndefined } from './utils/type-utils'
+import { _isArray, _isFunction, _isNumber, _isUint8Array, _isUndefined } from './utils/type-utils'
 
 export const addParamsToURL = (
     url: string,
@@ -72,7 +72,9 @@ export const xhr = ({
     timeout = 60000,
     onResponse,
 }: XHRParams) => {
-    url = addParamsToURL(url, { retry_count: retriesPerformedSoFar }, {})
+    if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
+        url = addParamsToURL(url, { retry_count: retriesPerformedSoFar }, {})
+    }
 
     const req = new XMLHttpRequest()
     req.open(options.method || 'GET', url, true)
