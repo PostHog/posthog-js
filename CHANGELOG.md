@@ -1,3 +1,7 @@
+## 1.87.4 - 2023-10-30
+
+- fix: logging pointless error when offline (#866)
+
 ## 1.87.3 - 2023-10-30
 
 - feat: retry count in url (#864)
