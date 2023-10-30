@@ -5,10 +5,6 @@ import Config from '../config'
 import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
 import { document, userAgent } from './globals'
 
-function matchReferrer(pattern: string): boolean {
-    return document.referrer.search('https?://(.*)' + pattern) === 0
-}
-
 export const _info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {
         const campaign_keywords = [
@@ -37,13 +33,13 @@ export const _info = {
         const referrer = document.referrer
         if (!referrer) {
             return null
-        } else if (matchReferrer('google.([^/?]*)')) {
+        } else if (referrer.search('https?://(.*)google.([^/?]*)') === 0) {
             return 'google'
-        } else if (matchReferrer('bing.com')) {
+        } else if (referrer.search('https?://(.*)bing.com') === 0) {
             return 'bing'
-        } else if (matchReferrer('yahoo.com')) {
+        } else if (referrer.search('https?://(.*)yahoo.com') === 0) {
             return 'yahoo'
-        } else if (matchReferrer('duckduckgo.com')) {
+        } else if (referrer.search('https?://(.*)duckduckgo.com') === 0) {
             return 'duckduckgo'
         } else {
             return null
@@ -72,7 +68,7 @@ export const _info = {
      * The order of the checks are important since many user agents
      * include key words used in later checks.
      */
-    browser: function (user_agent: string, vendor: string | undefined, opera?: any): string {
+    browser: function (user_agent: string, vendor: string, opera?: any): string {
         vendor = vendor || '' // vendor is undefined for at least IE9
         if (opera || _includes(user_agent, ' OPR/')) {
             if (_includes(user_agent, 'Mini')) {
@@ -105,7 +101,7 @@ export const _info = {
             return 'Safari'
         } else if (_includes(user_agent, 'Android')) {
             return 'Android Mobile'
-        } else if (_includes(user_agent, 'Konqueror') || _includes(user_agent, 'konqueror')) {
+        } else if (_includes(user_agent, 'Konqueror')) {
             return 'Konqueror'
         } else if (_includes(user_agent, 'Firefox')) {
             return 'Firefox'
@@ -123,9 +119,9 @@ export const _info = {
      * parsing major and minor version (e.g., 42.1). User agent strings from:
      * http://www.useragentstring.com/pages/useragentstring.php
      */
-    browserVersion: function (userAgent: string, vendor: string | undefined, opera: string): number | null {
+    browserVersion: function (userAgent: string, vendor: string, opera: string): number | null {
         const browser = _info.browser(userAgent, vendor, opera)
-        const versionRegexes = {
+        const versionRegexs = {
             'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
             'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
             Chrome: /Chrome\/(\d+(\.\d+)?)/,
@@ -136,14 +132,14 @@ export const _info = {
             Opera: /(Opera|OPR)\/(\d+(\.\d+)?)/,
             Firefox: /Firefox\/(\d+(\.\d+)?)/,
             'Firefox iOS': /FxiOS\/(\d+(\.\d+)?)/,
-            Konqueror: /Konqueror[://]?(\d+(\.\d+)?)/i,
+            Konqueror: /Konqueror:(\d+(\.\d+)?)/,
             BlackBerry: /BlackBerry (\d+(\.\d+)?)/,
             'Android Mobile': /android\s(\d+(\.\d+)?)/,
             'Samsung Internet': /SamsungBrowser\/(\d+(\.\d+)?)/,
             'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
             Mozilla: /rv:(\d+(\.\d+)?)/,
         }
-        const regex: RegExp | undefined = versionRegexes[browser as keyof typeof versionRegexes]
+        const regex: RegExp | undefined = versionRegexs[browser as keyof typeof versionRegexs]
         if (_isUndefined(regex)) {
             return null
         }
