@@ -127,6 +127,9 @@ export const _info = {
      * This function detects which browser version is running this script,
      * parsing major and minor version (e.g., 42.1). User agent strings from:
      * http://www.useragentstring.com/pages/useragentstring.php
+     *
+     * `navigator.vendor` is passed in and used to help with detecting certain browsers
+     * NB `navigator.vendor` is deprecated and not present in every browser
      */
     browserVersion: function (userAgent: string, vendor: string | undefined, opera: string): number | null {
         const browser = _info.browser(userAgent, vendor, opera)
