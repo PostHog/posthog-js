@@ -1,6 +1,5 @@
 /*
- * Saved references to long variable names, so that closure compiler can
- * minimize file size.
+ * Saved references to long variable names, so that bundling can minimize file size.
  */
 export const ArrayProto = Array.prototype
 export const nativeForEach = ArrayProto.forEach
