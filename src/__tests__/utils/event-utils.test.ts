@@ -128,10 +128,17 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'Firefox iOS',
             },
             {
-                name: 'Konqueror',
+                name: 'Konqueror (lowercase)',
                 userAgent: 'Mozilla/5.0 (X11; U; U; DragonFly amd64) KIO/5.97 konqueror/22.08.0',
                 vendor: '',
                 expectedVersion: 22.08,
+                expectedBrowser: 'Konqueror',
+            },
+            {
+                name: 'Konqueror (uppercase)',
+                userAgent: 'Mozilla/5.0 (X11; Linux i686) KHTML/5.20 (like Gecko) Konqueror/5.20',
+                vendor: '',
+                expectedVersion: 5.2,
                 expectedBrowser: 'Konqueror',
             },
             {
