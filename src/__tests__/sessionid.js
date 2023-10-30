@@ -38,9 +38,21 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: given.timestamp,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
+                [SESSION_ID]: [
+                    given.timestamp,
+                    'newUUID',
+                    given.timestamp,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -51,9 +63,21 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: given.timestamp,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
+                [SESSION_ID]: [
+                    given.timestamp,
+                    'newUUID',
+                    given.timestamp,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -72,9 +96,21 @@ describe('Session ID manager', () => {
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: given.timestampOfSessionStart,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestampOfSessionStart],
+                [SESSION_ID]: [
+                    given.timestamp,
+                    'oldSessionID',
+                    given.timestampOfSessionStart,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
         })
 
@@ -90,9 +126,21 @@ describe('Session ID manager', () => {
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: sessionStart,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [oldTimestamp, 'oldSessionID', sessionStart],
+                [SESSION_ID]: [
+                    oldTimestamp,
+                    'oldSessionID',
+                    sessionStart,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
         })
 
@@ -102,9 +150,21 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: given.timestampOfSessionStart,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestampOfSessionStart],
+                [SESSION_ID]: [
+                    given.timestamp,
+                    'oldSessionID',
+                    given.timestampOfSessionStart,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -117,9 +177,21 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: given.timestamp,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
+                [SESSION_ID]: [
+                    given.timestamp,
+                    'newUUID',
+                    given.timestamp,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -134,10 +206,22 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: given.timestamp,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
 
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
+                [SESSION_ID]: [
+                    given.timestamp,
+                    'newUUID',
+                    given.timestamp,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -153,10 +237,22 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: given.timestamp,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
 
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, 'newUUID', given.timestamp],
+                [SESSION_ID]: [
+                    given.timestamp,
+                    'newUUID',
+                    given.timestamp,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
         })
@@ -170,9 +266,21 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: now,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.now, 'newUUID', given.now],
+                [SESSION_ID]: [
+                    given.now,
+                    'newUUID',
+                    given.now,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
         })
 
@@ -182,9 +290,21 @@ describe('Session ID manager', () => {
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: given.timestamp,
+                sessionSourceParams: {
+                    initialPathName: '/',
+                    referringDomain: '$direct',
+                },
             })
             expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [given.timestamp, 'oldSessionID', given.timestamp],
+                [SESSION_ID]: [
+                    given.timestamp,
+                    'oldSessionID',
+                    given.timestamp,
+                    {
+                        initialPathName: '/',
+                        referringDomain: '$direct',
+                    },
+                ],
             })
         })
     })
@@ -211,22 +331,41 @@ describe('Session ID manager', () => {
 
     describe('session id storage', () => {
         it('stores and retrieves a session id and timestamp', () => {
-            given.sessionIdManager._setSessionId('newSessionId', 1603107460000, 1603107460000)
-            expect(given.persistence.register).toHaveBeenCalledWith({
-                [SESSION_ID]: [1603107460000, 'newSessionId', 1603107460000],
+            given.sessionIdManager._setSessionId('newSessionId', 1603107460000, 1603107460000, {
+                initialPathName: '/some/path/name',
+                referringDomain: 'referring.example.com',
             })
-            expect(given.sessionIdManager._getSessionId()).toEqual([1603107460000, 'newSessionId', 1603107460000])
+            expect(given.persistence.register).toHaveBeenCalledWith({
+                [SESSION_ID]: [
+                    1603107460000,
+                    'newSessionId',
+                    1603107460000,
+                    {
+                        initialPathName: '/some/path/name',
+                        referringDomain: 'referring.example.com',
+                    },
+                ],
+            })
+            expect(given.sessionIdManager._getSessionId()).toEqual([
+                1603107460000,
+                'newSessionId',
+                1603107460000,
+                {
+                    initialPathName: '/some/path/name',
+                    referringDomain: 'referring.example.com',
+                },
+            ])
         })
     })
 
     describe('reset session id', () => {
         it('clears the existing session id', () => {
             given.sessionIdManager.resetSessionId()
-            expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
+            expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null, null] })
         })
         it('a new session id is generated when called', () => {
-            given('storedSessionIdData', () => [null, null, null])
-            expect(given.sessionIdManager._getSessionId()).toEqual([null, null, null])
+            given('storedSessionIdData', () => [null, null, null, null])
+            expect(given.sessionIdManager._getSessionId()).toEqual([null, null, null, null])
             expect(given.subject).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',

@@ -929,9 +929,21 @@ export class PostHog {
         const infoProperties = _info.properties()
 
         if (this.sessionManager) {
-            const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
+            const { sessionId, windowId, sessionSourceParams } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
+            if (
+                sessionSourceParams &&
+                (event_name === '$pageview' || event_name === '$pageleave' || event_name === '$autocapture')
+            ) {
+                properties['$client_session_referring_host'] = sessionSourceParams.referringDomain
+                properties['$client_session_initial_pathname'] = sessionSourceParams.initialPathName
+                properties['$client_session_utm_source'] = sessionSourceParams.utmSource
+                properties['$client_session_utm_campaign'] = sessionSourceParams.utmCampaign
+                properties['$client_session_utm_medium'] = sessionSourceParams.utmMedium
+                properties['$client_session_utm_content'] = sessionSourceParams.utmContent
+                properties['$client_session_utm_term'] = sessionSourceParams.utmTerm
+            }
         }
 
         if (this.config.__preview_measure_pageview_stats) {
