@@ -258,6 +258,7 @@ export const _info = {
                 $current_url: window?.location.href,
                 $host: window?.location.host,
                 $pathname: window?.location.pathname,
+                $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
                 $browser_version: _info.browserVersion(userAgent, navigator.vendor, (window as any).opera),
                 $browser_language: _info.browserLanguage(),
                 $screen_height: window?.screen.height,
