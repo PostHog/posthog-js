@@ -1,4 +1,4 @@
-import { window } from './utils'
+import { window } from './utils/globals'
 
 interface PageViewData {
     pathname: string

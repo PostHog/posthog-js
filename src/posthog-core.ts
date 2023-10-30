@@ -7,11 +7,9 @@ import {
     _isBlockedUA,
     _register_event,
     _safewrap_class,
-    userAgent,
-    window,
-    logger,
     isCrossDomainCookie,
 } from './utils'
+import { window } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -55,9 +53,10 @@ import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
-import { document } from './utils'
 import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
 import { _info } from './utils/event-utils'
+import { logger } from './utils/logger'
+import { document, userAgent } from './utils/globals'
 
 /*
 SIMPLE STYLE GUIDE:

@@ -1,6 +1,7 @@
-import { _each, _isValidRegex, logger } from './'
+import { _each, _isValidRegex } from './'
 
 import { _isArray, _isUndefined } from './type-utils'
+import { logger } from './logger'
 
 const localDomains = ['localhost', '127.0.0.1']
 

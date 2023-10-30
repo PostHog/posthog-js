@@ -1,12 +1,4 @@
-import {
-    _bind_instance_methods,
-    _each,
-    _extend,
-    _includes,
-    _register_event,
-    _safewrap_instance_methods,
-    logger,
-} from './utils'
+import { _bind_instance_methods, _each, _extend, _includes, _register_event, _safewrap_instance_methods } from './utils'
 import {
     getClassName,
     getSafeText,
@@ -28,6 +20,7 @@ import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { _isBoolean, _isFunction, _isNull, _isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {

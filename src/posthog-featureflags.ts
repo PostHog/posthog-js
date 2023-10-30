@@ -1,4 +1,4 @@
-import { _base64Encode, _entries, _extend, logger } from './utils'
+import { _base64Encode, _entries, _extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
     DecideResponse,
@@ -20,6 +20,7 @@ import {
 } from './constants'
 
 import { _isArray } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
