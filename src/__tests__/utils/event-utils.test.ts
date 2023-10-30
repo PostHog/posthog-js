@@ -80,7 +80,7 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'Internet Explorer Mobile',
             },
             {
-                name: 'version for Microsoft',
+                name: 'Microsoft Edge 44',
                 userAgent:
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/44.17763.831.0',
                 vendor: '',
@@ -88,7 +88,7 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'Microsoft Edge',
             },
             {
-                name: 'version for Chrome',
+                name: 'Chrome 21 iOS',
                 userAgent:
                     'Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; en) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/21.0.1180.82 Mobile/9B206 Safari/7534.48.3',
                 vendor: '',
@@ -142,16 +142,16 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'Konqueror',
             },
             {
-                name: 'should return 7.1 for BlackBerry Bold 9790 version',
+                name: 'BlackBerry Bold 9790',
                 userAgent:
                     'Mozilla/5.0 (BlackBerry; U; BlackBerry 9790; es) AppleWebKit/534.11+ (KHTML, like Gecko) Version/7.1.0.569 Mobile Safari/534.11+',
                 vendor: '',
-                // TODO is this a bug we match 9790 the model and not 7.1 the browser version
+                // TODO should we match 9790 the model and not 7.1 the browser version?
                 expectedVersion: 9790,
                 expectedBrowser: 'BlackBerry',
             },
             {
-                name: 'should return 10.1 for BlackBerry BB10 version',
+                name: 'BlackBerry BB10 version v10.1',
                 userAgent:
                     'Mozilla/5.0 (BB10; Kbd) AppleWebKit/537.10+ (KHTML, like Gecko) Version/10.1.0.1720 Mobile Safari/537.10+',
                 vendor: '',
@@ -183,7 +183,7 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'Internet Explorer',
             },
             {
-                name: 'mobile safari',
+                name: 'mobile safari (with vendor)',
                 userAgent:
                     'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
                 vendor: 'Apple',
@@ -191,7 +191,7 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'Mobile Safari',
             },
             {
-                name: 'mobile safari',
+                name: 'mobile safari (without vendor)',
                 userAgent:
                     'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
                 vendor: '', // vendor is deprecated, and we see this user agent not matching in the wild
