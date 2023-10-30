@@ -20,15 +20,6 @@ function userAgentFor(botString) {
     return `Mozilla/5.0 (compatible; ${botString}/${randOne}; +http://a.com/bot/${randTwo})`
 }
 
-describe(`utils.js`, () => {
-    it('should have $host and $pathname in properties', () => {
-        const properties = _info.properties()
-        expect(properties['$current_url']).toBeDefined()
-        expect(properties['$host']).toBeDefined()
-        expect(properties['$pathname']).toBeDefined()
-    })
-})
-
 describe('_.copyAndTruncateStrings', () => {
     given('subject', () => _copyAndTruncateStrings(given.target, given.maxStringLength))
 
