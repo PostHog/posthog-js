@@ -1,6 +1,6 @@
 import Config from '../config'
 import { _isUndefined } from './type-utils'
-import { window } from './index'
+import { window } from './globals'
 
 const LOGGER_PREFIX = '[PostHog.js]'
 export const logger = {

@@ -2,7 +2,8 @@ import { _getQueryParam } from './request-utils'
 import { _isNull, _isUndefined } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { _each, _extend, _includes, _strip_empty_properties, _timestamp, document, userAgent } from './index'
+import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
+import { document, userAgent } from './globals'
 
 export const _info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {

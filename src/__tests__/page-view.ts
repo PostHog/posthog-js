@@ -1,8 +1,8 @@
 import { PageViewManager } from '../page-view'
 
 const mockWindowGetter = jest.fn()
-jest.mock('../utils', () => ({
-    ...jest.requireActual('../utils'),
+jest.mock('../utils/globals', () => ({
+    ...jest.requireActual('../utils/globals'),
     get window() {
         return mockWindowGetter()
     },

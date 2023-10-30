@@ -2,7 +2,7 @@
 import { PostHog } from '../../../posthog-core'
 import { DecideResponse, PostHogConfig } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
-import { window } from '../../../utils'
+import { window } from '../../../utils/globals'
 
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver

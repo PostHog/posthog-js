@@ -1,9 +1,10 @@
-import { _register_event, _try, loadScript, window } from '../utils'
+import { _register_event, _try, loadScript } from '../utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, ToolbarParams } from '../types'
 import { POSTHOG_MANAGED_HOSTS } from './cloud'
 import { _getHashParam } from '../utils/request-utils'
 import { logger } from '../utils/logger'
+import { window } from '../utils/globals'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed

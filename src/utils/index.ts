@@ -10,18 +10,8 @@ import {
     hasOwnProperty,
 } from './type-utils'
 import { logger } from './logger'
+import { document, nativeForEach, nativeIndexOf } from './globals'
 
-/*
- * Saved references to long variable names, so that closure compiler can
- * minimize file size.
- */
-export const ArrayProto = Array.prototype
-export const nativeForEach = ArrayProto.forEach
-export const nativeIndexOf = ArrayProto.indexOf
-const win: Window & typeof globalThis = typeof window !== 'undefined' ? window : ({} as typeof window)
-const navigator = win.navigator || { userAgent: '' }
-const document = win.document || {}
-const userAgent = navigator.userAgent
 const breaker: Breaker = {}
 
 // UNDERSCORE
@@ -555,5 +545,3 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     // for the hostname
     return hostname.split('.').slice(-2).join('.') !== 'herokuapp.com'
 }
-
-export { win as window, userAgent, document }

@@ -3,7 +3,7 @@ import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuidv7 } from './uuidv7'
-import { window } from './utils'
+import { window } from './utils/globals'
 
 import { _isArray, _isNumber, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'

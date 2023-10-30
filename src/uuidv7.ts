@@ -9,7 +9,7 @@
  */
 
 // polyfill for IE11
-import { window } from './utils'
+import { window } from './utils/globals'
 
 import { _isNumber, _isUndefined } from './utils/type-utils'
 

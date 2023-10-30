@@ -1,4 +1,4 @@
-import { window } from '../../src/utils'
+import { window } from '../../src/utils/globals'
 import { RateLimiter } from '../rate-limiter'
 import { logger } from '../utils/logger'
 

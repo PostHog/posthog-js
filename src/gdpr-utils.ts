@@ -11,7 +11,8 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { _each, _includes, window } from './utils'
+import { _each, _includes } from './utils'
+import { window } from './utils/globals'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
 import { PostHog } from './posthog-core'

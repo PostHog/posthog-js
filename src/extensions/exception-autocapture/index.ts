@@ -1,4 +1,4 @@
-import { window } from '../../utils'
+import { window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
