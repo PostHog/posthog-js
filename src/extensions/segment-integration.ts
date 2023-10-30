@@ -16,8 +16,8 @@
  *  })
  *  ```
  */
-import { logger } from '../utils'
 import { PostHog } from '../posthog-core'
+import { logger } from '../utils/logger'
 
 // Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
 interface SegmentPluginContext {

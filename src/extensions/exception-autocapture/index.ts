@@ -1,10 +1,11 @@
-import { logger, window } from '../../utils'
+import { window } from '../../utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
 import { isPrimitive } from './type-checking'
 
 import { _isArray, _isObject, _isUndefined } from '../../utils/type-utils'
+import { logger } from '../../utils/logger'
 
 const EXCEPTION_INGESTION_ENDPOINT = '/e/'
 

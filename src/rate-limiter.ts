@@ -1,4 +1,4 @@
-import { logger } from './utils'
+import { logger } from './utils/logger'
 
 const oneMinuteInMilliseconds = 60 * 1000
 
@@ -20,7 +20,12 @@ export class RateLimiter {
 
     public checkForLimiting = (xmlHttpRequest: XMLHttpRequest): void => {
         try {
-            const response: CaptureResponse = JSON.parse(xmlHttpRequest.responseText)
+            const text = xmlHttpRequest.responseText
+            if (!text || !text.length) {
+                return
+            }
+
+            const response: CaptureResponse = JSON.parse(text)
             const quotaLimitedProducts = response.quota_limited || []
             quotaLimitedProducts.forEach((batchKey) => {
                 logger.info(`[RateLimiter] ${batchKey || 'events'} is quota limited.`)

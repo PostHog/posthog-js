@@ -9,7 +9,6 @@ import {
     _safewrap_class,
     userAgent,
     window,
-    logger,
     isCrossDomainCookie,
 } from './utils'
 import { autocapture } from './autocapture'
@@ -58,6 +57,7 @@ import { SurveyCallback } from './posthog-surveys-types'
 import { document } from './utils'
 import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
 import { _info } from './utils/event-utils'
+import { logger } from './utils/logger'
 
 /*
 SIMPLE STYLE GUIDE:

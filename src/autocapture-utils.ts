@@ -4,9 +4,10 @@
  * @returns {string} the element's class
  */
 import { AutocaptureConfig } from 'types'
-import { _each, _includes, _trim, logger } from './utils'
+import { _each, _includes, _trim } from './utils'
 
 import { _isNull, _isString, _isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 export function getClassName(el: Element): string {
     switch (typeof el.className) {

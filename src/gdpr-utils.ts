@@ -11,12 +11,13 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { _each, _includes, logger, window } from './utils'
+import { _each, _includes, window } from './utils'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
 import { PostHog } from './posthog-core'
 
 import { _isNumber, _isString } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)

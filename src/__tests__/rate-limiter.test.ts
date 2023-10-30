@@ -1,4 +1,8 @@
+import { window } from '../../src/utils'
 import { RateLimiter } from '../rate-limiter'
+import { logger } from '../utils/logger'
+
+jest.mock('../../src/utils/logger')
 
 describe('Rate Limiter', () => {
     let rateLimiter: RateLimiter
@@ -6,6 +10,7 @@ describe('Rate Limiter', () => {
     beforeEach(() => {
         jest.useFakeTimers()
         rateLimiter = new RateLimiter()
+        jest.spyOn(window.console, 'error').mockImplementation()
     })
 
     it('is not rate limited with no batch key', () => {
@@ -109,5 +114,13 @@ describe('Rate Limiter', () => {
         })
 
         expect(rateLimiter.limits).toStrictEqual({})
+    })
+
+    it('does not log an error when there is an empty body', () => {
+        rateLimiter.checkForLimiting({
+            responseText: '',
+        })
+
+        expect(jest.mocked(logger).error).not.toHaveBeenCalled()
     })
 })
