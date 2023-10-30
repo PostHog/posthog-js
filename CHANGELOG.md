@@ -1,3 +1,7 @@
+## 1.87.5 - 2023-10-30
+
+- fix: include raw user agent in event properties (#868)
+
 ## 1.87.4 - 2023-10-30
 
 - fix: logging pointless error when offline (#866)
