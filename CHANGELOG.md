@@ -1,3 +1,7 @@
+## 1.87.3 - 2023-10-30
+
+- feat: retry count in url (#864)
+
 ## 1.87.2 - 2023-10-27
 
 - fix(surveys): Publish types in module (#863)
