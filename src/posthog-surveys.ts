@@ -1,7 +1,7 @@
 import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
-import { _isUrlMatchingRegex } from './utils'
 import { SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
+import { _isUrlMatchingRegex } from './utils/request-utils'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) => window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,

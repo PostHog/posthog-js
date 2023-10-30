@@ -26,7 +26,7 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { _isUndefined } from '../../utils'
+import { _isUndefined } from '../../utils/type-utils'
 
 const WEBPACK_ERROR_REGEXP = /\(error: (.*)\)/
 const STACKTRACE_FRAME_LIMIT = 50

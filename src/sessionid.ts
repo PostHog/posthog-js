@@ -3,7 +3,9 @@ import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuidv7 } from './uuidv7'
-import { _isArray, _isNumber, _isUndefined, logger, window } from './utils'
+import { logger, window } from './utils'
+
+import { _isArray, _isNumber, _isUndefined } from './utils/type-utils'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 minutes
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 minute

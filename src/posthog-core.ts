@@ -4,21 +4,13 @@ import {
     _each,
     _eachArray,
     _extend,
-    _info,
-    _isArray,
     _isBlockedUA,
-    _isEmptyObject,
-    _isObject,
-    _isUndefined,
     _register_event,
     _safewrap_class,
-    document,
     userAgent,
     window,
     logger,
     isCrossDomainCookie,
-    _isString,
-    _isFunction,
 } from './utils'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -63,6 +55,9 @@ import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
+import { document } from './utils'
+import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
+import { _info } from './utils/event-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -835,7 +830,7 @@ export class PostHog {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
-            return logger.unintializedWarning('posthog.capture')
+            return logger.uninitializedWarning('posthog.capture')
         }
 
         if (userOptedOut(this)) {
@@ -1254,7 +1249,7 @@ export class PostHog {
      */
     identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
         if (!this.__loaded || !this.persistence) {
-            return logger.unintializedWarning('posthog.identify')
+            return logger.uninitializedWarning('posthog.identify')
         }
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
@@ -1423,7 +1418,7 @@ export class PostHog {
      */
     reset(reset_device_id?: boolean): void {
         if (!this.__loaded) {
-            return logger.unintializedWarning('posthog.reset')
+            return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property('$device_id')
         this.persistence?.clear()

@@ -1,8 +1,10 @@
 import { autocapture } from './autocapture'
-import { _base64Encode, _isUndefined, loadScript, logger } from './utils'
+import { _base64Encode, loadScript, logger } from './utils'
 import { PostHog } from './posthog-core'
 import { DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
+
+import { _isUndefined } from './utils/type-utils'
 
 export class Decide {
     instance: PostHog

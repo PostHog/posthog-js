@@ -1,26 +1,28 @@
-import Config from './config'
-import { Breaker, EventHandler, Properties } from './types'
+import Config from '../config'
+import { Breaker, EventHandler, Properties } from '../types'
+import {
+    _isArray,
+    _isDate,
+    _isFunction,
+    _isNull,
+    _isObject,
+    _isString,
+    _isUndefined,
+    hasOwnProperty,
+} from './type-utils'
 
 /*
  * Saved references to long variable names, so that closure compiler can
  * minimize file size.
  */
-
-const ArrayProto = Array.prototype
-const ObjProto = Object.prototype
-const toString = ObjProto.toString
-const hasOwnProperty = ObjProto.hasOwnProperty
+export const ArrayProto = Array.prototype
+export const nativeForEach = ArrayProto.forEach
+export const nativeIndexOf = ArrayProto.indexOf
 const win: Window & typeof globalThis = typeof window !== 'undefined' ? window : ({} as typeof window)
 const navigator = win.navigator || { userAgent: '' }
 const document = win.document || {}
 const userAgent = navigator.userAgent
-const localDomains = ['localhost', '127.0.0.1']
-
-const nativeForEach = ArrayProto.forEach,
-    nativeIndexOf = ArrayProto.indexOf,
-    // eslint-disable-next-line posthog-js/no-direct-array-check
-    nativeIsArray = Array.isArray,
-    breaker: Breaker = {}
+const breaker: Breaker = {}
 
 const LOGGER_PREFIX = '[PostHog.js]'
 
@@ -55,7 +57,7 @@ export const logger = {
         console.error(LOGGER_PREFIX, ...args)
     },
 
-    unintializedWarning: (methodName: string) => {
+    uninitializedWarning: (methodName: string) => {
         logger.error(`You must initialize PostHog before calling ${methodName}`)
     },
 }
@@ -124,24 +126,6 @@ export const _extend = function (obj: Record<string, any>, ...args: Record<strin
     return obj
 }
 
-export const _isArray =
-    nativeIsArray ||
-    function (obj: any): obj is any[] {
-        return toString.call(obj) === '[object Array]'
-    }
-
-// from a comment on http://dbj.org/dbj/?p=286
-// fails on only one very rare and deliberate custom object:
-// let bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
-export const _isFunction = function (f: any): f is (...args: any[]) => any {
-    try {
-        // eslint-disable-next-line posthog-js/no-direct-function-check
-        return /^\s*\bfunction\b/.test(f)
-    } catch (x) {
-        return false
-    }
-}
-
 export const _include = function (
     obj: null | string | Array<any> | Record<string, any>,
     target: any
@@ -181,52 +165,6 @@ export function _entries<T = any>(obj: Record<string, T>): [string, T][] {
     return resArray
 }
 
-// Underscore Addons
-export const _isObject = function (x: unknown): x is Record<string, any> {
-    // eslint-disable-next-line posthog-js/no-direct-object-check
-    return x === Object(x) && !_isArray(x)
-}
-
-export const _isEmptyObject = function (x: unknown): x is Record<string, any> {
-    if (_isObject(x)) {
-        for (const key in x) {
-            if (hasOwnProperty.call(x, key)) {
-                return false
-            }
-        }
-        return true
-    }
-    return false
-}
-
-export const _isUndefined = function (x: unknown): x is undefined {
-    return x === void 0
-}
-
-export const _isString = function (x: unknown): x is string {
-    // eslint-disable-next-line posthog-js/no-direct-string-check
-    return toString.call(x) == '[object String]'
-}
-
-export const _isNull = function (x: unknown): x is null {
-    // eslint-disable-next-line posthog-js/no-direct-null-check
-    return x === null
-}
-
-export const _isDate = function (x: unknown): x is Date {
-    // eslint-disable-next-line posthog-js/no-direct-date-check
-    return toString.call(x) == '[object Date]'
-}
-export const _isNumber = function (x: unknown): x is number {
-    // eslint-disable-next-line posthog-js/no-direct-number-check
-    return toString.call(x) == '[object Number]'
-}
-
-export const _isBoolean = function (x: unknown): x is boolean {
-    // eslint-disable-next-line posthog-js/no-direct-boolean-check
-    return toString.call(x) === '[object Boolean]'
-}
-
 export const _isValidRegex = function (str: string): boolean {
     try {
         new RegExp(str)
@@ -234,11 +172,6 @@ export const _isValidRegex = function (str: string): boolean {
         return false
     }
     return true
-}
-
-export const _isUrlMatchingRegex = function (url: string, pattern: string): boolean {
-    if (!_isValidRegex(pattern)) return false
-    return new RegExp(pattern).test(url)
 }
 
 export const _encodeDates = function (obj: Properties): Properties {
@@ -539,45 +472,6 @@ export const _isBlockedUA = function (ua: string, customBlockedUserAgents: strin
     })
 }
 
-export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_separator = '&'): string {
-    let use_val: string
-    let use_key: string
-    const tph_arr: string[] = []
-
-    _each(formdata, function (val, key) {
-        use_val = encodeURIComponent(val.toString())
-        use_key = encodeURIComponent(key)
-        tph_arr[tph_arr.length] = use_key + '=' + use_val
-    })
-
-    return tph_arr.join(arg_separator)
-}
-
-export const _getQueryParam = function (url: string, param: string): string {
-    // Expects a raw URL
-
-    const cleanParam = param.replace(/[[]/, '\\[').replace(/[\]]/, '\\]')
-    const regexS = '[\\?&]' + cleanParam + '=([^&#]*)'
-    const regex = new RegExp(regexS)
-    const results = regex.exec(url)
-    if (_isNull(results) || (results && !_isString(results[1]) && (results[1] as any).length)) {
-        return ''
-    } else {
-        let result = results[1]
-        try {
-            result = decodeURIComponent(result)
-        } catch (err) {
-            logger.error('Skipping decoding for malformed query param: ' + result)
-        }
-        return result.replace(/\+/g, ' ')
-    }
-}
-
-export const _getHashParam = function (hash: string, param: string): string | null {
-    const matches = hash.match(new RegExp(param + '=([^&]*)'))
-    return matches ? matches[1] : null
-}
-
 export const _register_event = (function () {
     // written by Dean Edwards, 2005
     // with input from Tino Zijdel - crisp@xs4all.nl
@@ -664,10 +558,6 @@ export const _register_event = (function () {
     return register_event
 })()
 
-export const isLocalhost = (): boolean => {
-    return localDomains.includes(location.hostname)
-}
-
 export function loadScript(scriptUrlToLoad: string, callback: (error?: string | Event, event?: Event) => void): void {
     const addScript = () => {
         const scriptTag = document.createElement('script')
@@ -690,288 +580,6 @@ export function loadScript(scriptUrlToLoad: string, callback: (error?: string | 
     } else {
         document.addEventListener('DOMContentLoaded', addScript)
     }
-}
-
-export const _info = {
-    campaignParams: function (customParams?: string[]): Record<string, any> {
-        const campaign_keywords = [
-            'utm_source',
-            'utm_medium',
-            'utm_campaign',
-            'utm_content',
-            'utm_term',
-            'gclid',
-            'fbclid',
-            'msclkid',
-        ].concat(customParams || [])
-
-        const params: Record<string, any> = {}
-        _each(campaign_keywords, function (kwkey) {
-            const kw = _getQueryParam(document.URL, kwkey)
-            if (kw.length) {
-                params[kwkey] = kw
-            }
-        })
-
-        return params
-    },
-
-    searchEngine: function (): string | null {
-        const referrer = document.referrer
-        if (!referrer) {
-            return null
-        } else if (referrer.search('https?://(.*)google.([^/?]*)') === 0) {
-            return 'google'
-        } else if (referrer.search('https?://(.*)bing.com') === 0) {
-            return 'bing'
-        } else if (referrer.search('https?://(.*)yahoo.com') === 0) {
-            return 'yahoo'
-        } else if (referrer.search('https?://(.*)duckduckgo.com') === 0) {
-            return 'duckduckgo'
-        } else {
-            return null
-        }
-    },
-
-    searchInfo: function (): Record<string, any> {
-        const search = _info.searchEngine(),
-            param = search != 'yahoo' ? 'q' : 'p',
-            ret: Record<string, any> = {}
-
-        if (!_isNull(search)) {
-            ret['$search_engine'] = search
-
-            const keyword = _getQueryParam(document.referrer, param)
-            if (keyword.length) {
-                ret['ph_keyword'] = keyword
-            }
-        }
-
-        return ret
-    },
-
-    /**
-     * This function detects which browser is running this script.
-     * The order of the checks are important since many user agents
-     * include key words used in later checks.
-     */
-    browser: function (user_agent: string, vendor: string, opera?: any): string {
-        vendor = vendor || '' // vendor is undefined for at least IE9
-        if (opera || _includes(user_agent, ' OPR/')) {
-            if (_includes(user_agent, 'Mini')) {
-                return 'Opera Mini'
-            }
-            return 'Opera'
-        } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
-            return 'BlackBerry'
-        } else if (_includes(user_agent, 'IEMobile') || _includes(user_agent, 'WPDesktop')) {
-            return 'Internet Explorer Mobile'
-        } else if (_includes(user_agent, 'SamsungBrowser/')) {
-            // https://developer.samsung.com/internet/user-agent-string-format
-            return 'Samsung Internet'
-        } else if (_includes(user_agent, 'Edge') || _includes(user_agent, 'Edg/')) {
-            return 'Microsoft Edge'
-        } else if (_includes(user_agent, 'FBIOS')) {
-            return 'Facebook Mobile'
-        } else if (_includes(user_agent, 'Chrome')) {
-            return 'Chrome'
-        } else if (_includes(user_agent, 'CriOS')) {
-            return 'Chrome iOS'
-        } else if (_includes(user_agent, 'UCWEB') || _includes(user_agent, 'UCBrowser')) {
-            return 'UC Browser'
-        } else if (_includes(user_agent, 'FxiOS')) {
-            return 'Firefox iOS'
-        } else if (_includes(vendor, 'Apple')) {
-            if (_includes(user_agent, 'Mobile')) {
-                return 'Mobile Safari'
-            }
-            return 'Safari'
-        } else if (_includes(user_agent, 'Android')) {
-            return 'Android Mobile'
-        } else if (_includes(user_agent, 'Konqueror')) {
-            return 'Konqueror'
-        } else if (_includes(user_agent, 'Firefox')) {
-            return 'Firefox'
-        } else if (_includes(user_agent, 'MSIE') || _includes(user_agent, 'Trident/')) {
-            return 'Internet Explorer'
-        } else if (_includes(user_agent, 'Gecko')) {
-            return 'Mozilla'
-        } else {
-            return ''
-        }
-    },
-
-    /**
-     * This function detects which browser version is running this script,
-     * parsing major and minor version (e.g., 42.1). User agent strings from:
-     * http://www.useragentstring.com/pages/useragentstring.php
-     */
-    browserVersion: function (userAgent: string, vendor: string, opera: string): number | null {
-        const browser = _info.browser(userAgent, vendor, opera)
-        const versionRegexs = {
-            'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
-            'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
-            Chrome: /Chrome\/(\d+(\.\d+)?)/,
-            'Chrome iOS': /CriOS\/(\d+(\.\d+)?)/,
-            'UC Browser': /(UCBrowser|UCWEB)\/(\d+(\.\d+)?)/,
-            Safari: /Version\/(\d+(\.\d+)?)/,
-            'Mobile Safari': /Version\/(\d+(\.\d+)?)/,
-            Opera: /(Opera|OPR)\/(\d+(\.\d+)?)/,
-            Firefox: /Firefox\/(\d+(\.\d+)?)/,
-            'Firefox iOS': /FxiOS\/(\d+(\.\d+)?)/,
-            Konqueror: /Konqueror:(\d+(\.\d+)?)/,
-            BlackBerry: /BlackBerry (\d+(\.\d+)?)/,
-            'Android Mobile': /android\s(\d+(\.\d+)?)/,
-            'Samsung Internet': /SamsungBrowser\/(\d+(\.\d+)?)/,
-            'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
-            Mozilla: /rv:(\d+(\.\d+)?)/,
-        }
-        const regex: RegExp | undefined = versionRegexs[browser as keyof typeof versionRegexs]
-        if (_isUndefined(regex)) {
-            return null
-        }
-        const matches = userAgent.match(regex)
-        if (!matches) {
-            return null
-        }
-        return parseFloat(matches[matches.length - 2])
-    },
-
-    browserLanguage: function (): string {
-        return (
-            navigator.language || // Any modern browser
-            (navigator as Record<string, any>).userLanguage // IE11
-        )
-    },
-
-    os: function (user_agent: string): { os_name: string; os_version: string } {
-        if (/Windows/i.test(user_agent)) {
-            if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
-                return { os_name: 'Windows Phone', os_version: '' }
-            }
-            const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
-            if (match && match[1]) {
-                const version = match[1]
-                return { os_name: 'Windows', os_version: version }
-            }
-            return { os_name: 'Windows', os_version: '' }
-        } else if (/(iPhone|iPad|iPod)/.test(user_agent)) {
-            const match = /OS (\d+)_(\d+)_?(\d+)?/i.exec(user_agent)
-            if (match && match[1]) {
-                const versionParts = [match[1], match[2], match[3] || '0']
-                return { os_name: 'iOS', os_version: versionParts.join('.') }
-            }
-            return { os_name: 'iOS', os_version: '' }
-        } else if (/Android/.test(user_agent)) {
-            const match = /Android (\d+)\.(\d+)\.?(\d+)?/i.exec(user_agent)
-            if (match && match[1]) {
-                const versionParts = [match[1], match[2], match[3] || '0']
-                return { os_name: 'Android', os_version: versionParts.join('.') }
-            }
-            return { os_name: 'Android', os_version: '' }
-        } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
-            return { os_name: 'BlackBerry', os_version: '' }
-        } else if (/Mac/i.test(user_agent)) {
-            const match = /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i.exec(user_agent)
-            if (match && match[1]) {
-                const versionParts = [match[1], match[2], match[3] || '0']
-                return { os_name: 'Mac OS X', os_version: versionParts.join('.') }
-            }
-            return { os_name: 'Mac OS X', os_version: '' }
-        } else if (/Linux/.test(user_agent)) {
-            return { os_name: 'Linux', os_version: '' }
-        } else if (/CrOS/.test(user_agent)) {
-            return { os_name: 'Chrome OS', os_version: '' }
-        } else {
-            return { os_name: '', os_version: '' }
-        }
-    },
-
-    device: function (user_agent: string): string {
-        if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
-            return 'Windows Phone'
-        } else if (/iPad/.test(user_agent)) {
-            return 'iPad'
-        } else if (/iPod/.test(user_agent)) {
-            return 'iPod Touch'
-        } else if (/iPhone/.test(user_agent)) {
-            return 'iPhone'
-        } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
-            return 'BlackBerry'
-        } else if (/Android/.test(user_agent) && !/Mobile/.test(user_agent)) {
-            return 'Android Tablet'
-        } else if (/Android/.test(user_agent)) {
-            return 'Android'
-        } else {
-            return ''
-        }
-    },
-
-    deviceType: function (user_agent: string): string {
-        const device = this.device(user_agent)
-        if (device === 'iPad' || device === 'Android Tablet') {
-            return 'Tablet'
-        } else if (device) {
-            return 'Mobile'
-        } else {
-            return 'Desktop'
-        }
-    },
-
-    referrer: function (): string {
-        return document.referrer || '$direct'
-    },
-
-    referringDomain: function (): string {
-        if (!document.referrer) {
-            return '$direct'
-        }
-        const parser = document.createElement('a') // Unfortunately we cannot use new URL due to IE11
-        parser.href = document.referrer
-        return parser.host
-    },
-
-    properties: function (): Properties {
-        const { os_name, os_version } = _info.os(userAgent)
-        return _extend(
-            _strip_empty_properties({
-                $os: os_name,
-                $os_version: os_version,
-                $browser: _info.browser(userAgent, navigator.vendor, (win as any).opera),
-                $device: _info.device(userAgent),
-                $device_type: _info.deviceType(userAgent),
-            }),
-            {
-                $current_url: win?.location.href,
-                $host: win?.location.host,
-                $pathname: win?.location.pathname,
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor, (win as any).opera),
-                $browser_language: _info.browserLanguage(),
-                $screen_height: win?.screen.height,
-                $screen_width: win?.screen.width,
-                $viewport_height: win?.innerHeight,
-                $viewport_width: win?.innerWidth,
-                $lib: 'web',
-                $lib_version: Config.LIB_VERSION,
-                $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
-                $time: _timestamp() / 1000, // epoch time in seconds
-            }
-        )
-    },
-
-    people_properties: function (): Properties {
-        const { os_name, os_version } = _info.os(userAgent)
-        return _extend(
-            _strip_empty_properties({
-                $os: os_name,
-                $os_version: os_version,
-                $browser: _info.browser(userAgent, navigator.vendor, (win as any).opera),
-            }),
-            {
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor, (win as any).opera),
-            }
-        )
-    },
 }
 
 export function isCrossDomainCookie(documentLocation: Location | undefined) {
