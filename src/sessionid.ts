@@ -283,10 +283,9 @@ export class SessionIdManager {
 }
 
 export const generateSessionSourceParams = (): SessionSourceParams => {
-    const params: SessionSourceParams = {
+    return {
         initialPathName: window.location.pathname,
         referringDomain: _info.referringDomain(),
         ..._info.campaignParams(),
     }
-    return params
 }

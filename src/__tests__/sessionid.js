@@ -1,10 +1,23 @@
-import { SessionIdManager } from '../sessionid'
+import { generateSessionSourceParams, SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
 import { uuidv7 } from '../uuidv7'
+import { window, document } from '../utils/globals'
 
 jest.mock('../uuidv7')
 jest.mock('../storage')
+jest.mock('../utils/globals', () => {
+    const originalModule = jest.requireActual('../utils/globals')
+    return {
+        ...originalModule,
+        window: { ...originalModule.window },
+        document: {
+            ...originalModule.document,
+            createElement: (...args) => originalModule.document.createElement(...args),
+            URL: originalModule.document.URL,
+        },
+    }
+})
 
 describe('Session ID manager', () => {
     given('subject', () => given.sessionIdManager.checkAndGetSessionAndWindowId(given.readOnly, given.timestamp))
@@ -422,6 +435,80 @@ describe('Session ID manager', () => {
             expect(console.warn).toBeCalledTimes(2)
             expect(mockSessionManager('foobar')._sessionTimeoutMs).toEqual(30 * 60 * 1000)
             expect(console.warn).toBeCalledTimes(3)
+        })
+    })
+
+    describe('generateSessionSourceParams', () => {
+        it('should return the pathname', () => {
+            window.location = { pathname: '/some/pathname' }
+            const params = generateSessionSourceParams()
+            expect(params.initialPathName).toEqual('/some/pathname')
+        })
+        it('should return the referring domain', () => {
+            window.location = { pathname: '/some/pathname' }
+            document.referrer = 'https://referrer.example.com'
+            const params = generateSessionSourceParams()
+            expect(params.initialPathName).toEqual('/some/pathname')
+            expect(params.referringDomain).toEqual('referrer.example.com')
+        })
+        it('should return $direct for no domain', () => {
+            window.location = { pathname: '/some/pathname' }
+            document.referrer = 'https://referrer.example.com'
+            const params = generateSessionSourceParams()
+            expect(params.initialPathName).toEqual('/some/pathname')
+            expect(params.referringDomain).toEqual('$direct')
+        })
+        it('should not have utm parameters when there is no search', () => {
+            window.location = { pathname: '/some/pathname', search: '' }
+            document.URL = 'https://site.example.com/some/pathname'
+            const params = generateSessionSourceParams()
+            expect(params.initialPathName).toEqual('/some/pathname')
+            expect(params.referringDomain).toEqual('$direct')
+            expect(params.utm_source).toEqual(undefined)
+            expect(params.utm_campaign).toEqual(undefined)
+            expect(params.utm_term).toEqual(undefined)
+            expect(params.utm_medium).toEqual(undefined)
+            expect(params.utm_content).toEqual(undefined)
+        })
+        it('should not have utm parameters when there is only unrelated search', () => {
+            window.location = { pathname: '/some/pathname', search: '?some-other-param=1' }
+            document.URL = 'https://site.example.com/some/pathname?some-other-param=1'
+            const params = generateSessionSourceParams()
+            expect(params.initialPathName).toEqual('/some/pathname')
+            expect(params.referringDomain).toEqual('$direct')
+            expect(params.utm_source).toEqual(undefined)
+            expect(params.utm_campaign).toEqual(undefined)
+            expect(params.utm_term).toEqual(undefined)
+            expect(params.utm_medium).toEqual(undefined)
+            expect(params.utm_content).toEqual(undefined)
+        })
+        it('should include only present utm parameters', () => {
+            window.location = { pathname: '/some/pathname', search: '?some-other-param=1&utm-source=some-source' }
+            document.URL = 'https://site.example.com/some/pathname?some-other-param=1&utm-source=some-source'
+            const params = generateSessionSourceParams()
+            expect(params.initialPathName).toEqual('/some/pathname')
+            expect(params.referringDomain).toEqual('$direct')
+            expect(params.utm_source).toEqual('2')
+            expect(params.utm_campaign).toEqual(undefined)
+            expect(params.utm_term).toEqual(undefined)
+            expect(params.utm_medium).toEqual(undefined)
+            expect(params.utm_content).toEqual(undefined)
+        })
+        it('should include all utm parameters when present', () => {
+            window.location = {
+                pathname: '/some/pathname',
+                search: '?some-other-param=1&utm-source=some-source&utm-campaign=some-campaign&utm_medium=some_medium&utm_term-some-term&utm_content=some-content',
+            }
+            document.URL =
+                'https://site.example.com/some/pathname?some-other-param=1&utm-source=some-source&utm-campaign=some-campaign&utm_medium=some_medium&utm_term-some-term&utm_content=some-content'
+            const params = generateSessionSourceParams()
+            expect(params.initialPathName).toEqual('/some/pathname')
+            expect(params.referringDomain).toEqual('$direct')
+            expect(params.utm_source).toEqual('some-source')
+            expect(params.utm_campaign).toEqual('some-campaign')
+            expect(params.utm_term).toEqual('some-term')
+            expect(params.utm_medium).toEqual('some-medium')
+            expect(params.utm_content).toEqual('some-content')
         })
     })
 })
