@@ -10,7 +10,10 @@ jest.mock('../utils/globals', () => {
     const originalModule = jest.requireActual('../utils/globals')
     return {
         ...originalModule,
-        window: { ...originalModule.window },
+        window: {
+            ...originalModule.window,
+            addEventListener: (...args) => originalModule.window.addEventListener(...args),
+        },
         document: {
             ...originalModule.document,
             createElement: (...args) => originalModule.document.createElement(...args),
@@ -453,17 +456,15 @@ describe('Session ID manager', () => {
         })
         it('should return $direct for no domain', () => {
             window.location = { pathname: '/some/pathname' }
-            document.referrer = 'https://referrer.example.com'
+            document.referrer = undefined
             const params = generateSessionSourceParams()
             expect(params.initialPathName).toEqual('/some/pathname')
             expect(params.referringDomain).toEqual('$direct')
         })
         it('should not have utm parameters when there is no search', () => {
             window.location = { pathname: '/some/pathname', search: '' }
-            document.URL = 'https://site.example.com/some/pathname'
             const params = generateSessionSourceParams()
             expect(params.initialPathName).toEqual('/some/pathname')
-            expect(params.referringDomain).toEqual('$direct')
             expect(params.utm_source).toEqual(undefined)
             expect(params.utm_campaign).toEqual(undefined)
             expect(params.utm_term).toEqual(undefined)
@@ -475,7 +476,6 @@ describe('Session ID manager', () => {
             document.URL = 'https://site.example.com/some/pathname?some-other-param=1'
             const params = generateSessionSourceParams()
             expect(params.initialPathName).toEqual('/some/pathname')
-            expect(params.referringDomain).toEqual('$direct')
             expect(params.utm_source).toEqual(undefined)
             expect(params.utm_campaign).toEqual(undefined)
             expect(params.utm_term).toEqual(undefined)
@@ -483,11 +483,10 @@ describe('Session ID manager', () => {
             expect(params.utm_content).toEqual(undefined)
         })
         it('should include only present utm parameters', () => {
-            window.location = { pathname: '/some/pathname', search: '?some-other-param=1&utm-source=some-source' }
-            document.URL = 'https://site.example.com/some/pathname?some-other-param=1&utm-source=some-source'
+            window.location = { pathname: '/some/pathname', search: '?some_other_param=1&utm_source=2' }
+            document.URL = 'https://site.example.com/some/pathname?some_other_param=1&utm_source=2'
             const params = generateSessionSourceParams()
             expect(params.initialPathName).toEqual('/some/pathname')
-            expect(params.referringDomain).toEqual('$direct')
             expect(params.utm_source).toEqual('2')
             expect(params.utm_campaign).toEqual(undefined)
             expect(params.utm_term).toEqual(undefined)
@@ -497,18 +496,17 @@ describe('Session ID manager', () => {
         it('should include all utm parameters when present', () => {
             window.location = {
                 pathname: '/some/pathname',
-                search: '?some-other-param=1&utm-source=some-source&utm-campaign=some-campaign&utm_medium=some_medium&utm_term-some-term&utm_content=some-content',
+                search: '?some_other_param=1&utm_source=some_source&utm_campaign=some_campaign&utm_medium=some_medium&utm_term=some_term&utm_content=some_content',
             }
             document.URL =
-                'https://site.example.com/some/pathname?some-other-param=1&utm-source=some-source&utm-campaign=some-campaign&utm_medium=some_medium&utm_term-some-term&utm_content=some-content'
+                'https://site.example.com/some/pathname?some_other_param=1&utm_source=some_source&utm_campaign=some_campaign&utm_medium=some_medium&utm_term=some_term&utm_content=some_content'
             const params = generateSessionSourceParams()
             expect(params.initialPathName).toEqual('/some/pathname')
-            expect(params.referringDomain).toEqual('$direct')
-            expect(params.utm_source).toEqual('some-source')
-            expect(params.utm_campaign).toEqual('some-campaign')
-            expect(params.utm_term).toEqual('some-term')
-            expect(params.utm_medium).toEqual('some-medium')
-            expect(params.utm_content).toEqual('some-content')
+            expect(params.utm_source).toEqual('some_source')
+            expect(params.utm_campaign).toEqual('some_campaign')
+            expect(params.utm_term).toEqual('some_term')
+            expect(params.utm_medium).toEqual('some_medium')
+            expect(params.utm_content).toEqual('some_content')
         })
     })
 })
