@@ -933,6 +933,7 @@ export class PostHog {
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
             if (
+                this.config.__preview_send_client_session_params &&
                 sessionSourceParams &&
                 (event_name === '$pageview' || event_name === '$pageleave' || event_name === '$autocapture')
             ) {

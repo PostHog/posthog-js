@@ -124,6 +124,7 @@ export interface PostHogConfig {
     }
     segment?: any
     __preview_measure_pageview_stats?: boolean
+    __preview_send_client_session_params?: boolean
 }
 
 export interface OptInOutCapturingOptions {
