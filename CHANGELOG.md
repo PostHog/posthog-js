@@ -1,3 +1,7 @@
+## 1.87.6 - 2023-10-31
+
+- fix: add tests for browser and browser version detection (#870)
+
 ## 1.87.5 - 2023-10-30
 
 - fix: include raw user agent in event properties (#868)
