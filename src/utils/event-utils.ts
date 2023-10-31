@@ -5,6 +5,15 @@ import Config from '../config'
 import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
 import { document, userAgent } from './globals'
 
+/**
+ * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
+ * We can be slightly loose because some options have been ruled out (e.g. firefox on iOS)
+ * before this check is made
+ */
+function isSafari(userAgent: string): boolean {
+    return _includes(userAgent, 'Safari') && !_includes(userAgent, 'Chrome') && !_includes(userAgent, 'Android')
+}
+
 export const _info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {
         const campaign_keywords = [
@@ -68,7 +77,7 @@ export const _info = {
      * The order of the checks are important since many user agents
      * include key words used in later checks.
      */
-    browser: function (user_agent: string, vendor: string, opera?: any): string {
+    browser: function (user_agent: string, vendor: string | undefined, opera?: any): string {
         vendor = vendor || '' // vendor is undefined for at least IE9
         if (opera || _includes(user_agent, ' OPR/')) {
             if (_includes(user_agent, 'Mini')) {
@@ -94,14 +103,14 @@ export const _info = {
             return 'UC Browser'
         } else if (_includes(user_agent, 'FxiOS')) {
             return 'Firefox iOS'
-        } else if (_includes(vendor, 'Apple')) {
+        } else if (_includes(vendor, 'Apple') || isSafari(user_agent)) {
             if (_includes(user_agent, 'Mobile')) {
                 return 'Mobile Safari'
             }
             return 'Safari'
         } else if (_includes(user_agent, 'Android')) {
             return 'Android Mobile'
-        } else if (_includes(user_agent, 'Konqueror')) {
+        } else if (_includes(user_agent, 'Konqueror') || _includes(user_agent, 'konqueror')) {
             return 'Konqueror'
         } else if (_includes(user_agent, 'Firefox')) {
             return 'Firefox'
@@ -118,36 +127,44 @@ export const _info = {
      * This function detects which browser version is running this script,
      * parsing major and minor version (e.g., 42.1). User agent strings from:
      * http://www.useragentstring.com/pages/useragentstring.php
+     *
+     * `navigator.vendor` is passed in and used to help with detecting certain browsers
+     * NB `navigator.vendor` is deprecated and not present in every browser
      */
-    browserVersion: function (userAgent: string, vendor: string, opera: string): number | null {
+    browserVersion: function (userAgent: string, vendor: string | undefined, opera: string): number | null {
         const browser = _info.browser(userAgent, vendor, opera)
-        const versionRegexs = {
-            'Internet Explorer Mobile': /rv:(\d+(\.\d+)?)/,
-            'Microsoft Edge': /Edge?\/(\d+(\.\d+)?)/,
-            Chrome: /Chrome\/(\d+(\.\d+)?)/,
-            'Chrome iOS': /CriOS\/(\d+(\.\d+)?)/,
-            'UC Browser': /(UCBrowser|UCWEB)\/(\d+(\.\d+)?)/,
-            Safari: /Version\/(\d+(\.\d+)?)/,
-            'Mobile Safari': /Version\/(\d+(\.\d+)?)/,
-            Opera: /(Opera|OPR)\/(\d+(\.\d+)?)/,
-            Firefox: /Firefox\/(\d+(\.\d+)?)/,
-            'Firefox iOS': /FxiOS\/(\d+(\.\d+)?)/,
-            Konqueror: /Konqueror:(\d+(\.\d+)?)/,
-            BlackBerry: /BlackBerry (\d+(\.\d+)?)/,
-            'Android Mobile': /android\s(\d+(\.\d+)?)/,
-            'Samsung Internet': /SamsungBrowser\/(\d+(\.\d+)?)/,
-            'Internet Explorer': /(rv:|MSIE )(\d+(\.\d+)?)/,
-            Mozilla: /rv:(\d+(\.\d+)?)/,
+        const versionRegexes: Record<string, RegExp[]> = {
+            'Internet Explorer Mobile': [/rv:(\d+(\.\d+)?)/],
+            'Microsoft Edge': [/Edge?\/(\d+(\.\d+)?)/],
+            Chrome: [/Chrome\/(\d+(\.\d+)?)/],
+            'Chrome iOS': [/CriOS\/(\d+(\.\d+)?)/],
+            'UC Browser': [/(UCBrowser|UCWEB)\/(\d+(\.\d+)?)/],
+            Safari: [/Version\/(\d+(\.\d+)?)/],
+            'Mobile Safari': [/Version\/(\d+(\.\d+)?)/],
+            Opera: [/(Opera|OPR)\/(\d+(\.\d+)?)/],
+            Firefox: [/Firefox\/(\d+(\.\d+)?)/],
+            'Firefox iOS': [/FxiOS\/(\d+(\.\d+)?)/],
+            Konqueror: [/Konqueror[:/]?(\d+(\.\d+)?)/i],
+            // not every blackberry user agent has the version after the name
+            BlackBerry: [/BlackBerry (\d+(\.\d+)?)/, /Version\/(\d+(\.\d+)?)/],
+            'Android Mobile': [/android\s(\d+(\.\d+)?)/],
+            'Samsung Internet': [/SamsungBrowser\/(\d+(\.\d+)?)/],
+            'Internet Explorer': [/(rv:|MSIE )(\d+(\.\d+)?)/],
+            Mozilla: [/rv:(\d+(\.\d+)?)/],
         }
-        const regex: RegExp | undefined = versionRegexs[browser as keyof typeof versionRegexs]
-        if (_isUndefined(regex)) {
+        const regexes: RegExp[] | undefined = versionRegexes[browser as keyof typeof versionRegexes]
+        if (_isUndefined(regexes)) {
             return null
         }
-        const matches = userAgent.match(regex)
-        if (!matches) {
-            return null
+
+        for (let i = 0; i < regexes.length; i++) {
+            const regex = regexes[i]
+            const matches = userAgent.match(regex)
+            if (matches) {
+                return parseFloat(matches[matches.length - 2])
+            }
         }
-        return parseFloat(matches[matches.length - 2])
+        return null
     },
 
     browserLanguage: function (): string {
