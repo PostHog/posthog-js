@@ -938,11 +938,11 @@ export class PostHog {
             ) {
                 properties['$client_session_referring_host'] = sessionSourceParams.referringDomain
                 properties['$client_session_initial_pathname'] = sessionSourceParams.initialPathName
-                properties['$client_session_utm_source'] = sessionSourceParams.utmSource
-                properties['$client_session_utm_campaign'] = sessionSourceParams.utmCampaign
-                properties['$client_session_utm_medium'] = sessionSourceParams.utmMedium
-                properties['$client_session_utm_content'] = sessionSourceParams.utmContent
-                properties['$client_session_utm_term'] = sessionSourceParams.utmTerm
+                properties['$client_session_utm_source'] = sessionSourceParams.utm_source
+                properties['$client_session_utm_campaign'] = sessionSourceParams.utm_campaign
+                properties['$client_session_utm_medium'] = sessionSourceParams.utm_medium
+                properties['$client_session_utm_content'] = sessionSourceParams.utm_content
+                properties['$client_session_utm_term'] = sessionSourceParams.utm_term
             }
         }
 

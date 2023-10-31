@@ -15,18 +15,20 @@ const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
 /* Client-side session parameters. These are primarily used by web analytics,
  * which relies on these for session analytics without the plugin server being
- * available for the person level set-once properties.
+ * available for the person level set-once properties. Obviously not consistent
+ * between client-side events and server-side events but this is acceptable
+ * as web analytics only uses client-side.
  *
  * These have the same lifespan as a session_id
  */
 interface SessionSourceParams {
     initialPathName: string
-    referringDomain?: string // Is actually host, but named domain for internal consistency. Should contain a port if there is one.
-    utmMedium?: string
-    utmSource?: string
-    utmCampaign?: string
-    utmContent?: string
-    utmTerm?: string
+    referringDomain: string // Is actually host, but named domain for internal consistency. Should contain a port if there is one.
+    utm_medium?: string
+    utm_source?: string
+    utm_campaign?: string
+    utm_content?: string
+    utm_term?: string
 }
 
 export class SessionIdManager {
@@ -280,18 +282,11 @@ export class SessionIdManager {
     }
 }
 
-const generateSessionSourceParams = (): SessionSourceParams => {
+export const generateSessionSourceParams = (): SessionSourceParams => {
     const params: SessionSourceParams = {
         initialPathName: window.location.pathname,
         referringDomain: _info.referringDomain(),
-    }
-    if (typeof URLSearchParams !== 'undefined') {
-        const search = new URLSearchParams(window.location.search)
-        params.utmSource = search.get('utm_source') ?? undefined
-        params.utmCampaign = search.get('utm_campaign') ?? undefined
-        params.utmMedium = search.get('utm_medium') ?? undefined
-        params.utmTerm = search.get('utm_term') ?? undefined
-        params.utmContent = search.get('utm_content') ?? undefined
+        ..._info.campaignParams(),
     }
     return params
 }
