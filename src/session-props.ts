@@ -40,8 +40,6 @@ export class SessionPropsManager {
     private readonly _persistence: PostHogPersistence
     private readonly _sessionSourceParamGenerator: typeof generateSessionSourceParams
 
-    private _sessionSourceParams: StoredSessionSourceProps | null
-
     constructor(
         sessionIdManager: SessionIdManager,
         persistence: PostHogPersistence,
@@ -51,27 +49,28 @@ export class SessionPropsManager {
         this._persistence = persistence
         this._sessionSourceParamGenerator = sessionSourceParamGenerator || generateSessionSourceParams
 
-        this._sessionSourceParams = this._persistence.props[CLIENT_SESSION_PROPS]
-
         this._sessionIdManager.onSessionId(this._onSessionIdCallback)
-        this._sessionIdManager.checkAndGetSessionAndWindowId()
+    }
+
+    _getStoredProps(): StoredSessionSourceProps | undefined {
+        return this._persistence.props[CLIENT_SESSION_PROPS]
     }
 
     _onSessionIdCallback = (sessionId: string) => {
-        if (this._sessionSourceParams?.sessionId === sessionId) {
+        const stored = this._getStoredProps()
+        if (stored && stored.sessionId === sessionId) {
             return
         }
-        const props = this._sessionSourceParamGenerator()
-        const stored: StoredSessionSourceProps = {
+
+        const newProps: StoredSessionSourceProps = {
             sessionId,
-            props,
+            props: this._sessionSourceParamGenerator(),
         }
-        this._persistence.register({ [CLIENT_SESSION_PROPS]: stored })
-        this._sessionSourceParams = stored
+        this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
     }
 
     getSessionProps() {
-        const p = this._sessionSourceParams?.props
+        const p = this._getStoredProps()?.props
         if (!p) {
             return {}
         }

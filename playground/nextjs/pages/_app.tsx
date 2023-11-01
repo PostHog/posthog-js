@@ -14,6 +14,7 @@ if (typeof window !== 'undefined') {
             recordCrossOriginIframes: true,
         },
         debug: true,
+        __preview_send_client_session_params: true,
     })
     ;(window as any).posthog = posthog
 }

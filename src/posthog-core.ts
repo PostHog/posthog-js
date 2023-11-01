@@ -439,11 +439,11 @@ export class PostHog {
         this.__request_queue = []
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
-        this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.sessionPersistence)
 
         this._gdpr_init()
 
