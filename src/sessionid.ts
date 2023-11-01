@@ -7,34 +7,14 @@ import { window } from './utils/globals'
 
 import { _isArray, _isNumber, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { _info } from './utils/event-utils'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 minutes
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 minute
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
 
-/* Client-side session parameters. These are primarily used by web analytics,
- * which relies on these for session analytics without the plugin server being
- * available for the person level set-once properties. Obviously not consistent
- * between client-side events and server-side events but this is acceptable
- * as web analytics only uses client-side.
- *
- * These have the same lifespan as a session_id
- */
-interface SessionSourceParams {
-    initialPathName: string
-    referringDomain: string // Is actually host, but named domain for internal consistency. Should contain a port if there is one.
-    utm_medium?: string
-    utm_source?: string
-    utm_campaign?: string
-    utm_content?: string
-    utm_term?: string
-}
-
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
     private readonly _windowIdGenerator: () => string
-    private readonly _sessionSourceParamGenerator: () => SessionSourceParams
     private config: Partial<PostHogConfig>
     private persistence: PostHogPersistence
     private _windowId: string | null | undefined
@@ -42,7 +22,6 @@ export class SessionIdManager {
     private readonly _window_id_storage_key: string
     private readonly _primary_window_exists_storage_key: string
     private _sessionStartTimestamp: number | null
-    private _sessionSourceParams: SessionSourceParams | null | undefined
 
     private _sessionActivityTimestamp: number | null
     private readonly _sessionTimeoutMs: number
@@ -52,8 +31,7 @@ export class SessionIdManager {
         config: Partial<PostHogConfig>,
         persistence: PostHogPersistence,
         sessionIdGenerator?: () => string,
-        windowIdGenerator?: () => string,
-        sessionSourceParamGenerator?: () => SessionSourceParams
+        windowIdGenerator?: () => string
     ) {
         this.config = config
         this.persistence = persistence
@@ -61,10 +39,8 @@ export class SessionIdManager {
         this._sessionId = undefined
         this._sessionStartTimestamp = null
         this._sessionActivityTimestamp = null
-        this._sessionSourceParams = null
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
-        this._sessionSourceParamGenerator = sessionSourceParamGenerator || generateSessionSourceParams
 
         const persistenceName = config['persistence_name'] || config['token']
         let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
@@ -153,39 +129,26 @@ export class SessionIdManager {
     private _setSessionId(
         sessionId: string | null,
         sessionActivityTimestamp: number | null,
-        sessionStartTimestamp: number | null,
-        sessionSourceParams: SessionSourceParams | null
+        sessionStartTimestamp: number | null
     ): void {
         if (
             sessionId !== this._sessionId ||
             sessionActivityTimestamp !== this._sessionActivityTimestamp ||
-            sessionStartTimestamp !== this._sessionStartTimestamp ||
-            sessionSourceParams !== this._sessionSourceParams
+            sessionStartTimestamp !== this._sessionStartTimestamp
         ) {
             this._sessionStartTimestamp = sessionStartTimestamp
             this._sessionActivityTimestamp = sessionActivityTimestamp
             this._sessionId = sessionId
-            this._sessionSourceParams = sessionSourceParams
 
             this.persistence.register({
-                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp, sessionSourceParams],
+                [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
             })
         }
     }
 
-    private _getSessionId(): [number, string, number, SessionSourceParams] {
-        if (
-            this._sessionId &&
-            this._sessionActivityTimestamp &&
-            this._sessionStartTimestamp &&
-            this._sessionSourceParams
-        ) {
-            return [
-                this._sessionActivityTimestamp,
-                this._sessionId,
-                this._sessionStartTimestamp,
-                this._sessionSourceParams,
-            ]
+    private _getSessionId(): [number, string, number] {
+        if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
+            return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
         const sessionId = this.persistence.props[SESSION_ID]
 
@@ -193,10 +156,6 @@ export class SessionIdManager {
             if (sessionId.length === 2) {
                 // Storage does not yet have a session start time. Add the last activity timestamp as the start time
                 sessionId.push(sessionId[0])
-            }
-            if (sessionId.length === 3) {
-                // Storage does not yet have a session source params, use the generator function
-                sessionId.push(generateSessionSourceParams())
             }
         }
 
@@ -206,7 +165,7 @@ export class SessionIdManager {
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
     // new ids will be generated.
     resetSessionId(): void {
-        this._setSessionId(null, null, null, null)
+        this._setSessionId(null, null, null)
     }
 
     /*
@@ -243,7 +202,7 @@ export class SessionIdManager {
         const timestamp = _timestamp || new Date().getTime()
 
         // eslint-disable-next-line prefer-const
-        let [lastTimestamp, sessionId, startTimestamp, sessionSourceParams] = this._getSessionId()
+        let [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
         let windowId = this._getWindowId()
 
         const sessionPastMaximumLength =
@@ -256,7 +215,6 @@ export class SessionIdManager {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
             startTimestamp = timestamp
-            sessionSourceParams = this._sessionSourceParamGenerator()
             valuesChanged = true
         } else if (!windowId) {
             windowId = this._windowIdGenerator()
@@ -267,7 +225,7 @@ export class SessionIdManager {
         const sessionStartTimestamp = startTimestamp === 0 ? new Date().getTime() : startTimestamp
 
         this._setWindowId(windowId)
-        this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp, sessionSourceParams)
+        this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
 
         if (valuesChanged) {
             this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId))
@@ -277,15 +235,6 @@ export class SessionIdManager {
             sessionId,
             windowId,
             sessionStartTimestamp,
-            sessionSourceParams,
         }
-    }
-}
-
-export const generateSessionSourceParams = (): SessionSourceParams => {
-    return {
-        initialPathName: window.location.pathname,
-        referringDomain: _info.referringDomain(),
-        ..._info.campaignParams(),
     }
 }

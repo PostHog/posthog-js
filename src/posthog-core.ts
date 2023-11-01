@@ -57,6 +57,7 @@ import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefin
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
+import { SessionPropsManager } from './session-props'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -271,6 +272,7 @@ export class PostHog {
     persistence?: PostHogPersistence
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
+    sessionPropsManager?: SessionPropsManager
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -441,6 +443,7 @@ export class PostHog {
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+        this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.sessionPersistence)
 
         this._gdpr_init()
 
@@ -929,22 +932,18 @@ export class PostHog {
         const infoProperties = _info.properties()
 
         if (this.sessionManager) {
-            const { sessionId, windowId, sessionSourceParams } = this.sessionManager.checkAndGetSessionAndWindowId()
+            const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
-            if (
-                this.config.__preview_send_client_session_params &&
-                sessionSourceParams &&
-                (event_name === '$pageview' || event_name === '$pageleave' || event_name === '$autocapture')
-            ) {
-                properties['$client_session_referring_host'] = sessionSourceParams.referringDomain
-                properties['$client_session_initial_pathname'] = sessionSourceParams.initialPathName
-                properties['$client_session_utm_source'] = sessionSourceParams.utm_source
-                properties['$client_session_utm_campaign'] = sessionSourceParams.utm_campaign
-                properties['$client_session_utm_medium'] = sessionSourceParams.utm_medium
-                properties['$client_session_utm_content'] = sessionSourceParams.utm_content
-                properties['$client_session_utm_term'] = sessionSourceParams.utm_term
-            }
+        }
+
+        if (
+            this.sessionPropsManager &&
+            this.config.__preview_send_client_session_params &&
+            (event_name === '$pageview' || event_name === '$pageleave' || event_name === '$autocapture')
+        ) {
+            const sessionProps = this.sessionPropsManager.getSessionProps()
+            properties = _extend(properties, sessionProps)
         }
 
         if (this.config.__preview_measure_pageview_stats) {
