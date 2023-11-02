@@ -1,3 +1,8 @@
+## 1.88.1 - 2023-11-02
+
+- chore(deps): bump next from 13.1.6 to 13.5.0 in /playground/nextjs (#855)
+- Tweak session prop names (#873)
+
 ## 1.88.0 - 2023-11-02
 
 - feat(web-analytics): Add client-side session params (#869)
