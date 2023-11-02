@@ -114,7 +114,7 @@ describe('Session Props Manager', () => {
 
         //assert
         expect(properties).toEqual({
-            $client_session_utm_source: 'some-utm-source',
+            $client_session_initial_utm_source: 'some-utm-source',
         })
     })
 })
