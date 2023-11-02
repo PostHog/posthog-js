@@ -1,3 +1,7 @@
+## 1.88.0 - 2023-11-02
+
+- feat(web-analytics): Add client-side session params (#869)
+
 ## 1.87.6 - 2023-10-31
 
 - fix: add tests for browser and browser version detection (#870)
