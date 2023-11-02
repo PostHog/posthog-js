@@ -76,13 +76,13 @@ export class SessionPropsManager {
         }
 
         return {
-            $client_session_referring_host: p.referringDomain,
+            $client_session_initial_referring_host: p.referringDomain,
             $client_session_initial_pathname: p.initialPathName,
-            $client_session_utm_source: p.utm_source,
-            $client_session_utm_campaign: p.utm_campaign,
-            $client_session_utm_medium: p.utm_medium,
-            $client_session_utm_content: p.utm_content,
-            $client_session_utm_term: p.utm_term,
+            $client_session_initial_utm_source: p.utm_source,
+            $client_session_initial_utm_campaign: p.utm_campaign,
+            $client_session_initial_utm_medium: p.utm_medium,
+            $client_session_initial_utm_content: p.utm_content,
+            $client_session_initial_utm_term: p.utm_term,
         }
     }
 }
