@@ -57,6 +57,7 @@ import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefin
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
+import { SessionPropsManager } from './session-props'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -271,6 +272,7 @@ export class PostHog {
     persistence?: PostHogPersistence
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
+    sessionPropsManager?: SessionPropsManager
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -437,6 +439,7 @@ export class PostHog {
         this.__request_queue = []
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
@@ -932,6 +935,15 @@ export class PostHog {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
+        }
+
+        if (
+            this.sessionPropsManager &&
+            this.config.__preview_send_client_session_params &&
+            (event_name === '$pageview' || event_name === '$pageleave' || event_name === '$autocapture')
+        ) {
+            const sessionProps = this.sessionPropsManager.getSessionProps()
+            properties = _extend(properties, sessionProps)
         }
 
         if (this.config.__preview_measure_pageview_stats) {
