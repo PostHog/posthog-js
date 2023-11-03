@@ -15,8 +15,8 @@ import { _strip_empty_properties } from './utils'
 
 // this might be stored in a cookie with a hard 4096 byte limit, so save characters on key names
 export interface SessionSourceProps {
-    p: string // initial pathname
-    r: string // referring domain
+    p?: string // initial pathname
+    r?: string // referring domain
     m?: string // utm medium
     s?: string // utm source
     c?: string // utm campaign
@@ -31,17 +31,15 @@ export interface StoredSessionSourceProps {
 
 export const generateSessionSourceParams = (): SessionSourceProps => {
     const campaignParams = _info.campaignParams()
-    return {
+    return _strip_empty_properties({
         p: window?.location.pathname || '',
         r: _info.referringDomain(),
-        ..._strip_empty_properties({
-            m: campaignParams.utm_medium,
-            s: campaignParams.utm_source,
-            c: campaignParams.utm_campaign,
-            n: campaignParams.utm_content,
-            t: campaignParams.utm_term,
-        }),
-    }
+        m: campaignParams.utm_medium,
+        s: campaignParams.utm_source,
+        c: campaignParams.utm_campaign,
+        n: campaignParams.utm_content,
+        t: campaignParams.utm_term,
+    })
 }
 
 export class SessionPropsManager {
