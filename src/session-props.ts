@@ -11,6 +11,7 @@ import { _info } from './utils/event-utils'
 import { SessionIdManager } from './sessionid'
 import { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
+import { _strip_empty_properties } from './utils'
 
 // this might be stored in a cookie with a hard 4096 byte limit, so save characters on key names
 interface SessionSourceProps {
@@ -33,11 +34,13 @@ export const generateSessionSourceParams = (): SessionSourceProps => {
     return {
         p: window?.location.pathname || '',
         r: _info.referringDomain(),
-        m: campaignParams.utm_medium,
-        s: campaignParams.utm_source,
-        c: campaignParams.utm_campaign,
-        n: campaignParams.utm_content,
-        t: campaignParams.utm_term,
+        ..._strip_empty_properties({
+            m: campaignParams.utm_medium,
+            s: campaignParams.utm_source,
+            c: campaignParams.utm_campaign,
+            n: campaignParams.utm_content,
+            t: campaignParams.utm_term,
+        }),
     }
 }
 

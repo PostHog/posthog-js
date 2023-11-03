@@ -202,11 +202,11 @@ export const _safewrap_instance_methods = function (obj: Record<string, any>): v
     }
 }
 
-export const _strip_empty_properties = function (p: Properties): Properties {
-    const ret: Properties = {}
+export const _strip_empty_properties = function <T extends Record<string, any>>(p: T): { [k in keyof T]?: T[k] } {
+    const ret: Partial<T> = {}
     _each(p, function (v, k) {
         if (_isString(v) && v.length > 0) {
-            ret[k] = v
+            ;(ret as any)[k] = v
         }
     })
     return ret
