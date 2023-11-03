@@ -12,26 +12,32 @@ import { SessionIdManager } from './sessionid'
 import { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 
+// this might be stored in a cookie with a hard 4096 byte limit, so save characters on key names
 interface SessionSourceProps {
-    initialPathName: string
-    referringDomain: string // Is actually host, but named domain for internal consistency. Should contain a port if there is one.
-    utm_medium?: string
-    utm_source?: string
-    utm_campaign?: string
-    utm_content?: string
-    utm_term?: string
+    p: string // initial pathname
+    r: string // referring domain
+    m?: string // utm medium
+    s?: string // utm source
+    c?: string // utm campaign
+    n?: string // utm content
+    t?: string // utm term
 }
 
 interface StoredSessionSourceProps {
-    sessionId: string
-    props: SessionSourceProps
+    s: string // session id
+    p: SessionSourceProps
 }
 
-const generateSessionSourceParams = (): SessionSourceProps => {
+export const generateSessionSourceParams = (): SessionSourceProps => {
+    const campaignParams = _info.campaignParams()
     return {
-        initialPathName: window?.location.pathname || '',
-        referringDomain: _info.referringDomain(),
-        ..._info.campaignParams(),
+        p: window?.location.pathname || '',
+        r: _info.referringDomain(),
+        m: campaignParams.utm_medium,
+        s: campaignParams.utm_source,
+        c: campaignParams.utm_campaign,
+        n: campaignParams.utm_content,
+        t: campaignParams.utm_term,
     }
 }
 
@@ -58,31 +64,31 @@ export class SessionPropsManager {
 
     _onSessionIdCallback = (sessionId: string) => {
         const stored = this._getStoredProps()
-        if (stored && stored.sessionId === sessionId) {
+        if (stored && stored.s === sessionId) {
             return
         }
 
         const newProps: StoredSessionSourceProps = {
-            sessionId,
-            props: this._sessionSourceParamGenerator(),
+            s: sessionId,
+            p: this._sessionSourceParamGenerator(),
         }
         this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
     }
 
     getSessionProps() {
-        const p = this._getStoredProps()?.props
+        const p = this._getStoredProps()?.p
         if (!p) {
             return {}
         }
 
         return {
-            $client_session_initial_referring_host: p.referringDomain,
-            $client_session_initial_pathname: p.initialPathName,
-            $client_session_initial_utm_source: p.utm_source,
-            $client_session_initial_utm_campaign: p.utm_campaign,
-            $client_session_initial_utm_medium: p.utm_medium,
-            $client_session_initial_utm_content: p.utm_content,
-            $client_session_initial_utm_term: p.utm_term,
+            $client_session_initial_referring_host: p.r,
+            $client_session_initial_pathname: p.p,
+            $client_session_initial_utm_source: p.s,
+            $client_session_initial_utm_campaign: p.c,
+            $client_session_initial_utm_medium: p.m,
+            $client_session_initial_utm_content: p.n,
+            $client_session_initial_utm_term: p.t,
         }
     }
 }
