@@ -1,4 +1,4 @@
-import { SessionPropsManager } from '../session-props'
+import { SessionPropsManager, StoredSessionSourceProps } from '../session-props'
 import { SessionIdManager } from '../sessionid'
 import { PostHogPersistence } from '../posthog-persistence'
 
@@ -46,12 +46,12 @@ describe('Session Props Manager', () => {
         expect(generateProps).toHaveBeenCalledTimes(1)
 
         expect(persistenceRegister).toBeCalledWith({
-            $client_session_props: {
-                props: {
-                    utm_source: 'some-utm-source',
+            $cl_ses_p: {
+                p: {
+                    s: 'some-utm-source',
                 },
-                sessionId: 'session-id',
-            },
+                s: 'session-id',
+            } as StoredSessionSourceProps,
         })
     })
 
@@ -60,10 +60,10 @@ describe('Session Props Manager', () => {
         const sessionId1 = 'session-id-1'
         const { onSessionId, persistence, generateProps, persistenceRegister } = createSessionPropsManager()
         persistence.props = {
-            $client_session_props: {
-                props: {},
-                sessionId: sessionId1,
-            },
+            $cl_ses_p: {
+                p: {},
+                s: sessionId1,
+            } as StoredSessionSourceProps,
         }
         const callback = onSessionId.mock.calls[0][0]
 
@@ -82,10 +82,10 @@ describe('Session Props Manager', () => {
 
         const { onSessionId, persistence, generateProps, persistenceRegister } = createSessionPropsManager()
         persistence.props = {
-            $client_session_props: {
-                props: {},
-                sessionId: sessionId1,
-            },
+            $cl_ses_p: {
+                p: {},
+                s: sessionId1,
+            } as StoredSessionSourceProps,
         }
         const callback = onSessionId.mock.calls[0][0]
 
@@ -101,12 +101,12 @@ describe('Session Props Manager', () => {
         // arrange
         const { persistence, sessionPropsManager } = createSessionPropsManager()
         persistence.props = {
-            $client_session_props: {
-                props: {
-                    utm_source: 'some-utm-source',
+            $cl_ses_p: {
+                p: {
+                    s: 'some-utm-source',
                 },
-                sessionId: 'session-id',
-            },
+                s: 'session-id',
+            } as StoredSessionSourceProps,
         }
 
         // act

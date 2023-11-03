@@ -23,7 +23,7 @@ interface SessionSourceProps {
     t?: string // utm term
 }
 
-interface StoredSessionSourceProps {
+export interface StoredSessionSourceProps {
     s: string // session id
     p: SessionSourceProps
 }
