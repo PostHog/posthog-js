@@ -14,7 +14,7 @@ import { CLIENT_SESSION_PROPS } from './constants'
 import { _strip_empty_properties } from './utils'
 
 // this might be stored in a cookie with a hard 4096 byte limit, so save characters on key names
-interface SessionSourceProps {
+export interface SessionSourceProps {
     p: string // initial pathname
     r: string // referring domain
     m?: string // utm medium

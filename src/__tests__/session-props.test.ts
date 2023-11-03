@@ -1,4 +1,4 @@
-import { SessionPropsManager, StoredSessionSourceProps } from '../session-props'
+import { SessionPropsManager, SessionSourceProps, StoredSessionSourceProps } from '../session-props'
 import { SessionIdManager } from '../sessionid'
 import { PostHogPersistence } from '../posthog-persistence'
 
@@ -36,7 +36,7 @@ describe('Session Props Manager', () => {
         const utmSource = 'some-utm-source'
         const sessionId = 'session-id'
         const { onSessionId, generateProps, persistenceRegister } = createSessionPropsManager()
-        generateProps.mockReturnValue({ utm_source: utmSource })
+        generateProps.mockReturnValue({ s: utmSource } as SessionSourceProps)
         const callback = onSessionId.mock.calls[0][0]
 
         // act
