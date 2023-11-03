@@ -1,12 +1,19 @@
 /* eslint camelcase: "off" */
 
 import { _each, _extend, _include, _strip_empty_properties } from './utils'
-import { cookieStore, localStore, localPlusCookieStore, memoryStore, sessionStore } from './storage'
+import {
+    COOKIE_PERSISTED_PROPERTIES,
+    cookieStore,
+    localPlusCookieStore,
+    localStore,
+    memoryStore,
+    sessionStore,
+} from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
-    PERSISTENCE_RESERVED_PROPERTIES,
-    EVENT_TIMERS_KEY,
     ENABLED_FEATURE_FLAGS,
+    EVENT_TIMERS_KEY,
+    PERSISTENCE_RESERVED_PROPERTIES,
     POSTHOG_QUOTA_LIMITED,
     USER_STATE,
 } from './constants'
@@ -21,6 +28,7 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
     'localstorage+cookie',
     'sessionstorage',
     'memory',
+    'default',
 ]
 
 /**
@@ -64,8 +72,8 @@ export class PostHogPersistence {
                 config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
             ) === -1
         ) {
-            logger.critical('Unknown persistence type ' + config['persistence'] + '; falling back to cookie')
-            config['persistence'] = 'cookie'
+            logger.critical('Unknown persistence type ' + config['persistence'] + '; falling back to default')
+            config['persistence'] = 'default'
         }
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
@@ -77,8 +85,11 @@ export class PostHogPersistence {
             this.storage = sessionStore
         } else if (storage_type === 'memory') {
             this.storage = memoryStore
-        } else {
+        } else if (storage_type === 'cookie') {
             this.storage = cookieStore
+        } else {
+            const { storage } = this._getAndMigrateToDefaultStore()
+            this.storage = storage
         }
 
         this.user_state = 'anonymous'
@@ -313,5 +324,61 @@ export class PostHogPersistence {
     set_quota_limits(state: Record<string, number>): void {
         this.props[POSTHOG_QUOTA_LIMITED] = state
         this.save()
+    }
+
+    _getAndMigrateToDefaultStore = (): { storage: PersistentStore; wasPreviouslyDifferentStore: boolean } => {
+        // Check if there's any data in local/cookie/session storage, and if needed,
+        // migrate to cookie+localstorage
+        const defaultStore = localPlusCookieStore
+        const currentStore = this._getCurrentStore()
+
+        if (currentStore && currentStore !== defaultStore) {
+            this._migrateStoreToDefaultStore(currentStore, defaultStore)
+            return { storage: defaultStore, wasPreviouslyDifferentStore: !!currentStore }
+        } else {
+            return { storage: defaultStore, wasPreviouslyDifferentStore: false }
+        }
+    }
+
+    _getCurrentStore = () => {
+        // Test by picking a property that is stored in the cookie for local+cookie
+        const testKey = COOKIE_PERSISTED_PROPERTIES[0]
+
+        // If that key exists in the local store, then we're definitely using
+        // local storage
+        const isLocalStore = localStore.is_supported() && localStore.get(this.name)?.[testKey]
+        if (isLocalStore) {
+            return localStore
+        }
+        // If not using pure localStore, we must be using localPlusCookie if
+        // there's data in both
+        const isLocalPlusCookie =
+            localPlusCookieStore.is_supported() &&
+            localStore.is_supported() &&
+            localStore.get(this.name) &&
+            cookieStore.is_supported() &&
+            cookieStore.get(this.name)
+        if (isLocalPlusCookie) {
+            return localPlusCookieStore
+        }
+        // If there's any data in cookieStore at this point then we're on cookieStore
+        const isCookie = cookieStore.is_supported() && cookieStore.get(this.name)
+        if (isCookie) {
+            return cookieStore
+        }
+
+        const isSession = sessionStore.is_supported() && sessionStore.get(this.name)
+        if (isSession) {
+            return sessionStore
+        }
+
+        // memory store, no existing store, or existing store no longer supported
+        return undefined
+    }
+
+    _migrateStoreToDefaultStore(store: PersistentStore, defaultStore: PersistentStore) {
+        const values = store.get(this.name)
+        store.remove(this.name, this.cross_subdomain)
+        defaultStore.set(this.name, values, this.expire_days, this.cross_subdomain, this.secure)
     }
 }

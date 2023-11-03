@@ -108,7 +108,7 @@ export const defaultConfig = (): PostHogConfig => ({
     autocapture: true,
     rageclick: true,
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
-    persistence: 'cookie',
+    persistence: 'default',
     persistence_name: '',
     cookie_name: '',
     loaded: __NOOP,
