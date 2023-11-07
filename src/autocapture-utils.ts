@@ -374,7 +374,7 @@ interface PHElement {
 }
 
 function escapeQuotes(input: string): string {
-    return input.replace(/"/g, '\\"')
+    return input.replace(/"|\\"/g, '\\"')
 }
 
 function elementsToString(elements: PHElement[]): string {
