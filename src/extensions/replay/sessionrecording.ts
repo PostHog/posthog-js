@@ -80,12 +80,8 @@ interface SnapshotBuffer {
 }
 
 export class SessionRecording {
-    private _linkedFlagSeen: boolean = false
     private instance: PostHog
     private _endpoint: string
-    private windowId: string | null
-    private sessionId: string | null
-    private _lastActivityTimestamp: number = Date.now()
     private flushBufferTimer?: any
     private buffer?: SnapshotBuffer
     private mutationRateLimiter?: MutationRateLimiter
@@ -94,6 +90,11 @@ export class SessionRecording {
     private receivedDecide: boolean
     private rrwebRecord: rrwebRecord | undefined
     private isIdle = false
+
+    private _linkedFlagSeen: boolean = false
+    private _lastActivityTimestamp: number = Date.now()
+    private windowId: string | null = null
+    private sessionId: string | null = null
     private _linkedFlag: string | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
@@ -183,10 +184,6 @@ export class SessionRecording {
             logger.error('Session recording started without valid sessionManager')
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
         }
-
-        const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        this.windowId = windowId
-        this.sessionId = sessionId
 
         this.buffer = this.clearBuffer()
     }
@@ -383,8 +380,6 @@ export class SessionRecording {
 
         const sessionIdChanged = this.sessionId !== sessionId
         const windowIdChanged = this.windowId !== windowId
-        this.windowId = windowId
-        this.sessionId = sessionId
 
         if (
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
@@ -392,6 +387,9 @@ export class SessionRecording {
         ) {
             this._tryTakeFullSnapshot()
         }
+
+        this.windowId = windowId
+        this.sessionId = sessionId
     }
 
     private _tryTakeFullSnapshot(): boolean {
@@ -523,18 +521,18 @@ export class SessionRecording {
         const event = truncateLargeConsoleLogs(throttledEvent)
         const size = JSON.stringify(event).length
 
-        const properties = {
-            $snapshot_bytes: size,
-            $snapshot_data: event,
-            $session_id: this.sessionId,
-            $window_id: this.windowId,
-        }
-
         this._updateWindowAndSessionIds(event)
 
         if (this.isIdle) {
             // When in an idle state we keep recording, but don't capture the events
             return
+        }
+
+        const properties = {
+            $snapshot_bytes: size,
+            $snapshot_data: event,
+            $session_id: this.sessionId,
+            $window_id: this.windowId,
         }
 
         if (this.status !== 'disabled') {
@@ -614,9 +612,15 @@ export class SessionRecording {
         if (
             !this.buffer ||
             this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            this.buffer.sessionId !== this.sessionId
+            (!!this.buffer.sessionId && this.buffer.sessionId !== this.sessionId)
         ) {
             this.buffer = this._flushBuffer()
+        }
+
+        if (_isNull(this.buffer.sessionId) && !_isNull(this.sessionId)) {
+            // session id starts null but has now been assigned, update the buffer
+            this.buffer.sessionId = this.sessionId
+            this.buffer.windowId = this.windowId
         }
 
         this.buffer.size += properties.$snapshot_bytes
