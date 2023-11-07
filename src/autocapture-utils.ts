@@ -4,10 +4,10 @@
  * @returns {string} the element's class
  */
 
-import { AutocaptureConfig } from 'types'
+import { AutocaptureConfig, Properties } from 'types'
 import { _each, _includes, _trim } from './utils'
 
-import { _isNull, _isString, _isUndefined } from './utils/type-utils'
+import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 
 export function getClassName(el: Element): string {
@@ -357,25 +357,27 @@ export function getElementsChainString(elements: Properties[]): string {
     return elementsToString(extractElements(elements))
 }
 
-interface Element {
-    text?: string;
-    tag_name?: string;
-    href?: string;
-    attr_id?: string;
-    attr_class?: string[];
-    nth_child?: number;
-    nth_of_type?: number;
-    attributes?: Record<string, any>;
-    event_id?: number;
-    order?: number;
-    group_id?: number;
+// This interface is called 'Element' in plugin-scaffold https://github.com/PostHog/plugin-scaffold/blob/b07d3b879796ecc7e22deb71bf627694ba05386b/src/types.ts#L200
+// However 'Element' is a DOM Element when run in the browser, so we have to rename it
+interface PHElement {
+    text?: string
+    tag_name?: string
+    href?: string
+    attr_id?: string
+    attr_class?: string[]
+    nth_child?: number
+    nth_of_type?: number
+    attributes?: Record<string, any>
+    event_id?: number
+    order?: number
+    group_id?: number
 }
 
 function escapeQuotes(input: string): string {
     return input.replace(/"/g, '\\"')
 }
 
-function elementsToString(elements: Element[]): string {
+function elementsToString(elements: PHElement[]): string {
     const ret = elements.map((element) => {
         let el_string = ''
         if (element.tag_name) {
@@ -409,7 +411,7 @@ function elementsToString(elements: Element[]): string {
     return ret.join(';')
 }
 
-function extractElements(elements: Properties[]): Element[] {
+function extractElements(elements: Properties[]): PHElement[] {
     return elements.map((el) => ({
         text: el['$el_text']?.slice(0, 400),
         tag_name: el['tag_name'],
@@ -422,11 +424,11 @@ function extractElements(elements: Properties[]): Element[] {
     }))
 }
 
-function extractAttrClass(el: Properties): Element['attr_class'] {
+function extractAttrClass(el: Properties): PHElement['attr_class'] {
     const attr_class = el['attr__class']
     if (!attr_class) {
         return undefined
-    } else if (Array.isArray(attr_class)) {
+    } else if (_isArray(attr_class)) {
         return attr_class
     } else {
         return attr_class.split(' ')
