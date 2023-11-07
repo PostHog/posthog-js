@@ -124,6 +124,7 @@ export interface PostHogConfig {
     }
     segment?: any
     __preview_measure_pageview_stats?: boolean
+    __preview_send_client_session_params?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -221,6 +222,9 @@ export interface DecideResponse {
     errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
     capturePerformance?: boolean
+    analytics?: {
+        endpoint?: string
+    }
     // this is currently in development and may have breaking changes without a major version bump
     autocaptureExceptions?:
         | boolean
@@ -232,6 +236,10 @@ export interface DecideResponse {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
         recorderVersion?: 'v1' | 'v2'
+        // the API returns a decimal between 0 and 1 as a string
+        sampleRate?: string | null
+        minimumDurationMilliseconds?: number
+        linkedFlag?: string | null
     }
     surveys?: boolean
     toolbarParams: ToolbarParams

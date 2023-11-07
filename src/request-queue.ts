@@ -2,6 +2,8 @@ import { RequestQueueScaffold } from './base-request-queue'
 import { _each } from './utils'
 import { Properties, QueuedRequestData, XHROptions } from './types'
 
+import { _isUndefined } from './utils/type-utils'
+
 export class RequestQueue extends RequestQueueScaffold {
     handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void
 
@@ -77,7 +79,7 @@ export class RequestQueue extends RequestQueueScaffold {
         _each(this._event_queue, (request) => {
             const { url, data, options } = request
             const key = (options ? options._batchKey : null) || url
-            if (requests[key] === undefined) {
+            if (_isUndefined(requests[key])) {
                 requests[key] = { data: [], url, options }
             }
 

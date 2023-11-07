@@ -1,4 +1,4 @@
-import { createShadow, callSurveys, generateSurveys } from '../../extensions/surveys'
+import { createShadow, callSurveys, generateSurveys, createMultipleQuestionSurvey } from '../../extensions/surveys'
 
 describe('survey display logic', () => {
     beforeEach(() => {
@@ -59,6 +59,9 @@ describe('survey display logic', () => {
             $survey_id: 'testSurvey1',
             $survey_name: 'Test survey 1',
             sessionRecordingUrl: undefined,
+            $set: {
+                '$survey_dismissed/testSurvey1': true,
+            },
         })
         expect(localStorage.getItem(`seenSurvey_${mockSurveys[0].id}`)).toBe('true')
 
@@ -83,7 +86,7 @@ describe('survey display logic', () => {
         // submit the survey
         const ratingButton = document
             .getElementsByClassName(`PostHogSurvey${mockSurveys[0].id}`)[0]
-            .shadowRoot.querySelectorAll('.rating_1')[0]
+            .shadowRoot.querySelectorAll('.question-0-rating-1')[0]
         ratingButton.click()
         const submitButton = document
             .getElementsByClassName(`PostHogSurvey${mockSurveys[0].id}`)[0]
@@ -145,11 +148,47 @@ describe('survey display logic', () => {
         expect(mockPostHog.capture).toBeCalledTimes(1)
     })
 
-    test('when url changes, callSurveys runs again', () => {
+    test('callSurveys runs on interval irrespective of url change', () => {
         jest.useFakeTimers()
         jest.spyOn(global, 'setInterval')
         generateSurveys(mockPostHog)
         expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(1)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1500)
+        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 3000)
+
+        jest.advanceTimersByTime(3000)
+        expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(2)
+        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 3000)
+    })
+
+    test('multiple choice type question elements are unique', () => {
+        mockSurveys = [
+            {
+                id: 'testSurvey2',
+                name: 'Test survey 2',
+                appearance: null,
+                conditions: { seenSurveyWaitPeriodInDays: 10 },
+                questions: [
+                    {
+                        question: 'Which types of content would you like to see more of?',
+                        description: 'This is a question description',
+                        type: 'multiple_choice',
+                        choices: ['Tutorials', 'Product Updates', 'Events', 'Other'],
+                    },
+                    {
+                        question: 'Which features do you use the most?',
+                        description: 'This is a question description',
+                        type: 'multiple_choice',
+                        choices: ['Surveys', 'Feature flags', 'Analytics'],
+                    },
+                ],
+            },
+        ]
+        const multipleQuestionSurveyForm = createMultipleQuestionSurvey(mockPostHog, mockSurveys[0])
+        const allSelectOptions = multipleQuestionSurveyForm.querySelectorAll('input[type=checkbox]')
+        const uniqueIds = new Set()
+        allSelectOptions.forEach((element) => {
+            uniqueIds.add(element.id)
+        })
+        expect(uniqueIds.size).toBe(allSelectOptions.length)
     })
 })

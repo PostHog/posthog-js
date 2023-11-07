@@ -1,8 +1,11 @@
 import { autocapture } from './autocapture'
 import { _base64Encode, loadScript } from './utils'
 import { PostHog } from './posthog-core'
-import { Compression, DecideResponse } from './types'
+import { DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
+
+import { _isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 export class Decide {
     instance: PostHog
@@ -44,11 +47,11 @@ export class Decide {
         this.instance.featureFlags._startReloadTimer()
 
         if (response?.status === 0) {
-            console.error('Failed to fetch feature flags from PostHog.')
+            logger.error('Failed to fetch feature flags from PostHog.')
             return
         }
         if (!(document && document.body)) {
-            console.log('document not ready yet, trying again in 500 milliseconds...')
+            logger.info('document not ready yet, trying again in 500 milliseconds...')
             setTimeout(() => {
                 this.parseDecideResponse(response)
             }, 500)
@@ -59,22 +62,12 @@ export class Decide {
         this.instance.sessionRecording?.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
         this.instance.webPerformance?.afterDecideResponse(response)
-        this.instance.exceptionAutocapture?.afterDecideResponse(response)
+        this.instance._afterDecideResponse(response)
 
         if (!this.instance.config.advanced_disable_feature_flags_on_first_load) {
             this.instance.featureFlags.receivedFeatureFlags(response)
         }
 
-        this.instance['compression'] = {}
-        if (response['supportedCompression'] && !this.instance.config.disable_compression) {
-            const compression: Partial<Record<Compression, boolean>> = {}
-            for (const method of response['supportedCompression']) {
-                compression[method] = true
-            }
-            this.instance['compression'] = compression
-        }
-
-        // Check if recorder.js is already loaded
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const surveysGenerator = window?.extendPostHogWithSurveys
@@ -82,12 +75,31 @@ export class Decide {
         if (response['surveys'] && !surveysGenerator) {
             loadScript(this.instance.config.api_host + `/static/surveys.js`, (err) => {
                 if (err) {
-                    return console.error(`Could not load surveys script`, err)
+                    return logger.error(`Could not load surveys script`, err)
                 }
 
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 window.extendPostHogWithSurveys(this.instance)
+            })
+        }
+
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const exceptionAutoCaptureAddedToWindow = window?.extendPostHogWithExceptionAutoCapture
+        if (
+            response['autocaptureExceptions'] &&
+            !!response['autocaptureExceptions'] &&
+            _isUndefined(exceptionAutoCaptureAddedToWindow)
+        ) {
+            loadScript(this.instance.config.api_host + `/static/exception-autocapture.js`, (err) => {
+                if (err) {
+                    return logger.error(`Could not load exception autocapture script`, err)
+                }
+
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                window.extendPostHogWithExceptionAutocapture(this.instance, response)
             })
         }
 
@@ -104,12 +116,12 @@ export class Decide {
 
                     loadScript(scriptUrl, (err) => {
                         if (err) {
-                            console.error(`Error while initializing PostHog app with config id ${id}`, err)
+                            logger.error(`Error while initializing PostHog app with config id ${id}`, err)
                         }
                     })
                 }
             } else if (response['siteApps'].length > 0) {
-                console.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
+                logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
             }
         }
     }

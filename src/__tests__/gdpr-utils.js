@@ -2,6 +2,8 @@ import sinon from 'sinon'
 
 import * as gdpr from '../gdpr-utils'
 
+import { _isNull } from '../utils/type-utils'
+
 const TOKENS = [
     `test-token`,
     `y^0M0RJnZq#9WE!Si*1tPZmtdcODB$%c`, // randomly-generated string
@@ -29,13 +31,13 @@ function forPersistenceTypes(runTests) {
 
 function assertPersistenceValue(persistenceType, token, value, persistencePrefix = DEFAULT_PERSISTENCE_PREFIX) {
     if (persistenceType === `cookie`) {
-        if (value === null) {
+        if (_isNull(value)) {
             expect(document.cookie).not.toContain(token)
         } else {
             expect(document.cookie).toContain(token + `=${value}`)
         }
     } else {
-        if (value === null) {
+        if (_isNull(value)) {
             expect(window.localStorage.getItem(persistencePrefix + token)).toBeNull()
         } else {
             expect(window.localStorage.getItem(persistencePrefix + token)).toBe(`${value}`)
@@ -465,140 +467,6 @@ describe(`GDPR utils`, () => {
                             persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
                         })
                     ).toBe(false)
-                })
-            })
-        })
-    })
-
-    describe(`addOptOutCheckPostHogLib`, () => {
-        const captureEventName = `єνєηт`
-        const captureProperties = { '𝖕𝖗𝖔𝖕𝖊𝖗𝖙𝖞': `𝓿𝓪𝓵𝓾𝓮` }
-        let capture, postHogLib
-
-        function setupMocks(config, silenceErrors = false) {
-            capture = sinon.spy()
-            postHogLib = {
-                config,
-                capture: undefined,
-            }
-            postHogLib.capture = gdpr.addOptOutCheck(postHogLib, capture, silenceErrors)
-        }
-
-        forPersistenceTypes(function (persistenceType) {
-            it(`should call the wrapped method if the user is neither opted in or opted out`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
-
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
-                })
-            })
-
-            it(`should call the wrapped method if the user is opted in`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
-
-                    gdpr.optIn(token, { persistenceType })
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
-                })
-            })
-
-            it(`should not call the wrapped method if the user is opted out`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
-
-                    gdpr.optOut(token, { persistenceType })
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.notCalled).toBe(true)
-                })
-            })
-
-            it(`should not invoke the callback directly if the user is neither opted in or opted out`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
-                    const callback = sinon.spy()
-
-                    postHogLib.capture(captureEventName, captureProperties, callback)
-
-                    expect(callback.notCalled).toBe(true)
-                })
-            })
-
-            it(`should not invoke the callback directly if the user is opted in`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
-                    const callback = sinon.spy()
-
-                    gdpr.optIn(token, { persistenceType })
-                    postHogLib.capture(captureEventName, captureProperties, callback)
-
-                    expect(callback.notCalled).toBe(true)
-                })
-            })
-
-            it(`should invoke the callback directly if the user is opted out`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks({ token, opt_out_capturing_persistence_type: persistenceType })
-                    const callback = sinon.spy()
-
-                    gdpr.optOut(token, { persistenceType })
-                    postHogLib.capture(captureEventName, captureProperties, callback)
-
-                    expect(callback.calledOnceWith(0)).toBe(true)
-                })
-            })
-
-            it(`should call the wrapped method if there is no token available`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks({ token: null, opt_out_capturing_persistence_type: persistenceType })
-
-                    gdpr.optIn(token, { persistenceType })
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
-                })
-            })
-
-            it(`should call the wrapped method if config is undefined`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks(undefined, false)
-                    console.error = jest.fn()
-
-                    gdpr.optIn(token, { persistenceType })
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
-                    // :KLUDGE: Exact error message may vary between runtimes
-                    expect(console.error).toHaveBeenCalled()
-                })
-            })
-
-            it(`should allow use of a custom "persistence prefix" string`, () => {
-                TOKENS.forEach((token) => {
-                    setupMocks({
-                        token,
-                        opt_out_capturing_persistence_type: persistenceType,
-                        opt_out_capturing_cookie_prefix: CUSTOM_PERSISTENCE_PREFIX,
-                    })
-
-                    gdpr.optOut(token, { persistenceType, persistencePrefix: CUSTOM_PERSISTENCE_PREFIX })
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.notCalled).toBe(true)
-
-                    gdpr.optIn(token, { persistenceType })
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.notCalled).toBe(true)
-
-                    gdpr.optIn(token, { persistenceType, persistencePrefix: CUSTOM_PERSISTENCE_PREFIX })
-                    postHogLib.capture(captureEventName, captureProperties)
-
-                    expect(capture.calledOnceWith(captureEventName, captureProperties)).toBe(true)
                 })
             })
         })

@@ -9,6 +9,7 @@ const rules = {
     '@typescript-eslint/no-unused-vars': ['error'],
     'no-prototype-builtins': 'off',
     'no-empty': 'off',
+    'no-console': 'error',
 }
 
 const extend = [
@@ -18,6 +19,7 @@ const extend = [
     'plugin:react-hooks/recommended',
     'prettier',
     'plugin:compat/recommended',
+    'plugin:posthog-js/all',
 ]
 
 module.exports = {
@@ -43,6 +45,12 @@ module.exports = {
         react: {
             version: '17.0',
         },
+        'import/resolver': {
+            node: {
+                paths: ['eslint-rules'], // Add the directory containing your custom rules
+                extensions: ['.js', '.jsx', '.ts', '.tsx'], // Ensure ESLint resolves both JS and TS files
+            },
+        },
     },
     overrides: [
         {
@@ -51,7 +59,28 @@ module.exports = {
             // but excluding the 'plugin:compat/recommended' rule
             // we don't mind using the latest features in our tests
             extends: extend.filter((s) => s !== 'plugin:compat/recommended'),
-            rules,
+            rules: {
+                ...rules,
+                'no-console': 'off',
+            },
+        },
+        {
+            files: 'eslint-rules/**/*',
+            extends: ['eslint:recommended', 'prettier'],
+            rules: {
+                'prettier/prettier': 'error',
+                '@typescript-eslint/no-var-requires': 'off',
+                'posthog-js/no-direct-null-check': 'off',
+            },
+            env: {
+                node: true,
+            },
+        },
+        {
+            files: 'cypress/**/*',
+            globals: {
+                cy: true,
+            },
         },
     ],
     root: true,

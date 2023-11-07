@@ -1,9 +1,11 @@
-import { _extend, logger } from './utils'
+import { _extend } from './utils'
 import { PersistentStore, Properties } from './types'
-import Config from './config'
-import { DISTINCT_ID, SESSION_ID } from './constants'
+import { DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constants'
 
-const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z.]{2,6}$/i
+import { _isNull, _isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
+
+const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
 
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore: PersistentStore = {
@@ -92,12 +94,12 @@ let _localStorage_supported: boolean | null = null
 
 export const localStore: PersistentStore = {
     is_supported: function () {
-        if (_localStorage_supported !== null) {
+        if (!_isNull(_localStorage_supported)) {
             return _localStorage_supported
         }
 
         let supported = true
-        if (typeof window !== 'undefined') {
+        if (!_isUndefined(window)) {
             try {
                 const key = '__mplssupport__',
                     val = 'xyz'
@@ -162,7 +164,7 @@ export const localStore: PersistentStore = {
 // Use localstorage for most data but still use cookie for COOKIE_PERSISTED_PROPERTIES
 // This solves issues with cookies having too much data in them causing headers too large
 // Also makes sure we don't have to send a ton of data to the server
-const COOKIE_PERSISTED_PROPERTIES = [DISTINCT_ID, SESSION_ID]
+const COOKIE_PERSISTED_PROPERTIES = [DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED]
 
 export const localPlusCookieStore: PersistentStore = {
     ...localStore,
@@ -246,11 +248,11 @@ export const resetSessionStorageSupported = () => {
 // Storage that only lasts the length of a tab/window. Survives page refreshes
 export const sessionStore: PersistentStore = {
     is_supported: function () {
-        if (sessionStorageSupported !== null) {
+        if (!_isNull(sessionStorageSupported)) {
             return sessionStorageSupported
         }
         sessionStorageSupported = true
-        if (typeof window !== 'undefined') {
+        if (!_isUndefined(window)) {
             try {
                 const key = '__support__',
                     val = 'xyz'
@@ -269,9 +271,7 @@ export const sessionStore: PersistentStore = {
     },
 
     error: function (msg) {
-        if (Config.DEBUG) {
-            logger.error('sessionStorage error: ', msg)
-        }
+        logger.error('sessionStorage error: ', msg)
     },
 
     get: function (name) {

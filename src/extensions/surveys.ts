@@ -9,6 +9,8 @@ import {
     SurveyQuestion,
 } from '../posthog-surveys-types'
 
+import { _isUndefined } from '../utils/type-utils'
+
 const satisfiedEmoji =
     '<svg class="emoji-svg" xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 -960 960 960" width="48"><path d="M626-533q22.5 0 38.25-15.75T680-587q0-22.5-15.75-38.25T626-641q-22.5 0-38.25 15.75T572-587q0 22.5 15.75 38.25T626-533Zm-292 0q22.5 0 38.25-15.75T388-587q0-22.5-15.75-38.25T334-641q-22.5 0-38.25 15.75T280-587q0 22.5 15.75 38.25T334-533Zm146 272q66 0 121.5-35.5T682-393h-52q-23 40-63 61.5T480.5-310q-46.5 0-87-21T331-393h-53q26 61 81 96.5T480-261Zm0 181q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-400Zm0 340q142.375 0 241.188-98.812Q820-337.625 820-480t-98.812-241.188Q622.375-820 480-820t-241.188 98.812Q140-622.375 140-480t98.812 241.188Q337.625-140 480-140Z"/></svg>'
 const neutralEmoji =
@@ -335,11 +337,13 @@ export const closeSurveyPopup = (surveyId: string, surveyPopup: HTMLFormElement)
 export const createOpenTextOrLinkPopup = (
     posthog: PostHog,
     survey: Survey,
-    question: BasicSurveyQuestion | LinkSurveyQuestion
+    question: BasicSurveyQuestion | LinkSurveyQuestion,
+    questionIndex: number
 ) => {
     const surveyQuestionType = question.type
     const surveyDescription = question.description
     const questionText = question.question
+    const isOptional = !!question.optional
     const form = `
     <div class="survey-${survey.id}-box">
         <div class="cancel-btn-wrapper">
@@ -350,7 +354,7 @@ export const createOpenTextOrLinkPopup = (
             ${surveyDescription ? `<span class="description auto-text-color">${surveyDescription}</span>` : ''}
             ${
                 surveyQuestionType === 'open'
-                    ? `<textarea class="survey-textarea" name="survey" rows=4 placeholder="${
+                    ? `<textarea class="survey-textarea-question${questionIndex}" name="survey" rows=4 placeholder="${
                           survey.appearance?.placeholder || ''
                       }"></textarea>`
                     : ''
@@ -358,9 +362,9 @@ export const createOpenTextOrLinkPopup = (
         </div>
         <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit auto-text-color" type="submit" ${
-                    surveyQuestionType === 'open' ? 'disabled' : null
-                }>${survey.appearance?.submitButtonText || 'Submit'}</button>
+                <button class="form-submit auto-text-color" type="submit">${
+                    survey.appearance?.submitButtonText || 'Submit'
+                }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
@@ -380,6 +384,9 @@ export const createOpenTextOrLinkPopup = (
                     $survey_question: survey.questions[0].question,
                     $survey_response: surveyQuestionType === 'open' ? e.target.survey.value : 'link clicked',
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                    $set: {
+                        [`$survey_responded/${survey.id}`]: true,
+                    },
                 })
                 if (surveyQuestionType === 'link') {
                     window.open(question.link || undefined)
@@ -401,13 +408,17 @@ export const createOpenTextOrLinkPopup = (
             }
         })
     }
-
-    formElement.addEventListener('input', (e: any) => {
-        if (formElement.querySelector('.form-submit')) {
-            const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
-            submitButton.disabled = !e.data
+    if (!isOptional) {
+        if (surveyQuestionType === 'open') {
+            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
         }
-    })
+        formElement.addEventListener('input', (e: any) => {
+            if (formElement.querySelector('.form-submit')) {
+                const submitButton = formElement.querySelector('.form-submit') as HTMLButtonElement
+                submitButton.disabled = !e.target.value
+            }
+        })
+    }
 
     return formElement
 }
@@ -441,31 +452,41 @@ export const addCancelListeners = (
     surveyId: string,
     surveyEventName: string
 ) => {
-    const cancelButton = surveyPopup.getElementsByClassName('form-cancel')?.[0] as HTMLButtonElement
-
-    cancelButton.addEventListener('click', (e) => {
-        e.preventDefault()
-        Object.assign(surveyPopup.style, { display: 'none' })
-        localStorage.setItem(`seenSurvey_${surveyId}`, 'true')
-        posthog.capture('survey dismissed', {
-            $survey_name: surveyEventName,
-            $survey_id: surveyId,
-            sessionRecordingUrl: posthog.get_session_replay_url(),
+    const cancelButtons = surveyPopup.getElementsByClassName('form-cancel')
+    for (const button of cancelButtons) {
+        button.addEventListener('click', (e) => {
+            e.preventDefault()
+            closeSurveyPopup(surveyId, surveyPopup)
+            posthog.capture('survey dismissed', {
+                $survey_name: surveyEventName,
+                $survey_id: surveyId,
+                sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                $set: {
+                    [`$survey_dismissed/${surveyId}`]: true,
+                },
+            })
         })
-        window.dispatchEvent(new Event('PHSurveyClosed'))
-    })
+    }
+    window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
-export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: RatingSurveyQuestion) => {
+export const createRatingsPopup = (
+    posthog: PostHog,
+    survey: Survey,
+    question: RatingSurveyQuestion,
+    questionIndex: number
+) => {
     const scale = question.scale
+    const starting = question.scale === 10 ? 0 : 1
     const displayType = question.display
+    const isOptional = !!question.optional
     const ratingOptionsElement = document.createElement('div')
     if (displayType === 'number') {
         ratingOptionsElement.className = 'rating-options-buttons'
-        ratingOptionsElement.style.gridTemplateColumns = `repeat(${scale}, minmax(0, 1fr))`
-        for (let i = 1; i <= scale; i++) {
+        ratingOptionsElement.style.gridTemplateColumns = `repeat(${scale - starting + 1}, minmax(0, 1fr))`
+        for (let i = starting; i <= scale; i++) {
             const buttonElement = document.createElement('button')
-            buttonElement.className = `ratings-number rating_${i} auto-text-color`
+            buttonElement.className = `ratings-number question-${questionIndex}-rating-${i} auto-text-color`
             buttonElement.type = 'submit'
             buttonElement.value = `${i}`
             buttonElement.innerHTML = `${i}`
@@ -477,7 +498,7 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
         const fiveEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
         for (let i = 1; i <= scale; i++) {
             const emojiElement = document.createElement('button')
-            emojiElement.className = `ratings-emoji rating_${i}`
+            emojiElement.className = `ratings-emoji question-${questionIndex}-rating-${i}`
             emojiElement.type = 'submit'
             emojiElement.value = `${i}`
             emojiElement.innerHTML = scale === 3 ? threeEmojis[i - 1] : fiveEmojis[i - 1]
@@ -504,9 +525,9 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
             }
             <div class="bottom-section">
             <div class="buttons">
-                <button class="form-submit auto-text-color" type="submit" disabled>${
-                    survey.appearance?.submitButtonText || 'Submit'
-                }</button>
+                <button class="form-submit auto-text-color" type="submit" ${isOptional ? '' : 'disabled'}>${
+        survey.appearance?.submitButtonText || 'Submit'
+    }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
         </div>
@@ -541,10 +562,10 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
             innerHTML: ratingsForm,
         })
     }
-
     formElement.getElementsByClassName('rating-options')[0].insertAdjacentElement('afterbegin', ratingOptionsElement)
-    for (const x of Array(question.scale).keys()) {
-        const ratingEl = formElement.getElementsByClassName(`rating_${x + 1}`)[0]
+    const allElements = question.scale === 10 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : [1, 2, 3, 4, 5]
+    for (const x of allElements) {
+        const ratingEl = formElement.getElementsByClassName(`question-${questionIndex}-rating-${x}`)[0]
         ratingEl.addEventListener('click', (e) => {
             e.preventDefault()
             for (const activeRatingEl of formElement.getElementsByClassName('rating-active')) {
@@ -561,11 +582,18 @@ export const createRatingsPopup = (posthog: PostHog, survey: Survey, question: R
     return formElement
 }
 
-export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, question: MultipleSurveyQuestion) => {
+export const createMultipleChoicePopup = (
+    posthog: PostHog,
+    survey: Survey,
+    question: MultipleSurveyQuestion,
+    questionIndex: number
+) => {
     const surveyQuestion = question.question
     const surveyDescription = question.description
     const surveyQuestionChoices = question.choices
     const singleOrMultiSelect = question.type
+    const isOptional = !!question.optional
+
     const form = `
     <div class="survey-${survey.id}-box">
         <div class="cancel-btn-wrapper">
@@ -577,17 +605,17 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
         ${surveyQuestionChoices
             .map((option, idx) => {
                 const inputType = singleOrMultiSelect === 'single_choice' ? 'radio' : 'checkbox'
-                const singleOrMultiSelectString = `<div class="choice-option"><input type=${inputType} id=surveyQuestionMultipleChoice${idx} name="choice" value="${option}">
-            <label class="auto-text-color" for=surveyQuestionMultipleChoice${idx}>${option}</label><span class="choice-check auto-text-color">${checkSVG}</span></div>`
+                const singleOrMultiSelectString = `<div class="choice-option"><input type=${inputType} id=surveyQuestion${questionIndex}MultipleChoice${idx} name="choice" value="${option}">
+            <label class="auto-text-color" for=surveyQuestion${questionIndex}MultipleChoice${idx}>${option}</label><span class="choice-check auto-text-color">${checkSVG}</span></div>`
                 return singleOrMultiSelectString
             })
             .join(' ')}
         </div>
         <div class="bottom-section">
         <div class="buttons">
-            <button class="form-submit auto-text-color" type="submit" disabled>${
-                survey.appearance?.submitButtonText || 'Submit'
-            }</button>
+            <button class="form-submit auto-text-color" type="submit" ${isOptional ? '' : 'disabled'}>${
+        survey.appearance?.submitButtonText || 'Submit'
+    }</button>
         </div>
         <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
     </div>
@@ -628,19 +656,19 @@ export const createMultipleChoicePopup = (posthog: PostHog, survey: Survey, ques
             innerHTML: form,
         })
     }
-    formElement.addEventListener('change', () => {
-        const selectedChoices =
-            singleOrMultiSelect === 'single_choice'
-                ? formElement.querySelectorAll('input[type=radio]:checked')
-                : formElement.querySelectorAll('input[type=checkbox]:checked')
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore // TODO: Fix this, error because it doesn't recognize node list as an array
-        if ((selectedChoices.length ?? 0) > 0) {
-            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
-        } else {
-            ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
-        }
-    })
+    if (!isOptional) {
+        formElement.addEventListener('change', () => {
+            const selectedChoices: NodeListOf<HTMLInputElement> =
+                singleOrMultiSelect === 'single_choice'
+                    ? formElement.querySelectorAll('input[type=radio]:checked')
+                    : formElement.querySelectorAll('input[type=checkbox]:checked')
+            if ((selectedChoices.length ?? 0) > 0) {
+                ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
+            } else {
+                ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
+            }
+        })
+    }
 
     return formElement
 }
@@ -742,8 +770,7 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
             e.preventDefault()
             const multipleQuestionResponses: Record<string, string | number | string[] | null> = {}
             const allTabs = (e.target as HTMLDivElement).getElementsByClassName('tab')
-            let idx = 0
-            for (const tab of allTabs) {
+            for (const [index, tab] of [...allTabs].entries()) {
                 const classes = tab.classList
                 const questionType = classes[2]
                 let response
@@ -764,14 +791,17 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
                               ].map((choice) => choice.value)
                     response = selectedChoices
                 }
-                if (response !== undefined) {
-                    if (idx === 0) {
+                const isQuestionOptional = survey.questions[index].optional
+                if (isQuestionOptional && _isUndefined(response)) {
+                    response = null
+                }
+                if (!_isUndefined(response)) {
+                    if (index === 0) {
                         multipleQuestionResponses['$survey_response'] = response
                     } else {
-                        multipleQuestionResponses[`$survey_response_${idx}`] = response
+                        multipleQuestionResponses[`$survey_response_${index}`] = response
                     }
                 }
-                idx++
             }
             posthog.capture('survey sent', {
                 $survey_name: survey.name,
@@ -790,7 +820,7 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
     questions.map((question, idx) => {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore // TODO: Fix this, error because of survey question type mapping
-        const questionElement = questionTypeMapping[question.type](posthog, survey, question)
+        const questionElement = questionTypeMapping[question.type](posthog, survey, question, idx)
         const questionTab = document.createElement('div')
         questionTab.className = `tab question-${idx} ${question.type}`
         if (idx < questions.length - 1) {
@@ -814,11 +844,11 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
 const createSingleQuestionSurvey = (posthog: PostHog, survey: Survey, question: SurveyQuestion) => {
     const questionType = question.type
     if (questionType === 'rating') {
-        return createRatingsPopup(posthog, survey, question)
+        return createRatingsPopup(posthog, survey, question, 0)
     } else if (questionType === 'open' || questionType === 'link') {
-        return createOpenTextOrLinkPopup(posthog, survey, question)
+        return createOpenTextOrLinkPopup(posthog, survey, question, 0)
     } else if (questionType === 'single_choice' || questionType === 'multiple_choice') {
-        return createMultipleChoicePopup(posthog, survey, question)
+        return createMultipleChoicePopup(posthog, survey, question, 0)
     }
     return null
 }
@@ -865,13 +895,8 @@ function nextQuestion(currentQuestionIdx: number, surveyId: string) {
 export function generateSurveys(posthog: PostHog) {
     callSurveys(posthog, true)
 
-    let currentUrl = location.href
-    if (location.href) {
-        setInterval(() => {
-            if (location.href !== currentUrl) {
-                currentUrl = location.href
-                callSurveys(posthog, false)
-            }
-        }, 1500)
-    }
+    // recalculate surveys every 3 seconds to check if URL or selectors have changed
+    setInterval(() => {
+        callSurveys(posthog, false)
+    }, 3000)
 }

@@ -25,7 +25,7 @@ describe('Event capture', () => {
                 sessionRecording: given.sessionRecording,
                 supportedCompression: given.supportedCompression,
                 excludedDomains: [],
-                autocaptureExceptions: true,
+                autocaptureExceptions: false,
             },
         }).as('decide')
 
@@ -51,14 +51,6 @@ describe('Event capture', () => {
         cy.phCaptures().should('include', '$pageleave')
         cy.phCaptures().should('include', '$autocapture')
         cy.phCaptures().should('include', 'custom-event')
-    })
-
-    it('captures exceptions', () => {
-        start()
-
-        cy.get('[data-cy-exception-button]').click()
-        cy.phCaptures().should('have.length', 3)
-        cy.phCaptures().should('include', '$exception')
     })
 
     describe('autocapture config', () => {

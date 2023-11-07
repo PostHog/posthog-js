@@ -21,6 +21,7 @@ import 'given2/setup'
 // require('./commands')
 
 // Add console errors into cypress logs.
+// eslint-disable-next-line no-undef
 Cypress.on('window:before:load', (win) => {
     cy.spy(win.console, 'error')
     cy.spy(win.console, 'warn')

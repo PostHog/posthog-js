@@ -28,9 +28,6 @@ export interface SurveyAppearance {
 
 export enum SurveyType {
     Popover = 'popover',
-    Button = 'button',
-    FullScreen = 'full_screen',
-    Email = 'email',
     API = 'api',
 }
 
@@ -39,7 +36,7 @@ export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSu
 interface SurveyQuestionBase {
     question: string
     description?: string | null
-    required?: boolean
+    optional?: boolean
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {

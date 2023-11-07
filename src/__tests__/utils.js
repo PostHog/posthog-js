@@ -7,27 +7,18 @@
 
 import {
     _copyAndTruncateStrings,
-    _info,
     _isBlockedUA,
     DEFAULT_BLOCKED_UA_STRS,
     loadScript,
-    _isUrlMatchingRegex,
+    isCrossDomainCookie,
 } from '../utils'
+import { _info } from '../utils/event-utils'
 
 function userAgentFor(botString) {
     const randOne = (Math.random() + 1).toString(36).substring(7)
     const randTwo = (Math.random() + 1).toString(36).substring(7)
     return `Mozilla/5.0 (compatible; ${botString}/${randOne}; +http://a.com/bot/${randTwo})`
 }
-
-describe(`utils.js`, () => {
-    it('should have $host and $pathname in properties', () => {
-        const properties = _info.properties()
-        expect(properties['$current_url']).toBeDefined()
-        expect(properties['$host']).toBeDefined()
-        expect(properties['$pathname']).toBeDefined()
-    })
-})
 
 describe('_.copyAndTruncateStrings', () => {
     given('subject', () => _copyAndTruncateStrings(given.target, given.maxStringLength))
@@ -231,27 +222,40 @@ describe('loadScript', () => {
                 expect(_isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
             }
         )
-    })
 
-    describe('_isUrlMatchingRegex', () => {
-        it('returns false when url does not match regex pattern', () => {
-            // test query params
-            expect(_isUrlMatchingRegex('https://example.com', '(\\?|\\&)(name.*)\\=([^&]+)')).toEqual(false)
-            // incorrect route
-            expect(_isUrlMatchingRegex('https://example.com/something/test', 'example.com/test')).toEqual(false)
-            // incorrect domain
-            expect(_isUrlMatchingRegex('https://example.com', 'anotherone.com')).toEqual(false)
+        it('should block googlebot desktop', () => {
+            expect(
+                _isBlockedUA(
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
+                    []
+                )
+            ).toBe(true)
         })
 
-        it('returns true when url matches regex pattern', () => {
-            // match query params
-            expect(_isUrlMatchingRegex('https://example.com?name=something', '(\\?|\\&)(name.*)\\=([^&]+)')).toEqual(
-                true
-            )
-            // match subdomain wildcard
-            expect(_isUrlMatchingRegex('https://app.example.com', '(.*.)?example.com')).toEqual(true)
-            // match route wildcard
-            expect(_isUrlMatchingRegex('https://example.com/something/test', 'example.com/(.*.)/test')).toEqual(true)
+        it('should block openai bot', () => {
+            expect(
+                _isBlockedUA(
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)',
+                    []
+                )
+            ).toBe(true)
+        })
+    })
+
+    describe('check for cross domain cookies', () => {
+        it.each([
+            [false, 'https://test.herokuapp.com'],
+            [false, 'test.herokuapp.com'],
+            [false, 'herokuapp.com'],
+            [false, undefined],
+            // ensure it isn't matching herokuapp anywhere in the domain
+            [true, 'https://test.herokuapp.com.impersonator.io'],
+            [true, 'mysite-herokuapp.com'],
+            [true, 'https://bbc.co.uk'],
+            [true, 'bbc.co.uk'],
+            [true, 'www.bbc.co.uk'],
+        ])('should return %s when hostname is %s', (expectedResult, hostname) => {
+            expect(isCrossDomainCookie({ hostname })).toEqual(expectedResult)
         })
     })
 })

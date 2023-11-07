@@ -11,10 +11,14 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { _each, _includes, _isNumber, _isString, window } from './utils'
+import { _each, _includes } from './utils'
+import { window } from './utils/globals'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
 import { PostHog } from './posthog-core'
+
+import { _isNumber, _isString } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)
@@ -188,7 +192,7 @@ function _hasDoNotTrackFlagOn(options: GDPROptions) {
  */
 function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
     if (!_isString(token) || !token.length) {
-        console.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
+        logger.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
         return
     }
 
@@ -210,7 +214,7 @@ function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
     }
 }
 
-export function userOptedOut(posthog: PostHog, silenceErrors: boolean | undefined) {
+export function userOptedOut(posthog: PostHog) {
     let optedOut = false
 
     try {
@@ -230,41 +234,7 @@ export function userOptedOut(posthog: PostHog, silenceErrors: boolean | undefine
             })
         }
     } catch (err) {
-        if (!silenceErrors) {
-            console.error('Unexpected error when checking capturing opt-out status: ' + err)
-        }
+        logger.error('Unexpected error when checking capturing opt-out status: ' + err)
     }
     return optedOut
-}
-
-/**
- * Wrap a method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
- * If the user has opted out, return early instead of executing the method.
- * If a callback argument was provided, execute it passing the 0 error code.
- * @param {PostHog} posthog - the posthog instance
- * @param {function} method - wrapped method to be executed if the user has not opted out
- * @param silenceErrors
- * @returns {*} the result of executing method OR undefined if the user has opted out
- */
-export function addOptOutCheck<M extends (...args: any[]) => any = (...args: any[]) => any>(
-    posthog: PostHog,
-    method: M,
-    silenceErrors?: boolean
-): M {
-    return function (...args) {
-        const optedOut = userOptedOut(posthog, silenceErrors)
-
-        if (!optedOut) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            return method.apply(this, args)
-        }
-
-        const callback = args[args.length - 1]
-        if (typeof callback === 'function') {
-            callback(0)
-        }
-
-        return
-    } as M
 }

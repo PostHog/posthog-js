@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import posthogJs, { PostHogConfig } from 'posthog-js'
 
 import React, { useMemo } from 'react'
@@ -17,13 +18,13 @@ export function PostHogProvider({
     const posthog = useMemo(() => {
         if (client && apiKey) {
             console.warn(
-                'You have provided both a client and an apiKey to PostHogProvider. The apiKey will be ignored in favour of the client.'
+                '[PostHog.js] You have provided both a client and an apiKey to PostHogProvider. The apiKey will be ignored in favour of the client.'
             )
         }
 
         if (client && options) {
             console.warn(
-                'You have provided both a client and options to PostHogProvider. The options will be ignored in favour of the client.'
+                '[PostHog.js] You have provided both a client and options to PostHogProvider. The options will be ignored in favour of the client.'
             )
         }
 
@@ -33,7 +34,7 @@ export function PostHogProvider({
 
         if (apiKey) {
             if (posthogJs.__loaded) {
-                console.warn('posthog was already loaded elsewhere. This may cause issues.')
+                console.warn('[PostHog.js] was already loaded elsewhere. This may cause issues.')
             }
             posthogJs.init(apiKey, options)
         }

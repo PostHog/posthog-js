@@ -15,6 +15,7 @@ export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
 export const SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE = '$session_recording_recorder_version_server_side' // follows rrweb versioning
 export const SESSION_ID = '$sesid'
+export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
@@ -23,8 +24,9 @@ export const SURVEYS = '$surveys'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const USER_STATE = '$user_state'
 export const POSTHOG_QUOTA_LIMITED = '$posthog_quota_limited'
+export const CLIENT_SESSION_PROPS = '$client_session_props'
 
-// These are propertties that are reserved and will not be automatically included in events
+// These are properties that are reserved and will not be automatically included in events
 export const PERSISTENCE_RESERVED_PROPERTIES = [
     PEOPLE_DISTINCT_ID_KEY,
     ALIAS_ID_KEY,
@@ -40,4 +42,5 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     FLAG_CALL_REPORTED,
+    CLIENT_SESSION_PROPS,
 ]

@@ -31,6 +31,7 @@ describe('Decide', () => {
         get_property: (key) => given.posthog.persistence.props[key],
         capture: jest.fn(),
         _addCaptureHook: jest.fn(),
+        _afterDecideResponse: jest.fn(),
         _prepare_callback: jest.fn().mockImplementation((callback) => callback),
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
         _send_request: jest
@@ -154,41 +155,19 @@ describe('Decide', () => {
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse)
+            expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
-        })
-
-        it('enables compression from decide response', () => {
-            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
-            given.subject()
-
-            expect(given.posthog.compression['gzip']).toBe(true)
-            expect(given.posthog.compression['lz64']).toBe(true)
-        })
-
-        it('enables compression from decide response when only one received', () => {
-            given('decideResponse', () => ({ supportedCompression: ['lz64'] }))
-            given.subject()
-
-            expect(given.posthog.compression).not.toHaveProperty('gzip')
-            expect(given.posthog.compression['lz64']).toBe(true)
-        })
-
-        it('does not enable compression from decide response if compression is disabled', () => {
-            given('config', () => ({ disable_compression: true, persistence: 'memory' }))
-            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
-            given.subject()
-
-            expect(given.posthog.compression).toEqual({})
         })
 
         it('Make sure receivedFeatureFlags is not called if the decide response fails', () => {
             given('decideResponse', () => ({ status: 0 }))
+            window.POSTHOG_DEBUG = true
             console.error = jest.fn()
 
             given.subject()
 
             expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
-            expect(console.error).toHaveBeenCalledWith('Failed to fetch feature flags from PostHog.')
+            expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
         })
 
         it('Make sure receivedFeatureFlags is called with empty if advanced_disable_feature_flags_on_first_load is set', () => {
@@ -221,13 +200,14 @@ describe('Decide', () => {
         })
 
         it('does not run site apps code if not opted in', () => {
+            window.POSTHOG_DEBUG = true
             given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: false, persistence: 'memory' }))
             given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             expect(() => {
                 given.subject()
             }).toThrow(
                 // throwing only in tests, just an error in production
-                'Unexpected console.error: PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
+                'Unexpected console.error: [PostHog.js],PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
         })
     })

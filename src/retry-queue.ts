@@ -1,8 +1,10 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
 import { QueuedRequestData, RetryQueueElement } from './types'
-import Config from './config'
 import { RateLimiter } from './rate-limiter'
+
+import { _isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -40,7 +42,7 @@ export class RetryQueue extends RequestQueueScaffold {
         this.onXHRError = onXHRError
         this.rateLimiter = rateLimiter
 
-        if (typeof window !== 'undefined' && 'onLine' in window.navigator) {
+        if (!_isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
                 this._handleWeAreNowOnline()
@@ -60,7 +62,13 @@ export class RetryQueue extends RequestQueueScaffold {
         const retryAt = new Date(Date.now() + msToNextRetry)
 
         this.queue.push({ retryAt, requestData })
-        console.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
+
+        let logMessage = `Enqueued failed request for retry in ${msToNextRetry}`
+        if (!navigator.onLine) {
+            logMessage += ' (Browser is offline)'
+        }
+        logger.warn(logMessage)
+
         if (!this.isPolling) {
             this.isPolling = true
             this.poll()
@@ -99,9 +107,7 @@ export class RetryQueue extends RequestQueueScaffold {
             const { url, data, options } = requestData
 
             if (this.rateLimiter.isRateLimited(options._batchKey)) {
-                if (Config.DEBUG) {
-                    console.warn('[PostHog RetryQueue] is quota limited. Dropping request.')
-                }
+                logger.warn('[RetryQueue] is quota limited. Dropping request.')
                 continue
             }
 
@@ -112,9 +118,7 @@ export class RetryQueue extends RequestQueueScaffold {
             } catch (e) {
                 // Note sendBeacon automatically retries, and after the first retry it will lose reference to contextual `this`.
                 // This means in some cases `this.getConfig` will be undefined.
-                if (Config.DEBUG) {
-                    console.error(e)
-                }
+                logger.error(e)
             }
         }
         this.queue = []

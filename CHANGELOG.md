@@ -1,3 +1,114 @@
+## 1.88.1 - 2023-11-02
+
+- chore(deps): bump next from 13.1.6 to 13.5.0 in /playground/nextjs (#855)
+- Tweak session prop names (#873)
+
+## 1.88.0 - 2023-11-02
+
+- feat(web-analytics): Add client-side session params (#869)
+
+## 1.87.6 - 2023-10-31
+
+- fix: add tests for browser and browser version detection (#870)
+
+## 1.87.5 - 2023-10-30
+
+- fix: include raw user agent in event properties (#868)
+
+## 1.87.4 - 2023-10-30
+
+- fix: logging pointless error when offline (#866)
+
+## 1.87.3 - 2023-10-30
+
+- feat: retry count in url (#864)
+
+## 1.87.2 - 2023-10-27
+
+- fix(surveys): Publish types in module (#863)
+
+## 1.87.1 - 2023-10-26
+
+- fix(surveys): clearer user property names (#861)
+
+## 1.87.0 - 2023-10-26
+
+- feat(surveys): Make selector targeting work, add user props (#858)
+
+## 1.86.0 - 2023-10-26
+
+- feat: allow backend to specify a custom analytics endpoint (#831)
+
+## 1.85.4 - 2023-10-26
+
+- fix: checkout every X minutes (#860)
+- feat: lazily load exception autocapture (#856)
+
+## 1.85.3 - 2023-10-25
+
+- feat: Toolbar loading from state faster (#849)
+
+## 1.85.2 - 2023-10-24
+
+- fix(surveys): cancel listener should be on all questions (#854)
+- Fix changelog.md (#853)
+- fix: eslint does not fail build (#852)
+
+## 1.85.1 - 2023-10-24
+
+- fix: Disable the string reduction code until we can battle test it more. (#851)
+
+## 1.85.0 - 2023-10-24
+
+- feat: allow sampling based on decide response (#839)
+
+## 1.84.4 - 2023-10-24
+
+- log when browser offline (#850)
+- chore: type checking in one place makes bundle smaller (#843)
+
+## 1.84.3 - 2023-10-23
+
+- fix: full snapshot every 10 minutes (#847)
+- fix: really fix subdomain check to satisfy codeql (#845)
+
+## 1.84.2 - 2023-10-23
+
+- fix: heroku subdomain check (#842)
+
+## 1.84.1 - 2023-10-19
+
+- fix(surveys): fix multiple choice input unique ID bug (#841)
+
+## 1.84.0 - 2023-10-18
+
+- Fix bot user agent detection (#840)
+
+## 1.83.3 - 2023-10-17
+
+- fix(surveys): add listener to 0th element (#837)
+
+## 1.83.2 - 2023-10-17
+
+- chore: Make ratings start at 0 (#834)
+
+## 1.83.1 - 2023-10-11
+
+- feat: Move all logs everything over to logger (#830)
+- Update DOMAIN_MATCH_REGEX (#787)
+
+## 1.83.0 - 2023-10-10
+
+- feat(surveys): Optional survey questions (#826)
+
+## 1.82.3 - 2023-10-06
+
+- fix: Typescript compilation of survey types (#827)
+
+## 1.82.2 - 2023-10-05
+
+- fix(surveys): open text value bug (#825)
+
 ## 1.82.1 - 2023-10-04
 
 - fix(surveys): multiple choice survey submit button bug (#822)

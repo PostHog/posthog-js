@@ -4,25 +4,18 @@ import {
     _each,
     _eachArray,
     _extend,
-    _info,
-    _isArray,
     _isBlockedUA,
-    _isEmptyObject,
-    _isObject,
-    _isUndefined,
     _register_event,
     _safewrap_class,
-    document,
-    logger,
-    userAgent,
-    window,
+    isCrossDomainCookie,
 } from './utils'
+import { window } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
-import { SessionRecording } from './extensions/sessionrecording'
-import { WebPerformanceObserver } from './extensions/web-performance'
+import { SessionRecording } from './extensions/replay/sessionrecording'
+import { WebPerformanceObserver } from './extensions/replay/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -37,6 +30,7 @@ import {
     CaptureOptions,
     CaptureResult,
     Compression,
+    DecideResponse,
     EarlyAccessFeatureCallback,
     GDPROptions,
     isFeatureEnabledOptions,
@@ -55,11 +49,15 @@ import {
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
-import { ExceptionObserver } from './extensions/exceptions/exception-autocapture'
 import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
+import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
+import { _info } from './utils/event-utils'
+import { logger } from './utils/logger'
+import { document, userAgent } from './utils/globals'
+import { SessionPropsManager } from './session-props'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -109,7 +107,7 @@ const defaultConfig = (): PostHogConfig => ({
     token: '',
     autocapture: true,
     rageclick: true,
-    cross_subdomain_cookie: document?.location?.hostname?.indexOf('herokuapp.com') === -1,
+    cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'cookie',
     persistence_name: '',
     cookie_name: '',
@@ -152,7 +150,7 @@ const defaultConfig = (): PostHogConfig => ({
     advanced_disable_toolbar_metrics: false,
     on_xhr_error: (req) => {
         const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
-        console.error(error)
+        logger.error(error)
     },
     get_device_id: (uuid) => uuid,
     // Used for internal testing
@@ -199,7 +197,7 @@ const create_phlib = function (
         instance = target as any
     } else {
         if (target && !_isArray(target)) {
-            console.error('You have already initialized ' + name)
+            logger.error('You have already initialized ' + name)
             // TODO: throw something instead?
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -221,8 +219,6 @@ const create_phlib = function (
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
-    instance.exceptionAutocapture = new ExceptionObserver(instance)
-
     instance.__autocapture = instance.config.autocapture
     autocapture._setIsAutocaptureEnabled(instance)
     if (autocapture._isAutocaptureEnabled) {
@@ -231,10 +227,10 @@ const create_phlib = function (
         const num_enabled_buckets = 100
         if (!autocapture.enabledForProject(instance.config.token, num_buckets, num_enabled_buckets)) {
             instance.__autocapture = false
-            logger.log('Not in active bucket: disabling Automatic Event Collection.')
+            logger.info('Not in active bucket: disabling Automatic Event Collection.')
         } else if (!autocapture.isBrowserSupported()) {
             instance.__autocapture = false
-            logger.log('Disabling Automatic Event Collection because this browser is not supported')
+            logger.info('Disabling Automatic Event Collection because this browser is not supported')
         } else {
             autocapture.init(instance)
         }
@@ -246,7 +242,7 @@ const create_phlib = function (
 
     // if target is not defined, we called init after the lib already
     // loaded, so there won't be an array of things to execute
-    if (typeof target !== 'undefined' && _isArray(target)) {
+    if (!_isUndefined(target) && _isArray(target)) {
         // Crunch through the people queue first - we queue this data up &
         // flush on identify, so it's better to do all these operations first
         instance._execute_array.call(instance.people, (target as any).people)
@@ -276,12 +272,12 @@ export class PostHog {
     persistence?: PostHogPersistence
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
+    sessionPropsManager?: SessionPropsManager
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
     webPerformance?: WebPerformanceObserver
-    exceptionAutocapture?: ExceptionObserver
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
@@ -290,6 +286,7 @@ export class PostHog {
     __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
+    analyticsDefaultEndpoint: string
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
@@ -312,6 +309,7 @@ export class PostHog {
         this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
+        this.analyticsDefaultEndpoint = '/e/'
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -322,12 +320,12 @@ export class PostHog {
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = typeof prop === 'string' ? { [prop]: to } : prop
+                const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(setProps)
                 callback?.({})
             },
             set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = typeof prop === 'string' ? { [prop]: to } : prop
+                const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(undefined, setProps)
                 callback?.({})
             },
@@ -354,11 +352,13 @@ export class PostHog {
      */
     init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
         if (_isUndefined(name)) {
-            console.error('You must name your new library: init(token, config, name)')
+            logger.critical('You must name your new library: init(token, config, name)')
             return
         }
         if (name === PRIMARY_INSTANCE_NAME) {
-            console.error('You must initialize the main posthog object right after you include the PostHog js snippet')
+            logger.critical(
+                'You must initialize the main posthog object right after you include the PostHog js snippet'
+            )
             return
         }
 
@@ -439,6 +439,7 @@ export class PostHog {
         this.__request_queue = []
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
@@ -463,6 +464,8 @@ export class PostHog {
             updateInitComplete('segmentRegister')()
         }
 
+        // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
+        // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.config.get_device_id(uuidv7())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
@@ -521,6 +524,21 @@ export class PostHog {
 
     // Private methods
 
+    _afterDecideResponse(response: DecideResponse) {
+        this.compression = {}
+        if (response.supportedCompression && !this.config.disable_compression) {
+            const compression: Partial<Record<Compression, boolean>> = {}
+            for (const method of response['supportedCompression']) {
+                compression[method] = true
+            }
+            this.compression = compression
+        }
+
+        if (response.analytics?.endpoint) {
+            this.analyticsDefaultEndpoint = response.analytics.endpoint
+        }
+    }
+
     _loaded(): void {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
         // These feature flags are loaded in the decide call made right
@@ -533,7 +551,7 @@ export class PostHog {
         try {
             this.config.loaded(this)
         } catch (err) {
-            console.error('`loaded` function failed', err)
+            logger.critical('`loaded` function failed', err)
         }
 
         this._start_queue_if_opted_in()
@@ -693,7 +711,7 @@ export class PostHog {
                     onResponse: this.rateLimiter.checkForLimiting,
                 })
             } catch (e) {
-                console.error(e)
+                logger.error(e)
             }
         } else {
             const script = document.createElement('script')
@@ -728,15 +746,11 @@ export class PostHog {
                 fn_name = item[0]
                 if (_isArray(fn_name)) {
                     capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
-                } else if (typeof item === 'function') {
+                } else if (_isFunction(item)) {
                     ;(item as any).call(this)
                 } else if (_isArray(item) && fn_name === 'alias') {
                     alias_calls.push(item)
-                } else if (
-                    _isArray(item) &&
-                    fn_name.indexOf('capture') !== -1 &&
-                    typeof (this as any)[fn_name] === 'function'
-                ) {
+                } else if (_isArray(item) && fn_name.indexOf('capture') !== -1 && _isFunction((this as any)[fn_name])) {
                     capturing_calls.push(item)
                 } else {
                     other_calls.push(item)
@@ -792,23 +806,6 @@ export class PostHog {
         this._execute_array([item])
     }
 
-    /*
-     * PostHog supports exception autocapture, however, this function
-     * is used to manually capture an exception
-     * and can be used to add more context to that exception
-     *
-     * Properties passed as the second option will be merged with the properties
-     * of the exception event.
-     * Where there is a key in both generated exception and passed properties,
-     * the generated exception property takes precedence.
-     */
-    captureException(exception: Error, properties?: Properties): void {
-        this.exceptionAutocapture?.captureException(
-            [exception.name, undefined, undefined, undefined, exception],
-            properties
-        )
-    }
-
     /**
      * Capture an event. This is the most important and
      * frequently used PostHog function.
@@ -835,10 +832,10 @@ export class PostHog {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
-            return logger.unintializedWarning('posthog.capture')
+            return logger.uninitializedWarning('posthog.capture')
         }
 
-        if (userOptedOut(this, false)) {
+        if (userOptedOut(this)) {
             return
         }
 
@@ -849,8 +846,8 @@ export class PostHog {
         }
 
         // typing doesn't prevent interesting data
-        if (_isUndefined(event_name) || typeof event_name !== 'string') {
-            console.error('No event name provided to posthog.capture')
+        if (_isUndefined(event_name) || !_isString(event_name)) {
+            logger.error('No event name provided to posthog.capture')
             return
         }
 
@@ -889,12 +886,10 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        if (this.config.debug) {
-            logger.log('PostHog.js send', data)
-        }
+        logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
-        const url = this.config.api_host + (options.endpoint || '/e/')
+        const url = this.config.api_host + (options.endpoint || this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 
@@ -942,6 +937,15 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
+        if (
+            this.sessionPropsManager &&
+            this.config.__preview_send_client_session_params &&
+            (event_name === '$pageview' || event_name === '$pageleave' || event_name === '$autocapture')
+        ) {
+            const sessionProps = this.sessionPropsManager.getSessionProps()
+            properties = _extend(properties, sessionProps)
+        }
+
         if (this.config.__preview_measure_pageview_stats) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
@@ -965,7 +969,7 @@ export class PostHog {
         }
 
         // set $duration if time_event was previously called for this event
-        if (typeof start_timestamp !== 'undefined') {
+        if (!_isUndefined(start_timestamp)) {
             const duration_in_ms = new Date().getTime() - start_timestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
@@ -989,7 +993,7 @@ export class PostHog {
                 delete properties[blacklisted_prop]
             })
         } else {
-            console.error('Invalid value for property_blacklist config: ' + property_blacklist)
+            logger.error('Invalid value for property_blacklist config: ' + property_blacklist)
         }
 
         const sanitize_properties = this.config.sanitize_properties
@@ -1256,11 +1260,11 @@ export class PostHog {
      */
     identify(new_distinct_id?: string, userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
         if (!this.__loaded || !this.persistence) {
-            return logger.unintializedWarning('posthog.identify')
+            return logger.uninitializedWarning('posthog.identify')
         }
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
-            console.error('Unique user id has not been set in posthog.identify')
+            logger.error('Unique user id has not been set in posthog.identify')
             return
         }
 
@@ -1350,7 +1354,7 @@ export class PostHog {
      */
     group(groupType: string, groupKey: string, groupPropertiesToSet?: Properties): void {
         if (!groupType || !groupKey) {
-            console.error('posthog.group requires a group type and group key')
+            logger.error('posthog.group requires a group type and group key')
             return
         }
 
@@ -1425,7 +1429,7 @@ export class PostHog {
      */
     reset(reset_device_id?: boolean): void {
         if (!this.__loaded) {
-            return logger.unintializedWarning('posthog.reset')
+            return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property('$device_id')
         this.persistence?.clear()
@@ -1543,7 +1547,7 @@ export class PostHog {
             this._register_single(ALIAS_ID_KEY, alias)
             return this.capture('$create_alias', { alias: alias, distinct_id: original })
         } else {
-            console.error('alias matches current distinct_id - skipping api call.')
+            logger.warn('alias matches current distinct_id - skipping api call.')
             this.identify(alias)
             return -1
         }
@@ -1704,7 +1708,7 @@ export class PostHog {
                 Config.DEBUG = true
             }
 
-            if (this.sessionRecording && typeof config.disable_session_recording !== 'undefined') {
+            if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
                 if (oldConfig.disable_session_recording !== config.disable_session_recording) {
                     if (config.disable_session_recording) {
                         this.sessionRecording.stopRecording()
@@ -1737,7 +1741,7 @@ export class PostHog {
      * is currently running
      */
     sessionRecordingStarted(): boolean {
-        return !!this.sessionRecording?.started()
+        return !!this.sessionRecording?.started
     }
 
     /**
@@ -2150,7 +2154,7 @@ export function init_from_snippet(): void {
 
     if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
         // lib has already been loaded at least once; we don't want to override the global object this time so bomb early
-        console.error('PostHog library has already been downloaded at least once.')
+        logger.critical('PostHog library has already been downloaded at least once.')
         return
     }
 
