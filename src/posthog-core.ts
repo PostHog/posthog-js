@@ -934,7 +934,7 @@ export class PostHog {
         if (this.sessionManager) {
             // don't let a delayed page leave start a new session
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(
-                event_name !== '$pageleave'
+                event_name === '$pageleave'
             )
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
