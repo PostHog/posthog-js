@@ -706,10 +706,10 @@ describe('Autocapture system', () => {
             const props = captureArgs[1]
             expect(event).toBe('$autocapture')
             expect(props['$event_type']).toBe('click')
-            expect(props['$elements'][0]).toHaveProperty('attr__href', 'http://test.com')
-            expect(props['$elements'][1]).toHaveProperty('tag_name', 'span')
-            expect(props['$elements'][2]).toHaveProperty('tag_name', 'div')
-            expect(props['$elements'][props['$elements'].length - 1]).toHaveProperty('tag_name', 'body')
+            expect(props['$elements_chain']).toContain('attr__href="http://test.com"')
+            expect(props['$elements_chain']).toContain('span:')
+            expect(props['$elements_chain']).toContain('div:')
+            expect(props['$elements_chain']).toContain('body:')
         })
 
         it('truncate any element property value to 1024 bytes', () => {
@@ -733,7 +733,7 @@ describe('Autocapture system', () => {
             const captureArgs = lib.capture.args[0]
             const props = captureArgs[1]
             expect(longString).toBe('prop'.repeat(400))
-            expect(props['$elements'][0]).toHaveProperty('attr__data-props', 'prop'.repeat(256) + '...')
+            expect(props['$elements_chain']).toContain('a:attr__data-props="' + 'prop'.repeat(256) + '..."')
         })
 
         it('gets the href attribute from parent anchor tags', () => {
@@ -750,7 +750,7 @@ describe('Autocapture system', () => {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).toHaveProperty('attr__href', 'http://test.com')
+            expect(getCapturedProps(lib.capture)['$elements_chain']).toContain('a:attr__href="http://test.com"')
         })
 
         it('does not capture href attribute values from password elements', () => {
@@ -784,7 +784,7 @@ describe('Autocapture system', () => {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
+            expect(getCapturedProps(lib.capture)['$elements_chain']).not.toContain('a:attr__href')
         })
 
         it('does not capture href attribute values that look like credit card numbers', () => {
@@ -801,7 +801,7 @@ describe('Autocapture system', () => {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
+            expect(getCapturedProps(lib.capture)['$elements_chain']).not.toContain('a:attr__href')
         })
 
         it('does not capture href attribute values that look like social-security numbers', () => {
@@ -818,7 +818,7 @@ describe('Autocapture system', () => {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
+            expect(getCapturedProps(lib.capture)['$elements_chain']).not.toContain('a:attr__href')
         })
 
         it('correctly identifies and formats text content', () => {
@@ -866,7 +866,7 @@ describe('Autocapture system', () => {
             const props1 = getCapturedProps(lib.capture)
             const text1 =
                 "Some super duper really long Text with new lines that we'll strip out and also we will want to make this text shorter since it's not likely people really care about text content that's super long and it also takes up more space and bandwidth. Some super d"
-            expect(props1['$elements'][0]).toHaveProperty('$el_text', text1)
+            expect(props1['$elements_chain']).toContain(`text="${text1}"`)
             expect(props1['$el_text']).toEqual(text1)
             lib.capture.resetHistory()
 
@@ -876,7 +876,7 @@ describe('Autocapture system', () => {
             }
             autocapture._captureEvent(e2, lib)
             const props2 = getCapturedProps(lib.capture)
-            expect(props2['$elements'][0]).toHaveProperty('$el_text', 'Some text')
+            expect(props2['$elements_chain']).toContain('text="Some text"')
             expect(props2['$el_text']).toEqual('Some text')
             lib.capture.resetHistory()
 
@@ -886,8 +886,7 @@ describe('Autocapture system', () => {
             }
             autocapture._captureEvent(e3, lib)
             const props3 = getCapturedProps(lib.capture)
-            expect(props3['$elements'][0]).toHaveProperty('$el_text', '')
-            expect(props3).not.toHaveProperty('$el_text')
+            expect(props3['$elements_chain']).not.toContain('text=""')
         })
 
         it('does not capture sensitive text content', () => {
@@ -916,8 +915,7 @@ describe('Autocapture system', () => {
             }
             autocapture._captureEvent(e1, lib)
             const props1 = getCapturedProps(lib.capture)
-            expect(props1['$elements'][0]).toHaveProperty('$el_text')
-            expect(props1['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
+            expect(props1['$elements_chain']).toContain('text="Why hello there"')
             lib.capture.resetHistory()
 
             const e2 = {
@@ -926,8 +924,7 @@ describe('Autocapture system', () => {
             }
             autocapture._captureEvent(e2, lib)
             const props2 = getCapturedProps(lib.capture)
-            expect(props2['$elements'][0]).toHaveProperty('$el_text')
-            expect(props2['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
+            expect(props2['$elements_chain']).toContain('text="Why hello there"')
             lib.capture.resetHistory()
 
             const e3 = {
@@ -936,8 +933,7 @@ describe('Autocapture system', () => {
             }
             autocapture._captureEvent(e3, lib)
             const props3 = getCapturedProps(lib.capture)
-            expect(props3['$elements'][0]).toHaveProperty('$el_text')
-            expect(props3['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
+            expect(props3['$elements_chain']).toContain('text="Why hello there"')
         })
 
         it('should capture a submit event with form field props', () => {
@@ -1031,7 +1027,7 @@ describe('Autocapture system', () => {
             autocapture._captureEvent(e1, newLib)
 
             const props1 = getCapturedProps(newLib.capture)
-            expect('attr__formmethod' in props1['$elements'][0]).toEqual(false)
+            expect(props1['$elements_chain']).not.toContain('attr__formmethod')
         })
 
         it('does not capture any textContent if mask_all_text is set', () => {
@@ -1060,7 +1056,7 @@ describe('Autocapture system', () => {
             autocapture._captureEvent(e1, newLib)
             const props1 = getCapturedProps(newLib.capture)
 
-            expect(props1['$elements'][0]).not.toHaveProperty('$el_text')
+            expect(props1['$elements_chain']).not.toHaveProperty('text')
         })
     })
 
