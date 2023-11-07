@@ -932,7 +932,10 @@ export class PostHog {
         const infoProperties = _info.properties()
 
         if (this.sessionManager) {
-            const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
+            // don't let a delayed page leave start a new session
+            const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(
+                event_name !== '$pageleave'
+            )
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
         }
