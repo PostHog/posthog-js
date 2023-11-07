@@ -973,7 +973,6 @@ describe('SessionRecording', () => {
                     expect(sessionRecording['isIdle']).toEqual(false)
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
 
-                    // TODO check this with Ben, this was being called because of session id being null
                     expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
                     _emit({
