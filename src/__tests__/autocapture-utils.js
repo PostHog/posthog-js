@@ -9,6 +9,7 @@ import {
     isAngularStyleAttr,
     getNestedSpanText,
     getDirectAndNestedSpanText,
+    getElementsChainString,
 } from '../autocapture-utils'
 
 describe(`Autocapture utility functions`, () => {
@@ -395,6 +396,21 @@ describe(`Autocapture utility functions`, () => {
             child2.innerHTML = `test2`
             child1.appendChild(child2)
             expect(getNestedSpanText(parent)).toBe('test test2')
+        })
+    })
+
+    describe('getElementsChainString', () => {
+        it('should return an empty string with no elements', () => {
+            const elementChain = getElementsChainString([])
+
+            expect(elementChain).toEqual('')
+        })
+        it('should process elements correctly', () => {
+            const elementChain = getElementsChainString([
+                { tag_name: 'div', nth_child: 1, nth_of_type: 2, $el_text: 'text' },
+            ])
+
+            expect(elementChain).toEqual('div:nth-child="1"nth-of-type="2"text="text"')
         })
     })
 })
