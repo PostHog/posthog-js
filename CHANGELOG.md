@@ -1,3 +1,9 @@
+## 1.88.2 - 2023-11-08
+
+- fix: session id should start null (#878)
+- chore(deps): bump @babel/traverse from 7.11.0 to 7.23.2 (#835)
+- chore(deps): bump @babel/traverse from 7.12.12 to 7.23.2 in /react (#836)
+
 ## 1.88.1 - 2023-11-02
 
 - chore(deps): bump next from 13.1.6 to 13.5.0 in /playground/nextjs (#855)
