@@ -408,15 +408,32 @@ describe('SessionRecording', () => {
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             expect(posthog.capture).not.toHaveBeenCalled()
-            expect(sessionRecording['buffer']?.data.length).toEqual(1)
+
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            source: 1,
+                        },
+                        type: 3,
+                    },
+                ],
+                // session id and window id are not null 🚀
+                sessionId: sessionId,
+                size: 30,
+                windowId: 'windowId',
+            })
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            // next call to emit won't flush the buffer
+            // the events aren't big enough
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
             // access private method 🤯so we don't need to wait for the timer
             sessionRecording['_flushBuffer']()
-
             expect(sessionRecording['buffer']?.data.length).toEqual(undefined)
+
             expect(posthog.capture).toHaveBeenCalledTimes(1)
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
@@ -525,20 +542,27 @@ describe('SessionRecording', () => {
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startRecordingIfEnabled()
 
-            _emit(createIncrementalSnapshot())
+            expect(sessionRecording['buffer']?.sessionId).toEqual(null)
+
+            _emit(createIncrementalSnapshot({ emit: 1 }))
+
             expect(posthog.capture).not.toHaveBeenCalled()
-            expect(sessionRecording['buffer']?.sessionId).toEqual(sessionId)
+            expect(sessionRecording['buffer']?.sessionId).not.toEqual(null)
+            expect(sessionRecording['buffer']?.data).toEqual([{ data: { source: 1 }, emit: 1, type: 3 }])
+
             // Not exactly right but easier to test than rotating the session id
+            // this simulates as the session id changing _after_ it has initially been set
+            // i.e. the data in the buffer should be sent with 'otherSessionId'
             sessionRecording['buffer']!.sessionId = 'otherSessionId'
-            _emit(createIncrementalSnapshot())
-            expect(posthog.capture).toHaveBeenCalled()
+            _emit(createIncrementalSnapshot({ emit: 2 }))
+
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
                     $session_id: 'otherSessionId',
                     $window_id: 'windowId',
-                    $snapshot_data: [{ type: 3, data: { source: 1 } }],
-                    $snapshot_bytes: 30,
+                    $snapshot_data: [{ data: { source: 1 }, emit: 1, type: 3 }],
+                    $snapshot_bytes: 39,
                 },
                 {
                     method: 'POST',
@@ -549,6 +573,22 @@ describe('SessionRecording', () => {
                     _metrics: expect.anything(),
                 }
             )
+
+            // and the rrweb event emitted _after_ the session id change should be sent yet
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            source: 1,
+                        },
+                        emit: 2,
+                        type: 3,
+                    },
+                ],
+                sessionId: sessionId,
+                size: 39,
+                windowId: 'windowId',
+            })
         })
 
         it("doesn't load recording script if already loaded", () => {
@@ -933,8 +973,7 @@ describe('SessionRecording', () => {
                     expect(sessionRecording['isIdle']).toEqual(false)
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
 
-                    // TODO check this with Ben, this was being called because of session id being null
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
+                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
                     _emit({
                         event: 123,
@@ -946,7 +985,7 @@ describe('SessionRecording', () => {
                     })
                     expect(sessionRecording['isIdle']).toEqual(false)
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
+                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
                     // this triggers idle state and isn't a user interaction so does not take a full snapshot
                     _emit({
@@ -959,7 +998,7 @@ describe('SessionRecording', () => {
                     })
                     expect(sessionRecording['isIdle']).toEqual(true)
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
+                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
                     // this triggers idle state _and_ is a user interaction, so we take a full snapshot
                     _emit({
@@ -974,7 +1013,7 @@ describe('SessionRecording', () => {
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(
                         lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
                     )
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
                 })
             })
         })
