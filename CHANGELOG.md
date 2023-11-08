@@ -1,3 +1,7 @@
+## 1.88.3 - 2023-11-08
+
+- fix(surveys): whitelabel, input radio grouping, and auto text color bugs (#881)
+
 ## 1.88.2 - 2023-11-08
 
 - fix: session id should start null (#878)
