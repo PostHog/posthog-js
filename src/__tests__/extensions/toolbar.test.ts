@@ -1,57 +1,46 @@
 import { Toolbar } from '../../extensions/toolbar'
-import { loadScript } from '../../utils'
-import { _isUndefined } from '../../utils/type-utils'
+import { _isString, _isUndefined } from '../../utils/type-utils'
+import { PostHog } from '../../posthog-core'
+import { PostHogConfig, ToolbarParams } from '../../types'
+import { window } from '../../utils/globals'
 
 jest.mock('../../utils', () => ({
     ...jest.requireActual('../../utils'),
-    loadScript: jest.fn((path, callback) => callback()),
+    loadScript: jest.fn((_path: any, callback: any) => callback()),
 }))
 
-const makeToolbarParams = (overrides) => ({
-    action: 'ph_authorize',
-    desiredHash: '#myhash',
-    projectId: 3,
-    projectOwnerId: 722725,
-    readOnly: false,
+const makeToolbarParams = (overrides: Partial<ToolbarParams>): ToolbarParams => ({
     token: 'test_token',
-    userFlags: {
-        flag_1: 0,
-        flag_2: 1,
-    },
-    userId: 12345,
     ...overrides,
 })
 
 describe('Toolbar', () => {
-    let toolbar
-    let lib
-    let config
-    let toolbarParams = makeToolbarParams({})
+    let toolbar: Toolbar
+    let instance: PostHog
+    const toolbarParams = makeToolbarParams({})
 
     beforeEach(() => {
-        config = {
-            api_host: 'http://api.example.com',
-            token: 'test_token',
-        }
-        lib = {
-            config: config,
+        instance = {
+            config: {
+                api_host: 'http://api.example.com',
+                token: 'test_token',
+            } as unknown as PostHogConfig,
             set_config: jest.fn(),
-        }
-        toolbar = new Toolbar(lib)
+        } as unknown as PostHog
+        toolbar = new Toolbar(instance)
     })
 
     beforeEach(() => {
-        loadScript.mockImplementation((path, callback) => callback())
-        window.ph_load_toolbar = jest.fn()
-        delete window['_postHogToolbarLoaded']
+        ;(window as any).ph_load_toolbar = jest.fn()
+        delete (window as any)['_postHogToolbarLoaded']
     })
 
     describe('maybeLoadToolbar', () => {
-        let localStorage = {
-            getItem: jest.fn().mockImplementation(() => jest.fn()),
+        const localStorage = {
+            getItem: jest.fn(),
             setItem: jest.fn(),
         }
-        let history = { replaceState: jest.fn() }
+        const history = { replaceState: jest.fn() }
 
         const defaultHashState = {
             action: 'ph_authorize',
@@ -67,19 +56,22 @@ describe('Toolbar', () => {
             userId: 12345,
         }
 
-        const withHashParamsFrom = (hashState = defaultHashState) => ({
+        const withHashParamsFrom = (
+            hashState: Record<string, any> | string = defaultHashState,
+            key: string = 'state'
+        ) => ({
             access_token: 'access token',
-            state: encodeURIComponent(JSON.stringify(hashState)),
+            [key]: encodeURIComponent(_isString(hashState) ? hashState : JSON.stringify(hashState)),
             expires_in: 3600,
         })
 
-        const withHash = (hashParams) => {
+        const withHash = (hashParams: Record<string, any>) => {
             return Object.keys(hashParams)
                 .map((k) => `${k}=${hashParams[k]}`)
                 .join('&')
         }
 
-        const aLocation = (hash) => {
+        const aLocation = (hash?: string) => {
             if (_isUndefined(hash)) {
                 hash = withHash(withHashParamsFrom())
             }
@@ -92,28 +84,32 @@ describe('Toolbar', () => {
         }
 
         beforeEach(() => {
-            jest.spyOn(toolbar, 'loadToolbar').mockImplementation(() => {})
+            localStorage.getItem.mockImplementation(() => {})
+
+            jest.spyOn(toolbar, 'loadToolbar')
         })
 
         it('should initialize the toolbar when the hash state contains action "ph_authorize"', () => {
-            toolbarParams = makeToolbarParams({
-                action: 'ph_authorize',
-            })
-
+            // the default hash state in the test setup contains the action "ph_authorize"
             toolbar.maybeLoadToolbar(aLocation(), localStorage, history)
 
             expect(toolbar.loadToolbar).toHaveBeenCalledWith({
                 ...toolbarParams,
+                ...defaultHashState,
                 source: 'url',
             })
         })
 
         it('should initialize the toolbar when there are editor params in the session', () => {
-            toolbar.maybeLoadToolbar(aLocation(), localStorage, history)
+            // if the hash state does not contain ph_authorize then look in storage
+            localStorage.getItem.mockImplementation(() => JSON.stringify(toolbarParams))
+
+            const hashState = { ...defaultHashState, action: undefined }
+            toolbar.maybeLoadToolbar(aLocation(withHash(withHashParamsFrom(hashState))), localStorage, history)
 
             expect(toolbar.loadToolbar).toHaveBeenCalledWith({
                 ...toolbarParams,
-                source: 'url',
+                source: 'localstorage',
             })
         })
 
@@ -131,8 +127,12 @@ describe('Toolbar', () => {
         })
 
         it('should work if calling toolbar params `__posthog`', () => {
-            toolbar.maybeLoadToolbar(aLocation(withHash(withHashParamsFrom(toolbarParams))), localStorage, history)
-            expect(toolbar.loadToolbar).toHaveBeenCalledWith({ ...toolbarParams, source: 'url' })
+            toolbar.maybeLoadToolbar(
+                aLocation(withHash(withHashParamsFrom(defaultHashState, '__posthog'))),
+                localStorage,
+                history
+            )
+            expect(toolbar.loadToolbar).toHaveBeenCalledWith({ ...toolbarParams, ...defaultHashState, source: 'url' })
         })
 
         it('should use the apiURL in the hash if available', () => {
@@ -144,6 +144,7 @@ describe('Toolbar', () => {
 
             expect(toolbar.loadToolbar).toHaveBeenCalledWith({
                 ...toolbarParams,
+                ...defaultHashState,
                 apiURL: 'blabla',
                 source: 'url',
             })
@@ -153,7 +154,7 @@ describe('Toolbar', () => {
     describe('load and close toolbar', () => {
         it('should persist for next time', () => {
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
-            expect(JSON.parse(window.localStorage.getItem('_postHogToolbarParams'))).toEqual({
+            expect(JSON.parse((window as any).localStorage.getItem('_postHogToolbarParams'))).toEqual({
                 ...toolbarParams,
                 apiURL: 'http://api.example.com',
             })
@@ -161,9 +162,9 @@ describe('Toolbar', () => {
 
         it('should load if not previously loaded', () => {
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
-            expect(window.ph_load_toolbar).toHaveBeenCalledWith(
+            expect((window as any).ph_load_toolbar).toHaveBeenCalledWith(
                 { ...toolbarParams, apiURL: 'http://api.example.com' },
-                lib
+                instance
             )
         })
 
@@ -174,19 +175,19 @@ describe('Toolbar', () => {
     })
 
     describe('load and close toolbar with minimal params', () => {
-        const minimalToolbarParams = {
-            accessToken: 'accessToken',
+        const minimalToolbarParams: ToolbarParams = {
+            token: 'accessToken',
         }
 
         it('should load if not previously loaded', () => {
             expect(toolbar.loadToolbar(minimalToolbarParams)).toBe(true)
-            expect(window.ph_load_toolbar).toHaveBeenCalledWith(
+            expect((window as any).ph_load_toolbar).toHaveBeenCalledWith(
                 {
                     ...minimalToolbarParams,
                     apiURL: 'http://api.example.com',
-                    token: 'test_token',
+                    token: 'accessToken',
                 },
-                lib
+                instance
             )
         })
 
