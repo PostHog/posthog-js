@@ -191,4 +191,39 @@ describe('survey display logic', () => {
         })
         expect(uniqueIds.size).toBe(allSelectOptions.length)
     })
+
+    test('single choice question type radio input elements are grouped correctly by question index', () => {
+        mockSurveys = [
+            {
+                id: 'testSurvey2',
+                name: 'Test survey 2',
+                appearance: null,
+                questions: [
+                    {
+                        question: 'Which types of content would you like to see more of?',
+                        description: 'This is a question description',
+                        type: 'single_choice',
+                        choices: ['Tutorials', 'Product Updates', 'Events', 'Other'],
+                    },
+                    {
+                        question: 'Which features do you use the most?',
+                        description: 'This is a question description',
+                        type: 'single_choice',
+                        choices: ['Surveys', 'Feature flags', 'Analytics'],
+                    },
+                ],
+            },
+        ]
+        const multipleQuestionSurveyForm = createMultipleQuestionSurvey(mockPostHog, mockSurveys[0])
+        const firstQuestionRadioInputs = multipleQuestionSurveyForm
+            .querySelectorAll('.tab.question-0')[0]
+            .querySelectorAll('input[type=radio]')
+        const mappedInputNames1 = [...firstQuestionRadioInputs].map((input) => input.name)
+        expect(mappedInputNames1.every((name) => name === 'question0')).toBe(true)
+        const secondQuestionRadioInputs = multipleQuestionSurveyForm
+            .querySelectorAll('.tab.question-1')[0]
+            .querySelectorAll('input[type=radio]')
+        const mappedInputNames2 = [...secondQuestionRadioInputs].map((input) => input.name)
+        expect(mappedInputNames2.every((name) => name === 'question1')).toBe(true)
+    })
 })
