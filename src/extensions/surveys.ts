@@ -704,9 +704,10 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     if (surveyPopup) {
                         addCancelListeners(posthog, surveyPopup, survey.id, survey.name)
                         if (survey.appearance?.whiteLabel) {
-                            ;(
-                                surveyPopup.getElementsByClassName('footer-branding')[0] as HTMLAnchorElement
-                            ).style.display = 'none'
+                            const allBrandingElements = surveyPopup.getElementsByClassName('footer-branding')
+                            for (const brandingElement of allBrandingElements) {
+                                ;(brandingElement as HTMLAnchorElement).style.display = 'none'
+                            }
                         }
                         shadow.appendChild(surveyPopup)
                     }
