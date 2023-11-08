@@ -605,7 +605,7 @@ export const createMultipleChoicePopup = (
         ${surveyQuestionChoices
             .map((option, idx) => {
                 const inputType = singleOrMultiSelect === 'single_choice' ? 'radio' : 'checkbox'
-                const singleOrMultiSelectString = `<div class="choice-option"><input type=${inputType} id=surveyQuestion${questionIndex}MultipleChoice${idx} name="choice" value="${option}">
+                const singleOrMultiSelectString = `<div class="choice-option"><input type=${inputType} id=surveyQuestion${questionIndex}MultipleChoice${idx} name="question${questionIndex}" value="${option}">
             <label class="auto-text-color" for=surveyQuestion${questionIndex}MultipleChoice${idx}>${option}</label><span class="choice-check auto-text-color">${checkSVG}</span></div>`
                 return singleOrMultiSelectString
             })
