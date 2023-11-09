@@ -99,6 +99,9 @@ describe('survey display logic', () => {
             $survey_question: 'How satisfied are you with our newest product?',
             $survey_response: 1,
             sessionRecordingUrl: undefined,
+            $set: {
+                '$survey_responded/testSurvey1': true,
+            },
         })
         expect(localStorage.getItem(`seenSurvey_${mockSurveys[0].id}`)).toBe('true')
 
