@@ -550,6 +550,9 @@ export const createRatingsPopup = (
                     // @ts-ignore // TODO: Fix this, error because it doesn't know that the target is a button
                     $survey_response: parseInt(activeRatingEl?.value),
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                    $set: {
+                        [`$survey_responded/${survey.id}`]: true,
+                    },
                 })
                 window.setTimeout(() => {
                     window.dispatchEvent(new Event('PHSurveySent'))
@@ -644,6 +647,9 @@ export const createMultipleChoicePopup = (
                     $survey_question: survey.questions[0].question,
                     $survey_response: selectedChoices,
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                    $set: {
+                        [`$survey_responded/${survey.id}`]: true,
+                    },
                 })
                 window.setTimeout(() => {
                     window.dispatchEvent(new Event('PHSurveySent'))
@@ -810,6 +816,9 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
                 $survey_questions: survey.questions.map((question) => question.question),
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 ...multipleQuestionResponses,
+                $set: {
+                    [`$survey_responded/${survey.id}`]: true,
+                },
             })
             window.setTimeout(() => {
                 window.dispatchEvent(new Event('PHSurveySent'))
