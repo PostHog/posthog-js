@@ -1,3 +1,9 @@
+## 1.88.4 - 2023-11-09
+
+- fix(surveys): Send responded property with every type of survey (#883)
+- Bump playground next yarn version (#874)
+- chore: convert 2 more test files to remove given and switch to TS (#882)
+
 ## 1.88.3 - 2023-11-08
 
 - fix(surveys): whitelabel, input radio grouping, and auto text color bugs (#881)
