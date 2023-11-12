@@ -119,10 +119,11 @@ describe('Session recording', () => {
             // and then reset
             cy.resetPhCaptures().then(() => {
                 cy.get('body')
-                    .trigger('mousemove', 50, 10)
-                    .trigger('mousemove', 52, 10)
-                    .trigger('mousemove', 54, 10)
-                    .trigger('mousemove', 56, 10)
+                    .trigger('mousemove', { clientX: 200, clientY: 300 })
+                    .trigger('mousemove', { clientX: 210, clientY: 300 })
+                    .trigger('mousemove', { clientX: 220, clientY: 300 })
+                    .trigger('mousemove', { clientX: 240, clientY: 300 })
+
                 cy.wait('@session-recording').then(() => {
                     cy.phCaptures({ full: true }).then((captures) => {
                         // should be a $snapshot for the current session
@@ -148,7 +149,7 @@ describe('Session recording', () => {
                             xPositions.push(captures[0]['properties']['$snapshot_data'][i].data.positions[0].x)
                         }
 
-                        expect(xPositions).to.eql([58, 64])
+                        expect(xPositions).to.eql([200, 240])
                     })
                 })
             })
