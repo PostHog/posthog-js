@@ -145,7 +145,10 @@ describe('Session recording', () => {
                         const xPositions = []
                         for (let i = 0; i < captures[0]['properties']['$snapshot_data'].length; i++) {
                             expect(captures[0]['properties']['$snapshot_data'][i].type).to.equal(3)
-                            expect(captures[0]['properties']['$snapshot_data'][i].data.source).to.equal(6)
+                            expect(captures[0]['properties']['$snapshot_data'][i].data.source).to.equal(
+                                6,
+                                JSON.stringify(captures[0]['properties']['$snapshot_data'][i])
+                            )
                             xPositions.push(captures[0]['properties']['$snapshot_data'][i].data.positions[0].x)
                         }
 
@@ -155,6 +158,60 @@ describe('Session recording', () => {
                     })
                 })
             })
+        })
+
+        it('rotates sessions after 24 hours', () => {
+            let firstSessionId = null
+
+            // first we start a session and give it some activity
+            cy.get('[data-cy-input]').type('hello world! ')
+            cy.wait(500)
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .wait('@session-recording')
+                .then(() => {
+                    cy.phCaptures({ full: true }).then((captures) => {
+                        // should be a pageview and a $snapshot
+                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
+                        expect(captures[1]['properties']['$session_id']).to.be.a('string')
+                        firstSessionId = captures[1]['properties']['$session_id']
+                    })
+                })
+
+            // then we reset the captures and move the session back in time
+            cy.resetPhCaptures()
+
+            cy.posthog().then((ph) => {
+                const activityTs = ph.sessionManager['_sessionActivityTimestamp']
+                const startTs = ph.sessionManager['_sessionStartTimestamp']
+                const timeout = ph.sessionManager['_sessionTimeoutMs']
+
+                // move the session values back,
+                // so that the next event appears to be greater than timeout since those values
+                ph.sessionManager['_sessionActivityTimestamp'] = activityTs - timeout - 1000
+                ph.sessionManager['_sessionStartTimestamp'] = startTs - timeout - 1000
+            })
+
+            // then we expect that user activity will rotate the session
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .wait('@session-recording', { timeout: 10000 })
+                .then(() => {
+                    cy.phCaptures({ full: true }).then((captures) => {
+                        // should be a pageview and a $snapshot
+                        expect(captures[0].event).to.equal('$snapshot')
+                        // // the amount of captured data should be deterministic
+                        // // but of course that would be too easy
+                        // expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(40)
+
+                        expect(captures[0]['properties']['$session_id']).to.be.a('string')
+                        expect(captures[0]['properties']['$session_id']).not.to.eq(firstSessionId)
+
+                        expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(0)
+                        expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+                        expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                    })
+                })
         })
     })
 })
