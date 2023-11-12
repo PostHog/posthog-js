@@ -18,7 +18,6 @@ describe('Session recording', () => {
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
-                    supportedCompression: ['None'],
                     capture_performance: true,
                 },
             }).as('decide')
