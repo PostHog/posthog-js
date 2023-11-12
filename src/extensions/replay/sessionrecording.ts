@@ -21,6 +21,7 @@ import { _timestamp, loadScript } from '../../utils'
 
 import { _isBoolean, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
+import { defaultNetworkOptions, getRecordNetworkPlugin, NetworkRecordOptions } from './network/record'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -90,6 +91,7 @@ export class SessionRecording {
     private receivedDecide: boolean
     private rrwebRecord: rrwebRecord | undefined
     private isIdle = false
+    private _captureNetworkPerformance: boolean | undefined
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
@@ -251,6 +253,8 @@ export class SessionRecording {
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
             })
         }
+
+        this._captureNetworkPerformance = response.capturePerformance
 
         const receivedSampleRate = response.sessionRecording?.sampleRate
         this._sampleRate =
@@ -462,14 +466,26 @@ export class SessionRecording {
                 },
             })
 
+        const plugins = []
+
+        if ((window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+            plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
+        }
+        if (this._captureNetworkPerformance) {
+            const options: NetworkRecordOptions = {
+                ...defaultNetworkOptions,
+                recordBody: true,
+                recordHeaders: true,
+                recordInitialRequests: true,
+            }
+            plugins.push(getRecordNetworkPlugin(options))
+        }
+
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
-            plugins:
-                (window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled
-                    ? [(window as any).rrwebConsoleRecord.getRecordConsolePlugin()]
-                    : [],
+            plugins,
             ...sessionRecordingOptions,
         })
 
