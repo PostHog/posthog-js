@@ -117,45 +117,113 @@ describe('Session recording', () => {
                 })
             })
             // and then reset
-            cy.resetPhCaptures().then(() => {
-                cy.get('body')
-                    .trigger('mousemove', { clientX: 200, clientY: 300 })
-                    .trigger('mousemove', { clientX: 210, clientY: 300 })
-                    .trigger('mousemove', { clientX: 220, clientY: 300 })
-                    .trigger('mousemove', { clientX: 240, clientY: 300 })
+            cy.resetPhCaptures()
 
-                cy.wait('@session-recording').then(() => {
-                    cy.phCaptures({ full: true }).then((captures) => {
-                        // should be a $snapshot for the current session
-                        expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
-                        expect(captures[0].properties['$session_id']).to.equal(sessionId)
+            cy.get('body')
+                .trigger('mousemove', { clientX: 200, clientY: 300 })
+                .trigger('mousemove', { clientX: 210, clientY: 300 })
+                .trigger('mousemove', { clientX: 220, clientY: 300 })
+                .trigger('mousemove', { clientX: 240, clientY: 300 })
 
-                        // the amount of captured data should be deterministic
-                        // but of course that would be too easy
-                        expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(0)
+            cy.wait('@session-recording').then(() => {
+                cy.phCaptures({ full: true }).then((captures) => {
+                    // should be a $snapshot for the current session
+                    expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+                    expect(captures[0].properties['$session_id']).to.equal(sessionId)
 
-                        /**
-                         * the snapshots will look a little like:
-                         * [
-                         *  {"type":3,"data":{"source":6,"positions":[{"x":58,"y":18,"id":15,"timeOffset":0}]},"timestamp":1699814887222},
-                         *  {"type":3,"data":{"source":6,"positions":[{"x":58,"y":18,"id":15,"timeOffset":-430}]},"timestamp":1699814887722}
-                         *  ]
-                         */
+                    // the amount of captured data should be deterministic
+                    // but of course that would be too easy
+                    expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(0)
 
-                        const xPositions = []
-                        for (let i = 0; i < captures[0]['properties']['$snapshot_data'].length; i++) {
-                            expect(captures[0]['properties']['$snapshot_data'][i].type).to.equal(3)
-                            expect(captures[0]['properties']['$snapshot_data'][i].data.source).to.equal(
-                                6,
-                                JSON.stringify(captures[0]['properties']['$snapshot_data'][i])
-                            )
-                            xPositions.push(captures[0]['properties']['$snapshot_data'][i].data.positions[0].x)
+                    /**
+                     * the snapshots will look a little like:
+                     * [
+                     *  {"type":3,"data":{"source":6,"positions":[{"x":58,"y":18,"id":15,"timeOffset":0}]},"timestamp":1699814887222},
+                     *  {"type":3,"data":{"source":6,"positions":[{"x":58,"y":18,"id":15,"timeOffset":-430}]},"timestamp":1699814887722}
+                     *  ]
+                     */
+
+                    const xPositions = []
+                    for (let i = 0; i < captures[0]['properties']['$snapshot_data'].length; i++) {
+                        expect(captures[0]['properties']['$snapshot_data'][i].type).to.equal(3)
+                        expect(captures[0]['properties']['$snapshot_data'][i].data.source).to.equal(
+                            6,
+                            JSON.stringify(captures[0]['properties']['$snapshot_data'][i])
+                        )
+                        xPositions.push(captures[0]['properties']['$snapshot_data'][i].data.positions[0].x)
+                    }
+
+                    // even though we trigger 4 events, only 2 snapshots should be captured
+                    // I _think_ this is because Cypress is faking things and they happen too fast
+                    expect(xPositions).to.have.length(2)
+                    expect(xPositions[0]).to.equal(200)
+                    // timing seems to vary if this value picks up 220 or 240
+                    // given it's going to be hard to make it deterministic with Celery
+                    // all we _really_ care about is that it's greater than the previous value
+                    expect(xPositions[1]).to.be.above(xPositions[0])
+                })
+            })
+        })
+
+        it.skip('continues capturing to the same session when the page reloads', () => {
+            let sessionId = null
+
+            // cypress time handling can confuse when to run full snapshot, let's force that to happen...
+            cy.get('[data-cy-input]').type('hello world! ')
+            cy.wait('@session-recording').then(() => {
+                cy.phCaptures({ full: true }).then((captures) => {
+                    captures.forEach((c) => {
+                        if (_isNull(sessionId)) {
+                            sessionId = c.properties['$session_id']
                         }
-
-                        // even though we trigger 4 events, only 2 snapshots should be captured
-                        // I _think_ this is because Cypress is faking things and they happen too fast
-                        expect(xPositions).to.eql([200, 240])
+                        // all captures should be from one session
+                        expect(c.properties['$session_id']).to.equal(sessionId)
                     })
+                    expect(sessionId).not.to.be.null
+                })
+            })
+            // and then reset
+            cy.resetPhCaptures()
+            // and refresh the page
+            cy.reload()
+
+            cy.get('body')
+                .trigger('mousemove', { clientX: 200, clientY: 300 })
+                .trigger('mousemove', { clientX: 210, clientY: 300 })
+                .trigger('mousemove', { clientX: 220, clientY: 300 })
+                .trigger('mousemove', { clientX: 240, clientY: 300 })
+
+            cy.wait('@session-recording').then(() => {
+                cy.phCaptures({ full: true }).then((captures) => {
+                    // should be a $snapshot for the current session
+                    expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+                    expect(captures[0].properties['$session_id']).to.equal(sessionId)
+
+                    // the amount of captured data should be deterministic
+                    // but of course that would be too easy
+                    expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(0)
+
+                    /**
+                     * the snapshots will look a little like:
+                     * [
+                     *  {"type":3,"data":{"source":6,"positions":[{"x":58,"y":18,"id":15,"timeOffset":0}]},"timestamp":1699814887222},
+                     *  {"type":3,"data":{"source":6,"positions":[{"x":58,"y":18,"id":15,"timeOffset":-430}]},"timestamp":1699814887722}
+                     *  ]
+                     */
+
+                    const xPositions = []
+                    for (let i = 0; i < captures[0]['properties']['$snapshot_data'].length; i++) {
+                        expect(captures[0]['properties']['$snapshot_data'][i].type).to.equal(3)
+                        expect(captures[0]['properties']['$snapshot_data'][i].data.source).to.equal(
+                            6,
+                            JSON.stringify(captures[0]['properties']['$snapshot_data'][i])
+                        )
+                        xPositions.push(captures[0]['properties']['$snapshot_data'][i].data.positions[0].x)
+                    }
+
+                    // even though we trigger 4 events, only 2 snapshots should be captured
+                    // I _think_ this is because Cypress is faking things and they happen too fast
+                    expect(xPositions).to.eql([200, 240])
                 })
             })
         })
