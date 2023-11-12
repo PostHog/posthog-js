@@ -1,6 +1,7 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { RetryQueue } from './retry-queue'
+import { InitiatorType } from './extensions/replay/network/record'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -154,13 +155,27 @@ export interface SessionRecordingOptions {
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
-    /** Modify the network request before it is captured. Returning null stops it being captured */
-    maskNetworkRequestFn?: ((url: NetworkRequest) => NetworkRequest | null | undefined) | null
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recorderVersion?: 'v1' | 'v2'
     recordCrossOriginIframes?: boolean
+    /** Modify the network request before it is captured. Returning null stops it being captured */
+    // TODO this has to work for both capture mechanisms? 😱
+    maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
+    // properties below here are ALPHA, don't rely on them, they may change without notice
+    // TODO which of these do we actually expose?
+    // if this isn't provided a default will be used
+    // this only applies to the payload recorder
+    // TODO I guess it should apply to the other recorder to
+    initiatorTypes?: InitiatorType[]
+    recordHeaders?: boolean | { request: boolean; response: boolean }
+    // true means record all bodies
+    // false means record no bodies
+    // string[] means record bodies matching the provided content-type headers
+    recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
+    // I can't think why you wouldn't want this... so
+    // recordInitialRequests?: boolean
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
@@ -346,6 +361,33 @@ export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
 }
 
+export type Headers = Record<string, string>
+
+export type Body =
+    | string
+    | Document
+    | Blob
+    | ArrayBufferView
+    | ArrayBuffer
+    | FormData
+    | URLSearchParams
+    | ReadableStream<Uint8Array>
+    | null
+
+// extending this to match the rrweb NetworkRequest type
+// it is different in that the rrweb type will have initator type, starttime, and endtime
+// as required properties. but we don't want to require them here
+// because we've previously exposed this type as only having `url`
 export type NetworkRequest = {
     url: string
+    // properties below here are ALPHA, don't rely on them, they may change without notice
+    method?: string
+    initiatorType?: InitiatorType
+    status?: number
+    startTime?: number
+    endTime?: number
+    requestHeaders?: Headers
+    requestBody?: Body
+    responseHeaders?: Headers
+    responseBody?: Body
 }

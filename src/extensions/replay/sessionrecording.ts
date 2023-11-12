@@ -21,7 +21,8 @@ import { _timestamp, loadScript } from '../../utils'
 
 import { _isBoolean, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { defaultNetworkOptions, getRecordNetworkPlugin, NetworkRecordOptions } from './network/record'
+import { getRecordNetworkPlugin } from './network/record'
+import { buildNetworkRequestOptions } from './network/record/default-options'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -472,13 +473,7 @@ export class SessionRecording {
             plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
         }
         if (this._captureNetworkPerformance) {
-            const options: NetworkRecordOptions = {
-                ...defaultNetworkOptions,
-                recordBody: true,
-                recordHeaders: true,
-                recordInitialRequests: true,
-            }
-            plugins.push(getRecordNetworkPlugin(options))
+            plugins.push(getRecordNetworkPlugin(buildNetworkRequestOptions(this.instance.config)))
         }
 
         this.stopRrweb = this.rrwebRecord({
@@ -566,6 +561,8 @@ export class SessionRecording {
                 url,
             }
 
+            // TODO we should deprecate this and use the same function for this masking and the rrweb/network plugin
+            // TODO or deprecate this and provide a new clearer name so this would be `maskURLPerformanceFn` or similar
             networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
 
             return networkRequest?.url

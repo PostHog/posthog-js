@@ -8,6 +8,7 @@
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { _isArray, _isBoolean, _isFunction, _isNull, _isUndefined } from '../../../../utils/type-utils'
 import { logger } from '../../../../utils/logger'
+import { NetworkRequest, Headers } from '../../../../types'
 
 export type InitiatorType =
     | 'audio'
@@ -68,31 +69,6 @@ export const defaultNetworkOptions: NetworkRecordOptions = {
     recordHeaders: false,
     recordBody: false,
     recordInitialRequests: false,
-}
-
-type Headers = Record<string, string>
-type Body =
-    | string
-    | Document
-    | Blob
-    | ArrayBufferView
-    | ArrayBuffer
-    | FormData
-    | URLSearchParams
-    | ReadableStream<Uint8Array>
-    | null
-
-type NetworkRequest = {
-    url: string
-    method?: string
-    initiatorType: InitiatorType
-    status?: number
-    startTime: number
-    endTime: number
-    requestHeaders?: Headers
-    requestBody?: Body
-    responseHeaders?: Headers
-    responseBody?: Body
 }
 
 export type NetworkData = {
@@ -493,7 +469,6 @@ function initNetworkObserver(
             }
         })
 
-        //data.requests.filter((request) => !networkOptions.maskRequestFn(request))
         if (requests.length > 0 || data.isInitial) {
             callback({ ...data, requests })
         }
@@ -508,7 +483,7 @@ function initNetworkObserver(
     }
 }
 
-// use the plugin name so that when this functionality is adoped into rrweb
+// use the plugin name so that when this functionality is adopted into rrweb
 // we can remove this plugin and use the core functionality with the same data
 export const NETWORK_PLUGIN_NAME = 'rrweb/network@1'
 
