@@ -149,6 +149,8 @@ describe('Session recording', () => {
                             xPositions.push(captures[0]['properties']['$snapshot_data'][i].data.positions[0].x)
                         }
 
+                        // even though we trigger 4 events, only 2 snapshots should be captured
+                        // I _think_ this is because Cypress is faking things and they happen too fast
                         expect(xPositions).to.eql([200, 240])
                     })
                 })
