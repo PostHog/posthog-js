@@ -2,6 +2,12 @@
 
 import { _isNull } from '../../src/utils/type-utils'
 
+function onPageLoad() {
+    cy.posthogInit(given.options)
+    cy.wait('@decide')
+    cy.wait('@recorder')
+}
+
 describe('Session recording', () => {
     given('options', () => ({}))
 
@@ -70,9 +76,7 @@ describe('Session recording', () => {
             }).as('decide')
 
             cy.visit('./playground/cypress')
-            cy.posthogInit(given.options)
-            cy.wait('@decide')
-            cy.wait('@recorder')
+            onPageLoad()
         })
 
         it('captures session events', () => {
@@ -165,7 +169,7 @@ describe('Session recording', () => {
             })
         })
 
-        it.skip('continues capturing to the same session when the page reloads', () => {
+        it('continues capturing to the same session when the page reloads', () => {
             let sessionId = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
@@ -186,6 +190,7 @@ describe('Session recording', () => {
             cy.resetPhCaptures()
             // and refresh the page
             cy.reload()
+            onPageLoad()
 
             cy.get('body')
                 .trigger('mousemove', { clientX: 200, clientY: 300 })
@@ -196,12 +201,13 @@ describe('Session recording', () => {
             cy.wait('@session-recording').then(() => {
                 cy.phCaptures({ full: true }).then((captures) => {
                     // should be a $snapshot for the current session
-                    expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+                    expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
                     expect(captures[0].properties['$session_id']).to.equal(sessionId)
+                    expect(captures[1].properties['$session_id']).to.equal(sessionId)
 
                     // the amount of captured data should be deterministic
                     // but of course that would be too easy
-                    expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(0)
+                    expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(0)
 
                     /**
                      * the snapshots will look a little like:
@@ -211,19 +217,29 @@ describe('Session recording', () => {
                      *  ]
                      */
 
+                    // page reloaded so we will start with a full snapshot
+                    // a meta and then a full snapshot
+                    expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+                    expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+
                     const xPositions = []
-                    for (let i = 0; i < captures[0]['properties']['$snapshot_data'].length; i++) {
-                        expect(captures[0]['properties']['$snapshot_data'][i].type).to.equal(3)
-                        expect(captures[0]['properties']['$snapshot_data'][i].data.source).to.equal(
+                    for (let i = 2; i < captures[1]['properties']['$snapshot_data'].length; i++) {
+                        expect(captures[1]['properties']['$snapshot_data'][i].type).to.equal(3)
+                        expect(captures[1]['properties']['$snapshot_data'][i].data.source).to.equal(
                             6,
-                            JSON.stringify(captures[0]['properties']['$snapshot_data'][i])
+                            JSON.stringify(captures[1]['properties']['$snapshot_data'][i])
                         )
-                        xPositions.push(captures[0]['properties']['$snapshot_data'][i].data.positions[0].x)
+                        xPositions.push(captures[1]['properties']['$snapshot_data'][i].data.positions[0].x)
                     }
 
                     // even though we trigger 4 events, only 2 snapshots should be captured
                     // I _think_ this is because Cypress is faking things and they happen too fast
-                    expect(xPositions).to.eql([200, 240])
+                    expect(xPositions).to.have.length(2)
+                    expect(xPositions[0]).to.equal(200)
+                    // timing seems to vary if this value picks up 220 or 240
+                    // given it's going to be hard to make it deterministic with Celery
+                    // all we _really_ care about is that it's greater than the previous value
+                    expect(xPositions[1]).to.be.above(xPositions[0])
                 })
             })
         })
