@@ -16,7 +16,8 @@ describe('Session recording', () => {
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
-                    supportedCompression: ['gzip', 'lz64'],
+                    supportedCompression: ['None'],
+                    capture_performance: true,
                 },
             }).as('decide')
 
@@ -32,8 +33,21 @@ describe('Session recording', () => {
                 .type('hello posthog!')
                 .wait('@session-recording')
                 .then(() => {
-                    const requests = cy.state('requests').filter(({ alias }) => alias === 'session-recording')
-                    expect(requests.length).to.be.above(0).and.to.be.below(2)
+                    cy.phCaptures({ full: true }).then((captures) => {
+                        // should be a pageview and a $snapshot
+                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
+                        // the snapshot should have a meta and a full snapshot (and nothing else?)
+                        expect(captures[1]['properties']['$snapshot_data']).to.have.length(37)
+                        expect(
+                            JSON.stringify(captures[1]['properties']['$snapshot_data'].map((c) => c.type))
+                        ).to.deep.equal(['wat'])
+                        expect(captures[1]['properties']['$snapshot_data']).to.have.length(2)
+                    })
+                    // const requests = cy.state('requests').filter(({ alias }) => alias === 'session-recording')
+                    // const request = requests[0]
+                    // expect(JSON.stringify(Object.keys(request))).to.eq([])
+                    // const requestBody = JSON.parse(request.text().substring(5))
+                    // expect(requestBody).to.eql([{}])
                 })
         })
     })
@@ -52,6 +66,7 @@ describe('Session recording', () => {
                         endpoint: '/ses/',
                     },
                     supportedCompression: ['gzip', 'lz64'],
+                    capture_performance: true,
                 },
             }).as('decide')
 
