@@ -1,3 +1,8 @@
+## 1.89.0 - 2023-11-13
+
+- feat: capture network payloads (internal alpha) (#886)
+- fix: meaningful recordings integration tests (#885)
+
 ## 1.88.4 - 2023-11-09
 
 - fix(surveys): Send responded property with every type of survey (#883)
