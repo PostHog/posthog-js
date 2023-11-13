@@ -42,8 +42,15 @@ const removeAuthorizationHeader = (data: NetworkRequest): NetworkRequest => {
  *  we _never_ want to record that header by accident
  *  if someone complains then we'll add an opt-in to let them override it
  */
-export const buildNetworkRequestOptions = (instanceConfig: PostHogConfig): NetworkRecordOptions => {
+export const buildNetworkRequestOptions = (
+    instanceConfig: PostHogConfig,
+    remoteNetworkOptions: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'>
+): NetworkRecordOptions => {
     const config = instanceConfig.session_recording as NetworkRecordOptions
+    // client can always disable despite remote options
+    const canRecordHeaders = config.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
+    const canRecordBody = config.recordBody === false ? false : remoteNetworkOptions.recordBody
+
     config.maskRequestFn = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
         ? (data) => {
               const cleanedRequest = removeAuthorizationHeader(data)
@@ -58,5 +65,7 @@ export const buildNetworkRequestOptions = (instanceConfig: PostHogConfig): Netwo
     return {
         ...defaultNetworkOptions,
         ...config,
+        recordHeaders: canRecordHeaders,
+        recordBody: canRecordBody,
     }
 }

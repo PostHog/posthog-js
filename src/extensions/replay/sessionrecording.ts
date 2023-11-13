@@ -14,7 +14,7 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, NetworkRequest, Properties } from '../../types'
+import { DecideResponse, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../../config'
 import { _timestamp, loadScript } from '../../utils'
@@ -92,7 +92,7 @@ export class SessionRecording {
     private receivedDecide: boolean
     private rrwebRecord: rrwebRecord | undefined
     private isIdle = false
-    private _captureNetworkPayloads: boolean | undefined
+    private _captureNetworkPayloads: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined = undefined
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
@@ -255,8 +255,7 @@ export class SessionRecording {
             })
         }
 
-        this._captureNetworkPayloads =
-            response.capturePerformance && response.sessionRecording?.networkPayloadCaptureEnabled
+        this._captureNetworkPayloads = response.sessionRecording?.networkPayloadCaptureEnabled
 
         const receivedSampleRate = response.sessionRecording?.sampleRate
         this._sampleRate =
@@ -475,7 +474,11 @@ export class SessionRecording {
         }
         if (this._captureNetworkPayloads) {
             if (_isFunction((window as any).getRecordNetworkPlugin)) {
-                plugins.push((window as any).getRecordNetworkPlugin(buildNetworkRequestOptions(this.instance.config)))
+                plugins.push(
+                    (window as any).getRecordNetworkPlugin(
+                        buildNetworkRequestOptions(this.instance.config, this._captureNetworkPayloads)
+                    )
+                )
             }
         }
 
