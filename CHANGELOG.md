@@ -1,3 +1,17 @@
+## 1.89.1 - 2023-11-13
+
+- fix(surveys): fix emoji rating scale bug (#887)
+- feat: capture network payloads (internal alpha) (#886)
+- fix: meaningful recordings integration tests (#885)
+- fix(surveys): Send responded property with every type of survey (#883)
+- Bump playground next yarn version (#874)
+- chore: convert 2 more test files to remove given and switch to TS (#882)
+- fix(surveys): whitelabel, input radio grouping, and auto text color bugs (#881)
+- fix: session id should start null (#878)
+- chore(deps): bump @babel/traverse from 7.11.0 to 7.23.2 (#835)
+- chore(deps): bump @babel/traverse from 7.12.12 to 7.23.2 in /react (#836)
+- chore(deps): bump next from 13.1.6 to 13.5.0 in /playground/nextjs (#855)
+
 ## 1.89.0 - 2023-11-13
 
 - feat: capture network payloads (internal alpha) (#886)
