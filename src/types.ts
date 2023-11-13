@@ -254,6 +254,7 @@ export interface DecideResponse {
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
         linkedFlag?: string | null
+        networkPayloadCaptureEnabled?: boolean
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
