@@ -1,6 +1,35 @@
-import { NetworkRequest, PostHogConfig } from '../../../../types'
-import { defaultNetworkOptions, NetworkRecordOptions } from './index'
-import { _isFunction } from '../../../../utils/type-utils'
+import { NetworkRecordOptions, NetworkRequest, PostHogConfig } from '../../types'
+import { _isFunction } from '../../utils/type-utils'
+
+export const defaultNetworkOptions: NetworkRecordOptions = {
+    initiatorTypes: [
+        'audio',
+        'beacon',
+        'body',
+        'css',
+        'early-hint',
+        'embed',
+        'fetch',
+        'frame',
+        'iframe',
+        'icon',
+        'image',
+        'img',
+        'input',
+        'link',
+        'navigation',
+        'object',
+        'ping',
+        'script',
+        'track',
+        'video',
+        'xmlhttprequest',
+    ],
+    maskRequestFn: (data: NetworkRequest) => data,
+    recordHeaders: false,
+    recordBody: false,
+    recordInitialRequests: false,
+}
 
 const removeAuthorizationHeader = (data: NetworkRequest): NetworkRequest => {
     delete data.requestHeaders?.['Authorization']

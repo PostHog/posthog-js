@@ -1,7 +1,6 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import { RetryQueue } from './retry-queue'
-import { InitiatorType } from './extensions/replay/network/record'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -373,6 +372,41 @@ export type Body =
     | URLSearchParams
     | ReadableStream<Uint8Array>
     | null
+
+/* for rrweb/network@1
+ ** when that is released as part of rrweb this can be removed
+ ** don't rely on this type, it may change without notice
+ */
+export type InitiatorType =
+    | 'audio'
+    | 'beacon'
+    | 'body'
+    | 'css'
+    | 'early-hint'
+    | 'embed'
+    | 'fetch'
+    | 'frame'
+    | 'iframe'
+    | 'icon'
+    | 'image'
+    | 'img'
+    | 'input'
+    | 'link'
+    | 'navigation'
+    | 'object'
+    | 'ping'
+    | 'script'
+    | 'track'
+    | 'video'
+    | 'xmlhttprequest'
+
+export type NetworkRecordOptions = {
+    initiatorTypes?: InitiatorType[]
+    maskRequestFn?: (data: NetworkRequest) => NetworkRequest | undefined
+    recordHeaders?: boolean | { request: boolean; response: boolean }
+    recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
+    recordInitialRequests?: boolean
+}
 
 // extending this to match the rrweb NetworkRequest type
 // it is different in that the rrweb type will have initator type, starttime, and endtime

@@ -1,5 +1,5 @@
-import { buildNetworkRequestOptions } from '../../../extensions/replay/network/record/default-options'
 import { defaultConfig } from '../../../posthog-core'
+import { buildNetworkRequestOptions } from '../../../extensions/replay/config'
 
 describe('config', () => {
     describe('network request options', () => {

@@ -19,10 +19,10 @@ import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/type
 import Config from '../../config'
 import { _timestamp, loadScript } from '../../utils'
 
-import { _isBoolean, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
+import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { getRecordNetworkPlugin } from './network/record'
-import { buildNetworkRequestOptions } from './network/record/default-options'
+import { window } from '../../utils/globals'
+import { buildNetworkRequestOptions } from './config'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -473,7 +473,9 @@ export class SessionRecording {
             plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
         }
         if (this._captureNetworkPerformance) {
-            plugins.push(getRecordNetworkPlugin(buildNetworkRequestOptions(this.instance.config)))
+            if (_isFunction((window as any).getRecordNetworkPlugin)) {
+                plugins.push((window as any).getRecordNetworkPlugin(buildNetworkRequestOptions(this.instance.config)))
+            }
         }
 
         this.stopRrweb = this.rrwebRecord({
