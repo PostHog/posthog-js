@@ -43,8 +43,7 @@ describe('Session recording', () => {
                     cy.phCaptures({ full: true }).then((captures) => {
                         // should be a pageview and a $snapshot
                         expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
-                        // the amount of captured data should be deterministic
-                        // but of course that would be too easy
+
                         expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(38)
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta

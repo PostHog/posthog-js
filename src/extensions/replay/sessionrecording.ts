@@ -14,13 +14,15 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, NetworkRequest, Properties } from '../../types'
+import { DecideResponse, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../../config'
 import { _timestamp, loadScript } from '../../utils'
 
-import { _isBoolean, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
+import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
+import { window } from '../../utils/globals'
+import { buildNetworkRequestOptions } from './config'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -90,6 +92,7 @@ export class SessionRecording {
     private receivedDecide: boolean
     private rrwebRecord: rrwebRecord | undefined
     private isIdle = false
+    private _networkPayloadCapture: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined = undefined
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
@@ -251,6 +254,8 @@ export class SessionRecording {
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
             })
         }
+
+        this._networkPayloadCapture = response.sessionRecording?.networkPayloadCapture
 
         const receivedSampleRate = response.sessionRecording?.sampleRate
         this._sampleRate =
@@ -462,14 +467,26 @@ export class SessionRecording {
                 },
             })
 
+        const plugins = []
+
+        if ((window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+            plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
+        }
+        if (this._networkPayloadCapture) {
+            if (_isFunction((window as any).getRecordNetworkPlugin)) {
+                plugins.push(
+                    (window as any).getRecordNetworkPlugin(
+                        buildNetworkRequestOptions(this.instance.config, this._networkPayloadCapture)
+                    )
+                )
+            }
+        }
+
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
-            plugins:
-                (window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled
-                    ? [(window as any).rrwebConsoleRecord.getRecordConsolePlugin()]
-                    : [],
+            plugins,
             ...sessionRecordingOptions,
         })
 
@@ -550,6 +567,8 @@ export class SessionRecording {
                 url,
             }
 
+            // TODO we should deprecate this and use the same function for this masking and the rrweb/network plugin
+            // TODO or deprecate this and provide a new clearer name so this would be `maskURLPerformanceFn` or similar
             networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
 
             return networkRequest?.url
