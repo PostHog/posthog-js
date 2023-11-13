@@ -566,7 +566,8 @@ export const createRatingsPopup = (
         })
     }
     formElement.getElementsByClassName('rating-options')[0].insertAdjacentElement('afterbegin', ratingOptionsElement)
-    const allElements = question.scale === 10 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : [1, 2, 3, 4, 5]
+    const allElements =
+        question.scale === 10 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : question.scale === 5 ? [1, 2, 3, 4, 5] : [1, 2, 3]
     for (const x of allElements) {
         const ratingEl = formElement.getElementsByClassName(`question-${questionIndex}-rating-${x}`)[0]
         ratingEl.addEventListener('click', (e) => {
