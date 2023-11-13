@@ -254,7 +254,7 @@ export interface DecideResponse {
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
         linkedFlag?: string | null
-        networkPayloadCaptureEnabled?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+        networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     }
     surveys?: boolean
     toolbarParams: ToolbarParams

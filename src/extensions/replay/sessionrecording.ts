@@ -92,7 +92,7 @@ export class SessionRecording {
     private receivedDecide: boolean
     private rrwebRecord: rrwebRecord | undefined
     private isIdle = false
-    private _captureNetworkPayloads: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined = undefined
+    private _networkPayloadCapture: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined = undefined
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
@@ -255,7 +255,7 @@ export class SessionRecording {
             })
         }
 
-        this._captureNetworkPayloads = response.sessionRecording?.networkPayloadCaptureEnabled
+        this._networkPayloadCapture = response.sessionRecording?.networkPayloadCapture
 
         const receivedSampleRate = response.sessionRecording?.sampleRate
         this._sampleRate =
@@ -472,11 +472,11 @@ export class SessionRecording {
         if ((window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
             plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
         }
-        if (this._captureNetworkPayloads) {
+        if (this._networkPayloadCapture) {
             if (_isFunction((window as any).getRecordNetworkPlugin)) {
                 plugins.push(
                     (window as any).getRecordNetworkPlugin(
-                        buildNetworkRequestOptions(this.instance.config, this._captureNetworkPayloads)
+                        buildNetworkRequestOptions(this.instance.config, this._networkPayloadCapture)
                     )
                 )
             }
