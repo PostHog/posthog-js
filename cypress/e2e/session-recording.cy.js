@@ -89,8 +89,6 @@ describe('Session recording', () => {
                     cy.phCaptures({ full: true }).then((captures) => {
                         // should be a pageview and a $snapshot
                         expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
-                        // the amount of captured data should be deterministic
-                        // but of course that would be too easy
                         expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(38)
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
@@ -135,8 +133,6 @@ describe('Session recording', () => {
                     expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
                     expect(captures[0].properties['$session_id']).to.equal(sessionId)
 
-                    // the amount of captured data should be deterministic
-                    // but of course that would be too easy
                     expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(0)
 
                     /**
@@ -158,11 +154,10 @@ describe('Session recording', () => {
                     }
 
                     // even though we trigger 4 events, only 2 snapshots should be captured
-                    // I _think_ this is because Cypress is faking things and they happen too fast
+                    // This is because rrweb doesn't try to capture _every_ mouse move
                     expect(xPositions).to.have.length(2)
                     expect(xPositions[0]).to.equal(200)
-                    // timing seems to vary if this value picks up 220 or 240
-                    // given it's going to be hard to make it deterministic with Celery
+                    // smoothing varies if this value picks up 220 or 240
                     // all we _really_ care about is that it's greater than the previous value
                     expect(xPositions[1]).to.be.above(xPositions[0])
                 })
@@ -205,8 +200,6 @@ describe('Session recording', () => {
                     expect(captures[0].properties['$session_id']).to.equal(sessionId)
                     expect(captures[1].properties['$session_id']).to.equal(sessionId)
 
-                    // the amount of captured data should be deterministic
-                    // but of course that would be too easy
                     expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(0)
 
                     /**
@@ -233,11 +226,10 @@ describe('Session recording', () => {
                     }
 
                     // even though we trigger 4 events, only 2 snapshots should be captured
-                    // I _think_ this is because Cypress is faking things and they happen too fast
+                    // This is because rrweb doesn't try to capture _every_ mouse move
                     expect(xPositions).to.have.length(2)
                     expect(xPositions[0]).to.equal(200)
-                    // timing seems to vary if this value picks up 220 or 240
-                    // given it's going to be hard to make it deterministic with Celery
+                    // smoothing varies if this value picks up 220 or 240
                     // all we _really_ care about is that it's greater than the previous value
                     expect(xPositions[1]).to.be.above(xPositions[0])
                 })
@@ -284,9 +276,6 @@ describe('Session recording', () => {
                     cy.phCaptures({ full: true }).then((captures) => {
                         // should be a pageview and a $snapshot
                         expect(captures[0].event).to.equal('$snapshot')
-                        // // the amount of captured data should be deterministic
-                        // // but of course that would be too easy
-                        // expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(40)
 
                         expect(captures[0]['properties']['$session_id']).to.be.a('string')
                         expect(captures[0]['properties']['$session_id']).not.to.eq(firstSessionId)
