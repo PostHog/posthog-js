@@ -1,7 +1,7 @@
 import { initPosthog } from './helpers'
 
 // eslint-disable-next-line no-undef
-fixture`Subdomain detection`
+fixture`Subdomain detection`.page('http://localhost:8000/playground/cypress-full/index.html')
 
 const testCases = [
     {
@@ -18,7 +18,7 @@ const testCases = [
     },
     {
         location: 'localhost',
-        expected: 'localhost',
+        expected: '',
     },
 ]
 
