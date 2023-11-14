@@ -361,7 +361,7 @@ export const createOpenTextOrLinkPopup = (
         <div class="bottom-section">
             <div class="buttons">
                 <button class="form-submit auto-text-color" type="submit">${
-                    survey.appearance?.submitButtonText || 'Submit'
+                    question.buttonText || survey.appearance?.submitButtonText || 'Submit'
                 }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
@@ -526,7 +526,7 @@ export const createRatingsPopup = (
             <div class="bottom-section">
             <div class="buttons">
                 <button class="form-submit auto-text-color" type="submit" ${isOptional ? '' : 'disabled'}>${
-        survey.appearance?.submitButtonText || 'Submit'
+        question.buttonText || survey.appearance?.submitButtonText || 'Submit'
     }</button>
             </div>
             <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
@@ -618,7 +618,7 @@ export const createMultipleChoicePopup = (
         <div class="bottom-section">
         <div class="buttons">
             <button class="form-submit auto-text-color" type="submit" ${isOptional ? '' : 'disabled'}>${
-        survey.appearance?.submitButtonText || 'Submit'
+        question.buttonText || survey.appearance?.submitButtonText || 'Submit'
     }</button>
         </div>
         <a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>
