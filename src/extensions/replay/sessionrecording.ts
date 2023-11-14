@@ -602,8 +602,11 @@ export class SessionRecording {
 
         const minimumDuration = this._minimumDuration
         const sessionDuration = this.sessionDuration
+        // if we have old data in the buffer but the session has rotated then the
+        // session duration might be negative, in that case we want to flush the buffer
+        const isPositiveSessionDuration = _isNumber(sessionDuration) && sessionDuration >= 0
         const isBelowMinimumDuration =
-            _isNumber(minimumDuration) && _isNumber(sessionDuration) && sessionDuration < minimumDuration
+            _isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
         if (this.status === 'buffering' || isBelowMinimumDuration) {
             this.flushBufferTimer = setTimeout(() => {
