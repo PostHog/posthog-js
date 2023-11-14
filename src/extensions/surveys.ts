@@ -741,7 +741,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                                 })
                             }
                             const countdownEl = thankYouElement.querySelector('.thank-you-message-countdown')
-                            if (countdownEl) {
+                            if (survey.appearance?.autoDisappear && countdownEl) {
                                 let count = 3
                                 countdownEl.textContent = `(${count})`
                                 const countdown = setInterval(() => {
