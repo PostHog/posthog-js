@@ -1,5 +1,5 @@
 import { captureLogger, initPosthog, staticFilesMock } from './helpers'
-import { t } from 'testcafe'
+import { t, ClientFunction } from 'testcafe'
 
 // eslint-disable-next-line no-undef
 fixture`Subdomain detection`
@@ -36,7 +36,6 @@ const testCases = [
     },
 ]
 
-// eslint-disable-next-line no-undef
 const getSubject = ClientFunction(() => {
     return window.POSTHOG_INTERNAL_seekFirstNonPublicSubDomain
 })
