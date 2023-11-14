@@ -39,13 +39,6 @@ const testCases = [
 testCases.forEach(({ location, expected }) => {
     test(`location ${location} is detected as having subdomain ${expected}`, async (t) => {
         await initPosthog()
-        const fn = await t.eval(() => window.POSTHOG_INTERNAL_seekFirstNonPublicSubDomain)
-
-        // a little probing
-        t.expect(fn).typeOf('function')
-        t.expect(location.split).typeOf('function')
-
-        // the real test
-        await t.expect(fn(location)).eql(expected)
+        await t.expect(await t.eval(() => window.POSTHOG_INTERNAL_seekFirstNonPublicSubDomain(location))).eql(expected)
     })
 })
