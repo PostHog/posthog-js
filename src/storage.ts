@@ -43,15 +43,26 @@ export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = docume
     }
     return ''
 }
-// TRICKY: this is important enough functionality that we need to test it
-// but, it relies on browser behavior, so we set it on window here
-// so that we can access it in browser-based tests
-;(window as any).POSTHOG_INTERNAL_seekFirstNonPublicSubDomain = seekFirstNonPublicSubDomain
+
+const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
+const originalCookieDomainFn = (hostname: string): string => {
+    const matches = hostname.match(DOMAIN_MATCH_REGEX)
+    return matches ? matches[0] : ''
+}
 
 export function chooseCookieDomain(hostname: string, cross_subdomain: boolean | undefined): string {
     if (cross_subdomain) {
         // NOTE: Could we use this for cross domain tracking?
-        const matchedSubDomain = seekFirstNonPublicSubDomain(hostname)
+        let matchedSubDomain = seekFirstNonPublicSubDomain(hostname)
+
+        if (!matchedSubDomain) {
+            const originalMatch = originalCookieDomainFn(hostname)
+            if (originalMatch !== matchedSubDomain) {
+                logger.info('Warning: cookie subdomain discovery mismatch', originalMatch, matchedSubDomain)
+            }
+            matchedSubDomain = originalMatch
+        }
+
         return matchedSubDomain ? '; domain=.' + matchedSubDomain : ''
     }
     return ''
