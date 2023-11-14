@@ -287,16 +287,14 @@ const style = (id: string, appearance: SurveyAppearance | null) => {
               width: 100%;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}
           }
-          .thank-you-message {
-              color: ${appearance?.textColor || 'black'};
-          }
           .thank-you-message-body {
               margin-top: 6px;
               font-size: 14px;
-              color: ${appearance?.descriptionTextColor || '#4b4b52'};
+              background: ${appearance?.backgroundColor || '#eeeded'};
           }
           .thank-you-message-header {
               margin: 10px 0px 0px;
+              background: ${appearance?.backgroundColor || '#eeeded'};
           }
           .thank-you-message-container .form-submit {
               margin-top: 20px;
@@ -429,8 +427,10 @@ export const createThankYouMessage = (survey: Survey) => {
         <div class="cancel-btn-wrapper">
             <button class="form-cancel" type="cancel">${cancelSVG}</button>
         </div>
-        <h3 class="thank-you-message-header">${survey.appearance?.thankYouMessageHeader || 'Thank you!'}</h3>
-        <div class="thank-you-message-body">${survey.appearance?.thankYouMessageDescription || ''}</div>
+        <h3 class="thank-you-message-header auto-text-color">${
+            survey.appearance?.thankYouMessageHeader || 'Thank you!'
+        }</h3>
+        <div class="thank-you-message-body auto-text-color">${survey.appearance?.thankYouMessageDescription || ''}</div>
         <button class="form-submit auto-text-color"><span>Close</span><span class="thank-you-message-countdown"></span></button>
         ${
             survey.appearance?.whiteLabel
@@ -550,6 +550,9 @@ export const createRatingsPopup = (
                     // @ts-ignore // TODO: Fix this, error because it doesn't know that the target is a button
                     $survey_response: parseInt(activeRatingEl?.value),
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                    $set: {
+                        [`$survey_responded/${survey.id}`]: true,
+                    },
                 })
                 window.setTimeout(() => {
                     window.dispatchEvent(new Event('PHSurveySent'))
@@ -563,7 +566,8 @@ export const createRatingsPopup = (
         })
     }
     formElement.getElementsByClassName('rating-options')[0].insertAdjacentElement('afterbegin', ratingOptionsElement)
-    const allElements = question.scale === 10 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : [1, 2, 3, 4, 5]
+    const allElements =
+        question.scale === 10 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : question.scale === 5 ? [1, 2, 3, 4, 5] : [1, 2, 3]
     for (const x of allElements) {
         const ratingEl = formElement.getElementsByClassName(`question-${questionIndex}-rating-${x}`)[0]
         ratingEl.addEventListener('click', (e) => {
@@ -605,8 +609,8 @@ export const createMultipleChoicePopup = (
         ${surveyQuestionChoices
             .map((option, idx) => {
                 const inputType = singleOrMultiSelect === 'single_choice' ? 'radio' : 'checkbox'
-                const singleOrMultiSelectString = `<div class="choice-option"><input type=${inputType} id=surveyQuestion${questionIndex}MultipleChoice${idx} name="choice" value="${option}">
-            <label class="auto-text-color" for=surveyQuestion${questionIndex}MultipleChoice${idx}>${option}</label><span class="choice-check auto-text-color">${checkSVG}</span></div>`
+                const singleOrMultiSelectString = `<div class="choice-option"><input type=${inputType} id=surveyQuestion${questionIndex}Choice${idx} name="question${questionIndex}" value="${option}">
+            <label class="auto-text-color" for=surveyQuestion${questionIndex}Choice${idx}>${option}</label><span class="choice-check auto-text-color">${checkSVG}</span></div>`
                 return singleOrMultiSelectString
             })
             .join(' ')}
@@ -644,6 +648,9 @@ export const createMultipleChoicePopup = (
                     $survey_question: survey.questions[0].question,
                     $survey_response: selectedChoices,
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                    $set: {
+                        [`$survey_responded/${survey.id}`]: true,
+                    },
                 })
                 window.setTimeout(() => {
                     window.dispatchEvent(new Event('PHSurveySent'))
@@ -704,9 +711,10 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     if (surveyPopup) {
                         addCancelListeners(posthog, surveyPopup, survey.id, survey.name)
                         if (survey.appearance?.whiteLabel) {
-                            ;(
-                                surveyPopup.getElementsByClassName('footer-branding')[0] as HTMLAnchorElement
-                            ).style.display = 'none'
+                            const allBrandingElements = surveyPopup.getElementsByClassName('footer-branding')
+                            for (const brandingElement of allBrandingElements) {
+                                ;(brandingElement as HTMLAnchorElement).style.display = 'none'
+                            }
                         }
                         shadow.appendChild(surveyPopup)
                     }
@@ -809,6 +817,9 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
                 $survey_questions: survey.questions.map((question) => question.question),
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 ...multipleQuestionResponses,
+                $set: {
+                    [`$survey_responded/${survey.id}`]: true,
+                },
             })
             window.setTimeout(() => {
                 window.dispatchEvent(new Event('PHSurveySent'))

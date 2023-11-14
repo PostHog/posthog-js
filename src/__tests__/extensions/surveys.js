@@ -1,4 +1,10 @@
-import { createShadow, callSurveys, generateSurveys, createMultipleQuestionSurvey } from '../../extensions/surveys'
+import {
+    createShadow,
+    callSurveys,
+    generateSurveys,
+    createMultipleQuestionSurvey,
+    createRatingsPopup,
+} from '../../extensions/surveys'
 
 describe('survey display logic', () => {
     beforeEach(() => {
@@ -99,6 +105,9 @@ describe('survey display logic', () => {
             $survey_question: 'How satisfied are you with our newest product?',
             $survey_response: 1,
             sessionRecordingUrl: undefined,
+            $set: {
+                '$survey_responded/testSurvey1': true,
+            },
         })
         expect(localStorage.getItem(`seenSurvey_${mockSurveys[0].id}`)).toBe('true')
 
@@ -190,5 +199,84 @@ describe('survey display logic', () => {
             uniqueIds.add(element.id)
         })
         expect(uniqueIds.size).toBe(allSelectOptions.length)
+    })
+
+    test('single choice question type radio input elements are grouped correctly by question index', () => {
+        mockSurveys = [
+            {
+                id: 'testSurvey2',
+                name: 'Test survey 2',
+                appearance: null,
+                questions: [
+                    {
+                        question: 'Which types of content would you like to see more of?',
+                        description: 'This is a question description',
+                        type: 'single_choice',
+                        choices: ['Tutorials', 'Product Updates', 'Events', 'Other'],
+                    },
+                    {
+                        question: 'Which features do you use the most?',
+                        description: 'This is a question description',
+                        type: 'single_choice',
+                        choices: ['Surveys', 'Feature flags', 'Analytics'],
+                    },
+                ],
+            },
+        ]
+        const multipleQuestionSurveyForm = createMultipleQuestionSurvey(mockPostHog, mockSurveys[0])
+        const firstQuestionRadioInputs = multipleQuestionSurveyForm
+            .querySelectorAll('.tab.question-0')[0]
+            .querySelectorAll('input[type=radio]')
+        const mappedInputNames1 = [...firstQuestionRadioInputs].map((input) => input.name)
+        expect(mappedInputNames1.every((name) => name === 'question0')).toBe(true)
+        const secondQuestionRadioInputs = multipleQuestionSurveyForm
+            .querySelectorAll('.tab.question-1')[0]
+            .querySelectorAll('input[type=radio]')
+        const mappedInputNames2 = [...secondQuestionRadioInputs].map((input) => input.name)
+        expect(mappedInputNames2.every((name) => name === 'question1')).toBe(true)
+    })
+
+    test('rating questions that are on the 10 scale start at 0', () => {
+        mockSurveys = [
+            {
+                id: 'testSurvey2',
+                name: 'Test survey 2',
+                appearance: null,
+                questions: [
+                    {
+                        question: 'How satisfied are you with our newest product?',
+                        description: 'This is a question description',
+                        type: 'rating',
+                        display: 'number',
+                        scale: 10,
+                        lower_bound_label: 'Not Satisfied',
+                        upper_bound_label: 'Very Satisfied',
+                    },
+                ],
+            },
+            {
+                id: 'testSurvey3',
+                name: 'Test survey 3',
+                appearance: null,
+                questions: [
+                    {
+                        question: 'How satisfied are you with our newest product?',
+                        description: 'This is a question description',
+                        type: 'rating',
+                        display: 'emoji',
+                        scale: 3,
+                        lower_bound_label: 'Not Satisfied',
+                        upper_bound_label: 'Very Satisfied',
+                    },
+                ],
+            },
+        ]
+        const ratingQuestion = createRatingsPopup(mockPostHog, mockSurveys[0], mockSurveys[0].questions[0], 0)
+        expect(ratingQuestion.querySelectorAll('.question-0-rating-0').length).toBe(1)
+
+        // expect the first value of the rating buttons to be 1 for other scales
+        const ratingQuestion2 = createRatingsPopup(mockPostHog, mockSurveys[1], mockSurveys[1].questions[0], 0)
+        expect(ratingQuestion2.querySelectorAll('.question-0-rating-0').length).toBe(0)
+        expect(ratingQuestion2.querySelectorAll('.question-0-rating-1').length).toBe(1)
     })
 })

@@ -14,13 +14,15 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, NetworkRequest, Properties } from '../../types'
+import { DecideResponse, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
 import Config from '../../config'
 import { _timestamp, loadScript } from '../../utils'
 
-import { _isBoolean, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
+import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
+import { window } from '../../utils/globals'
+import { buildNetworkRequestOptions } from './config'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -80,12 +82,8 @@ interface SnapshotBuffer {
 }
 
 export class SessionRecording {
-    private _linkedFlagSeen: boolean = false
     private instance: PostHog
     private _endpoint: string
-    private windowId: string | null
-    private sessionId: string | null
-    private _lastActivityTimestamp: number = Date.now()
     private flushBufferTimer?: any
     private buffer?: SnapshotBuffer
     private mutationRateLimiter?: MutationRateLimiter
@@ -94,6 +92,12 @@ export class SessionRecording {
     private receivedDecide: boolean
     private rrwebRecord: rrwebRecord | undefined
     private isIdle = false
+    private _networkPayloadCapture: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined = undefined
+
+    private _linkedFlagSeen: boolean = false
+    private _lastActivityTimestamp: number = Date.now()
+    private windowId: string | null = null
+    private sessionId: string | null = null
     private _linkedFlag: string | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
@@ -184,10 +188,6 @@ export class SessionRecording {
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
         }
 
-        const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        this.windowId = windowId
-        this.sessionId = sessionId
-
         this.buffer = this.clearBuffer()
     }
 
@@ -254,6 +254,8 @@ export class SessionRecording {
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
             })
         }
+
+        this._networkPayloadCapture = response.sessionRecording?.networkPayloadCapture
 
         const receivedSampleRate = response.sessionRecording?.sampleRate
         this._sampleRate =
@@ -383,8 +385,6 @@ export class SessionRecording {
 
         const sessionIdChanged = this.sessionId !== sessionId
         const windowIdChanged = this.windowId !== windowId
-        this.windowId = windowId
-        this.sessionId = sessionId
 
         if (
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
@@ -392,6 +392,9 @@ export class SessionRecording {
         ) {
             this._tryTakeFullSnapshot()
         }
+
+        this.windowId = windowId
+        this.sessionId = sessionId
     }
 
     private _tryTakeFullSnapshot(): boolean {
@@ -464,14 +467,26 @@ export class SessionRecording {
                 },
             })
 
+        const plugins = []
+
+        if ((window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+            plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
+        }
+        if (this._networkPayloadCapture) {
+            if (_isFunction((window as any).getRecordNetworkPlugin)) {
+                plugins.push(
+                    (window as any).getRecordNetworkPlugin(
+                        buildNetworkRequestOptions(this.instance.config, this._networkPayloadCapture)
+                    )
+                )
+            }
+        }
+
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
-            plugins:
-                (window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled
-                    ? [(window as any).rrwebConsoleRecord.getRecordConsolePlugin()]
-                    : [],
+            plugins,
             ...sessionRecordingOptions,
         })
 
@@ -523,18 +538,18 @@ export class SessionRecording {
         const event = truncateLargeConsoleLogs(throttledEvent)
         const size = JSON.stringify(event).length
 
-        const properties = {
-            $snapshot_bytes: size,
-            $snapshot_data: event,
-            $session_id: this.sessionId,
-            $window_id: this.windowId,
-        }
-
         this._updateWindowAndSessionIds(event)
 
         if (this.isIdle) {
             // When in an idle state we keep recording, but don't capture the events
             return
+        }
+
+        const properties = {
+            $snapshot_bytes: size,
+            $snapshot_data: event,
+            $session_id: this.sessionId,
+            $window_id: this.windowId,
         }
 
         if (this.status !== 'disabled') {
@@ -552,6 +567,8 @@ export class SessionRecording {
                 url,
             }
 
+            // TODO we should deprecate this and use the same function for this masking and the rrweb/network plugin
+            // TODO or deprecate this and provide a new clearer name so this would be `maskURLPerformanceFn` or similar
             networkRequest = userSessionRecordingOptions.maskNetworkRequestFn(networkRequest)
 
             return networkRequest?.url
@@ -585,8 +602,11 @@ export class SessionRecording {
 
         const minimumDuration = this._minimumDuration
         const sessionDuration = this.sessionDuration
+        // if we have old data in the buffer but the session has rotated then the
+        // session duration might be negative, in that case we want to flush the buffer
+        const isPositiveSessionDuration = _isNumber(sessionDuration) && sessionDuration >= 0
         const isBelowMinimumDuration =
-            _isNumber(minimumDuration) && _isNumber(sessionDuration) && sessionDuration < minimumDuration
+            _isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
         if (this.status === 'buffering' || isBelowMinimumDuration) {
             this.flushBufferTimer = setTimeout(() => {
@@ -614,9 +634,15 @@ export class SessionRecording {
         if (
             !this.buffer ||
             this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            this.buffer.sessionId !== this.sessionId
+            (!!this.buffer.sessionId && this.buffer.sessionId !== this.sessionId)
         ) {
             this.buffer = this._flushBuffer()
+        }
+
+        if (_isNull(this.buffer.sessionId) && !_isNull(this.sessionId)) {
+            // session id starts null but has now been assigned, update the buffer
+            this.buffer.sessionId = this.sessionId
+            this.buffer.windowId = this.windowId
         }
 
         this.buffer.size += properties.$snapshot_bytes
