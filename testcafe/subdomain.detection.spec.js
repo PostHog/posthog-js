@@ -1,7 +1,21 @@
-import { initPosthog } from './helpers'
+import { captureLogger, initPosthog, staticFilesMock } from './helpers'
+import { t } from 'testcafe'
 
 // eslint-disable-next-line no-undef
-fixture`Subdomain detection`.page('http://localhost:8000/playground/cypress-full/index.html')
+fixture`Subdomain detection`
+    .page('http://localhost:8000/playground/cypress-full/index.html')
+    .requestHooks(captureLogger, staticFilesMock)
+    .afterEach(async () => {
+        const browserLogs = await t.getBrowserConsoleMessages()
+        Object.keys(browserLogs).forEach((level) => {
+            browserLogs[level].forEach((line) => {
+                // eslint-disable-next-line no-console
+                console.log(`Browser ${level}:`, line)
+            })
+        })
+
+        // console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
+    })
 
 const testCases = [
     {

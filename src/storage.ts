@@ -41,6 +41,9 @@ function seekFirstNonPublicSubDomain(hostname: string): string {
     }
     return ''
 }
+// TRICKY: this is important enough functionality that we need to test it
+// but, it relies on browser behavior, so we set it on window here
+// so that we can access it in browser-based tests
 ;(window as any).POSTHOG_INTERNAL_seekFirstNonPublicSubDomain = seekFirstNonPublicSubDomain
 
 export function chooseCookieDomain(hostname: string, cross_subdomain: boolean | undefined): string {
