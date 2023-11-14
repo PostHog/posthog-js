@@ -20,9 +20,9 @@ const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
  *
  * inspired by https://github.com/AngusFu/browser-root-domain
  */
-function seekFirstNonPublicSubDomain(hostname: string): string {
-    // eslint-disable-next-line no-console
-    console.log('seekFirstNonPublicSubDomain:', hostname)
+export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = document): string {
+    if (['localhost', '127.0.0.1'].includes(hostname)) return ''
+
     const list = hostname.split('.')
     let len = list.length
     const key = 'dmn_chk_' + +new Date()
@@ -33,11 +33,11 @@ function seekFirstNonPublicSubDomain(hostname: string): string {
         const candidateCookieValue = key + '=1;domain=.' + candidate
 
         // try to set cookie
-        document.cookie = candidateCookieValue
+        cookieJar.cookie = candidateCookieValue
 
-        if (R.test(document.cookie)) {
+        if (R.test(cookieJar.cookie)) {
             // the cookie was accepted by the browser, remove the test cookie
-            document.cookie = candidateCookieValue + ';expires=' + Y1970
+            cookieJar.cookie = candidateCookieValue + ';expires=' + Y1970
             return candidate
         }
     }

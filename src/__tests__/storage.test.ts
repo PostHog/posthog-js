@@ -1,7 +1,45 @@
 import { window } from '../../src/utils/globals'
-import { resetSessionStorageSupported, sessionStore } from '../storage'
+import { resetSessionStorageSupported, seekFirstNonPublicSubDomain, sessionStore } from '../storage'
 
 describe('sessionStore', () => {
+    describe('seekFirstNonPublicSubDomain', () => {
+        const mockDocumentDotCookie = {
+            value_: '',
+
+            get cookie() {
+                return this.value_
+            },
+
+            set cookie(value) {
+                //needs to refuse known public suffixes, like a browser would
+                // value arrives like dmn_chk_1699961248575=1;domain=.uk
+                const domain = value.split('domain=')
+                if (['.uk', '.com', '.au', '.com.au', '.co.uk'].includes(domain[1])) return
+                this.value_ += value + ';'
+            },
+        }
+        test.each([
+            {
+                candidate: 'www.google.co.uk',
+                expected: 'google.co.uk',
+            },
+            {
+                candidate: 'www.google.com',
+                expected: 'google.com',
+            },
+            {
+                candidate: 'www.google.com.au',
+                expected: 'google.com.au',
+            },
+            {
+                candidate: 'localhost',
+                expected: '',
+            },
+        ])(`%s subdomain check`, ({ candidate, expected }) => {
+            expect(seekFirstNonPublicSubDomain(candidate, mockDocumentDotCookie)).toEqual(expected)
+        })
+    })
+
     it('stores objects as strings', () => {
         sessionStore.set('foo', { bar: 'baz' })
         expect(sessionStore.get('foo')).toEqual('{"bar":"baz"}')
