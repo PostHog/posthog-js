@@ -31,8 +31,24 @@ export const defaultNetworkOptions: NetworkRecordOptions = {
     recordInitialRequests: false,
 }
 
+const HEADER_DENYLIST = [
+    'Authorization',
+    'X-FORWARDED-FOR',
+    'AUTHORIZATION',
+    'COOKIE',
+    'SET-COOKIE',
+    'X-API-KEY',
+    'X-REAL-IP',
+    'REMOTE-ADDR',
+    'FORWARDED',
+    'PROXY-AUTHORIZATION',
+    'X-CSRF-TOKEN',
+    'X-CSRFTOKEN',
+    'X-XSRF-TOKEN',
+]
+
 const removeAuthorizationHeader = (data: NetworkRequest): NetworkRequest => {
-    delete data.requestHeaders?.['Authorization']
+    HEADER_DENYLIST.forEach((header) => delete data.requestHeaders?.[header])
     return data
 }
 
