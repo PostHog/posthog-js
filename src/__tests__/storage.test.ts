@@ -1,3 +1,4 @@
+import { window } from '../../src/utils/globals'
 import { resetSessionStorageSupported, sessionStore } from '../storage'
 
 describe('sessionStore', () => {
@@ -33,10 +34,10 @@ describe('sessionStore', () => {
             resetSessionStorageSupported()
         })
         it('returns false if sessionStorage is undefined', () => {
-            const sessionStorage = global.window.sessionStorage
-            delete global.window.sessionStorage
+            const sessionStorage = (window as any).sessionStorage
+            delete (window as any).sessionStorage
             expect(sessionStore.is_supported()).toEqual(false)
-            global.window.sessionStorage = sessionStorage
+            ;(window as any).sessionStorage = sessionStorage
         })
         it('returns true by default', () => {
             expect(sessionStore.is_supported()).toEqual(true)

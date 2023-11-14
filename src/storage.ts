@@ -5,7 +5,59 @@ import { DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constan
 import { _isNull, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 
-const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
+const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
+
+let currentSubdomain: string | null = null
+
+/**
+ * Browsers don't offer a way to check if something is a public suffix
+ * e.g. `.com.au`, `.io`, `.org.uk`
+ *
+ * But they do reject cookies set on public suffixes
+ * Setting a cookie on `.co.uk` would mean it was sent for every `.co.uk` site visited
+ *
+ * So, we can use this to check if a domain is a public suffix
+ * by trying to set a cookie on a subdomain of the provided hostname
+ * until the browser accepts it
+ *
+ * inspired by https://github.com/AngusFu/browser-root-domain
+ */
+function seekFirstNonPublicSubDomain(hostname: string): string {
+    if (currentSubdomain) {
+        // the browser can't navigate between subdomains and keep in-memory variables
+        // so, if we've previously found a subdomain, return it
+        return currentSubdomain
+    }
+    const list = hostname.split('.')
+    let len = list.length
+    const key = 'dmn_chk_' + +new Date()
+    const R = new RegExp('(^|;)\\s*' + key + '=1')
+
+    while (len--) {
+        const candidate = list.slice(len).join('.')
+        const candidateCookieValue = key + '=1;domain=.' + candidate
+
+        // try to set cookie
+        document.cookie = candidateCookieValue
+
+        if (R.test(document.cookie)) {
+            // the cookie was accepted by the browser, remove the test cookie
+            document.cookie = candidateCookieValue + ';expires=' + Y1970
+            currentSubdomain = candidate
+            return candidate
+        }
+    }
+    return ''
+}
+
+export function chooseCookieDomain(hostname: string, cross_subdomain: boolean | undefined): string {
+    if (cross_subdomain) {
+        // NOTE: Could we use this for cross domain tracking?
+        const matchedSubDomain = seekFirstNonPublicSubDomain(hostname)
+        return matchedSubDomain ? '; domain=.' + matchedSubDomain : ''
+    }
+    return ''
+}
 
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore: PersistentStore = {
@@ -44,17 +96,10 @@ export const cookieStore: PersistentStore = {
 
     set: function (name, value, days, cross_subdomain, is_secure) {
         try {
-            let cdomain = '',
-                expires = '',
+            let expires = '',
                 secure = ''
 
-            if (cross_subdomain) {
-                // NOTE: Could we use this for cross domain tracking?
-                const matches = document.location.hostname.match(DOMAIN_MATCH_REGEX),
-                    domain = matches ? matches[0] : ''
-
-                cdomain = domain ? '; domain=.' + domain : ''
-            }
+            const cdomain = chooseCookieDomain(document.location.hostname, cross_subdomain)
 
             if (days) {
                 const date = new Date()
