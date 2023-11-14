@@ -1,5 +1,5 @@
 import { captureLogger, initPosthog, staticFilesMock } from './helpers'
-import { t, ClientFunction } from 'testcafe'
+import { t } from 'testcafe'
 
 // eslint-disable-next-line no-undef
 fixture`Subdomain detection`
@@ -36,13 +36,10 @@ const testCases = [
     },
 ]
 
-const getSubject = ClientFunction(() => {
-    return window.POSTHOG_INTERNAL_seekFirstNonPublicSubDomain
-})
-
 testCases.forEach(({ location, expected }) => {
     test(`location ${location} is detected as having subdomain ${expected}`, async (t) => {
         await initPosthog()
-        await t.expect(getSubject()(location)).eql(expected)
+        const result = await t.eval(() => window.POSTHOG_INTERNAL_seekFirstNonPublicSubDomain(location))
+        await t.expect(result).eql(expected)
     })
 })
