@@ -1119,7 +1119,8 @@ describe('SessionRecording', () => {
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
 
             // if we have some data in the buffer and the buffer has a session id but then the session id changes
-            // then the session duration will be negative and we will never flush the buffer
+            // then the session duration will be negative, and we will never flush the buffer
+            // this setup isn't quite that but does simulate the behaviour closely enough
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp - 1000 }))
 
             expect(sessionRecording['sessionDuration']).toBe(-1000)
