@@ -1108,6 +1108,31 @@ describe('SessionRecording', () => {
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
+        it('does flush if session duration is negative', () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording['status']).toBe('active')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+
+            // if we have some data in the buffer and the buffer has a session id but then the session id changes
+            // then the session duration will be negative, and we will never flush the buffer
+            // this setup isn't quite that but does simulate the behaviour closely enough
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp - 1000 }))
+
+            expect(sessionRecording['sessionDuration']).toBe(-1000)
+            expect(sessionRecording['_minimumDuration']).toBe(1500)
+
+            expect(sessionRecording['buffer']?.data.length).toBe(1)
+            // call the private method to avoid waiting for the timer
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalled()
+        })
+
         it('does not stay buffering after the minimum duration', () => {
             sessionRecording.afterDecideResponse(
                 makeDecideResponse({
