@@ -75,6 +75,20 @@ describe('config', () => {
                     'content-type': 'edited',
                 })
             })
+
+            it('case insensitively removes headers on the deny list', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    url: 'something',
+                    requestHeaders: {
+                        AuThOrIzAtIoN: 'Bearer 123',
+                        'content-type': 'application/json',
+                    },
+                })
+                expect(cleaned?.requestHeaders).toEqual({
+                    'content-type': 'application/json',
+                })
+            })
         })
     })
 })
