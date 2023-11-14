@@ -7,8 +7,6 @@ import { logger } from './utils/logger'
 
 const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
 
-let currentSubdomain: string | null = null
-
 /**
  * Browsers don't offer a way to check if something is a public suffix
  * e.g. `.com.au`, `.io`, `.org.uk`
@@ -23,11 +21,6 @@ let currentSubdomain: string | null = null
  * inspired by https://github.com/AngusFu/browser-root-domain
  */
 function seekFirstNonPublicSubDomain(hostname: string): string {
-    if (currentSubdomain) {
-        // the browser can't navigate between subdomains and keep in-memory variables
-        // so, if we've previously found a subdomain, return it
-        return currentSubdomain
-    }
     const list = hostname.split('.')
     let len = list.length
     const key = 'dmn_chk_' + +new Date()
@@ -43,12 +36,12 @@ function seekFirstNonPublicSubDomain(hostname: string): string {
         if (R.test(document.cookie)) {
             // the cookie was accepted by the browser, remove the test cookie
             document.cookie = candidateCookieValue + ';expires=' + Y1970
-            currentSubdomain = candidate
             return candidate
         }
     }
     return ''
 }
+;(window as any).POSTHOG_INTERNAL_seekFirstNonPublicSubDomain = seekFirstNonPublicSubDomain
 
 export function chooseCookieDomain(hostname: string, cross_subdomain: boolean | undefined): string {
     if (cross_subdomain) {

@@ -1,6 +1,7 @@
 import { t } from 'testcafe'
 import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock } from './helpers'
 
+// eslint-disable-next-line no-undef
 fixture('posthog.js capture')
     .page('http://localhost:8000/playground/cypress-full/index.html')
     .requestHooks(captureLogger, staticFilesMock)
@@ -8,6 +9,7 @@ fixture('posthog.js capture')
         const browserLogs = await t.getBrowserConsoleMessages()
         Object.keys(browserLogs).forEach((level) => {
             browserLogs[level].forEach((line) => {
+                // eslint-disable-next-line no-console
                 console.log(`Browser ${level}:`, line)
             })
         })
@@ -16,7 +18,7 @@ fixture('posthog.js capture')
     })
 
 test('Custom events work and are accessible via /api/event', async (t) => {
-    const testSessionId = await initPosthog()
+    const { testSessionId } = await initPosthog()
     await t
         .wait(5000)
         .click('[data-cy-custom-event-button]')
@@ -36,7 +38,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
 })
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
-    const testSessionId = await initPosthog()
+    const { testSessionId } = await initPosthog()
     await t
         .wait(5000)
         .click('[data-cy-link-mask-text]')
@@ -74,7 +76,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
 })
 
 test('Config options change autocapture behavior accordingly', async (t) => {
-    const testSessionId = await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
+    const { testSessionId } = await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
 
     await t
         .wait(5000)
