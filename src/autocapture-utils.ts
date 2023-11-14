@@ -5,7 +5,7 @@
  */
 
 import { AutocaptureConfig, Properties } from 'types'
-import { _each, _includes, _trim } from './utils'
+import { _each, _entries, _includes, _trim } from './utils'
 
 import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
@@ -389,7 +389,7 @@ function elementsToString(elements: PHElement[]): string {
                 el_string += `.${single_class.replace(/"/g, '')}`
             }
         }
-        let attributes: Record<string, any> = {
+        const attributes: Record<string, any> = {
             ...(element.text ? { text: element.text } : {}),
             'nth-child': element.nth_child ?? 0,
             'nth-of-type': element.nth_of_type ?? 0,
@@ -397,13 +397,14 @@ function elementsToString(elements: PHElement[]): string {
             ...(element.attr_id ? { attr_id: element.attr_id } : {}),
             ...element.attributes,
         }
-        attributes = Object.fromEntries(
-            Object.entries(attributes)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([key, value]) => [escapeQuotes(key.toString()), escapeQuotes(value.toString())])
-        )
+        const sortedAttributes: Record<string, any> = {}
+        _entries(attributes)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .forEach(
+                ([key, value]) => (sortedAttributes[escapeQuotes(key.toString())] = escapeQuotes(value.toString()))
+            )
         el_string += ':'
-        el_string += Object.entries(attributes)
+        el_string += _entries(attributes)
             .map(([key, value]) => `${key}="${value}"`)
             .join('')
         return el_string
@@ -412,16 +413,22 @@ function elementsToString(elements: PHElement[]): string {
 }
 
 function extractElements(elements: Properties[]): PHElement[] {
-    return elements.map((el) => ({
-        text: el['$el_text']?.slice(0, 400),
-        tag_name: el['tag_name'],
-        href: el['attr__href']?.slice(0, 2048),
-        attr_class: extractAttrClass(el),
-        attr_id: el['attr__id'],
-        nth_child: el['nth_child'],
-        nth_of_type: el['nth_of_type'],
-        attributes: Object.fromEntries(Object.entries(el).filter(([key]) => key.startsWith('attr__'))),
-    }))
+    return elements.map((el) => {
+        const response = {
+            text: el['$el_text']?.slice(0, 400),
+            tag_name: el['tag_name'],
+            href: el['attr__href']?.slice(0, 2048),
+            attr_class: extractAttrClass(el),
+            attr_id: el['attr__id'],
+            nth_child: el['nth_child'],
+            nth_of_type: el['nth_of_type'],
+            attributes: {} as { [id: string]: any },
+        }
+        _entries(el)
+            .filter(([key]) => key.startsWith('attr__'))
+            .forEach(([key, value]) => (response.attributes[key] = value))
+        return response
+    })
 }
 
 function extractAttrClass(el: Properties): PHElement['attr_class'] {
