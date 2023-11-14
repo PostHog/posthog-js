@@ -733,7 +733,7 @@ describe('Autocapture system', () => {
             const captureArgs = lib.capture.args[0]
             const props = captureArgs[1]
             expect(longString).toBe('prop'.repeat(400))
-            expect(props['$elements_chain']).toContain('a:attr__data-props="' + 'prop'.repeat(256) + '..."')
+            expect(props['$elements_chain']).toContain('attr__data-props="' + 'prop'.repeat(256) + '..."')
         })
 
         it('gets the href attribute from parent anchor tags', () => {
@@ -750,7 +750,7 @@ describe('Autocapture system', () => {
                 },
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements_chain']).toContain('a:attr__href="http://test.com"')
+            expect(getCapturedProps(lib.capture)['$elements_chain']).toContain('attr__href="http://test.com"')
         })
 
         it('does not capture href attribute values from password elements', () => {

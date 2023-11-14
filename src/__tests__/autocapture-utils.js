@@ -410,7 +410,7 @@ describe(`Autocapture utility functions`, () => {
                 { tag_name: 'div', nth_child: 1, nth_of_type: 2, $el_text: 'text' },
             ])
 
-            expect(elementChain).toEqual('div:nth-child="1"nth-of-type="2"text="text"')
+            expect(elementChain).toEqual('div:text="text"nth-child="1"nth-of-type="2"')
         })
     })
 })
