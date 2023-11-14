@@ -42,9 +42,8 @@ testCases.forEach(({ location, expected }) => {
         const fn = await t.eval(() => window.POSTHOG_INTERNAL_seekFirstNonPublicSubDomain)
 
         // a little probing
-        expect(fn).toBeDefined()
-        expect(typeof fn).toBe('function')
-        expect(typeof location.split).toBe('function')
+        t.expect(fn).typeOf('function')
+        t.expect(location.split).typeOf('function')
 
         // the real test
         await t.expect(fn(location)).eql(expected)
