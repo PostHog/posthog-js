@@ -21,6 +21,8 @@ const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
  * inspired by https://github.com/AngusFu/browser-root-domain
  */
 function seekFirstNonPublicSubDomain(hostname: string): string {
+    // eslint-disable-next-line no-console
+    console.log('seekFirstNonPublicSubDomain:', hostname)
     const list = hostname.split('.')
     let len = list.length
     const key = 'dmn_chk_' + +new Date()
