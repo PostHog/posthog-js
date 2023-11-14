@@ -1,3 +1,9 @@
+## 1.89.2 - 2023-11-14
+
+- fix: a little session buffering logic (#890)
+- fix: make header comparison case insensitive (#891)
+- fix: extend header denylist (#889)
+
 ## 1.89.1 - 2023-11-13
 
 - fix(surveys): fix emoji rating scale bug (#887)
