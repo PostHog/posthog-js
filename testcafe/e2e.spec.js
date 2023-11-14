@@ -18,7 +18,7 @@ fixture('posthog.js capture')
     })
 
 test('Custom events work and are accessible via /api/event', async (t) => {
-    const { testSessionId } = await initPosthog()
+    const testSessionId = await initPosthog()
     await t
         .wait(5000)
         .click('[data-cy-custom-event-button]')
@@ -38,7 +38,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
 })
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
-    const { testSessionId } = await initPosthog()
+    const testSessionId = await initPosthog()
     await t
         .wait(5000)
         .click('[data-cy-link-mask-text]')
@@ -76,7 +76,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
 })
 
 test('Config options change autocapture behavior accordingly', async (t) => {
-    const { testSessionId } = await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
+    const testSessionId = await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
 
     await t
         .wait(5000)

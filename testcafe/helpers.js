@@ -41,14 +41,14 @@ export const staticFilesMock = RequestMock()
 
 export const initPosthog = (config) => {
     return ClientFunction((configParams = {}) => {
-        var testSessionId = Math.round(Math.random() * 10000000000).toString()
+        const testSessionId = Math.round(Math.random() * 10000000000).toString()
         configParams.debug = true
         window.posthog.init(configParams.api_key, configParams)
         window.posthog.register({
             testSessionId,
         })
 
-        return { testSessionId, seekFirstNonPublicSubDomainFn: window.POSTHOG_INTERNAL_seekFirstNonPublicSubDomain }
+        return testSessionId
     })({
         ...config,
         api_host: POSTHOG_API_HOST,
