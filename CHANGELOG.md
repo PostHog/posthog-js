@@ -1,3 +1,7 @@
+## 1.90.1 - 2023-11-15
+
+- fix: seek subdomain correctly (#888)
+
 ## 1.90.0 - 2023-11-15
 
 - fix(surveys): prioritize question button text field and thank you countdown is not automatic (#893)
