@@ -1,5 +1,5 @@
 import { RequestQueueScaffold } from './base-request-queue'
-import { encodePostData, xhr } from './send-request'
+import { encodePostData, request } from './send-request'
 import { QueuedRequestData, RetryQueueElement } from './types'
 import { RateLimiter } from './rate-limiter'
 
@@ -130,7 +130,7 @@ export class RetryQueue extends RequestQueueScaffold {
             return
         }
 
-        xhr({
+        request({
             url,
             data: data || {},
             options: options || {},

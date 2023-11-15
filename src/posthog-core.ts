@@ -22,7 +22,7 @@ import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } f
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { compressData, decideCompression } from './compression'
-import { addParamsToURL, encodePostData, xhr } from './send-request'
+import { addParamsToURL, encodePostData, request } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import {
@@ -698,7 +698,7 @@ export class PostHog {
             }
         } else if (USE_XHR || !document) {
             try {
-                xhr({
+                request({
                     url: url,
                     data: data,
                     headers: this.config.xhr_headers,

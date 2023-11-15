@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { addParamsToURL, encodePostData, xhr } from '../send-request'
+import { addParamsToURL, encodePostData, request } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 import { Compression, PostData, XHROptions, XHRParams } from '../types'
 
@@ -55,7 +55,7 @@ describe('send-request', () => {
 
         test('it adds the retry count to the URL', () => {
             const retryCount = Math.floor(Math.random() * 100) + 1 // make sure it is never 0
-            xhr(
+            request(
                 xhrParams({
                     retriesPerformedSoFar: retryCount,
                     url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
@@ -69,7 +69,7 @@ describe('send-request', () => {
         })
 
         test('does not add retry count when it is 0', () => {
-            xhr(
+            request(
                 xhrParams({
                     retriesPerformedSoFar: 0,
                     url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
@@ -86,7 +86,7 @@ describe('send-request', () => {
             it('does not error if the configured onXHRError is not a function', () => {
                 onXHRError = 'not a function' as unknown as XHRParams['onXHRError']
                 expect(() => {
-                    xhr(xhrParams())
+                    request(xhrParams())
                     mockXHR.onreadystatechange?.({} as Event)
                 }).not.toThrow()
             })
@@ -97,7 +97,7 @@ describe('send-request', () => {
                 onXHRError = (req) => {
                     requestFromError = req
                 }
-                xhr(xhrParams())
+                request(xhrParams())
                 mockXHR.onreadystatechange?.({} as Event)
                 expect(requestFromError).toHaveProperty('status', 502)
             })
@@ -109,7 +109,7 @@ describe('send-request', () => {
                 // @ts-ignore
                 // noinspection JSConstantReassignment
                 mockXHR.status = Math.floor(Math.random() * 100)
-                xhr(xhrParams())
+                request(xhrParams())
                 mockXHR.onreadystatechange?.({} as Event)
                 expect(checkForLimiting).toHaveBeenCalledWith(mockXHR)
             })

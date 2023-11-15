@@ -201,7 +201,7 @@ describe('RetryQueue', () => {
     })
 
     it('when you flush the queue onXHRError is passed to xhr', () => {
-        const xhrSpy = jest.spyOn(SendRequest, 'xhr')
+        const xhrSpy = jest.spyOn(SendRequest, 'request')
         enqueueRequests()
         given.retryQueue.flush()
         fastForwardTimeAndRunTimer()

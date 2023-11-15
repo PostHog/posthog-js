@@ -5,6 +5,7 @@ import { _HTTPBuildQuery } from './utils/request-utils'
 
 import { _isArray, _isFunction, _isNumber, _isUint8Array, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window } from './utils/globals'
 
 export const addParamsToURL = (
     url: string,
@@ -61,7 +62,56 @@ export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHR
     return body_data
 }
 
-export const xhr = ({
+export const request = (params: XHRParams) => {
+    if (window?.fetch) {
+        const body = encodePostData(params.data, params.options)
+
+        const headers = new Headers()
+        _each(headers, function (headerValue, headerName) {
+            headers.append(headerName, headerValue)
+        })
+
+        if (params.options.method === 'POST' && !params.options.blob) {
+            headers.append('Content-Type', 'application/x-www-form-urlencoded')
+        }
+
+        window
+            .fetch(params.url, {
+                method: params.options?.method || 'GET',
+                headers: params.headers as Headers,
+                keepalive: true,
+                body,
+            })
+            .then((response) => {
+                // TODO: Implement on response handler
+                if (response.status === 200) {
+                    response.json().then((json) => {
+                        params.callback?.(json)
+                    })
+                } else {
+                    // don't retry errors between 400 and 500 inclusive
+                    if (response.status < 400 || response.status > 500) {
+                        params.retryQueue.enqueue({
+                            ...params,
+                            headers,
+                            retriesPerformedSoFar: (params.retriesPerformedSoFar || 0) + 1,
+                        })
+                    }
+                    params.callback?.({ status: 0 })
+                }
+            })
+            .catch((error) => {
+                logger.error(error)
+                params.callback?.({ status: 0 })
+            })
+
+        return
+    }
+
+    return xhr(params)
+}
+
+const xhr = ({
     url,
     data,
     headers,
