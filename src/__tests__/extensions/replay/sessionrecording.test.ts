@@ -19,6 +19,7 @@ import {
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
+import { assignableWindow } from '../../../utils/globals'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -52,8 +53,8 @@ describe('SessionRecording', () => {
     let onFeatureFlagsCallback: ((flags: string[]) => void) | null
 
     beforeEach(() => {
-        ;(window as any).rrwebRecord = jest.fn()
-        ;(window as any).rrwebConsoleRecord = {
+        assignableWindow.rrwebRecord = jest.fn()
+        assignableWindow.rrwebConsoleRecord = {
             getRecordConsolePlugin: jest.fn(),
         }
 
@@ -193,7 +194,7 @@ describe('SessionRecording', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording, 'startRecordingIfEnabled')
             ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
-            ;(window as any).rrwebRecord = jest.fn(({ emit }) => {
+            assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
                 _emit = emit
                 return () => {}
             })
@@ -277,11 +278,11 @@ describe('SessionRecording', () => {
     describe('recording', () => {
         beforeEach(() => {
             const mockFullSnapshot = jest.fn()
-            ;(window as any).rrwebRecord = jest.fn(({ emit }) => {
+            assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
                 _emit = emit
                 return () => {}
             })
-            ;(window as any).rrwebRecord.takeFullSnapshot = mockFullSnapshot
+            assignableWindow.rrwebRecord.takeFullSnapshot = mockFullSnapshot
             ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
         })
 
@@ -356,7 +357,7 @@ describe('SessionRecording', () => {
                         sessionRecording: { endpoint: '/s/', sampleRate: '0.50' },
                     })
                 )
-                const emitValues = []
+                const emitValues: string[] = []
                 let lastSessionId = sessionRecording['sessionId']
 
                 for (let i = 0; i < 100; i++) {
@@ -368,7 +369,7 @@ describe('SessionRecording', () => {
                     expect(sessionRecording['sessionId']).not.toBe(lastSessionId)
                     lastSessionId = sessionRecording['sessionId']
 
-                    emitValues.push(sessionRecording['status'])
+                    emitValues.push(sessionRecording.status)
                 }
 
                 // the random number generator won't always be exactly 0.5, but it should be close
@@ -384,7 +385,7 @@ describe('SessionRecording', () => {
 
             // maskAllInputs should change from default
             // someUnregisteredProp should not be present
-            expect((window as any).rrwebRecord).toHaveBeenCalledWith({
+            expect(assignableWindow.rrwebRecord).toHaveBeenCalledWith({
                 emit: expect.anything(),
                 maskAllInputs: false,
                 blockClass: 'ph-no-capture',
@@ -680,7 +681,7 @@ describe('SessionRecording', () => {
 
                 sessionRecording.startRecordingIfEnabled()
 
-                expect((window as any).rrwebConsoleRecord.getRecordConsolePlugin).not.toHaveBeenCalled()
+                expect(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin).not.toHaveBeenCalled()
             })
 
             it('if enabled, plugin is used', () => {
@@ -688,7 +689,7 @@ describe('SessionRecording', () => {
 
                 sessionRecording.startRecordingIfEnabled()
 
-                expect((window as any).rrwebConsoleRecord.getRecordConsolePlugin).toHaveBeenCalled()
+                expect(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin).toHaveBeenCalled()
             })
         })
 
@@ -710,32 +711,32 @@ describe('SessionRecording', () => {
                 sessionIdGeneratorMock.mockImplementation(() => 'newSessionId')
                 windowIdGeneratorMock.mockImplementation(() => 'newWindowId')
                 _emit(createIncrementalSnapshot())
-                expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
+                expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('sends a full snapshot if there is a new window id and the event is not type FullSnapshot or Meta', () => {
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
                 windowIdGeneratorMock.mockImplementation(() => 'newWindowId')
                 _emit(createIncrementalSnapshot())
-                expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
+                expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is a new session/window id and the event is type FullSnapshot or Meta', () => {
                 sessionIdGeneratorMock.mockImplementation(() => 'newSessionId')
                 windowIdGeneratorMock.mockImplementation(() => 'newWindowId')
                 _emit(createIncrementalSnapshot({ type: META_EVENT_TYPE }))
-                expect((window as any).rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
+                expect(assignableWindow.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
             it('does not send a full snapshot if there is not a new session or window id', () => {
-                ;(window as any).rrwebRecord.takeFullSnapshot.mockClear()
+                assignableWindow.rrwebRecord.takeFullSnapshot.mockClear()
 
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
                 windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
                 sessionManager.resetSessionId()
 
                 _emit(createIncrementalSnapshot())
-                expect((window as any).rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
+                expect(assignableWindow.rrwebRecord.takeFullSnapshot).not.toHaveBeenCalled()
             })
         })
 
@@ -843,7 +844,7 @@ describe('SessionRecording', () => {
 
                 it('takes a full snapshot for the first _emit', () => {
                     emitAtDateTime(startingDate)
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
                 })
 
                 it('does not take a full snapshot for the second _emit', () => {
@@ -857,7 +858,7 @@ describe('SessionRecording', () => {
                             startingDate.getMinutes() + 1
                         )
                     )
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
                 })
 
                 it('does not change session id for a second _emit', () => {
@@ -899,7 +900,7 @@ describe('SessionRecording', () => {
                             startingDate.getMinutes() + 2
                         )
                     )
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
                 })
 
                 it('sends a full snapshot if the session is rotated because session has been inactive for 30 minutes', () => {
@@ -925,7 +926,7 @@ describe('SessionRecording', () => {
                     emitAtDateTime(inactivityThresholdLater)
 
                     expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
                 })
 
                 it('sends a full snapshot if the session is rotated because max time has passed', () => {
@@ -950,7 +951,7 @@ describe('SessionRecording', () => {
                     emitAtDateTime(moreThanADayLater)
 
                     expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
                 })
             })
 
@@ -960,7 +961,7 @@ describe('SessionRecording', () => {
                     const lastActivityTimestamp = sessionRecording['_lastActivityTimestamp']
                     expect(lastActivityTimestamp).toBeGreaterThan(0)
 
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
 
                     _emit({
                         event: 123,
@@ -973,7 +974,7 @@ describe('SessionRecording', () => {
                     expect(sessionRecording['isIdle']).toEqual(false)
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
 
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
                     _emit({
                         event: 123,
@@ -985,7 +986,7 @@ describe('SessionRecording', () => {
                     })
                     expect(sessionRecording['isIdle']).toEqual(false)
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
                     // this triggers idle state and isn't a user interaction so does not take a full snapshot
                     _emit({
@@ -998,7 +999,7 @@ describe('SessionRecording', () => {
                     })
                     expect(sessionRecording['isIdle']).toEqual(true)
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
                     // this triggers idle state _and_ is a user interaction, so we take a full snapshot
                     _emit({
@@ -1013,7 +1014,7 @@ describe('SessionRecording', () => {
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(
                         lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
                     )
-                    expect((window as any).rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
                 })
             })
         })
@@ -1046,7 +1047,7 @@ describe('SessionRecording', () => {
 
     describe('buffering minimum duration', () => {
         beforeEach(() => {
-            ;(window as any).rrwebRecord = jest.fn(({ emit }) => {
+            assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
                 _emit = emit
                 return () => {}
             })

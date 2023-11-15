@@ -1,8 +1,6 @@
 import { _info } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
 
-jest.mock('../../utils/globals')
-
 describe(`event-utils`, () => {
     describe('properties', () => {
         it('should have $host and $pathname in properties', () => {

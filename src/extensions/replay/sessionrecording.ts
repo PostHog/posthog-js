@@ -21,7 +21,7 @@ import { _timestamp, loadScript } from '../../utils'
 
 import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { window } from '../../utils/globals'
+import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 
 const BASE_ENDPOINT = '/s/'
@@ -469,13 +469,13 @@ export class SessionRecording {
 
         const plugins = []
 
-        if ((window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
-            plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
+        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
         }
         if (this._networkPayloadCapture) {
-            if (_isFunction((window as any).getRecordNetworkPlugin)) {
+            if (_isFunction(assignableWindow.getRecordNetworkPlugin)) {
                 plugins.push(
-                    (window as any).getRecordNetworkPlugin(
+                    assignableWindow.getRecordNetworkPlugin(
                         buildNetworkRequestOptions(this.instance.config, this._networkPayloadCapture)
                     )
                 )
