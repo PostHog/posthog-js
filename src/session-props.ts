@@ -27,9 +27,9 @@ interface StoredSessionSourceProps {
     props: SessionSourceProps
 }
 
-export const generateSessionSourceParams = (): SessionSourceProps => {
+const generateSessionSourceParams = (): SessionSourceProps => {
     return {
-        initialPathName: window.location.pathname,
+        initialPathName: window?.location.pathname || '',
         referringDomain: _info.referringDomain(),
         ..._info.campaignParams(),
     }
@@ -38,12 +38,12 @@ export const generateSessionSourceParams = (): SessionSourceProps => {
 export class SessionPropsManager {
     private readonly _sessionIdManager: SessionIdManager
     private readonly _persistence: PostHogPersistence
-    private readonly _sessionSourceParamGenerator: typeof generateSessionSourceParams
+    private readonly _sessionSourceParamGenerator: () => SessionSourceProps
 
     constructor(
         sessionIdManager: SessionIdManager,
         persistence: PostHogPersistence,
-        sessionSourceParamGenerator?: typeof generateSessionSourceParams
+        sessionSourceParamGenerator?: () => SessionSourceProps
     ) {
         this._sessionIdManager = sessionIdManager
         this._persistence = persistence

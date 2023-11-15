@@ -5,9 +5,10 @@ import { _isUrlMatchingRegex } from './utils/request-utils'
 import { window, document } from './utils/globals'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
-    icontains: (conditionsUrl) => window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
-    regex: (conditionsUrl) => _isUrlMatchingRegex(window.location.href, conditionsUrl),
-    exact: (conditionsUrl) => window.location.href === conditionsUrl,
+    icontains: (conditionsUrl) =>
+        !!window && window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
+    regex: (conditionsUrl) => !!window && _isUrlMatchingRegex(window.location.href, conditionsUrl),
+    exact: (conditionsUrl) => window?.location.href === conditionsUrl,
 }
 
 export class PostHogSurveys {
@@ -50,7 +51,7 @@ export class PostHogSurveys {
                     ? surveyUrlValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](survey.conditions.url)
                     : true
                 const selectorCheck = survey.conditions?.selector
-                    ? document.querySelector(survey.conditions.selector)
+                    ? document?.querySelector(survey.conditions.selector)
                     : true
                 return urlCheck && selectorCheck
             })

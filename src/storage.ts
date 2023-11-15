@@ -23,6 +23,9 @@ const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
  * inspired by https://github.com/AngusFu/browser-root-domain
  */
 export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = document): string {
+    if (!cookieJar) {
+        return ''
+    }
     if (['localhost', '127.0.0.1'].includes(hostname)) return ''
 
     const list = hostname.split('.')
@@ -72,13 +75,17 @@ export function chooseCookieDomain(hostname: string, cross_subdomain: boolean | 
 
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore: PersistentStore = {
-    is_supported: () => true,
+    is_supported: () => !!document,
 
     error: function (msg) {
         logger.error('cookieStore error: ' + msg)
     },
 
     get: function (name) {
+        if (!document) {
+            return
+        }
+
         try {
             const nameEQ = name + '='
             const ca = document.cookie.split(';').filter((x) => x.length)
@@ -106,6 +113,9 @@ export const cookieStore: PersistentStore = {
     },
 
     set: function (name, value, days, cross_subdomain, is_secure) {
+        if (!document) {
+            return
+        }
         try {
             let expires = '',
                 secure = ''
@@ -184,7 +194,7 @@ export const localStore: PersistentStore = {
 
     get: function (name) {
         try {
-            return window.localStorage.getItem(name)
+            return window?.localStorage.getItem(name)
         } catch (err) {
             localStore.error(err)
         }
@@ -202,7 +212,7 @@ export const localStore: PersistentStore = {
 
     set: function (name, value) {
         try {
-            window.localStorage.setItem(name, JSON.stringify(value))
+            window?.localStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
             localStore.error(err)
         }
@@ -210,7 +220,7 @@ export const localStore: PersistentStore = {
 
     remove: function (name) {
         try {
-            window.localStorage.removeItem(name)
+            window?.localStorage.removeItem(name)
         } catch (err) {
             localStore.error(err)
         }
@@ -260,7 +270,7 @@ export const localPlusCookieStore: PersistentStore = {
 
     remove: function (name, cross_subdomain) {
         try {
-            window.localStorage.removeItem(name)
+            window?.localStorage.removeItem(name)
             cookieStore.remove(name, cross_subdomain)
         } catch (err) {
             localStore.error(err)
@@ -332,7 +342,7 @@ export const sessionStore: PersistentStore = {
 
     get: function (name) {
         try {
-            return window.sessionStorage.getItem(name)
+            return window?.sessionStorage.getItem(name)
         } catch (err) {
             sessionStore.error(err)
         }
@@ -350,7 +360,7 @@ export const sessionStore: PersistentStore = {
 
     set: function (name, value) {
         try {
-            window.sessionStorage.setItem(name, JSON.stringify(value))
+            window?.sessionStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
             sessionStore.error(err)
         }
@@ -358,7 +368,7 @@ export const sessionStore: PersistentStore = {
 
     remove: function (name) {
         try {
-            window.sessionStorage.removeItem(name)
+            window?.sessionStorage.removeItem(name)
         } catch (err) {
             sessionStore.error(err)
         }

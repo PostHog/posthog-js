@@ -454,14 +454,11 @@ export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordP
 }
 
 // rrweb/networ@1 ends
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-window.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-window.rrwebConsoleRecord = { getRecordConsolePlugin }
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-window.getRecordNetworkPlugin = getRecordNetworkPlugin
+
+if (window) {
+    ;(window as any).rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+    ;(window as any).rrwebConsoleRecord = { getRecordConsolePlugin }
+    ;(window as any).getRecordNetworkPlugin = getRecordNetworkPlugin
+}
 
 export default rrwebRecord

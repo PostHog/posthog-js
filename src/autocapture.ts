@@ -132,7 +132,7 @@ const autocapture = {
 
     _extractCustomPropertyValue: function (customProperty: AutoCaptureCustomProperty): string {
         const propValues: string[] = []
-        _each(document.querySelectorAll(customProperty['css_selector']), function (matchedElem) {
+        _each(document?.querySelectorAll(customProperty['css_selector']), function (matchedElem) {
             let value
 
             if (['input', 'select'].indexOf(matchedElem.tagName.toLowerCase()) > -1) {
@@ -153,7 +153,7 @@ const autocapture = {
         const props: Properties = {} // will be deleted
         _each(this._customProperties, (customProperty) => {
             _each(customProperty['event_selectors'], (eventSelector) => {
-                const eventElements = document.querySelectorAll(eventSelector)
+                const eventElements = document?.querySelectorAll(eventSelector)
                 _each(eventElements, (eventElement) => {
                     if (_includes(targetElementList, eventElement) && shouldCaptureElement(eventElement)) {
                         props[customProperty['name']] = this._extractCustomPropertyValue(customProperty)
@@ -271,12 +271,18 @@ const autocapture = {
     // only reason is to stub for unit tests
     // since you can't override window.location props
     _navigate: function (href: string): void {
+        if (!window) {
+            return
+        }
         window.location.href = href
     },
 
     _addDomEventHandlers: function (instance: PostHog): void {
+        if (!window || !document) {
+            return
+        }
         const handler = (e: Event) => {
-            e = e || window.event
+            e = e || window?.event
             this._captureEvent(e, instance)
         }
         _register_event(document, 'submit', handler, false, true)
@@ -359,7 +365,7 @@ const autocapture = {
     },
 
     isBrowserSupported: function (): boolean {
-        return _isFunction(document.querySelectorAll)
+        return _isFunction(document?.querySelectorAll)
     },
 }
 

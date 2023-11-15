@@ -110,7 +110,7 @@ export function shouldCaptureDomEvent(
     event: Event,
     autocaptureConfig: AutocaptureConfig | undefined = undefined
 ): boolean {
-    if (!el || isTag(el, 'html') || !isElementNode(el)) {
+    if (!window || !el || isTag(el, 'html') || !isElementNode(el)) {
         return false
     }
 

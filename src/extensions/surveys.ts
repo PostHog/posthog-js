@@ -10,7 +10,11 @@ import {
 } from '../posthog-surveys-types'
 
 import { _isUndefined } from '../utils/type-utils'
-import { window, document } from '../utils/globals'
+import { window as _window, document as _document } from '../utils/globals'
+
+// We cast the types here which is dangerous but protected by the top level generateSurveys call
+const window = _window as Window & typeof globalThis
+const document = _document as Document
 
 const satisfiedEmoji =
     '<svg class="emoji-svg" xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 -960 960 960" width="48"><path d="M626-533q22.5 0 38.25-15.75T680-587q0-22.5-15.75-38.25T626-641q-22.5 0-38.25 15.75T572-587q0 22.5 15.75 38.25T626-533Zm-292 0q22.5 0 38.25-15.75T388-587q0-22.5-15.75-38.25T334-641q-22.5 0-38.25 15.75T280-587q0 22.5 15.75 38.25T334-533Zm146 272q66 0 121.5-35.5T682-393h-52q-23 40-63 61.5T480.5-310q-46.5 0-87-21T331-393h-53q26 61 81 96.5T480-261Zm0 181q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-400Zm0 340q142.375 0 241.188-98.812Q820-337.625 820-480t-98.812-241.188Q622.375-820 480-820t-241.188 98.812Q140-622.375 140-480t98.812 241.188Q337.625-140 480-140Z"/></svg>'
@@ -897,14 +901,19 @@ function showQuestion(n: number, surveyId: string) {
 function nextQuestion(currentQuestionIdx: number, surveyId: string) {
     // figure out which tab to display
     const tabs = document
-        .getElementsByClassName(`PostHogSurvey${surveyId}`)[0]
+        ?.getElementsByClassName(`PostHogSurvey${surveyId}`)[0]
         ?.shadowRoot?.querySelectorAll('.tab') as NodeListOf<HTMLElement>
 
     tabs[currentQuestionIdx].style.display = 'none'
     showQuestion(currentQuestionIdx + 1, surveyId)
 }
 
+// This is the main exported function
 export function generateSurveys(posthog: PostHog) {
+    // NOTE: Important to ensure we never try and run surveys without a window environment
+    if (!document || !window) {
+        return
+    }
     callSurveys(posthog, true)
 
     // recalculate surveys every 3 seconds to check if URL or selectors have changed

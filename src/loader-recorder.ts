@@ -10,11 +10,9 @@ import { getRecordConsolePlugin } from 'rrweb-v1/es/rrweb/packages/rrweb/src/plu
 
 import { window } from './utils/globals'
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-window.rrweb = { record: rrwebRecord, version: 'v1', rrwebVersion: version }
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-window.rrwebConsoleRecord = { getRecordConsolePlugin }
+if (window) {
+    ;(window as any).rrweb = { record: rrwebRecord, version: 'v1', rrwebVersion: version }
+    ;(window as any).rrwebConsoleRecord = { getRecordConsolePlugin }
+}
 
 export default rrwebRecord

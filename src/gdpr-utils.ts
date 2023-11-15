@@ -158,11 +158,11 @@ function _getStorageValue(token: string, options: GDPROptions) {
 function _hasDoNotTrackFlagOn(options: GDPROptions) {
     if (options && options.respectDnt) {
         const win = (options && options.window) || window
-        const nav = win['navigator'] || {}
+        const nav = win?.navigator
         let hasDntOn = false
         _each(
             [
-                nav['doNotTrack'], // standard
+                nav?.doNotTrack, // standard
                 (nav as any)['msDoNotTrack'],
                 (win as any)['doNotTrack'],
             ],

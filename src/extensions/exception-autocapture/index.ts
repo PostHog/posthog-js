@@ -18,8 +18,8 @@ export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
 export class ExceptionObserver {
     instance: PostHog
     remoteEnabled: boolean | undefined
-    private originalOnErrorHandler: typeof window['onerror'] | null | undefined = undefined
-    private originalOnUnhandledRejectionHandler: typeof window['onunhandledrejection'] | null | undefined = undefined
+    private originalOnErrorHandler: Window['onerror'] | null | undefined = undefined
+    private originalOnUnhandledRejectionHandler: Window['onunhandledrejection'] | null | undefined = undefined
 
     private errorsToIgnore: RegExp[] = []
 
@@ -28,7 +28,7 @@ export class ExceptionObserver {
     }
 
     startCapturing() {
-        if (!this.isEnabled() || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
+        if (!window || !this.isEnabled() || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
             return
         }
 
@@ -56,7 +56,7 @@ export class ExceptionObserver {
                 const errorProperties: ErrorProperties = unhandledRejectionToProperties(args)
                 this.sendExceptionEvent(errorProperties)
 
-                if (this.originalOnUnhandledRejectionHandler) {
+                if (window && this.originalOnUnhandledRejectionHandler) {
                     // eslint-disable-next-line prefer-rest-params
                     return this.originalOnUnhandledRejectionHandler.apply(window, args)
                 }
@@ -71,6 +71,9 @@ export class ExceptionObserver {
     }
 
     stopCapturing() {
+        if (!window) {
+            return
+        }
         if (!_isUndefined(this.originalOnErrorHandler)) {
             window.onerror = this.originalOnErrorHandler
             this.originalOnErrorHandler = null
@@ -85,7 +88,7 @@ export class ExceptionObserver {
     }
 
     isCapturing() {
-        return !!(window.onerror as any)?.__POSTHOG_INSTRUMENTED__
+        return !!(window?.onerror as any)?.__POSTHOG_INSTRUMENTED__
     }
 
     isEnabled() {

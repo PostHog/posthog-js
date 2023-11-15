@@ -5,7 +5,12 @@ import { assignableWindow, window } from './globals'
 const LOGGER_PREFIX = '[PostHog.js]'
 export const logger = {
     _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => {
-        if ((Config.DEBUG || assignableWindow.POSTHOG_DEBUG) && !_isUndefined(window.console) && window.console) {
+        if (
+            window &&
+            (Config.DEBUG || assignableWindow.POSTHOG_DEBUG) &&
+            !_isUndefined(window.console) &&
+            window.console
+        ) {
             const consoleLog =
                 '__rrweb_original__' in window.console[level]
                     ? (window.console[level] as any)['__rrweb_original__']

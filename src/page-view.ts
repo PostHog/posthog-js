@@ -35,7 +35,7 @@ export class PageViewManager {
 
     _createPageViewData(): PageViewData {
         return {
-            pathname: window.location.pathname,
+            pathname: window?.location.pathname ?? '',
         }
     }
 
@@ -134,31 +134,33 @@ export class PageViewManager {
     }
 
     startMeasuringScrollPosition() {
-        window.addEventListener('scroll', this._updateScrollData)
-        window.addEventListener('scrollend', this._updateScrollData)
-        window.addEventListener('resize', this._updateScrollData)
+        window?.addEventListener('scroll', this._updateScrollData)
+        window?.addEventListener('scrollend', this._updateScrollData)
+        window?.addEventListener('resize', this._updateScrollData)
     }
 
     stopMeasuringScrollPosition() {
-        window.removeEventListener('scroll', this._updateScrollData)
-        window.removeEventListener('scrollend', this._updateScrollData)
-        window.removeEventListener('resize', this._updateScrollData)
+        window?.removeEventListener('scroll', this._updateScrollData)
+        window?.removeEventListener('scrollend', this._updateScrollData)
+        window?.removeEventListener('resize', this._updateScrollData)
     }
 
     _scrollHeight(): number {
-        return Math.max(0, window.document.documentElement.scrollHeight - window.document.documentElement.clientHeight)
+        return window
+            ? Math.max(0, window.document.documentElement.scrollHeight - window.document.documentElement.clientHeight)
+            : 0
     }
 
     _scrollY(): number {
-        return window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0
+        return window ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0 : 0
     }
 
     _contentHeight(): number {
-        return window.document.documentElement.scrollHeight || 0
+        return window?.document.documentElement.scrollHeight || 0
     }
 
     _contentY(): number {
-        const clientHeight = window.document.documentElement.clientHeight || 0
+        const clientHeight = window?.document.documentElement.clientHeight || 0
         return this._scrollY() + clientHeight
     }
 }
