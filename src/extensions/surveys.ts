@@ -843,7 +843,7 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
             const questionElementSubmitButton = questionElement.getElementsByClassName(
                 'form-submit'
             )[0] as HTMLButtonElement
-            questionElementSubmitButton.innerText = 'Next'
+            questionElementSubmitButton.innerText = question.buttonText || 'Next'
             questionElementSubmitButton.type = 'button'
             questionElementSubmitButton.addEventListener('click', () => {
                 nextQuestion(idx, survey.id)
