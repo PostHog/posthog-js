@@ -1,6 +1,12 @@
+## 1.90.2 - 2023-11-15
+
+- chore: uniquify differently (#897)
+- correct CHANGELOG.md (#896)
+
 ## 1.90.1 - 2023-11-15
 
 - fix: seek subdomain correctly (#888)
+- fix: merge server permissions for payload capture (#892)
 
 ## 1.90.0 - 2023-11-15
 
