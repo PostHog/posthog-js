@@ -1,3 +1,7 @@
+## 1.91.1 - 2023-11-15
+
+- fix(surveys): button text field fix (#899)
+
 ## 1.91.0 - 2023-11-15
 
 - fix: Window or document access across the code (#894)
