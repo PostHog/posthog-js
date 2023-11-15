@@ -1,13 +1,13 @@
 import Config from '../config'
 import { _isUndefined } from './type-utils'
-import { window } from './globals'
+import { assignableWindow, window } from './globals'
 
 const LOGGER_PREFIX = '[PostHog.js]'
 export const logger = {
     _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => {
         if (
             window &&
-            (Config.DEBUG || (window as any).POSTHOG_DEBUG) &&
+            (Config.DEBUG || assignableWindow.POSTHOG_DEBUG) &&
             !_isUndefined(window.console) &&
             window.console
         ) {

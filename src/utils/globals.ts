@@ -9,5 +9,6 @@ export const win: (Window & typeof globalThis) | undefined = typeof window !== '
 const navigator = win?.navigator
 export const document = win?.document
 export const userAgent = navigator?.userAgent
+export const assignableWindow: Window & typeof globalThis & Record<string, any> = win ?? ({} as any)
 
 export { win as window }

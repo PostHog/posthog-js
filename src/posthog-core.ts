@@ -9,7 +9,7 @@ import {
     _safewrap_class,
     isCrossDomainCookie,
 } from './utils'
-import { window } from './utils/globals'
+import { assignableWindow, window } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -2104,7 +2104,7 @@ const override_ph_init_func = function () {
 
             ;(posthog_master as any) = instance
             if (init_type === InitType.INIT_SNIPPET) {
-                ;(window as any)[PRIMARY_INSTANCE_NAME] = posthog_master
+                assignableWindow[PRIMARY_INSTANCE_NAME] = posthog_master
             }
             extend_mp()
             return instance
@@ -2148,10 +2148,10 @@ const add_dom_loaded_handler = function () {
 
 export function init_from_snippet(): void {
     init_type = InitType.INIT_SNIPPET
-    if (_isUndefined((window as any).posthog)) {
-        ;(window as any).posthog = []
+    if (_isUndefined(assignableWindow.posthog)) {
+        assignableWindow.posthog = []
     }
-    posthog_master = (window as any).posthog
+    posthog_master = assignableWindow.posthog
 
     if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
         // lib has already been loaded at least once; we don't want to override the global object this time so bomb early

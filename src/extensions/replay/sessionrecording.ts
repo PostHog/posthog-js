@@ -2,6 +2,7 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../constants'
 import {
@@ -21,7 +22,7 @@ import { _timestamp, loadScript } from '../../utils'
 
 import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { window } from '../../utils/globals'
+import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 
 const BASE_ENDPOINT = '/s/'
@@ -92,7 +93,6 @@ export class SessionRecording {
     private receivedDecide: boolean
     private rrwebRecord: rrwebRecord | undefined
     private isIdle = false
-    private _networkPayloadCapture: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined = undefined
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
@@ -146,6 +146,19 @@ export class SessionRecording {
         const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
         const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
+    }
+
+    private get networkPayloadCapture(): Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined {
+        const networkPayloadCapture_server_side = this.instance.get_property(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
+        const networkPayloadCapture_client_side = {
+            recordHeaders: this.instance.config.session_recording?.recordHeaders,
+            recordBody: this.instance.config.session_recording?.recordBody,
+        }
+        const headersEnabled =
+            networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
+        const bodyEnabled =
+            networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
+        return headersEnabled || bodyEnabled ? { recordHeaders: headersEnabled, recordBody: bodyEnabled } : undefined
     }
 
     /**
@@ -252,10 +265,9 @@ export class SessionRecording {
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
+                [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: response.sessionRecording?.networkPayloadCapture,
             })
         }
-
-        this._networkPayloadCapture = response.sessionRecording?.networkPayloadCapture
 
         const receivedSampleRate = response.sessionRecording?.sampleRate
         this._sampleRate =
@@ -469,17 +481,15 @@ export class SessionRecording {
 
         const plugins = []
 
-        if ((window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
-            plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
+        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
         }
-        if (this._networkPayloadCapture) {
-            if (_isFunction((window as any).getRecordNetworkPlugin)) {
-                plugins.push(
-                    (window as any).getRecordNetworkPlugin(
-                        buildNetworkRequestOptions(this.instance.config, this._networkPayloadCapture)
-                    )
+        if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
+            plugins.push(
+                assignableWindow.getRecordNetworkPlugin(
+                    buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
                 )
-            }
+            )
         }
 
         this.stopRrweb = this.rrwebRecord({

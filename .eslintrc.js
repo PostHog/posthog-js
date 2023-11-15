@@ -10,7 +10,6 @@ const rules = {
     'no-prototype-builtins': 'off',
     'no-empty': 'off',
     'no-console': 'error',
-    'no-restricted-globals': ['error', 'document', 'window'],
 }
 
 const extend = [
@@ -54,6 +53,13 @@ module.exports = {
         },
     },
     overrides: [
+        {
+            files: 'src/**/*',
+            rules: {
+                ...rules,
+                'no-restricted-globals': ['error', 'document', 'window'],
+            },
+        },
         {
             files: 'src/__tests__/**/*',
             // the same set of config as in the root
