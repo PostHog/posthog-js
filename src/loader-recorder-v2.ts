@@ -23,6 +23,7 @@ import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { InitiatorType, NetworkRecordOptions, NetworkRequest, Headers } from './types'
 import { _isBoolean, _isFunction, _isArray, _isUndefined, _isNull } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window } from './utils/globals'
 import { defaultNetworkOptions } from './extensions/replay/config'
 
 export type NetworkData = {
@@ -453,11 +454,14 @@ export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordP
 }
 
 // rrweb/networ@1 ends
-
-const win: Window & typeof globalThis = _isUndefined(window) ? ({} as typeof window) : window
-
-;(win as any).rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
-;(win as any).rrwebConsoleRecord = { getRecordConsolePlugin }
-;(win as any).getRecordNetworkPlugin = getRecordNetworkPlugin
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+window.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+window.rrwebConsoleRecord = { getRecordConsolePlugin }
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+window.getRecordNetworkPlugin = getRecordNetworkPlugin
 
 export default rrwebRecord

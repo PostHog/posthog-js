@@ -5,6 +5,7 @@ import { RateLimiter } from './rate-limiter'
 
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window } from './utils/globals'
 
 const thirtyMinutes = 30 * 60 * 1000
 

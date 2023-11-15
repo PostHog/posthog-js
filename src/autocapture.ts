@@ -21,6 +21,7 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { _isBoolean, _isFunction, _isNull, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window, document } from './utils/globals'
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {

@@ -10,7 +10,7 @@ import {
     hasOwnProperty,
 } from './type-utils'
 import { logger } from './logger'
-import { document, nativeForEach, nativeIndexOf } from './globals'
+import { window, document, nativeForEach, nativeIndexOf } from './globals'
 
 const breaker: Breaker = {}
 

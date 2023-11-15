@@ -8,13 +8,13 @@ import rrwebRecord from 'rrweb-v1/es/rrweb/packages/rrweb/src/record'
 // @ts-ignore
 import { getRecordConsolePlugin } from 'rrweb-v1/es/rrweb/packages/rrweb/src/plugins/console/record'
 
-import { _isUndefined } from './utils/type-utils'
+import { window } from './utils/globals'
+
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-
-const win: Window & typeof globalThis = _isUndefined(window) ? ({} as typeof window) : window
-
-;(win as any).rrweb = { record: rrwebRecord, version: 'v1', rrwebVersion: version }
-;(win as any).rrwebConsoleRecord = { getRecordConsolePlugin }
+window.rrweb = { record: rrwebRecord, version: 'v1', rrwebVersion: version }
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+window.rrwebConsoleRecord = { getRecordConsolePlugin }
 
 export default rrwebRecord

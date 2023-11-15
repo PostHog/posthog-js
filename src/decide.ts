@@ -6,6 +6,7 @@ import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './con
 
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window, document } from './utils/globals'
 
 export class Decide {
     instance: PostHog

@@ -4,6 +4,7 @@ import { DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constan
 
 import { _isNull, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window, document } from './utils/globals'
 
 const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
 

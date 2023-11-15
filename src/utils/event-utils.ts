@@ -3,7 +3,7 @@ import { _isNull, _isUndefined } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
 import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
-import { document, userAgent } from './globals'
+import { document, window, userAgent } from './globals'
 
 /**
  * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509

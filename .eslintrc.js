@@ -10,6 +10,7 @@ const rules = {
     'no-prototype-builtins': 'off',
     'no-empty': 'off',
     'no-console': 'error',
+    'no-restricted-globals': ['error', 'document', 'window'],
 }
 
 const extend = [
@@ -62,6 +63,7 @@ module.exports = {
             rules: {
                 ...rules,
                 'no-console': 'off',
+                'no-restricted-globals': 'off',
             },
         },
         {
