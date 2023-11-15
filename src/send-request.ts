@@ -78,8 +78,8 @@ export const request = (params: XHRParams) => {
         window
             .fetch(params.url, {
                 method: params.options?.method || 'GET',
-                headers: params.headers as Headers,
-                keepalive: true,
+                headers,
+                keepalive: params.options.method === 'POST',
                 body,
             })
             .then((response) => {
