@@ -1,3 +1,7 @@
+## 1.90.0 - 2023-11-15
+
+- fix(surveys): prioritize question button text field and thank you countdown is not automatic (#893)
+
 ## 1.89.2 - 2023-11-14
 
 - fix: a little session buffering logic (#890)
