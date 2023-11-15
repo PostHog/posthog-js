@@ -54,6 +54,13 @@ module.exports = {
     },
     overrides: [
         {
+            files: 'src/**/*',
+            rules: {
+                ...rules,
+                'no-restricted-globals': ['error', 'document', 'window'],
+            },
+        },
+        {
             files: 'src/__tests__/**/*',
             // the same set of config as in the root
             // but excluding the 'plugin:compat/recommended' rule
@@ -62,6 +69,7 @@ module.exports = {
             rules: {
                 ...rules,
                 'no-console': 'off',
+                'no-restricted-globals': 'off',
             },
         },
         {

@@ -219,7 +219,7 @@ let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buf
 }
 
 // detect Web Crypto API
-if (!_isUndefined(window.crypto) && crypto.getRandomValues) {
+if (window && !_isUndefined(window.crypto) && crypto.getRandomValues) {
     getRandomValues = (buffer) => crypto.getRandomValues(buffer)
 }
 

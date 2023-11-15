@@ -22,7 +22,7 @@ import { _timestamp, loadScript } from '../../utils'
 
 import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { window } from '../../utils/globals'
+import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 
 const BASE_ENDPOINT = '/s/'
@@ -133,7 +133,7 @@ export class SessionRecording {
     private get isRecordingEnabled() {
         const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = !this.instance.config.disable_session_recording
-        return enabled_server_side && enabled_client_side
+        return window && enabled_server_side && enabled_client_side
     }
 
     private get isConsoleLogCaptureEnabled() {
@@ -192,7 +192,7 @@ export class SessionRecording {
         this.stopRrweb = undefined
         this.receivedDecide = false
 
-        window.addEventListener('beforeunload', () => {
+        window?.addEventListener('beforeunload', () => {
             this._flushBuffer()
         })
 
@@ -481,12 +481,12 @@ export class SessionRecording {
 
         const plugins = []
 
-        if ((window as any).rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
-            plugins.push((window as any).rrwebConsoleRecord.getRecordConsolePlugin())
+        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
         }
-        if (this.networkPayloadCapture && _isFunction((window as any).getRecordNetworkPlugin)) {
+        if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
             plugins.push(
-                (window as any).getRecordNetworkPlugin(
+                assignableWindow.getRecordNetworkPlugin(
                     buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
                 )
             )
@@ -507,7 +507,7 @@ export class SessionRecording {
             // so we catch all errors.
             try {
                 if (eventName === '$pageview') {
-                    const href = this._maskUrl(window.location.href)
+                    const href = window ? this._maskUrl(window.location.href) : ''
                     if (!href) {
                         return
                     }

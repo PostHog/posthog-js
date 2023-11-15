@@ -6,6 +6,7 @@ import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './con
 
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window, document, assignableWindow } from './utils/globals'
 
 export class Decide {
     instance: PostHog
@@ -112,7 +113,7 @@ export class Decide {
                         apiHost[apiHost.length - 1] === '/' && url[0] === '/' ? url.substring(1) : url,
                     ].join('')
 
-                    ;(window as any)[`__$$ph_site_app_${id}`] = this.instance
+                    assignableWindow[`__$$ph_site_app_${id}`] = this.instance
 
                     loadScript(scriptUrl, (err) => {
                         if (err) {

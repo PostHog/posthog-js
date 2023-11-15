@@ -36,7 +36,9 @@ describe('sessionStore', () => {
                 expected: '',
             },
         ])(`%s subdomain check`, ({ candidate, expected }) => {
-            expect(seekFirstNonPublicSubDomain(candidate, mockDocumentDotCookie)).toEqual(expected)
+            expect(seekFirstNonPublicSubDomain(candidate, mockDocumentDotCookie as unknown as Document)).toEqual(
+                expected
+            )
         })
     })
 

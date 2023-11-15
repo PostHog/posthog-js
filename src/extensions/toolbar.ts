@@ -4,11 +4,11 @@ import { DecideResponse, ToolbarParams } from '../types'
 import { POSTHOG_MANAGED_HOSTS } from './cloud'
 import { _getHashParam } from '../utils/request-utils'
 import { logger } from '../utils/logger'
-import { window } from '../utils/globals'
+import { window, document, assignableWindow } from '../utils/globals'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
-const STATE_FROM_WINDOW = window.location
+const STATE_FROM_WINDOW = window?.location
     ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
     : null
 
@@ -40,10 +40,16 @@ export class Toolbar {
      * 2. From session storage under the key `toolbarParams` if the toolbar was initialized on a previous page
      */
     maybeLoadToolbar(
-        location = window.location,
+        location: Location | undefined = undefined,
         localStorage: Storage | undefined = undefined,
-        history = window.history
+        history: History | undefined = undefined
     ): boolean {
+        if (!window || !document) {
+            return false
+        }
+        location = location ?? window.location
+        history = history ?? window.history
+
         try {
             // Before running the code we check if we can access localStorage, if not we opt-out
             if (!localStorage) {
@@ -55,7 +61,7 @@ export class Toolbar {
                 }
 
                 // If localStorage was undefined, and localStorage is supported we set the default value
-                localStorage = window.localStorage
+                localStorage = window?.localStorage
             }
 
             /**
@@ -114,11 +120,11 @@ export class Toolbar {
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
-        if ((window as any)['_postHogToolbarLoaded']) {
+        if (!window || assignableWindow['_postHogToolbarLoaded']) {
             return false
         }
         // only load the toolbar once, even if there are multiple instances of PostHogLib
-        ;(window as any)['_postHogToolbarLoaded'] = true
+        assignableWindow['_postHogToolbarLoaded'] = true
 
         const host = this.instance.config.api_host
         // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
@@ -146,12 +152,12 @@ export class Toolbar {
                 logger.error('Failed to load toolbar', err)
                 return
             }
-            ;((window as any)['ph_load_toolbar'] || (window as any)['ph_load_editor'])(toolbarParams, this.instance)
+            ;(assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor'])(toolbarParams, this.instance)
         })
         // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
         // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
         _register_event(window, 'turbolinks:load', () => {
-            ;(window as any)['_postHogToolbarLoaded'] = false
+            assignableWindow['_postHogToolbarLoaded'] = false
             this.loadToolbar(toolbarParams)
         })
         return true
@@ -164,9 +170,9 @@ export class Toolbar {
 
     /** @deprecated Use "maybeLoadToolbar" instead. */
     maybeLoadEditor(
-        location = window.location,
+        location: Location | undefined = undefined,
         localStorage: Storage | undefined = undefined,
-        history = window.history
+        history: History | undefined = undefined
     ): boolean {
         return this.maybeLoadToolbar(location, localStorage, history)
     }

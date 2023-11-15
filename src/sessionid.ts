@@ -173,7 +173,7 @@ export class SessionIdManager {
      * We conditionally check the primaryWindowExists value in the constructor to decide if the window id in the last session storage should be carried over.
      */
     private _listenToReloadWindow(): void {
-        window.addEventListener('beforeunload', () => {
+        window?.addEventListener('beforeunload', () => {
             if (this._canUseSessionStorage()) {
                 sessionStore.remove(this._primary_window_exists_storage_key)
             }
