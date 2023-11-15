@@ -4,6 +4,7 @@ import { DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constan
 
 import { _isNull, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { uuidv7 } from './uuidv7'
 
 const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
 
@@ -25,7 +26,7 @@ export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = docume
 
     const list = hostname.split('.')
     let len = list.length
-    const key = 'dmn_chk_' + +new Date()
+    const key = 'dmn_chk_' + uuidv7()
     const R = new RegExp('(^|;)\\s*' + key + '=1')
 
     while (len--) {
