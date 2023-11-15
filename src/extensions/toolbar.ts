@@ -8,7 +8,7 @@ import { window, document } from '../utils/globals'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
-const STATE_FROM_WINDOW = window.location
+const STATE_FROM_WINDOW = window?.location
     ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
     : null
 
@@ -40,10 +40,16 @@ export class Toolbar {
      * 2. From session storage under the key `toolbarParams` if the toolbar was initialized on a previous page
      */
     maybeLoadToolbar(
-        location = window.location,
+        location: Location | undefined = undefined,
         localStorage: Storage | undefined = undefined,
-        history = window.history
+        history: History | undefined = undefined
     ): boolean {
+        if (!window || !document) {
+            return false
+        }
+        location = location ?? window.location
+        history = history ?? window.history
+
         try {
             // Before running the code we check if we can access localStorage, if not we opt-out
             if (!localStorage) {
@@ -55,7 +61,7 @@ export class Toolbar {
                 }
 
                 // If localStorage was undefined, and localStorage is supported we set the default value
-                localStorage = window.localStorage
+                localStorage = window?.localStorage
             }
 
             /**
@@ -114,7 +120,7 @@ export class Toolbar {
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
-        if ((window as any)['_postHogToolbarLoaded']) {
+        if (!window || (window as any)['_postHogToolbarLoaded']) {
             return false
         }
         // only load the toolbar once, even if there are multiple instances of PostHogLib
@@ -164,9 +170,9 @@ export class Toolbar {
 
     /** @deprecated Use "maybeLoadToolbar" instead. */
     maybeLoadEditor(
-        location = window.location,
+        location: Location | undefined = undefined,
         localStorage: Storage | undefined = undefined,
-        history = window.history
+        history: History | undefined = undefined
     ): boolean {
         return this.maybeLoadToolbar(location, localStorage, history)
     }

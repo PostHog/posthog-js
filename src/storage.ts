@@ -10,13 +10,17 @@ const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
 
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore: PersistentStore = {
-    is_supported: () => true,
+    is_supported: () => !!document,
 
     error: function (msg) {
         logger.error('cookieStore error: ' + msg)
     },
 
     get: function (name) {
+        if (!document) {
+            return
+        }
+
         try {
             const nameEQ = name + '='
             const ca = document.cookie.split(';').filter((x) => x.length)
@@ -44,6 +48,9 @@ export const cookieStore: PersistentStore = {
     },
 
     set: function (name, value, days, cross_subdomain, is_secure) {
+        if (!document) {
+            return
+        }
         try {
             let cdomain = '',
                 expires = '',
@@ -51,7 +58,7 @@ export const cookieStore: PersistentStore = {
 
             if (cross_subdomain) {
                 // NOTE: Could we use this for cross domain tracking?
-                const matches = document.location.hostname.match(DOMAIN_MATCH_REGEX),
+                const matches = document?.location.hostname.match(DOMAIN_MATCH_REGEX),
                     domain = matches ? matches[0] : ''
 
                 cdomain = domain ? '; domain=.' + domain : ''
@@ -129,7 +136,7 @@ export const localStore: PersistentStore = {
 
     get: function (name) {
         try {
-            return window.localStorage.getItem(name)
+            return window?.localStorage.getItem(name)
         } catch (err) {
             localStore.error(err)
         }
@@ -147,7 +154,7 @@ export const localStore: PersistentStore = {
 
     set: function (name, value) {
         try {
-            window.localStorage.setItem(name, JSON.stringify(value))
+            window?.localStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
             localStore.error(err)
         }
@@ -155,7 +162,7 @@ export const localStore: PersistentStore = {
 
     remove: function (name) {
         try {
-            window.localStorage.removeItem(name)
+            window?.localStorage.removeItem(name)
         } catch (err) {
             localStore.error(err)
         }
@@ -205,7 +212,7 @@ export const localPlusCookieStore: PersistentStore = {
 
     remove: function (name, cross_subdomain) {
         try {
-            window.localStorage.removeItem(name)
+            window?.localStorage.removeItem(name)
             cookieStore.remove(name, cross_subdomain)
         } catch (err) {
             localStore.error(err)
@@ -277,7 +284,7 @@ export const sessionStore: PersistentStore = {
 
     get: function (name) {
         try {
-            return window.sessionStorage.getItem(name)
+            return window?.sessionStorage.getItem(name)
         } catch (err) {
             sessionStore.error(err)
         }
@@ -295,7 +302,7 @@ export const sessionStore: PersistentStore = {
 
     set: function (name, value) {
         try {
-            window.sessionStorage.setItem(name, JSON.stringify(value))
+            window?.sessionStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
             sessionStore.error(err)
         }
@@ -303,7 +310,7 @@ export const sessionStore: PersistentStore = {
 
     remove: function (name) {
         try {
-            window.sessionStorage.removeItem(name)
+            window?.sessionStorage.removeItem(name)
         } catch (err) {
             sessionStore.error(err)
         }

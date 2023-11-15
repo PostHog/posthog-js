@@ -29,7 +29,7 @@ export const _info = {
 
         const params: Record<string, any> = {}
         _each(campaign_keywords, function (kwkey) {
-            const kw = _getQueryParam(document.URL, kwkey)
+            const kw = document ? _getQueryParam(document.URL, kwkey) : ''
             if (kw.length) {
                 params[kwkey] = kw
             }
@@ -39,7 +39,7 @@ export const _info = {
     },
 
     searchEngine: function (): string | null {
-        const referrer = document.referrer
+        const referrer = document?.referrer
         if (!referrer) {
             return null
         } else if (referrer.search('https?://(.*)google.([^/?]*)') === 0) {
@@ -63,7 +63,7 @@ export const _info = {
         if (!_isNull(search)) {
             ret['$search_engine'] = search
 
-            const keyword = _getQueryParam(document.referrer, param)
+            const keyword = document ? _getQueryParam(document.referrer, param) : ''
             if (keyword.length) {
                 ret['ph_keyword'] = keyword
             }
@@ -249,11 +249,11 @@ export const _info = {
     },
 
     referrer: function (): string {
-        return document.referrer || '$direct'
+        return document?.referrer || '$direct'
     },
 
     referringDomain: function (): string {
-        if (!document.referrer) {
+        if (!document?.referrer) {
             return '$direct'
         }
         const parser = document.createElement('a') // Unfortunately we cannot use new URL due to IE11
@@ -262,6 +262,9 @@ export const _info = {
     },
 
     properties: function (): Properties {
+        if (!userAgent) {
+            return {}
+        }
         const { os_name, os_version } = _info.os(userAgent)
         return _extend(
             _strip_empty_properties({
@@ -291,6 +294,10 @@ export const _info = {
     },
 
     people_properties: function (): Properties {
+        if (!userAgent) {
+            return {}
+        }
+
         const { os_name, os_version } = _info.os(userAgent)
         return _extend(
             _strip_empty_properties({

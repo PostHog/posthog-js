@@ -5,9 +5,9 @@ export const ArrayProto = Array.prototype
 export const nativeForEach = ArrayProto.forEach
 export const nativeIndexOf = ArrayProto.indexOf
 // eslint-disable-next-line no-restricted-globals
-export const win: Window & typeof globalThis = typeof window !== 'undefined' ? window : ({} as typeof window)
-const navigator = win.navigator || { userAgent: '' }
-export const document = win.document || {}
-export const userAgent = navigator.userAgent
+export const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
+const navigator = win?.navigator
+export const document = win?.document
+export const userAgent = navigator?.userAgent
 
 export { win as window }
