@@ -9,12 +9,14 @@ export interface SurveyAppearance {
     backgroundColor?: string
     submitButtonColor?: string
     textColor?: string
+    // deprecate submit button text eventually
     submitButtonText?: string
     descriptionTextColor?: string
     ratingButtonColor?: string
     ratingButtonActiveColor?: string
     ratingButtonHoverColor?: string
     whiteLabel?: boolean
+    autoDisappear?: boolean
     displayThankYouMessage?: boolean
     thankYouMessageHeader?: string
     thankYouMessageDescription?: string
@@ -37,6 +39,7 @@ interface SurveyQuestionBase {
     question: string
     description?: string | null
     optional?: boolean
+    buttonText?: string
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
