@@ -1,3 +1,7 @@
+## 1.91.0 - 2023-11-15
+
+- fix: Window or document access across the code (#894)
+
 ## 1.90.2 - 2023-11-15
 
 - chore: uniquify differently (#897)
