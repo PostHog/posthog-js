@@ -133,7 +133,7 @@ export class SessionRecording {
     private get isRecordingEnabled() {
         const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = !this.instance.config.disable_session_recording
-        return enabled_server_side && enabled_client_side
+        return window && enabled_server_side && enabled_client_side
     }
 
     private get isConsoleLogCaptureEnabled() {
@@ -179,7 +179,7 @@ export class SessionRecording {
         this.stopRrweb = undefined
         this.receivedDecide = false
 
-        window.addEventListener('beforeunload', () => {
+        window?.addEventListener('beforeunload', () => {
             this._flushBuffer()
         })
 
@@ -497,7 +497,7 @@ export class SessionRecording {
             // so we catch all errors.
             try {
                 if (eventName === '$pageview') {
-                    const href = this._maskUrl(window.location.href)
+                    const href = window ? this._maskUrl(window.location.href) : ''
                     if (!href) {
                         return
                     }
