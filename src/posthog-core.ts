@@ -287,6 +287,7 @@ export class PostHog {
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
+    elementsChainAsString: boolean
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
@@ -310,6 +311,7 @@ export class PostHog {
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
         this.analyticsDefaultEndpoint = '/e/'
+        this.elementsChainAsString = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -536,6 +538,10 @@ export class PostHog {
 
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
+        }
+
+        if (response.analytics?.elementsChainAsString) {
+            this.elementsChainAsString = response.analytics.elementsChainAsString
         }
     }
 

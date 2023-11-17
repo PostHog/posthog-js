@@ -255,9 +255,13 @@ const autocapture = {
 
             const props = _extend(
                 this._getDefaultProperties(e.type),
-                {
-                    $elements_chain: getElementsChainString(elementsJson),
-                },
+                instance.elementsChainAsString
+                    ? {
+                          $elements_chain: getElementsChainString(elementsJson),
+                      }
+                    : {
+                          $elements: elementsJson,
+                      },
                 elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
                 this._getCustomProperties(targetElementList),
                 autocaptureAugmentProperties
