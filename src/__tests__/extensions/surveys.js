@@ -279,4 +279,99 @@ describe('survey display logic', () => {
         expect(ratingQuestion2.querySelectorAll('.question-0-rating-0').length).toBe(0)
         expect(ratingQuestion2.querySelectorAll('.question-0-rating-1').length).toBe(1)
     })
+
+    test('open choice value on a multiple choice question is determined by a text input', () => {
+        mockSurveys = [
+            {
+                id: 'testSurvey2',
+                name: 'Test survey 2',
+                appearance: null,
+                questions: [
+                    {
+                        question: 'Which types of content would you like to see more of?',
+                        description: 'This is a question description',
+                        type: 'multiple_choice',
+                        choices: ['Tutorials', 'Product Updates', 'Events', 'OPENlabel=Other'],
+                    },
+                ],
+            },
+        ]
+        const singleQuestionSurveyForm = createMultipleQuestionSurvey(mockPostHog, mockSurveys[0])
+
+        const checkboxInputs = singleQuestionSurveyForm
+            .querySelector('.tab.question-0')
+            .querySelectorAll('input[type=checkbox]')
+        let checkboxInputValues = [...checkboxInputs].map((input) => input.value)
+        expect(checkboxInputValues).toEqual(['Tutorials', 'Product Updates', 'Events', ''])
+        const openChoiceTextInput = singleQuestionSurveyForm
+            .querySelector('.tab.question-0')
+            .querySelector('input[type=text]')
+        openChoiceTextInput.value = 'NEW VALUE 1'
+        openChoiceTextInput.dispatchEvent(new Event('input'))
+        checkboxInputValues = [...checkboxInputs].map((input) => input.value)
+        expect(checkboxInputValues).toEqual(['Tutorials', 'Product Updates', 'Events', 'NEW VALUE 1'])
+        checkboxInputs[0].click()
+        const checkboxInputsChecked = [...checkboxInputs].map((input) => input.checked)
+        expect(checkboxInputsChecked).toEqual([true, false, false, true])
+
+        singleQuestionSurveyForm.dispatchEvent(new Event('submit'))
+        expect(mockPostHog.capture).toBeCalledTimes(1)
+        expect(mockPostHog.capture).toBeCalledWith('survey sent', {
+            $survey_name: 'Test survey 2',
+            $survey_id: 'testSurvey2',
+            $survey_questions: ['Which types of content would you like to see more of?'],
+            $survey_response: ['Tutorials', 'NEW VALUE 1'],
+            sessionRecordingUrl: undefined,
+            $set: {
+                ['$survey_responded/testSurvey2']: true,
+            },
+        })
+    })
+
+    test('open choice value on a single choice question is determined by a text input', () => {
+        mockSurveys = [
+            {
+                id: 'testSurvey2',
+                name: 'Test survey 2',
+                appearance: null,
+                questions: [
+                    {
+                        question: 'Which features do you use the most?',
+                        description: 'This is a question description',
+                        type: 'single_choice',
+                        choices: ['Surveys', 'Feature flags', 'Analytics', 'OPENlabel=Another Feature'],
+                    },
+                ],
+            },
+        ]
+        const singleQuestionSurveyForm = createMultipleQuestionSurvey(mockPostHog, mockSurveys[0])
+
+        const radioInputs = singleQuestionSurveyForm
+            .querySelector('.tab.question-0')
+            .querySelectorAll('input[type=radio]')
+        let radioInputValues = [...radioInputs].map((input) => input.value)
+        expect(radioInputValues).toEqual(['Surveys', 'Feature flags', 'Analytics', ''])
+        const openChoiceTextInput = singleQuestionSurveyForm
+            .querySelector('.tab.question-0')
+            .querySelector('input[type=text]')
+        openChoiceTextInput.value = 'NEW VALUE 2'
+        openChoiceTextInput.dispatchEvent(new Event('input'))
+        radioInputValues = [...radioInputs].map((input) => input.value)
+        expect(radioInputValues).toEqual(['Surveys', 'Feature flags', 'Analytics', 'NEW VALUE 2'])
+        const radioInputsChecked = [...radioInputs].map((input) => input.checked)
+        expect(radioInputsChecked).toEqual([false, false, false, true])
+
+        singleQuestionSurveyForm.dispatchEvent(new Event('submit'))
+        expect(mockPostHog.capture).toBeCalledTimes(1)
+        expect(mockPostHog.capture).toBeCalledWith('survey sent', {
+            $survey_name: 'Test survey 2',
+            $survey_id: 'testSurvey2',
+            $survey_questions: ['Which features do you use the most?'],
+            $survey_response: 'NEW VALUE 2',
+            sessionRecordingUrl: undefined,
+            $set: {
+                ['$survey_responded/testSurvey2']: true,
+            },
+        })
+    })
 })
