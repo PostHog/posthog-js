@@ -4,6 +4,7 @@ import { isLocalhost } from '../../utils/request-utils'
 
 import { _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
+import { window } from '../../utils/globals'
 
 const PERFORMANCE_EVENTS_MAPPING: { [key: string]: number } = {
     // BASE_PERFORMANCE_EVENT_COLUMNS

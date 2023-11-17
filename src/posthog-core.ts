@@ -9,7 +9,7 @@ import {
     _safewrap_class,
     isCrossDomainCookie,
 } from './utils'
-import { window } from './utils/globals'
+import { assignableWindow, window } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -92,12 +92,12 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
  */
 // http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
 // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-const USE_XHR = window.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
+const USE_XHR = window?.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
 
 // IE<10 does not support cross-origin XHR's but script tags
 // with defer won't block window.onload; ENQUEUE_REQUESTS
 // should only be true for Opera<12
-let ENQUEUE_REQUESTS = !USE_XHR && userAgent.indexOf('MSIE') === -1 && userAgent.indexOf('Mozilla') === -1
+let ENQUEUE_REQUESTS = !USE_XHR && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
@@ -516,8 +516,7 @@ export class PostHog {
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
-        window.addEventListener &&
-            window.addEventListener('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
+        window?.addEventListener?.('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
 
         // Make sure that we also call the initComplete callback at the end of
         // the synchronous code as well.
@@ -564,7 +563,7 @@ export class PostHog {
 
         // this happens after so a user can call identify in
         // the loaded callback
-        if (this.config.capture_pageview) {
+        if (this.config.capture_pageview && document) {
             this.capture('$pageview', { title: document.title }, { send_instantly: true })
         }
 
@@ -689,7 +688,7 @@ export class PostHog {
             options.method = 'GET'
         }
 
-        const useSendBeacon = 'sendBeacon' in window.navigator && options.transport === 'sendBeacon'
+        const useSendBeacon = window && 'sendBeacon' in window.navigator && options.transport === 'sendBeacon'
         url = addParamsToURL(url, options.urlQueryArgs || {}, {
             ip: this.config.ip,
         })
@@ -698,12 +697,12 @@ export class PostHog {
             // beacon documentation https://w3c.github.io/beacon/
             // beacons format the message and use the type property
             try {
-                window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+                window?.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
             } catch (e) {
                 // send beacon is a best-effort, fire-and-forget mechanism on page unload,
                 // we don't want to throw errors here
             }
-        } else if (USE_XHR) {
+        } else if (USE_XHR || !document) {
             try {
                 xhr({
                     url: url,
@@ -857,7 +856,7 @@ export class PostHog {
             return
         }
 
-        if (_isBlockedUA(userAgent, this.config.custom_blocked_useragents)) {
+        if (userAgent && _isBlockedUA(userAgent, this.config.custom_blocked_useragents)) {
             return
         }
 
@@ -962,7 +961,7 @@ export class PostHog {
             properties = _extend(properties, performanceProperties)
         }
 
-        if (event_name === '$pageview') {
+        if (event_name === '$pageview' && document) {
             properties['title'] = document.title
         }
 
@@ -2051,11 +2050,11 @@ export class PostHog {
 
     debug(debug?: boolean): void {
         if (debug === false) {
-            window.console.log("You've disabled debug mode.")
+            window?.console.log("You've disabled debug mode.")
             localStorage && localStorage.removeItem('ph_debug')
             this.set_config({ debug: false })
         } else {
-            window.console.log(
+            window?.console.log(
                 "You're now in debug mode. All calls to PostHog will be logged in your console.\nYou can disable this with `posthog.debug(false)`."
             )
             localStorage && localStorage.setItem('ph_debug', 'true')
@@ -2111,7 +2110,7 @@ const override_ph_init_func = function () {
 
             ;(posthog_master as any) = instance
             if (init_type === InitType.INIT_SNIPPET) {
-                ;(window as any)[PRIMARY_INSTANCE_NAME] = posthog_master
+                assignableWindow[PRIMARY_INSTANCE_NAME] = posthog_master
             }
             extend_mp()
             return instance
@@ -2135,7 +2134,7 @@ const add_dom_loaded_handler = function () {
         })
     }
 
-    if (document.addEventListener) {
+    if (document?.addEventListener) {
         if (document.readyState === 'complete') {
             // safari 4 can fire the DOMContentLoaded event before loading all
             // external JS (including this file). you will see some copypasta
@@ -2148,15 +2147,17 @@ const add_dom_loaded_handler = function () {
     }
 
     // fallback handler, always will work
-    _register_event(window, 'load', dom_loaded_handler, true)
+    if (window) {
+        _register_event(window, 'load', dom_loaded_handler, true)
+    }
 }
 
 export function init_from_snippet(): void {
     init_type = InitType.INIT_SNIPPET
-    if (_isUndefined((window as any).posthog)) {
-        ;(window as any).posthog = []
+    if (_isUndefined(assignableWindow.posthog)) {
+        assignableWindow.posthog = []
     }
-    posthog_master = (window as any).posthog
+    posthog_master = assignableWindow.posthog
 
     if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
         // lib has already been loaded at least once; we don't want to override the global object this time so bomb early

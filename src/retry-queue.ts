@@ -5,6 +5,7 @@ import { RateLimiter } from './rate-limiter'
 
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window } from './utils/globals'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -114,7 +115,7 @@ export class RetryQueue extends RequestQueueScaffold {
             try {
                 // we've had send beacon in place for at least 2 years
                 // eslint-disable-next-line compat/compat
-                window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+                window?.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
             } catch (e) {
                 // Note sendBeacon automatically retries, and after the first retry it will lose reference to contextual `this`.
                 // This means in some cases `this.getConfig` will be undefined.

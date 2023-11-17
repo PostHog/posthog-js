@@ -1,3 +1,25 @@
+## 1.91.1 - 2023-11-15
+
+- fix(surveys): button text field fix (#899)
+
+## 1.91.0 - 2023-11-15
+
+- fix: Window or document access across the code (#894)
+
+## 1.90.2 - 2023-11-15
+
+- chore: uniquify differently (#897)
+- correct CHANGELOG.md (#896)
+
+## 1.90.1 - 2023-11-15
+
+- fix: seek subdomain correctly (#888)
+- fix: merge server permissions for payload capture (#892)
+
+## 1.90.0 - 2023-11-15
+
+- fix(surveys): prioritize question button text field and thank you countdown is not automatic (#893)
+
 ## 1.89.2 - 2023-11-14
 
 - fix: a little session buffering logic (#890)

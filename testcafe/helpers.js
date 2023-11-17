@@ -5,12 +5,14 @@ import fetch from 'node-fetch'
 
 // NOTE: These tests are run against a dedicated test project in PostHog cloud
 // but can be overridden to call a local API when running locally
+// eslint-disable-next-line no-undef
+const currentEnv = process.env
 const {
     POSTHOG_PROJECT_KEY,
     POSTHOG_API_KEY,
     POSTHOG_API_HOST = 'https://app.posthog.com',
     POSTHOG_API_PROJECT = '11213',
-} = process.env
+} = currentEnv
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
@@ -26,18 +28,20 @@ export const captureLogger = RequestLogger(/ip=1/, {
 export const staticFilesMock = RequestMock()
     .onRequestTo(/array.full.js/)
     .respond((req, res) => {
+        // eslint-disable-next-line no-undef
         const arrayjs = fs.readFileSync(path.resolve(__dirname, '../dist/array.full.js'))
         res.setBody(arrayjs)
     })
     .onRequestTo(/playground/)
     .respond((req, res) => {
+        // eslint-disable-next-line no-undef
         const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
         res.setBody(html)
     })
 
 export const initPosthog = (config) => {
     return ClientFunction((configParams = {}) => {
-        var testSessionId = Math.round(Math.random() * 10000000000).toString()
+        const testSessionId = Math.round(Math.random() * 10000000000).toString()
         configParams.debug = true
         window.posthog.init(configParams.api_key, configParams)
         window.posthog.register({
@@ -70,6 +74,7 @@ export async function retryUntilResults(operation, target_results, limit = 6, de
                     if (results.length >= target_results) {
                         resolve(results)
                     } else {
+                        // eslint-disable-next-line no-console
                         console.log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
                         attempt(count + 1, resolve, reject)
                     }
@@ -78,6 +83,8 @@ export async function retryUntilResults(operation, target_results, limit = 6, de
         }, delay)
     }
 
+    // new Promise isn't supported in IE11, but we don't care in these tests
+    // eslint-disable-next-line compat/compat
     return new Promise((...args) => attempt(0, ...args))
 }
 
@@ -90,6 +97,7 @@ export async function queryAPI(testSessionId) {
     const data = await response.text()
 
     if (!response.ok) {
+        // eslint-disable-next-line no-console
         console.error('Bad Response', response.status, data)
         throw new Error('Bad Response')
     }

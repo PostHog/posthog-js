@@ -9,6 +9,7 @@ import { _each, _entries, _includes, _trim } from './utils'
 
 import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { window } from './utils/globals'
 
 export function getClassName(el: Element): string {
     switch (typeof el.className) {
@@ -110,7 +111,7 @@ export function shouldCaptureDomEvent(
     event: Event,
     autocaptureConfig: AutocaptureConfig | undefined = undefined
 ): boolean {
-    if (!el || isTag(el, 'html') || !isElementNode(el)) {
+    if (!window || !el || isTag(el, 'html') || !isElementNode(el)) {
         return false
     }
 

@@ -1,6 +1,7 @@
 import { t } from 'testcafe'
 import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock } from './helpers'
 
+// eslint-disable-next-line no-undef
 fixture('posthog.js capture')
     .page('http://localhost:8000/playground/cypress-full/index.html')
     .requestHooks(captureLogger, staticFilesMock)
@@ -8,6 +9,7 @@ fixture('posthog.js capture')
         const browserLogs = await t.getBrowserConsoleMessages()
         Object.keys(browserLogs).forEach((level) => {
             browserLogs[level].forEach((line) => {
+                // eslint-disable-next-line no-console
                 console.log(`Browser ${level}:`, line)
             })
         })

@@ -10,7 +10,7 @@ import {
     hasOwnProperty,
 } from './type-utils'
 import { logger } from './logger'
-import { document, nativeForEach, nativeIndexOf } from './globals'
+import { window, document, nativeForEach, nativeIndexOf } from './globals'
 
 const breaker: Breaker = {}
 
@@ -466,7 +466,7 @@ export const _register_event = (function () {
         old_handlers: EventHandler
     ) {
         return function (event: Event): boolean | void {
-            event = event || fixEvent(window.event)
+            event = event || fixEvent(window?.event)
 
             // this basically happens in firefox whenever another script
             // overwrites the onload callback and doesn't pass the event
@@ -512,6 +512,9 @@ export const _register_event = (function () {
 
 export function loadScript(scriptUrlToLoad: string, callback: (error?: string | Event, event?: Event) => void): void {
     const addScript = () => {
+        if (!document) {
+            return callback('document not found')
+        }
         const scriptTag = document.createElement('script')
         scriptTag.type = 'text/javascript'
         scriptTag.src = scriptUrlToLoad
@@ -527,10 +530,10 @@ export function loadScript(scriptUrlToLoad: string, callback: (error?: string | 
         }
     }
 
-    if (document.body) {
+    if (document?.body) {
         addScript()
     } else {
-        document.addEventListener('DOMContentLoaded', addScript)
+        document?.addEventListener('DOMContentLoaded', addScript)
     }
 }
 

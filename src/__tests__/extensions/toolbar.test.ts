@@ -2,7 +2,7 @@ import { Toolbar } from '../../extensions/toolbar'
 import { _isString, _isUndefined } from '../../utils/type-utils'
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig, ToolbarParams } from '../../types'
-import { window } from '../../utils/globals'
+import { assignableWindow, window } from '../../utils/globals'
 
 jest.mock('../../utils', () => ({
     ...jest.requireActual('../../utils'),
@@ -31,8 +31,8 @@ describe('Toolbar', () => {
     })
 
     beforeEach(() => {
-        ;(window as any).ph_load_toolbar = jest.fn()
-        delete (window as any)['_postHogToolbarLoaded']
+        assignableWindow.ph_load_toolbar = jest.fn()
+        delete assignableWindow['_postHogToolbarLoaded']
     })
 
     describe('maybeLoadToolbar', () => {
@@ -40,7 +40,8 @@ describe('Toolbar', () => {
             getItem: jest.fn(),
             setItem: jest.fn(),
         }
-        const history = { replaceState: jest.fn() }
+        const storage = localStorage as unknown as Storage
+        const history = { replaceState: jest.fn() } as unknown as History
 
         const defaultHashState = {
             action: 'ph_authorize',
@@ -71,7 +72,7 @@ describe('Toolbar', () => {
                 .join('&')
         }
 
-        const aLocation = (hash?: string) => {
+        const aLocation = (hash?: string): Location => {
             if (_isUndefined(hash)) {
                 hash = withHash(withHashParamsFrom())
             }
@@ -80,7 +81,7 @@ describe('Toolbar', () => {
                 hash: `#${hash}`,
                 pathname: 'pathname',
                 search: '?search',
-            }
+            } as Location
         }
 
         beforeEach(() => {
@@ -91,7 +92,7 @@ describe('Toolbar', () => {
 
         it('should initialize the toolbar when the hash state contains action "ph_authorize"', () => {
             // the default hash state in the test setup contains the action "ph_authorize"
-            toolbar.maybeLoadToolbar(aLocation(), localStorage, history)
+            toolbar.maybeLoadToolbar(aLocation(), storage, history)
 
             expect(toolbar.loadToolbar).toHaveBeenCalledWith({
                 ...toolbarParams,
@@ -105,7 +106,7 @@ describe('Toolbar', () => {
             localStorage.getItem.mockImplementation(() => JSON.stringify(toolbarParams))
 
             const hashState = { ...defaultHashState, action: undefined }
-            toolbar.maybeLoadToolbar(aLocation(withHash(withHashParamsFrom(hashState))), localStorage, history)
+            toolbar.maybeLoadToolbar(aLocation(withHash(withHashParamsFrom(hashState))), storage, history)
 
             expect(toolbar.loadToolbar).toHaveBeenCalledWith({
                 ...toolbarParams,
@@ -114,14 +115,14 @@ describe('Toolbar', () => {
         })
 
         it('should NOT initialize the toolbar when the activation query param does not exist', () => {
-            expect(toolbar.maybeLoadToolbar(aLocation(''), localStorage, history)).toEqual(false)
+            expect(toolbar.maybeLoadToolbar(aLocation(''), storage, history)).toEqual(false)
 
             expect(toolbar.loadToolbar).not.toHaveBeenCalled()
         })
 
         it('should return false when parsing invalid JSON from fragment state', () => {
             expect(
-                toolbar.maybeLoadToolbar(aLocation(withHash(withHashParamsFrom('literally'))), localStorage, history)
+                toolbar.maybeLoadToolbar(aLocation(withHash(withHashParamsFrom('literally'))), storage, history)
             ).toEqual(false)
             expect(toolbar.loadToolbar).not.toHaveBeenCalled()
         })
@@ -129,7 +130,7 @@ describe('Toolbar', () => {
         it('should work if calling toolbar params `__posthog`', () => {
             toolbar.maybeLoadToolbar(
                 aLocation(withHash(withHashParamsFrom(defaultHashState, '__posthog'))),
-                localStorage,
+                storage,
                 history
             )
             expect(toolbar.loadToolbar).toHaveBeenCalledWith({ ...toolbarParams, ...defaultHashState, source: 'url' })
@@ -138,7 +139,7 @@ describe('Toolbar', () => {
         it('should use the apiURL in the hash if available', () => {
             toolbar.maybeLoadToolbar(
                 aLocation(withHash(withHashParamsFrom({ ...defaultHashState, apiURL: 'blabla' }))),
-                localStorage,
+                storage,
                 history
             )
 
@@ -154,7 +155,7 @@ describe('Toolbar', () => {
     describe('load and close toolbar', () => {
         it('should persist for next time', () => {
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
-            expect(JSON.parse((window as any).localStorage.getItem('_postHogToolbarParams'))).toEqual({
+            expect(JSON.parse(window.localStorage.getItem('_postHogToolbarParams') ?? '')).toEqual({
                 ...toolbarParams,
                 apiURL: 'http://api.example.com',
             })
@@ -162,7 +163,7 @@ describe('Toolbar', () => {
 
         it('should load if not previously loaded', () => {
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
-            expect((window as any).ph_load_toolbar).toHaveBeenCalledWith(
+            expect(assignableWindow.ph_load_toolbar).toHaveBeenCalledWith(
                 { ...toolbarParams, apiURL: 'http://api.example.com' },
                 instance
             )
@@ -181,7 +182,7 @@ describe('Toolbar', () => {
 
         it('should load if not previously loaded', () => {
             expect(toolbar.loadToolbar(minimalToolbarParams)).toBe(true)
-            expect((window as any).ph_load_toolbar).toHaveBeenCalledWith(
+            expect(assignableWindow.ph_load_toolbar).toHaveBeenCalledWith(
                 {
                     ...minimalToolbarParams,
                     apiURL: 'http://api.example.com',
