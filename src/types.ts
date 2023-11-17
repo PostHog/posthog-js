@@ -238,8 +238,8 @@ export interface DecideResponse {
     capturePerformance?: boolean
     analytics?: {
         endpoint?: string
-        elementsChainAsString?: boolean
     }
+    elementsChainAsString?: boolean
     // this is currently in development and may have breaking changes without a major version bump
     autocaptureExceptions?:
         | boolean

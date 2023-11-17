@@ -540,8 +540,8 @@ export class PostHog {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
         }
 
-        if (response.analytics?.elementsChainAsString) {
-            this.elementsChainAsString = response.analytics.elementsChainAsString
+        if (response.elementsChainAsString) {
+            this.elementsChainAsString = response.elementsChainAsString
         }
     }
 
