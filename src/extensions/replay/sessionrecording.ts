@@ -24,6 +24,7 @@ import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isU
 import { logger } from '../../utils/logger'
 import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
+import { isLocalhost } from '../../utils/request-utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -101,6 +102,9 @@ export class SessionRecording {
     private _linkedFlag: string | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
+
+    // Util to help developers working on this feature manually override
+    _forceAllowLocalhostNetworkCapture = false
 
     public get started(): boolean {
         // TODO could we use status instead of _captureStarted?
@@ -497,6 +501,11 @@ export class SessionRecording {
             plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
         }
         if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
+            if (isLocalhost() && !this._forceAllowLocalhostNetworkCapture) {
+                logger.info('[SessionReplay-NetworkCapture] not started because we are on localhost.')
+                return
+            }
+
             plugins.push(
                 assignableWindow.getRecordNetworkPlugin(
                     buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
