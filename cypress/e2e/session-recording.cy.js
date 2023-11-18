@@ -13,19 +13,15 @@ describe('Session recording', () => {
 
     describe('array.full.js', () => {
         beforeEach(() => {
-            cy.route({
-                method: 'POST',
-                url: '**/decide/*',
-                response: {
-                    config: { enable_collect_everything: false },
-                    editorParams: {},
-                    featureFlags: ['session-recording-player'],
-                    isAuthenticated: false,
-                    sessionRecording: {
-                        endpoint: '/ses/',
-                    },
-                    capture_performance: true,
+            cy.intercept('POST', '**/decide/*', {
+                config: { enable_collect_everything: false },
+                editorParams: {},
+                featureFlags: ['session-recording-player'],
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
                 },
+                capture_performance: true,
             }).as('decide')
 
             cy.visit('./playground/cypress-full')
@@ -58,20 +54,16 @@ describe('Session recording', () => {
 
     describe('array.js', () => {
         beforeEach(() => {
-            cy.route({
-                method: 'POST',
-                url: '**/decide/*',
-                response: {
-                    config: { enable_collect_everything: false },
-                    editorParams: {},
-                    featureFlags: ['session-recording-player'],
-                    isAuthenticated: false,
-                    sessionRecording: {
-                        endpoint: '/ses/',
-                    },
-                    supportedCompression: ['gzip', 'lz64'],
-                    capture_performance: true,
+            cy.intercept('POST', '**/decide/*', {
+                config: { enable_collect_everything: false },
+                editorParams: {},
+                featureFlags: ['session-recording-player'],
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
                 },
+                supportedCompression: ['gzip', 'lz64'],
+                capture_performance: true,
             }).as('decide')
 
             cy.visit('./playground/cypress')

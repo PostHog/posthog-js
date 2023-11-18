@@ -5,8 +5,8 @@ export function getBase64EncodedPayload(request) {
     return JSON.parse(Buffer.from(data, 'base64'))
 }
 
-export async function getGzipEncodedPayload(requestBody) {
-    const data = new Uint8Array(await requestBody.arrayBuffer())
+export async function getGzipEncodedPayload(request) {
+    const data = new Uint8Array(await request.body)
     const decoded = fflate.strFromU8(fflate.decompressSync(data))
     return JSON.parse(decoded)
 }
