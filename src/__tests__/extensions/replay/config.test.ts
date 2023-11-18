@@ -89,6 +89,87 @@ describe('config', () => {
                     'content-type': 'application/json',
                 })
             })
+
+            it.each([
+                [
+                    {
+                        name: 'https://app.posthog.com/api/feature_flag/',
+                    },
+                    {
+                        name: 'https://app.posthog.com/api/feature_flag/',
+                    },
+                ],
+                [
+                    {
+                        name: 'https://app.posthog.com/s/',
+                    },
+                    undefined,
+                ],
+                [
+                    {
+                        name: 'https://app.posthog.com/e/',
+                    },
+                    undefined,
+                ],
+                [
+                    {
+                        name: 'https://app.posthog.com/i/vo/e/',
+                    },
+                    undefined,
+                ],
+            ])('ignores ingestion paths', (capturedRequest, expected) => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const x = networkOptions.maskRequestFn!(capturedRequest)
+                expect(x).toEqual(expected)
+            })
+
+            it('redacts large request body', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    url: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                        'content-length': '1000001',
+                    },
+                    requestBody: 'something very large',
+                })
+                expect(cleaned?.requestBody).toEqual('Request body too large to record')
+            })
+            it('redacts large response body', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    url: 'something',
+                    responseHeaders: {
+                        'content-type': 'application/json',
+                        'content-length': '1000001',
+                    },
+                    responseBody: 'something very large',
+                })
+                expect(cleaned?.responseBody).toEqual('Response body too large to record')
+            })
+            it('redacts large request when there is no content length header', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    url: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: 'a'.repeat(1000001),
+                })
+                expect(cleaned?.requestBody).toEqual('Request body too large to record')
+            })
+            it('redacts large response when there is no content length header', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const largeArrayBuffer: ArrayBuffer = new ArrayBuffer(1000001)
+                const cleaned = networkOptions.maskRequestFn!({
+                    url: 'something',
+                    responseHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    responseBody: largeArrayBuffer,
+                })
+                expect(cleaned?.responseBody).toEqual('Response body too large to record')
+            })
         })
     })
 })

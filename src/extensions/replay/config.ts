@@ -1,5 +1,5 @@
-import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../types'
-import { _isFunction } from '../../utils/type-utils'
+import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig, Body } from '../../types'
+import { _isFunction, _isString } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
@@ -40,6 +40,7 @@ export const defaultNetworkOptions: NetworkRecordOptions = {
         'paint',
         'resource',
     ],
+    payloadSizeLimitBytes: 1000000,
 }
 
 const HEADER_DENYLIST = [
@@ -58,6 +59,7 @@ const HEADER_DENYLIST = [
     'x-xsrf-token',
 ]
 
+// we always remove headers on the deny list because we never want to capture this sensitive data
 const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
     Object.keys(data.requestHeaders ?? {}).forEach((header) => {
         if (HEADER_DENYLIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
@@ -67,12 +69,72 @@ const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetwor
 
 const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/vo/e/']
 // want to ignore posthog paths when capturing requests, or we can get trapped in a loop
+// because calls to PostHog would be reported using a call to PostHog which would be reported....
 const ignorePostHogPaths = (data: CapturedNetworkRequest): CapturedNetworkRequest | undefined => {
     const url = convertToURL(data.name)
     if (url && url.pathname && POSTHOG_PATHS_TO_IGNORE.includes(url.pathname)) {
         return undefined
     }
     return data
+}
+
+// we want to limit the size of the payload we send to the server
+// we don't need to be super accurate here, so we just estimate the size
+function estimatePayloadSize(payload: Body) {
+    if (_isString(payload)) {
+        return payload.length
+    } else if (payload instanceof Blob) {
+        return payload.size
+    } else if (payload instanceof FormData) {
+        return JSON.stringify(payload).length
+    } else if (payload instanceof URLSearchParams) {
+        return payload.toString().length
+    } else if (payload instanceof ArrayBuffer) {
+        return payload.byteLength
+    } else if (ArrayBuffer.isView(payload)) {
+        return payload.byteLength
+    } else if (payload instanceof ReadableStream) {
+        // ReadableStream does not have a built-in way to estimate size
+        // You might need to read the stream and count the chunks
+        // Be aware that reading the stream will consume it
+        return 0
+    } else {
+        return 0
+    }
+}
+
+function redactPayload(
+    payload: Body,
+    headers: Record<string, any> | undefined,
+    limit: number,
+    description: string
+): Body {
+    const requestContentLength = headers?.['content-length']
+    // use content length if it's available, otherwise estimate the size
+    if ((requestContentLength && parseInt(requestContentLength) > limit) || estimatePayloadSize(payload) > limit) {
+        return `${description} body too large to record`
+    }
+    return payload
+}
+
+// people can have arbitrarily large payloads on their site, but we don't want to ingest them
+const limitPayloadSize = (
+    options: NetworkRecordOptions
+): ((data: CapturedNetworkRequest | undefined) => CapturedNetworkRequest | undefined) => {
+    // the smallest of 1MB or the specified limit if there is one
+    const limit = Math.min(1000000, options.payloadSizeLimitBytes ?? 1000000)
+
+    return (data) => {
+        if (data?.requestBody) {
+            data.requestBody = redactPayload(data.requestBody, data.requestHeaders, limit, 'Request')
+        }
+
+        if (data?.responseBody) {
+            data.responseBody = redactPayload(data.responseBody, data.responseHeaders, limit, 'Response')
+        }
+
+        return data
+    }
 }
 
 /**
@@ -91,9 +153,14 @@ export const buildNetworkRequestOptions = (
     const canRecordBody = config.recordBody === false ? false : remoteNetworkOptions.recordBody
     const canRecordPerformance = config.recordPerformance === false ? false : remoteNetworkOptions.recordPerformance
 
+    const payloadLimiter = limitPayloadSize(config)
+
+    const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
+        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d)))
+
     config.maskRequestFn = _isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
         ? (data) => {
-              const cleanedRequest = ignorePostHogPaths(removeAuthorizationHeader(data))
+              const cleanedRequest = enforcedCleaningFn(data)
               return cleanedRequest
                   ? instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined
                   : undefined
@@ -101,7 +168,7 @@ export const buildNetworkRequestOptions = (
         : undefined
 
     if (!config.maskRequestFn) {
-        config.maskRequestFn = (data) => ignorePostHogPaths(removeAuthorizationHeader(data))
+        config.maskRequestFn = enforcedCleaningFn
     }
 
     return {

@@ -412,6 +412,9 @@ export type NetworkRecordOptions = {
     recordPerformance?: boolean
     // the PerformanceObserver will only observe these entry types
     performanceEntryTypeToObserve: string[]
+    // the maximum size of the request/response body to record
+    // NB this will be at most 1MB even if set larger
+    payloadSizeLimitBytes: number
 }
 
 // deprecated - use CapturedNetworkRequest instead
