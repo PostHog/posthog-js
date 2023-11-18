@@ -31,24 +31,30 @@ describe('config', () => {
             it('should remove the Authorization header from requests even if no other config is set', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
-                    url: 'something',
+                    name: 'something',
                     requestHeaders: {
                         Authorization: 'Bearer 123',
                         'content-type': 'application/json',
                     },
                 })
-                expect(cleaned?.requestHeaders).toEqual({
-                    'content-type': 'application/json',
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
                 })
             })
 
             it('should cope with no headers when even if no other config is set', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
-                    url: 'something',
+                    name: 'something',
                     requestHeaders: undefined,
                 })
-                expect(cleaned?.requestHeaders).toBeUndefined()
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: undefined,
+                })
             })
 
             it('should remove the Authorization header from requests even when a mask request fn is set', () => {
@@ -65,28 +71,59 @@ describe('config', () => {
                 const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
 
                 const cleaned = networkOptions.maskRequestFn!({
-                    url: 'something',
+                    name: 'something',
                     requestHeaders: {
                         Authorization: 'Bearer 123',
                         'content-type': 'application/json',
                     },
                 })
-                expect(cleaned?.requestHeaders).toEqual({
-                    'content-type': 'edited',
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'edited',
+                    },
+                })
+            })
+
+            it('uses the deprecated mask fn when set', () => {
+                const posthogConfig = defaultConfig()
+                posthogConfig.session_recording.maskNetworkRequestFn = (data) => {
+                    return {
+                        ...data,
+                        url: 'edited', // deprecated fn only edits the url
+                    }
+                }
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        Authorization: 'Bearer 123',
+                        'content-type': 'application/json',
+                    },
+                })
+                expect(cleaned).toEqual({
+                    name: 'edited',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
                 })
             })
 
             it('case insensitively removes headers on the deny list', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
-                    url: 'something',
+                    name: 'something',
                     requestHeaders: {
                         AuThOrIzAtIoN: 'Bearer 123',
                         'content-type': 'application/json',
                     },
                 })
-                expect(cleaned?.requestHeaders).toEqual({
-                    'content-type': 'application/json',
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
                 })
             })
 
@@ -126,40 +163,60 @@ describe('config', () => {
             it('redacts large request body', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
-                    url: 'something',
+                    name: 'something',
                     requestHeaders: {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
                     requestBody: 'something very large',
                 })
-                expect(cleaned?.requestBody).toEqual('Request body too large to record')
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                        'content-length': '1000001',
+                    },
+                    requestBody: 'Request body too large to record',
+                })
             })
 
             it('redacts large response body', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
-                    url: 'something',
+                    name: 'something',
                     responseHeaders: {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
                     responseBody: 'something very large',
                 })
-                expect(cleaned?.responseBody).toEqual('Response body too large to record')
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    responseHeaders: {
+                        'content-type': 'application/json',
+                        'content-length': '1000001',
+                    },
+                    responseBody: 'Response body too large to record',
+                })
             })
 
             it('cannot redact when there is no content length header', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const largeString = 'a'.repeat(1000001)
                 const cleaned = networkOptions.maskRequestFn!({
-                    url: 'something',
+                    name: 'something',
                     requestHeaders: {
                         'content-type': 'application/json',
                     },
                     requestBody: largeString,
                 })
-                expect(cleaned?.requestBody).toEqual(largeString)
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: largeString,
+                })
             })
         })
     })

@@ -7,9 +7,11 @@ import { document, window } from './globals'
 const localDomains = ['localhost', '127.0.0.1']
 
 /**
- * We can't rely on `new URL` because IE11 doesn't support it,
- * but we can create an anchor element and use that to parse the URL
+ * IE11 doesn't support `new URL`
+ * so when window.URL is not a function
+ * we can create an anchor element and use that to parse the URL
  * there's a lot of overlap between HTMLHyperlinkElementUtils and URL
+ * meaning useful properties like `pathname` are available on both
  */
 export const convertToURL = (url: string): HTMLAnchorElement | URL | null => {
     // TODO this definitely needs some tests!

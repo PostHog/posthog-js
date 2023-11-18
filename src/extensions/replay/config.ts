@@ -1,6 +1,7 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig, Body } from '../../types'
 import { _isFunction } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
+import { logger } from '../../utils/logger'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
     initiatorTypes: [
@@ -135,6 +136,24 @@ export const buildNetworkRequestOptions = (
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
         payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d)))
+
+    const hasDeprecatedMaskFunction = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
+
+    if (hasDeprecatedMaskFunction && _isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)) {
+        logger.warn(
+            'Both `maskNetworkRequestFn` and `maskCapturedNetworkRequestFn` are defined. `maskNetworkRequestFn` will be ignored.'
+        )
+    }
+
+    if (hasDeprecatedMaskFunction) {
+        instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
+            const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
+            return {
+                ...data,
+                name: cleanedURL?.url,
+            } as CapturedNetworkRequest
+        }
+    }
 
     config.maskRequestFn = _isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
         ? (data) => {
