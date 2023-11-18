@@ -1,9 +1,37 @@
 import { _each, _isValidRegex } from './'
 
-import { _isArray, _isUndefined } from './type-utils'
+import { _isArray, _isFunction, _isUndefined } from './type-utils'
 import { logger } from './logger'
+import { document, window } from './globals'
 
 const localDomains = ['localhost', '127.0.0.1']
+
+const canUseNewURL = (): boolean => {
+    return _isFunction(window?.URL)
+}
+
+/**
+ * We can't rely on `new URL` because IE11 doesn't support it,
+ * but we can create an anchor element and use that to parse the URL
+ */
+export const convertToURL = (url: string): HTMLAnchorElement | URL | null => {
+    // TODO this definitely needs some tests!
+    if (canUseNewURL()) {
+        try {
+            return new URL(url)
+        } catch (e) {
+            return null
+        }
+    } else {
+        const location = document?.createElement('a')
+        if (_isUndefined(location)) {
+            return null
+        }
+
+        location.href = url
+        return location
+    }
+}
 
 export const _isUrlMatchingRegex = function (url: string, pattern: string): boolean {
     if (!_isValidRegex(pattern)) return false

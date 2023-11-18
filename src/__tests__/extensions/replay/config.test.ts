@@ -53,7 +53,7 @@ describe('config', () => {
 
             it('should remove the Authorization header from requests even when a mask request fn is set', () => {
                 const posthogConfig = defaultConfig()
-                posthogConfig.session_recording.maskNetworkRequestFn = (data) => {
+                posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
                     return {
                         ...data,
                         requestHeaders: {
