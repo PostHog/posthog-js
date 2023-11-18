@@ -371,6 +371,11 @@ export type Body =
     | ArrayBufferView
     | ArrayBuffer
     | FormData
+    // rrweb uses URLSearchParams and ReadableStream<Uint8Array>
+    // as part of the union for this type
+    // because they don't support IE11
+    // but, we do 🫠
+    // what's going to happen here in IE11?
     | URLSearchParams
     | ReadableStream<Uint8Array>
     | null

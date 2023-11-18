@@ -135,6 +135,7 @@ describe('config', () => {
                 })
                 expect(cleaned?.requestBody).toEqual('Request body too large to record')
             })
+
             it('redacts large response body', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
@@ -147,28 +148,18 @@ describe('config', () => {
                 })
                 expect(cleaned?.responseBody).toEqual('Response body too large to record')
             })
-            it('redacts large request when there is no content length header', () => {
+
+            it('cannot redact when there is no content length header', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const largeString = 'a'.repeat(1000001)
                 const cleaned = networkOptions.maskRequestFn!({
                     url: 'something',
                     requestHeaders: {
                         'content-type': 'application/json',
                     },
-                    requestBody: 'a'.repeat(1000001),
+                    requestBody: largeString,
                 })
-                expect(cleaned?.requestBody).toEqual('Request body too large to record')
-            })
-            it('redacts large response when there is no content length header', () => {
-                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
-                const largeArrayBuffer: ArrayBuffer = new ArrayBuffer(1000001)
-                const cleaned = networkOptions.maskRequestFn!({
-                    url: 'something',
-                    responseHeaders: {
-                        'content-type': 'application/json',
-                    },
-                    responseBody: largeArrayBuffer,
-                })
-                expect(cleaned?.responseBody).toEqual('Response body too large to record')
+                expect(cleaned?.requestBody).toEqual(largeString)
             })
         })
     })

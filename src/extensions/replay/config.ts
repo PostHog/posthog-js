@@ -1,5 +1,5 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig, Body } from '../../types'
-import { _isFunction, _isString } from '../../utils/type-utils'
+import { _isFunction } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
@@ -78,31 +78,6 @@ const ignorePostHogPaths = (data: CapturedNetworkRequest): CapturedNetworkReques
     return data
 }
 
-// we want to limit the size of the payload we send to the server
-// we don't need to be super accurate here, so we just estimate the size
-function estimatePayloadSize(payload: Body) {
-    if (_isString(payload)) {
-        return payload.length
-    } else if (payload instanceof Blob) {
-        return payload.size
-    } else if (payload instanceof FormData) {
-        return JSON.stringify(payload).length
-    } else if (payload instanceof URLSearchParams) {
-        return payload.toString().length
-    } else if (payload instanceof ArrayBuffer) {
-        return payload.byteLength
-    } else if (ArrayBuffer.isView(payload)) {
-        return payload.byteLength
-    } else if (payload instanceof ReadableStream) {
-        // ReadableStream does not have a built-in way to estimate size
-        // You might need to read the stream and count the chunks
-        // Be aware that reading the stream will consume it
-        return 0
-    } else {
-        return 0
-    }
-}
-
 function redactPayload(
     payload: Body,
     headers: Record<string, any> | undefined,
@@ -110,8 +85,11 @@ function redactPayload(
     description: string
 ): Body {
     const requestContentLength = headers?.['content-length']
-    // use content length if it's available, otherwise estimate the size
-    if ((requestContentLength && parseInt(requestContentLength) > limit) || estimatePayloadSize(payload) > limit) {
+    // in the interests of bundle size and the complexity of estimating payload size
+    // we only check the content-length header if it's present
+    // this might mean we can't always limit the payload, but that's better than
+    // having lots of code shipped to every browser that will rarely run
+    if (requestContentLength && parseInt(requestContentLength) > limit) {
         return `${description} body too large to record`
     }
     return payload
