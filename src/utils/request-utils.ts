@@ -6,17 +6,13 @@ import { document, window } from './globals'
 
 const localDomains = ['localhost', '127.0.0.1']
 
-const canUseNewURL = (): boolean => {
-    return _isFunction(window?.URL)
-}
-
 /**
  * We can't rely on `new URL` because IE11 doesn't support it,
  * but we can create an anchor element and use that to parse the URL
  */
 export const convertToURL = (url: string): HTMLAnchorElement | URL | null => {
     // TODO this definitely needs some tests!
-    if (canUseNewURL()) {
+    if (_isFunction(window?.URL)) {
         try {
             return new URL(url)
         } catch (e) {
