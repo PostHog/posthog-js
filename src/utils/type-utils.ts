@@ -42,9 +42,7 @@ export const _isString = function (x: unknown): x is string {
     // eslint-disable-next-line posthog-js/no-direct-string-check
     return toString.call(x) == '[object String]'
 }
-export const _isBlob = function (x: unknown): x is Blob {
-    return toString.call(x) === '[object Blob]'
-}
+
 export const _isNull = function (x: unknown): x is null {
     // eslint-disable-next-line posthog-js/no-direct-null-check
     return x === null
