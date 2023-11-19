@@ -1,11 +1,16 @@
+/// <reference lib="dom" />
 /* eslint-disable compat/compat */
 import sinon from 'sinon'
 
 import { autocapture } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
+import { AutocaptureConfig, DecideResponse, PostHogConfig } from '../types'
+import { PostHog } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
+import { window } from '../utils/globals'
 
-const triggerMouseEvent = function (node, eventType) {
+const triggerMouseEvent = function (node: Node, eventType: string) {
     node.dispatchEvent(
         new MouseEvent(eventType, {
             bubbles: true,
@@ -14,16 +19,40 @@ const triggerMouseEvent = function (node, eventType) {
     )
 }
 
-const simulateClick = function (el) {
+const simulateClick = function (el: Node) {
     triggerMouseEvent(el, 'click')
 }
 
+function makePostHog(ph: Partial<PostHog>): PostHog {
+    return {
+        get_distinct_id() {
+            return 'distinctid'
+        },
+        ...ph,
+    } as unknown as PostHog
+}
+
+function makeMouseEvent(me: Partial<MouseEvent>) {
+    return { type: 'click', ...me } as unknown as MouseEvent
+}
+
 describe('Autocapture system', () => {
-    let decideResponse
-    let $autocapture_disabled_server_side
+    const originalWindowLocation = window!.location
+
+    let decideResponse: DecideResponse
+    let $autocapture_disabled_server_side: boolean
 
     beforeEach(() => {
-        jest.spyOn(window.console, 'log').mockImplementation()
+        jest.spyOn(window!.console, 'log').mockImplementation()
+
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            // eslint-disable-next-line compat/compat
+            value: new URL('https://example.com'),
+        })
+
         autocapture._isDisabledServerSide = null
         $autocapture_disabled_server_side = false
         decideResponse = {
@@ -38,15 +67,27 @@ describe('Autocapture system', () => {
                     name: 'my property name',
                 },
             ],
-        }
+        } as DecideResponse
     })
 
     afterEach(() => {
         document.getElementsByTagName('html')[0].innerHTML = ''
+
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            enumerable: true,
+            value: originalWindowLocation,
+        })
     })
 
     describe('_getPropertiesFromElement', () => {
-        let div, div2, input, sensitiveInput, hidden, password
+        let div: HTMLDivElement
+        let div2: HTMLDivElement
+        let input: HTMLInputElement
+        let sensitiveInput: HTMLInputElement
+        let hidden: HTMLInputElement
+        let password: HTMLInputElement
+
         beforeEach(() => {
             div = document.createElement('div')
             div.className = 'class1 class2 class3          ' // Lots of spaces might mess things up
@@ -59,11 +100,11 @@ describe('Autocapture system', () => {
             sensitiveInput.value = 'test val'
             sensitiveInput.className = 'ph-sensitive'
 
-            hidden = document.createElement('div')
+            hidden = document.createElement('input')
             hidden.setAttribute('type', 'hidden')
             hidden.value = 'hidden val'
 
-            password = document.createElement('div')
+            password = document.createElement('input')
             password.setAttribute('type', 'password')
             password.value = 'password val'
 
@@ -82,42 +123,42 @@ describe('Autocapture system', () => {
         })
 
         it('should contain the proper tag name', () => {
-            const props = autocapture._getPropertiesFromElement(div)
+            const props = autocapture._getPropertiesFromElement(div, false, false)
             expect(props['tag_name']).toBe('div')
         })
 
         it('should contain class list', () => {
-            const props = autocapture._getPropertiesFromElement(div)
+            const props = autocapture._getPropertiesFromElement(div, false, false)
             expect(props['classes']).toEqual(['class1', 'class2', 'class3'])
         })
 
         it('should not collect input value', () => {
-            const props = autocapture._getPropertiesFromElement(input)
+            const props = autocapture._getPropertiesFromElement(input, false, false)
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip element value with class "ph-sensitive"', () => {
-            const props = autocapture._getPropertiesFromElement(sensitiveInput)
+            const props = autocapture._getPropertiesFromElement(sensitiveInput, false, false)
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip hidden element value', () => {
-            const props = autocapture._getPropertiesFromElement(hidden)
+            const props = autocapture._getPropertiesFromElement(hidden, false, false)
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip password element value', () => {
-            const props = autocapture._getPropertiesFromElement(password)
+            const props = autocapture._getPropertiesFromElement(password, false, false)
             expect(props['value']).toBeUndefined()
         })
 
         it('should contain nth-of-type', () => {
-            const props = autocapture._getPropertiesFromElement(div)
+            const props = autocapture._getPropertiesFromElement(div, false, false)
             expect(props['nth_of_type']).toBe(2)
         })
 
         it('should contain nth-child', () => {
-            const props = autocapture._getPropertiesFromElement(password)
+            const props = autocapture._getPropertiesFromElement(password, false, false)
             expect(props['nth_child']).toBe(7)
         })
 
@@ -125,7 +166,7 @@ describe('Autocapture system', () => {
             const angularDiv = document.createElement('div')
             angularDiv.setAttribute('_ngcontent-dpm-c448', '')
             angularDiv.setAttribute('_nghost-dpm-c448', '')
-            const props = autocapture._getPropertiesFromElement(angularDiv)
+            const props = autocapture._getPropertiesFromElement(angularDiv, false, false)
             expect(props['_ngcontent-dpm-c448']).toBeUndefined()
             expect(props['_nghost-dpm-c448']).toBeUndefined()
         })
@@ -137,7 +178,7 @@ describe('Autocapture system', () => {
             div.setAttribute('data-attr', 'value')
             div.setAttribute('data-attr-2', 'value')
             div.setAttribute('data-attr-3', 'value')
-            const props = autocapture._getPropertiesFromElement(div)
+            const props = autocapture._getPropertiesFromElement(div, false, false)
             expect(props['attr__data-attr']).toBeUndefined()
             expect(props['attr__data-attr-2']).toBeUndefined()
             expect(props['attr__data-attr-3']).toBe('value')
@@ -150,7 +191,7 @@ describe('Autocapture system', () => {
             div.setAttribute('data-attr', 'value')
             div.setAttribute('data-attr-2', 'value')
             div.setAttribute('data-attr-3', 'value')
-            const props = autocapture._getPropertiesFromElement(div)
+            const props = autocapture._getPropertiesFromElement(div, false, false)
             expect(props['attr__data-attr']).toBe('value')
             expect(props['attr__data-attr-2']).toBe('value')
             expect(props['attr__data-attr-3']).toBe('value')
@@ -158,7 +199,13 @@ describe('Autocapture system', () => {
     })
 
     describe('_getAugmentPropertiesFromElement', () => {
-        let div, div2, input, sensitiveInput, hidden, password
+        let div: HTMLDivElement
+        let div2: HTMLDivElement
+        let input: HTMLInputElement
+        let sensitiveInput: HTMLInputElement
+        let hidden: HTMLInputElement
+        let password: HTMLInputElement
+
         beforeEach(() => {
             div = document.createElement('div')
             div.className = 'class1 class2 class3          ' // Lots of spaces might mess things up
@@ -166,7 +213,7 @@ describe('Autocapture system', () => {
             div.setAttribute('data-ph-capture-attribute-one-on-the-div', 'one')
             div.setAttribute('data-ph-capture-attribute-two-on-the-div', 'two')
             div.setAttribute('data-ph-capture-attribute-falsey-on-the-div', '0')
-            div.setAttribute('data-ph-capture-attribute-false-on-the-div', false)
+            div.setAttribute('data-ph-capture-attribute-false-on-the-div', 'false')
 
             input = document.createElement('input')
             input.setAttribute('data-ph-capture-attribute-on-the-input', 'is on the input')
@@ -177,12 +224,12 @@ describe('Autocapture system', () => {
             sensitiveInput.setAttribute('data-ph-capture-attribute-on-the-sensitive-input', 'is on the sensitive-input')
             sensitiveInput.className = 'ph-sensitive'
 
-            hidden = document.createElement('div')
+            hidden = document.createElement('input')
             hidden.setAttribute('type', 'hidden')
             hidden.setAttribute('data-ph-capture-attribute-on-the-hidden', 'is on the hidden')
             hidden.value = 'hidden val'
 
-            password = document.createElement('div')
+            password = document.createElement('input')
             password.setAttribute('type', 'password')
             password.setAttribute('data-ph-capture-attribute-on-the-password', 'is on the password')
             password.value = 'password val'
@@ -219,19 +266,20 @@ describe('Autocapture system', () => {
             expect(props['on-the-sensitive-input']).toBeUndefined()
         })
 
-        it('should collect augment from the hidden element value', () => {
+        it('should not collect augment from the hidden element value', () => {
             const props = autocapture._getAugmentPropertiesFromElement(hidden)
-            expect(props['on-the-hidden']).toBe('is on the hidden')
+            expect(props).toStrictEqual({})
         })
 
         it('should collect augment from the password element value', () => {
             const props = autocapture._getAugmentPropertiesFromElement(password)
-            expect(props['on-the-password']).toBe('is on the password')
+            expect(props).toStrictEqual({})
         })
     })
 
     describe('isBrowserSupported', () => {
-        let orig
+        let orig: typeof document.querySelectorAll
+
         beforeEach(() => {
             orig = document.querySelectorAll
         })
@@ -241,12 +289,14 @@ describe('Autocapture system', () => {
         })
 
         it('should return true if document.querySelectorAll is a function', () => {
-            document.querySelectorAll = function () {}
+            document.querySelectorAll = function () {
+                return [] as unknown as NodeListOf<Element>
+            }
             expect(autocapture.isBrowserSupported()).toBe(true)
         })
 
         it('should return false if document.querySelectorAll is not a function', () => {
-            document.querySelectorAll = undefined
+            document.querySelectorAll = undefined as unknown as typeof document.querySelectorAll
             expect(autocapture.isBrowserSupported()).toBe(false)
         })
     })
@@ -301,14 +351,14 @@ describe('Autocapture system', () => {
     describe('_getCustomProperties', () => {
         let customProps
         let noCustomProps
-        let capturedElem
+        let capturedElem: HTMLDivElement
         let capturedElemChild
-        let uncapturedElem
-        let sensitiveInput
-        let sensitiveDiv
+        let uncapturedElem: HTMLDivElement
+        let sensitiveInput: HTMLInputElement
+        let sensitiveDiv: HTMLDivElement
         let prop1
         let prop2
-        let prop3
+        let prop3: HTMLDivElement
 
         beforeEach(() => {
             capturedElem = document.createElement('div')
@@ -476,26 +526,23 @@ describe('Autocapture system', () => {
     })
 
     describe('_captureEvent', () => {
-        let lib, sandbox
+        let lib: PostHog
+        let sandbox: sinon.SinonSandbox
 
-        const getCapturedProps = function (captureSpy) {
-            const captureArgs = captureSpy.args[0]
+        const getCapturedProps = function (captureSpy: unknown) {
+            const captureArgs = (captureSpy as sinon.SinonSpy).args[0]
             return captureArgs[1]
         }
 
         beforeEach(() => {
             sandbox = sinon.createSandbox()
-            lib = {
-                _ceElementTextProperties: [],
-                get_distinct_id() {
-                    return 'distinctid'
-                },
+            lib = makePostHog({
                 capture: sandbox.spy(),
                 config: {
                     mask_all_element_attributes: false,
                     rageclick: true,
-                },
-            }
+                } as PostHogConfig,
+            })
         })
 
         afterEach(() => {
@@ -503,25 +550,21 @@ describe('Autocapture system', () => {
         })
 
         it('should add the custom property when an element matching any of the event selectors is clicked', () => {
-            lib = {
+            lib = makePostHog({
                 _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
                     mask_all_element_attributes: false,
                     autocapture: true,
-                },
-                token: 'testtoken',
+                } as PostHogConfig,
                 capture: sandbox.spy(),
-                get_distinct_id() {
-                    return 'distinctid'
-                },
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),
-                },
-                get_property: (property_key) =>
+                } as unknown as PostHog['toolbar'],
+                get_property: (property_key: string) =>
                     property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? $autocapture_disabled_server_side : undefined,
-            }
+            })
             $autocapture_disabled_server_side = false
             autocapture.init(lib)
             autocapture.afterDecideResponse(decideResponse, lib)
@@ -539,17 +582,17 @@ describe('Autocapture system', () => {
             document.body.appendChild(eventElement2)
             document.body.appendChild(propertyElement)
 
-            expect(lib.capture.callCount).toBe(0)
+            expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
             simulateClick(eventElement1)
             simulateClick(eventElement2)
-            expect(lib.capture.callCount).toBe(2)
-            const captureArgs1 = lib.capture.args[0]
-            const captureArgs2 = lib.capture.args[1]
+            expect((lib.capture as sinon.SinonSpy).callCount).toBe(2)
+            const captureArgs1 = (lib.capture as sinon.SinonSpy).args[0]
+            const captureArgs2 = (lib.capture as sinon.SinonSpy).args[1]
             const eventType1 = captureArgs1[1]['my property name']
             const eventType2 = captureArgs2[1]['my property name']
             expect(eventType1).toBe('my property value')
             expect(eventType2).toBe('my property value')
-            lib.capture.resetHistory()
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
         })
 
         it('should capture rageclick', () => {
@@ -559,20 +602,19 @@ describe('Autocapture system', () => {
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
             const elGrandparent = document.createElement('a')
-            elGrandparent.setAttribute('href', 'http://test.com')
+            elGrandparent.setAttribute('href', 'https://test.com')
             elGrandparent.appendChild(elParent)
-            const fakeEvent = {
+            const fakeEvent = makeMouseEvent({
                 target: elTarget,
-                type: 'click',
                 clientX: 5,
                 clientY: 5,
-            }
+            })
             Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
             autocapture._captureEvent(fakeEvent, lib)
             autocapture._captureEvent(fakeEvent, lib)
             autocapture._captureEvent(fakeEvent, lib)
 
-            expect(lib.capture.args.map((args) => args[0])).toEqual([
+            expect((lib.capture as sinon.SinonSpy).args.map((args) => args[0])).toEqual([
                 '$autocapture',
                 '$autocapture',
                 '$rageclick',
@@ -589,42 +631,37 @@ describe('Autocapture system', () => {
             elParent.setAttribute('data-ph-capture-attribute-parent-augment', 'the parent')
             elParent.appendChild(elTarget)
             const elGrandparent = document.createElement('a')
-            elGrandparent.setAttribute('href', 'http://test.com')
+            elGrandparent.setAttribute('href', 'https://test.com')
             elGrandparent.appendChild(elParent)
-            const fakeEvent = {
+            const fakeEvent = makeMouseEvent({
                 target: elTarget,
-                type: 'click',
                 clientX: 5,
                 clientY: 5,
-            }
+            })
             Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
             autocapture._captureEvent(fakeEvent, lib)
 
-            const captureProperties = lib.capture.args[0][1]
+            const captureProperties = (lib.capture as sinon.SinonSpy).args[0][1]
             expect(captureProperties).toHaveProperty('target-augment', 'the target')
             expect(captureProperties).toHaveProperty('parent-augment', 'the parent')
         })
 
         it('should not capture events when config returns false, when an element matching any of the event selectors is clicked', () => {
-            lib = {
+            lib = makePostHog({
                 _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
                     mask_all_element_attributes: false,
                     autocapture: false,
-                },
-                token: 'testtoken',
+                } as PostHogConfig,
                 capture: sandbox.spy(),
-                get_distinct_id() {
-                    return 'distinctid'
-                },
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),
-                },
-                get_property: (property_key) =>
+                } as unknown as PostHog['toolbar'],
+                get_property: (property_key: string) =>
                     property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? $autocapture_disabled_server_side : undefined,
-            }
+            })
 
             autocapture.init(lib)
             autocapture.afterDecideResponse(decideResponse, lib)
@@ -642,33 +679,30 @@ describe('Autocapture system', () => {
             document.body.appendChild(eventElement2)
             document.body.appendChild(propertyElement)
 
-            expect(lib.capture.callCount).toBe(0)
+            expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
             simulateClick(eventElement1)
             simulateClick(eventElement2)
-            expect(lib.capture.callCount).toBe(0)
-            lib.capture.resetHistory()
+            expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
         })
 
         it('should not capture events when config returns true but server setting is disabled', () => {
-            lib = {
+            lib = makePostHog({
                 _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
                     mask_all_element_attributes: false,
                     autocapture: true,
-                },
-                token: 'testtoken',
+                } as PostHogConfig,
                 capture: sandbox.spy(),
-                get_distinct_id() {
-                    return 'distinctid'
-                },
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),
-                },
-                get_property: (property_key) =>
+                } as unknown as PostHog['toolbar'],
+                get_property: (property_key: string) =>
                     property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? $autocapture_disabled_server_side : undefined,
-            }
+            })
+
             // TODO this appears to have no effect on the test 🤷
             $autocapture_disabled_server_side = true
             autocapture.init(lib)
@@ -677,15 +711,15 @@ describe('Autocapture system', () => {
             const eventElement = document.createElement('a')
             document.body.appendChild(eventElement)
 
-            expect(lib.capture.callCount).toBe(0)
+            expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
             simulateClick(eventElement)
-            expect(lib.capture.callCount).toBe(0)
-            lib.capture.resetHistory()
+            expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
         })
 
         it('includes necessary metadata as properties when capturing an event', () => {
             const elTarget = document.createElement('a')
-            elTarget.setAttribute('href', 'http://test.com')
+            elTarget.setAttribute('href', 'https://test.com')
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
             const elGrandparent = document.createElement('div')
@@ -693,18 +727,17 @@ describe('Autocapture system', () => {
             const elGreatGrandparent = document.createElement('table')
             elGreatGrandparent.appendChild(elGrandparent)
             document.body.appendChild(elGreatGrandparent)
-            const e = {
+            const e = makeMouseEvent({
                 target: elTarget,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e, lib)
-            expect(lib.capture.calledOnce).toBe(true)
-            const captureArgs = lib.capture.args[0]
+            expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
+            const captureArgs = (lib.capture as sinon.SinonSpy).args[0]
             const event = captureArgs[0]
             const props = captureArgs[1]
             expect(event).toBe('$autocapture')
             expect(props['$event_type']).toBe('click')
-            expect(props['$elements'][0]).toHaveProperty('attr__href', 'http://test.com')
+            expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
             expect(props['$elements'][1]).toHaveProperty('tag_name', 'span')
             expect(props['$elements'][2]).toHaveProperty('tag_name', 'div')
             expect(props['$elements'][props['$elements'].length - 1]).toHaveProperty('tag_name', 'body')
@@ -712,7 +745,7 @@ describe('Autocapture system', () => {
 
         it('truncate any element property value to 1024 bytes', () => {
             const elTarget = document.createElement('a')
-            elTarget.setAttribute('href', 'http://test.com')
+            elTarget.setAttribute('href', 'https://test.com')
             const longString = 'prop'.repeat(400)
             elTarget.dataset.props = longString
             const elParent = document.createElement('span')
@@ -722,13 +755,12 @@ describe('Autocapture system', () => {
             const elGreatGrandparent = document.createElement('table')
             elGreatGrandparent.appendChild(elGrandparent)
             document.body.appendChild(elGreatGrandparent)
-            const e = {
+            const e = makeMouseEvent({
                 target: elTarget,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e, lib)
-            expect(lib.capture.calledOnce).toBe(true)
-            const captureArgs = lib.capture.args[0]
+            expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
+            const captureArgs = (lib.capture as sinon.SinonSpy).args[0]
             const props = captureArgs[1]
             expect(longString).toBe('prop'.repeat(400))
             expect(props['$elements'][0]).toHaveProperty('attr__data-props', 'prop'.repeat(256) + '...')
@@ -739,16 +771,15 @@ describe('Autocapture system', () => {
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
             const elGrandparent = document.createElement('a')
-            elGrandparent.setAttribute('href', 'http://test.com')
+            elGrandparent.setAttribute('href', 'https://test.com')
             elGrandparent.appendChild(elParent)
             autocapture._captureEvent(
-                {
+                makeMouseEvent({
                     target: elTarget,
-                    type: 'click',
-                },
+                }),
                 lib
             )
-            expect(getCapturedProps(lib.capture)['$elements'][0]).toHaveProperty('attr__href', 'http://test.com')
+            expect(getCapturedProps(lib.capture)['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
         })
 
         it('does not capture href attribute values from password elements', () => {
@@ -759,10 +790,9 @@ describe('Autocapture system', () => {
             elGrandparent.appendChild(elParent)
             elGrandparent.setAttribute('type', 'password')
             autocapture._captureEvent(
-                {
+                makeMouseEvent({
                     target: elTarget,
-                    type: 'click',
-                },
+                }),
                 lib
             )
             expect(getCapturedProps(lib.capture)).not.toHaveProperty('attr__href')
@@ -776,10 +806,9 @@ describe('Autocapture system', () => {
             elGrandparent.appendChild(elParent)
             elGrandparent.setAttribute('type', 'hidden')
             autocapture._captureEvent(
-                {
+                makeMouseEvent({
                     target: elTarget,
-                    type: 'click',
-                },
+                }),
                 lib
             )
             expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
@@ -793,10 +822,9 @@ describe('Autocapture system', () => {
             elGrandparent.appendChild(elParent)
             elGrandparent.setAttribute('href', '4111111111111111')
             autocapture._captureEvent(
-                {
+                makeMouseEvent({
                     target: elTarget,
-                    type: 'click',
-                },
+                }),
                 lib
             )
             expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
@@ -810,25 +838,24 @@ describe('Autocapture system', () => {
             elGrandparent.appendChild(elParent)
             elGrandparent.setAttribute('href', '123-58-1321')
             autocapture._captureEvent(
-                {
+                makeMouseEvent({
                     target: elTarget,
-                    type: 'click',
-                },
+                }),
                 lib
             )
             expect(getCapturedProps(lib.capture)['$elements'][0]).not.toHaveProperty('attr__href')
         })
 
         it('correctly identifies and formats text content', () => {
-            const dom = `
+            document.body.innerHTML = `
       <div>
         <button id='span1'>Some text</button>
         <div>
           <div>
             <div>
-              <img src='' id='img1'/>
+              <img src='' id='img1' alt=""/>
               <button>
-                <img src='' id='img2'/>
+                <img src='' id='img2' alt=""/>
               </button>
             </div>
           </div>
@@ -850,15 +877,13 @@ describe('Autocapture system', () => {
       </button>
 
       `
-            document.body.innerHTML = dom
             const span1 = document.getElementById('span1')
             const span2 = document.getElementById('span2')
             const img2 = document.getElementById('img2')
 
-            const e1 = {
+            const e1 = makeMouseEvent({
                 target: span2,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e1, lib)
 
             const props1 = getCapturedProps(lib.capture)
@@ -866,22 +891,20 @@ describe('Autocapture system', () => {
                 "Some super duper really long Text with new lines that we'll strip out and also we will want to make this text shorter since it's not likely people really care about text content that's super long and it also takes up more space and bandwidth. Some super d"
             expect(props1['$elements'][0]).toHaveProperty('$el_text', text1)
             expect(props1['$el_text']).toEqual(text1)
-            lib.capture.resetHistory()
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
 
-            const e2 = {
+            const e2 = makeMouseEvent({
                 target: span1,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e2, lib)
             const props2 = getCapturedProps(lib.capture)
             expect(props2['$elements'][0]).toHaveProperty('$el_text', 'Some text')
             expect(props2['$el_text']).toEqual('Some text')
-            lib.capture.resetHistory()
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
 
-            const e3 = {
+            const e3 = makeMouseEvent({
                 target: img2,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e3, lib)
             const props3 = getCapturedProps(lib.capture)
             expect(props3['$elements'][0]).toHaveProperty('$el_text', '')
@@ -889,7 +912,8 @@ describe('Autocapture system', () => {
         })
 
         it('does not capture sensitive text content', () => {
-            const dom = `
+            // ^ valid credit card and social security numbers
+            document.body.innerHTML = `
       <div>
         <button id='button1'> Why 123-58-1321 hello there</button>
       </div>
@@ -901,37 +925,32 @@ describe('Autocapture system', () => {
         Why hello there
         5105-1051-0510-5100
       </button>
-      ` // ^ valid credit card and social security numbers
-
-            document.body.innerHTML = dom
+      `
             const button1 = document.getElementById('button1')
             const button2 = document.getElementById('button2')
             const button3 = document.getElementById('button3')
 
-            const e1 = {
+            const e1 = makeMouseEvent({
                 target: button1,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e1, lib)
             const props1 = getCapturedProps(lib.capture)
             expect(props1['$elements'][0]).toHaveProperty('$el_text')
             expect(props1['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
-            lib.capture.resetHistory()
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
 
-            const e2 = {
+            const e2 = makeMouseEvent({
                 target: button2,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e2, lib)
             const props2 = getCapturedProps(lib.capture)
             expect(props2['$elements'][0]).toHaveProperty('$el_text')
             expect(props2['$elements'][0]['$el_text']).toMatch(/Why\s+hello\s+there/)
-            lib.capture.resetHistory()
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
 
-            const e3 = {
+            const e3 = makeMouseEvent({
                 target: button3,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e3, lib)
             const props3 = getCapturedProps(lib.capture)
             expect(props3['$elements'][0]).toHaveProperty('$el_text')
@@ -942,44 +961,42 @@ describe('Autocapture system', () => {
             const e = {
                 target: document.createElement('form'),
                 type: 'submit',
-            }
+            } as unknown as FormDataEvent
             autocapture._captureEvent(e, lib)
-            expect(lib.capture.calledOnce).toBe(true)
+            expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
             const props = getCapturedProps(lib.capture)
             expect(props['$event_type']).toBe('submit')
         })
 
         it('should capture a click event inside a form with form field props', () => {
-            var form = document.createElement('form')
-            var link = document.createElement('a')
-            var input = document.createElement('input')
+            const form = document.createElement('form')
+            const link = document.createElement('a')
+            const input = document.createElement('input')
             input.name = 'test input'
             input.value = 'test val'
             form.appendChild(link)
             form.appendChild(input)
-            const e = {
+            const e = makeMouseEvent({
                 target: link,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e, lib)
-            expect(lib.capture.calledOnce).toBe(true)
-            const props = getCapturedProps(lib.capture)
+            expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
+            const props = getCapturedProps(lib.capture as sinon.SinonSpy)
             expect(props['$event_type']).toBe('click')
         })
 
         it('should capture a click event inside a shadowroot', () => {
-            var main_el = document.createElement('some-element')
-            var shadowRoot = main_el.attachShadow({ mode: 'open' })
-            var button = document.createElement('a')
+            const main_el = document.createElement('some-element')
+            const shadowRoot = main_el.attachShadow({ mode: 'open' })
+            const button = document.createElement('a')
             button.innerHTML = 'bla'
             shadowRoot.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e, lib)
-            expect(lib.capture.calledOnce).toBe(true)
+            expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
             const props = getCapturedProps(lib.capture)
             expect(props['$event_type']).toBe('click')
         })
@@ -988,20 +1005,20 @@ describe('Autocapture system', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')
             a.appendChild(span)
-            autocapture._captureEvent({ target: a, type: 'click' }, lib)
-            expect(lib.capture.calledOnce).toBe(true)
-            lib.capture.resetHistory()
+            autocapture._captureEvent(makeMouseEvent({ target: a, type: 'click' }), lib)
+            expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
 
-            autocapture._captureEvent({ target: span, type: 'click' }, lib)
-            expect(lib.capture.calledOnce).toBe(true)
-            lib.capture.resetHistory()
+            autocapture._captureEvent(makeMouseEvent({ target: span, type: 'click' }), lib)
+            expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
 
             a.className = 'test1 ph-no-capture test2'
-            autocapture._captureEvent({ target: a, type: 'click' }, lib)
-            expect(lib.capture.callCount).toBe(0)
+            autocapture._captureEvent(makeMouseEvent({ target: a, type: 'click' }), lib)
+            expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
 
-            autocapture._captureEvent({ target: span, type: 'click' }, lib)
-            expect(lib.capture.callCount).toBe(0)
+            autocapture._captureEvent(makeMouseEvent({ target: span, type: 'click' }), lib)
+            expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
         })
 
         it('does not capture any element attributes if mask_all_element_attributes is set', () => {
@@ -1011,21 +1028,20 @@ describe('Autocapture system', () => {
       </button>
       `
 
-            const newLib = {
+            const newLib = makePostHog({
                 ...lib,
                 config: {
                     ...lib.config,
                     mask_all_element_attributes: true,
                 },
-            }
+            })
 
             document.body.innerHTML = dom
             const button1 = document.getElementById('button1')
 
-            const e1 = {
+            const e1 = makeMouseEvent({
                 target: button1,
-                type: 'click',
-            }
+            })
             autocapture._captureEvent(e1, newLib)
 
             const props1 = getCapturedProps(newLib.capture)
@@ -1039,21 +1055,20 @@ describe('Autocapture system', () => {
         </a>
         `
 
-            const newLib = {
+            const newLib = makePostHog({
                 ...lib,
                 config: {
                     ...lib.config,
                     mask_all_text: true,
                 },
-            }
+            })
 
             document.body.innerHTML = dom
             const a = document.getElementById('a1')
 
-            const e1 = {
+            const e1 = makeMouseEvent({
                 target: a,
-                type: 'click',
-            }
+            })
 
             autocapture._captureEvent(e1, newLib)
             const props1 = getCapturedProps(newLib.capture)
@@ -1063,23 +1078,20 @@ describe('Autocapture system', () => {
     })
 
     describe('_addDomEventHandlers', () => {
-        const lib = {
+        const lib = makePostHog({
             capture: sinon.spy(),
-            get_distinct_id() {
-                return 'distinctid'
-            },
             config: {
                 mask_all_element_attributes: false,
-            },
-        }
+            } as PostHogConfig,
+        })
 
-        let navigateSpy
+        let navigateSpy: sinon.SinonSpy
 
         beforeEach(() => {
             document.title = 'test page'
             autocapture._addDomEventHandlers(lib)
             navigateSpy = sinon.spy(autocapture, '_navigate')
-            lib.capture.resetHistory()
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
         })
 
         afterAll(() => {
@@ -1091,41 +1103,39 @@ describe('Autocapture system', () => {
             document.body.appendChild(button)
             simulateClick(button)
             simulateClick(button)
-            expect(true).toBe(lib.capture.calledTwice)
-            const captureArgs1 = lib.capture.args[0]
-            const captureArgs2 = lib.capture.args[1]
+            expect(true).toBe((lib.capture as sinon.SinonSpy).calledTwice)
+            const captureArgs1 = (lib.capture as sinon.SinonSpy).args[0]
+            const captureArgs2 = (lib.capture as sinon.SinonSpy).args[1]
             const eventType1 = captureArgs1[1]['$event_type']
             const eventType2 = captureArgs2[1]['$event_type']
             expect(eventType1).toBe('click')
             expect(eventType2).toBe('click')
-            lib.capture.resetHistory()
+            ;(lib.capture as sinon.SinonSpy).resetHistory()
         })
     })
 
     describe('afterDecideResponse()', () => {
-        let posthog
-        let persistence
+        let posthog: PostHog
+        let persistence: PostHogPersistence
 
         beforeEach(() => {
             document.title = 'test page'
             autocapture._initializedTokens = []
 
-            persistence = { props: {}, register: jest.fn() }
-            decideResponse = { config: { enable_collect_everything: true } }
+            persistence = { props: {}, register: jest.fn() } as unknown as PostHogPersistence
+            decideResponse = { config: { enable_collect_everything: true } } as DecideResponse
 
-            posthog = {
+            posthog = makePostHog({
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
                     autocapture: true,
-                },
-                token: 'testtoken',
+                } as PostHogConfig,
                 capture: jest.fn(),
-                get_distinct_id: () => 'distinctid',
-                get_property: (property_key) =>
+                get_property: (property_key: string) =>
                     property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? $autocapture_disabled_server_side : undefined,
                 persistence: persistence,
-            }
+            })
 
             jest.spyOn(autocapture, '_addDomEventHandlers')
         })
@@ -1166,7 +1176,7 @@ describe('Autocapture system', () => {
                 decideResponse = {
                     config: { enable_collect_everything: true },
                     autocapture_opt_out: serverSideOptOut,
-                }
+                } as DecideResponse
                 autocapture.afterDecideResponse(decideResponse, posthog)
                 expect(autocapture._isAutocaptureEnabled).toBe(expected)
             }
@@ -1185,7 +1195,7 @@ describe('Autocapture system', () => {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: false,
-            }
+            } as PostHogConfig
             $autocapture_disabled_server_side = true
 
             autocapture.afterDecideResponse(decideResponse, posthog)
@@ -1194,7 +1204,7 @@ describe('Autocapture system', () => {
         })
 
         it('should NOT call _addDomEventHandlders if the decide request fails', () => {
-            decideResponse = { status: 0, error: 'Bad HTTP status: 400 Bad Request' }
+            decideResponse = { status: 0, error: 'Bad HTTP status: 400 Bad Request' } as unknown as DecideResponse
 
             autocapture.afterDecideResponse(decideResponse, posthog)
 
@@ -1202,7 +1212,7 @@ describe('Autocapture system', () => {
         })
 
         it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', () => {
-            decideResponse = { config: { enable_collect_everything: false } }
+            decideResponse = { config: { enable_collect_everything: false } } as DecideResponse
 
             autocapture.afterDecideResponse(decideResponse, posthog)
 
@@ -1217,7 +1227,11 @@ describe('Autocapture system', () => {
             autocapture.afterDecideResponse(decideResponse, posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
-            posthog.config = { api_host: 'https://test.com', token: 'anotherproject', autocapture: true }
+            posthog.config = {
+                api_host: 'https://test.com',
+                token: 'anotherproject',
+                autocapture: true,
+            } as PostHogConfig
             autocapture.afterDecideResponse(decideResponse, posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
         })
@@ -1225,80 +1239,73 @@ describe('Autocapture system', () => {
 
     describe('shouldCaptureDomEvent autocapture config', () => {
         it('only capture urls which match the url regex allowlist', () => {
-            var main_el = document.createElement('some-element')
-            var button = document.createElement('a')
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('a')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
+            })
             const autocapture_config = {
                 url_allowlist: ['https://posthog.com/test/*'],
             }
 
-            delete window.location
-            window.location = new URL('https://posthog.com/test/captured')
+            window!.location = new URL('https://posthog.com/test/captured') as unknown as Location
 
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
 
-            delete window.location
-            window.location = new URL('https://posthog.com/docs/not-captured')
+            window!.location = new URL('https://posthog.com/docs/not-captured') as unknown as Location
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('an empty url regex allowlist does not match any url', () => {
-            var main_el = document.createElement('some-element')
-            var button = document.createElement('a')
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('a')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
-            const autocapture_config = {
+            })
+            const autocapture_config: AutocaptureConfig = {
                 url_allowlist: [],
             }
 
-            delete window.location
-            window.location = new URL('https://posthog.com/test/captured')
+            window!.location = new URL('https://posthog.com/test/captured') as unknown as Location
 
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('only capture event types which match the allowlist', () => {
-            var main_el = document.createElement('some-element')
-            var button = document.createElement('button')
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
-            const autocapture_config = {
+            })
+            const autocapture_config: AutocaptureConfig = {
                 dom_event_allowlist: ['click'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
 
-            const autocapture_config_change = {
+            const autocapture_config_change: AutocaptureConfig = {
                 dom_event_allowlist: ['change'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })
 
         it('an empty event type allowlist matches no events', () => {
-            var main_el = document.createElement('some-element')
-            var button = document.createElement('button')
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
+            })
             const autocapture_config = {
                 dom_event_allowlist: [],
             }
@@ -1306,54 +1313,51 @@ describe('Autocapture system', () => {
         })
 
         it('only capture elements which match the allowlist', () => {
-            var main_el = document.createElement('some-element')
-            var button = document.createElement('button')
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
-            const autocapture_config = {
+            })
+            const autocapture_config: AutocaptureConfig = {
                 element_allowlist: ['button'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
 
-            const autocapture_config_change = {
+            const autocapture_config_change: AutocaptureConfig = {
                 element_allowlist: ['a'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config_change)).toBe(false)
         })
 
         it('an empty event allowlist means we capture no elements', () => {
-            var main_el = document.createElement('some-element')
-            var button = document.createElement('button')
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
-            const autocapture_config = {
+            })
+            const autocapture_config: AutocaptureConfig = {
                 element_allowlist: [],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
         it('only capture elements which match the css allowlist', () => {
-            var main_el = document.createElement('some-element')
-            var button = document.createElement('button')
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
             button.setAttribute('data-track', 'yes')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
-            const autocapture_config = {
+            })
+            const autocapture_config: AutocaptureConfig = {
                 css_selector_allowlist: ['[data-track="yes"]'],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
@@ -1365,17 +1369,16 @@ describe('Autocapture system', () => {
         })
 
         it('an empty css selector list captures no elements', () => {
-            var main_el = document.createElement('some-element')
-            var button = document.createElement('button')
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('button')
             button.setAttribute('data-track', 'yes')
             button.innerHTML = 'bla'
             main_el.appendChild(button)
-            const e = {
+            const e = makeMouseEvent({
                 target: main_el,
                 composedPath: () => [button, main_el],
-                type: 'click',
-            }
-            const autocapture_config = {
+            })
+            const autocapture_config: AutocaptureConfig = {
                 css_selector_allowlist: [],
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
