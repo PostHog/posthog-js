@@ -19,9 +19,26 @@ const simulateClick = function (el) {
 }
 
 describe('Autocapture system', () => {
+    let decideResponse
+    let $autocapture_disabled_server_side
+
     beforeEach(() => {
         jest.spyOn(window.console, 'log').mockImplementation()
         autocapture._isDisabledServerSide = null
+        $autocapture_disabled_server_side = false
+        decideResponse = {
+            config: {
+                enable_collect_everything: true,
+            },
+            // TODO: delete custom_properties after changeless typescript refactor
+            custom_properties: [
+                {
+                    event_selectors: ['.event-element-1', '.event-element-2'],
+                    css_selector: '.property-element',
+                    name: 'my property name',
+                },
+            ],
+        }
     })
 
     afterEach(() => {
@@ -485,20 +502,6 @@ describe('Autocapture system', () => {
             sandbox.restore()
         })
 
-        given('decideResponse', () => ({
-            config: {
-                enable_collect_everything: true,
-            },
-            // TODO: delete custom_properties after changeless typescript refactor
-            custom_properties: [
-                {
-                    event_selectors: ['.event-element-1', '.event-element-2'],
-                    css_selector: '.property-element',
-                    name: 'my property name',
-                },
-            ],
-        }))
-
         it('should add the custom property when an element matching any of the event selectors is clicked', () => {
             lib = {
                 _prepare_callback: sandbox.spy((callback) => callback),
@@ -517,13 +520,11 @@ describe('Autocapture system', () => {
                     maybeLoadToolbar: jest.fn(),
                 },
                 get_property: (property_key) =>
-                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE
-                        ? given.$autocapture_disabled_server_side
-                        : undefined,
+                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? $autocapture_disabled_server_side : undefined,
             }
-            given('$autocapture_disabled_server_side', () => false)
+            $autocapture_disabled_server_side = false
             autocapture.init(lib)
-            autocapture.afterDecideResponse(given.decideResponse, lib)
+            autocapture.afterDecideResponse(decideResponse, lib)
 
             const eventElement1 = document.createElement('div')
             const eventElement2 = document.createElement('div')
@@ -622,13 +623,11 @@ describe('Autocapture system', () => {
                     maybeLoadToolbar: jest.fn(),
                 },
                 get_property: (property_key) =>
-                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE
-                        ? given.$autocapture_disabled_server_side
-                        : undefined,
+                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? $autocapture_disabled_server_side : undefined,
             }
-            given('$autocapture_disabled_server_side', () => false)
+
             autocapture.init(lib)
-            autocapture.afterDecideResponse(given.decideResponse, lib)
+            autocapture.afterDecideResponse(decideResponse, lib)
 
             const eventElement1 = document.createElement('div')
             const eventElement2 = document.createElement('div')
@@ -668,13 +667,12 @@ describe('Autocapture system', () => {
                     maybeLoadToolbar: jest.fn(),
                 },
                 get_property: (property_key) =>
-                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE
-                        ? given.$autocapture_disabled_server_side
-                        : undefined,
+                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? $autocapture_disabled_server_side : undefined,
             }
-            given('$autocapture_disabled_server_side', () => true)
+            // TODO this appears to have no effect on the test 🤷
+            $autocapture_disabled_server_side = true
             autocapture.init(lib)
-            autocapture.afterDecideResponse(given.decideResponse, lib)
+            autocapture.afterDecideResponse(decideResponse, lib)
 
             const eventElement = document.createElement('a')
             document.body.appendChild(eventElement)
@@ -1105,52 +1103,52 @@ describe('Autocapture system', () => {
     })
 
     describe('afterDecideResponse()', () => {
-        given('subject', () => () => autocapture.afterDecideResponse(given.decideResponse, given.posthog))
-
-        given('persistence', () => ({ props: {}, register: jest.fn() }))
-
-        given('posthog', () => ({
-            config: {
-                api_host: 'https://test.com',
-                token: 'testtoken',
-                autocapture: true,
-            },
-            token: 'testtoken',
-            capture: jest.fn(),
-            get_distinct_id: () => 'distinctid',
-            get_property: (property_key) =>
-                property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? given.$autocapture_disabled_server_side : undefined,
-            persistence: given.persistence,
-        }))
-
-        given('decideResponse', () => ({ config: { enable_collect_everything: true } }))
+        let posthog
+        let persistence
 
         beforeEach(() => {
             document.title = 'test page'
             autocapture._initializedTokens = []
+
+            persistence = { props: {}, register: jest.fn() }
+            decideResponse = { config: { enable_collect_everything: true } }
+
+            posthog = {
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    autocapture: true,
+                },
+                token: 'testtoken',
+                capture: jest.fn(),
+                get_distinct_id: () => 'distinctid',
+                get_property: (property_key) =>
+                    property_key === AUTOCAPTURE_DISABLED_SERVER_SIDE ? $autocapture_disabled_server_side : undefined,
+                persistence: persistence,
+            }
 
             jest.spyOn(autocapture, '_addDomEventHandlers')
         })
 
         it('should be enabled before the decide response', () => {
             // _setIsAutocaptureEnabled is called during init
-            autocapture._setIsAutocaptureEnabled(given.posthog)
+            autocapture._setIsAutocaptureEnabled(posthog)
             expect(autocapture._isAutocaptureEnabled).toBe(true)
         })
 
         it('should be disabled before the decide response if opt out is in persistence', () => {
-            given('persistence', () => ({ props: { [AUTOCAPTURE_DISABLED_SERVER_SIDE]: true } }))
+            persistence.props[AUTOCAPTURE_DISABLED_SERVER_SIDE] = true
 
             // _setIsAutocaptureEnabled is called during init
-            autocapture._setIsAutocaptureEnabled(given.posthog)
+            autocapture._setIsAutocaptureEnabled(posthog)
             expect(autocapture._isAutocaptureEnabled).toBe(false)
         })
 
         it('should be disabled before the decide response if client side opted out', () => {
-            given.posthog.config.autocapture = false
+            posthog.config.autocapture = false
 
             // _setIsAutocaptureEnabled is called during init
-            autocapture._setIsAutocaptureEnabled(given.posthog)
+            autocapture._setIsAutocaptureEnabled(posthog)
             expect(autocapture._isAutocaptureEnabled).toBe(false)
         })
 
@@ -1164,58 +1162,63 @@ describe('Autocapture system', () => {
         ])(
             'when client side config is %p and remote opt out is %p - autocapture enabled should be %p',
             (clientSideOptIn, serverSideOptOut, expected) => {
-                given.posthog.config.autocapture = clientSideOptIn
-                given('decideResponse', () => ({
+                posthog.config.autocapture = clientSideOptIn
+                decideResponse = {
                     config: { enable_collect_everything: true },
                     autocapture_opt_out: serverSideOptOut,
-                }))
-                given.subject()
+                }
+                autocapture.afterDecideResponse(decideResponse, posthog)
                 expect(autocapture._isAutocaptureEnabled).toBe(expected)
             }
         )
 
         it('should call _addDomEventHandlders if autocapture is true', () => {
-            given('$autocapture_disabled_server_side', () => false)
-            given.subject()
+            $autocapture_disabled_server_side = false
+
+            autocapture.afterDecideResponse(decideResponse, posthog)
 
             expect(autocapture._addDomEventHandlers).toHaveBeenCalled()
         })
 
         it('should not call _addDomEventHandlders if autocapture is disabled', () => {
-            given.posthog.config = {
+            posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: false,
             }
-            given('$autocapture_disabled_server_side', () => true)
-            given.subject()
+            $autocapture_disabled_server_side = true
+
+            autocapture.afterDecideResponse(decideResponse, posthog)
+
             expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders if the decide request fails', () => {
-            given('decideResponse', () => ({ status: 0, error: 'Bad HTTP status: 400 Bad Request' }))
+            decideResponse = { status: 0, error: 'Bad HTTP status: 400 Bad Request' }
 
-            given.subject()
+            autocapture.afterDecideResponse(decideResponse, posthog)
+
             expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when enable_collect_everything is "false"', () => {
-            given('decideResponse', () => ({ config: { enable_collect_everything: false } }))
+            decideResponse = { config: { enable_collect_everything: false } }
 
-            given.subject()
+            autocapture.afterDecideResponse(decideResponse, posthog)
+
             expect(autocapture._addDomEventHandlers).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
-            given('$autocapture_disabled_server_side', () => false)
-            autocapture.afterDecideResponse(given.decideResponse, given.posthog)
+            $autocapture_disabled_server_side = false
+            autocapture.afterDecideResponse(decideResponse, posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
-            autocapture.afterDecideResponse(given.decideResponse, given.posthog)
+            autocapture.afterDecideResponse(decideResponse, posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(1)
 
-            given.posthog.config = { api_host: 'https://test.com', token: 'anotherproject', autocapture: true }
-            autocapture.afterDecideResponse(given.decideResponse, given.posthog)
+            posthog.config = { api_host: 'https://test.com', token: 'anotherproject', autocapture: true }
+            autocapture.afterDecideResponse(decideResponse, posthog)
             expect(autocapture._addDomEventHandlers).toHaveBeenCalledTimes(2)
         })
     })
