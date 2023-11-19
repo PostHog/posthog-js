@@ -1,0 +1,75 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`compressData() handles base64 1`] = `
+Array [
+  Object {
+    "data": "eyJsYXJnZV9rZXkiOiJhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmNhYmMifQ==",
+  },
+  Object {
+    "method": "POST",
+  },
+]
+`;
+
+exports[`compressData() handles gzip-js 1`] = `
+Array [
+  Uint8Array [
+    31,
+    139,
+    8,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    3,
+    171,
+    86,
+    202,
+    73,
+    44,
+    74,
+    79,
+    141,
+    207,
+    78,
+    173,
+    84,
+    178,
+    82,
+    74,
+    76,
+    74,
+    30,
+    69,
+    163,
+    104,
+    20,
+    141,
+    162,
+    81,
+    52,
+    156,
+    144,
+    82,
+    45,
+    0,
+    150,
+    15,
+    165,
+    86,
+    233,
+    5,
+    0,
+    0,
+  ],
+  Object {
+    "blob": true,
+    "method": "POST",
+    "urlQueryArgs": Object {
+      "compression": "gzip-js",
+    },
+  },
+]
+`;
