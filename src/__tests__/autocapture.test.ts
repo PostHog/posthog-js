@@ -32,8 +32,8 @@ function makePostHog(ph: Partial<PostHog>): PostHog {
     } as unknown as PostHog
 }
 
-function makeMouseEvent(me: Partial<MouseEvent>) {
-    return { type: 'click', ...me } as unknown as MouseEvent
+export function makeMouseEvent(partialEvent: Partial<MouseEvent>) {
+    return { type: 'click', ...partialEvent } as unknown as MouseEvent
 }
 
 describe('Autocapture system', () => {
@@ -1005,19 +1005,19 @@ describe('Autocapture system', () => {
             const a = document.createElement('a')
             const span = document.createElement('span')
             a.appendChild(span)
-            autocapture._captureEvent(makeMouseEvent({ target: a, type: 'click' }), lib)
+            autocapture._captureEvent(makeMouseEvent({ target: a }), lib)
             expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
             ;(lib.capture as sinon.SinonSpy).resetHistory()
 
-            autocapture._captureEvent(makeMouseEvent({ target: span, type: 'click' }), lib)
+            autocapture._captureEvent(makeMouseEvent({ target: span }), lib)
             expect((lib.capture as sinon.SinonSpy).calledOnce).toBe(true)
             ;(lib.capture as sinon.SinonSpy).resetHistory()
 
             a.className = 'test1 ph-no-capture test2'
-            autocapture._captureEvent(makeMouseEvent({ target: a, type: 'click' }), lib)
+            autocapture._captureEvent(makeMouseEvent({ target: a }), lib)
             expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
 
-            autocapture._captureEvent(makeMouseEvent({ target: span, type: 'click' }), lib)
+            autocapture._captureEvent(makeMouseEvent({ target: span }), lib)
             expect((lib.capture as sinon.SinonSpy).callCount).toBe(0)
         })
 

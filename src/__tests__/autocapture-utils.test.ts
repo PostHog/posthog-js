@@ -13,6 +13,7 @@ import {
     getDirectAndNestedSpanText,
 } from '../autocapture-utils'
 import { document } from '../utils/globals'
+import { makeMouseEvent } from './autocapture.test'
 
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
@@ -126,11 +127,7 @@ describe(`Autocapture utility functions`, () => {
         // [`div`, `sPan`, `A`, `strong`, `table`]
         ;['a'].forEach((tagName) => {
             it(`should capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(
-                    shouldCaptureDomEvent(document!.createElement(tagName), {
-                        type: `click`,
-                    } as unknown as Event)
-                ).toBe(true)
+                expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(true)
             })
         })
 
@@ -141,55 +138,22 @@ describe(`Autocapture utility functions`, () => {
             const button3 = document!.createElement(`input`)
             button3.setAttribute(`type`, `submit`)
             ;[button1, button2, button3].forEach((button) => {
-                expect(
-                    shouldCaptureDomEvent(button, {
-                        type: `click`,
-                    } as unknown as Event)
-                ).toBe(true)
+                expect(shouldCaptureDomEvent(button, makeMouseEvent({}))).toBe(true)
             })
         })
 
         it(`should protect against bad inputs`, () => {
-            expect(
-                shouldCaptureDomEvent(
-                    null as unknown as Element,
-                    {
-                        type: `click`,
-                    } as unknown as Event
-                )
-            ).toBe(false)
-            expect(
-                shouldCaptureDomEvent(
-                    undefined as unknown as Element,
-                    {
-                        type: `click`,
-                    } as unknown as Event
-                )
-            ).toBe(false)
-            expect(
-                shouldCaptureDomEvent(
-                    `div` as unknown as Element,
-                    {
-                        type: `click`,
-                    } as unknown as Event
-                )
-            ).toBe(false)
+            expect(shouldCaptureDomEvent(null as unknown as Element, makeMouseEvent({}))).toBe(false)
+            expect(shouldCaptureDomEvent(undefined as unknown as Element, makeMouseEvent({}))).toBe(false)
+            expect(shouldCaptureDomEvent(`div` as unknown as Element, makeMouseEvent({}))).toBe(false)
         })
 
         it(`should NOT capture "click" events on <form> elements`, () => {
-            expect(
-                shouldCaptureDomEvent(document!.createElement(`form`), {
-                    type: `click`,
-                } as unknown as Event)
-            ).toBe(false)
+            expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
         ;[`html`].forEach((tagName) => {
             it(`should NOT capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(
-                    shouldCaptureDomEvent(document!.createElement(tagName), {
-                        type: `click`,
-                    } as unknown as Event)
-                ).toBe(false)
+                expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
             })
         })
     })
