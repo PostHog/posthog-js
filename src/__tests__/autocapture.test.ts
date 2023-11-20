@@ -1075,6 +1075,29 @@ describe('Autocapture system', () => {
 
             expect(props1['$elements'][0]).not.toHaveProperty('$el_text')
         })
+
+        it('returns elementsChain instead of elements when set', () => {
+            const elTarget = document.createElement('a')
+            elTarget.setAttribute('href', 'http://test.com')
+            const elParent = document.createElement('span')
+            elParent.appendChild(elTarget)
+
+            const e = {
+                target: elTarget,
+                type: 'click',
+            }
+
+            const newLib = {
+                ...lib,
+                elementsChainAsString: true,
+            }
+
+            autocapture._captureEvent(e, newLib)
+            const props1 = getCapturedProps(newLib.capture)
+
+            expect(props1['$elements_chain']).toBeDefined()
+            expect(props1['$elements']).toBeUndefined()
+        })
     })
 
     describe('_addDomEventHandlers', () => {

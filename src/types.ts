@@ -239,6 +239,7 @@ export interface DecideResponse {
     analytics?: {
         endpoint?: string
     }
+    elementsChainAsString?: boolean
     // this is currently in development and may have breaking changes without a major version bump
     autocaptureExceptions?:
         | boolean
