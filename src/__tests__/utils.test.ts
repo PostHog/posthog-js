@@ -7,16 +7,10 @@
  * currently not supported in the browser lib).
  */
 
-import {
-    _copyAndTruncateStrings,
-    _isBlockedUA,
-    DEFAULT_BLOCKED_UA_STRS,
-    loadScript,
-    isCrossDomainCookie,
-    _base64Encode,
-} from '../utils'
+import { _copyAndTruncateStrings, loadScript, isCrossDomainCookie, _base64Encode } from '../utils'
 import { _info } from '../utils/event-utils'
 import { document } from '../utils/globals'
+import { _isBlockedUA, DEFAULT_BLOCKED_UA_STRS } from '../utils/blocked-uas'
 
 function userAgentFor(botString: string) {
     const randOne = (Math.random() + 1).toString(36).substring(7)
