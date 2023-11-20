@@ -4,7 +4,6 @@ import {
     _each,
     _eachArray,
     _extend,
-    _isBlockedUA,
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
@@ -58,6 +57,7 @@ import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
+import { _isBlockedUA } from './utils/blocked-uas'
 
 /*
 SIMPLE STYLE GUIDE:
