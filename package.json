@@ -34,8 +34,6 @@
         "fflate": "^0.4.1"
     },
     "devDependencies": {
-        "eslint-config-posthog-js": "link:./eslint-rules",
-        "eslint-plugin-posthog-js": "link:./eslint-rules",
         "@babel/core": "7.18.9",
         "@babel/preset-env": "7.18.9",
         "@babel/preset-typescript": "^7.18.6",
@@ -55,11 +53,13 @@
         "@typescript-eslint/parser": "^6.4.0",
         "babel-eslint": "10.1.0",
         "babel-jest": "^26.6.3",
-        "cypress": "10.3.1",
+        "cypress": "13.5.1",
         "eslint": "8.20.0",
+        "eslint-config-posthog-js": "link:./eslint-rules",
         "eslint-config-prettier": "^8.5.0",
         "eslint-plugin-compat": "^4.1.4",
         "eslint-plugin-jest": "^27.2.3",
+        "eslint-plugin-posthog-js": "link:./eslint-rules",
         "eslint-plugin-prettier": "^4.2.1",
         "eslint-plugin-react": "^7.30.1",
         "eslint-plugin-react-hooks": "^4.6.0",
