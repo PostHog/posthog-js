@@ -235,7 +235,8 @@ describe('Event capture', () => {
 
         it('captures $snapshot events', () => {
             start()
-
+            // de-flake the test
+            cy.wait(100)
             cy.phCaptures().should('include', '$snapshot')
         })
 
