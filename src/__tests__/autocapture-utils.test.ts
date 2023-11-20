@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+
 import sinon from 'sinon'
 
 import {
@@ -10,15 +12,17 @@ import {
     getNestedSpanText,
     getDirectAndNestedSpanText,
 } from '../autocapture-utils'
+import { document } from '../utils/globals'
+import { makeMouseEvent } from './autocapture.test'
 
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
-        document.getElementsByTagName('html')[0].innerHTML = ''
+        document!.getElementsByTagName('html')[0].innerHTML = ''
     })
 
     describe(`getSafeText`, () => {
         it(`should collect and normalize text from elements`, () => {
-            const el = document.createElement(`div`)
+            const el = document!.createElement(`div`)
 
             el.innerHTML = `  Why  hello  there  `
             expect(getSafeText(el)).toBe(`Why hello there`)
@@ -41,7 +45,7 @@ describe(`Autocapture utility functions`, () => {
         })
 
         it(`shouldn't collect text from element children`, () => {
-            const el = document.createElement(`div`)
+            const el = document!.createElement(`div`)
             let safeText
 
             el.innerHTML = `<div>sensitive</div>`
@@ -64,26 +68,26 @@ describe(`Autocapture utility functions`, () => {
         it(`shouldn't collect text from potentially sensitive elements`, () => {
             let el
 
-            el = document.createElement(`input`)
+            el = document!.createElement(`input`)
             el.innerHTML = `Why hello there`
             expect(getSafeText(el)).toBe(``)
 
-            el = document.createElement(`textarea`)
+            el = document!.createElement(`textarea`)
             el.innerHTML = `Why hello there`
             expect(getSafeText(el)).toBe(``)
 
-            el = document.createElement(`select`)
+            el = document!.createElement(`select`)
             el.innerHTML = `Why hello there`
             expect(getSafeText(el)).toBe(``)
 
-            el = document.createElement(`div`)
+            el = document!.createElement(`div`)
             el.setAttribute(`contenteditable`, `true`)
             el.innerHTML = `Why hello there`
             expect(getSafeText(el)).toBe(``)
         })
 
         it(`shouldn't collect sensitive values`, () => {
-            const el = document.createElement(`div`)
+            const el = document!.createElement(`div`)
 
             el.innerHTML = `Why 123-58-1321 hello there`
             expect(getSafeText(el)).toBe(`Why hello there`)
@@ -105,17 +109,17 @@ describe(`Autocapture utility functions`, () => {
     describe(`shouldCaptureDomEvent`, () => {
         it(`should capture "submit" events on <form> elements`, () => {
             expect(
-                shouldCaptureDomEvent(document.createElement(`form`), {
+                shouldCaptureDomEvent(document!.createElement(`form`), {
                     type: `submit`,
-                })
+                } as unknown as Event)
             ).toBe(true)
         })
         ;[`input`, `SELECT`, `textarea`].forEach((tagName) => {
             it(`should capture "change" events on <` + tagName.toLowerCase() + `> elements`, () => {
                 expect(
-                    shouldCaptureDomEvent(document.createElement(tagName), {
+                    shouldCaptureDomEvent(document!.createElement(tagName), {
                         type: `change`,
-                    })
+                    } as unknown as Event)
                 ).toBe(true)
             })
         })
@@ -123,81 +127,53 @@ describe(`Autocapture utility functions`, () => {
         // [`div`, `sPan`, `A`, `strong`, `table`]
         ;['a'].forEach((tagName) => {
             it(`should capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(
-                    shouldCaptureDomEvent(document.createElement(tagName), {
-                        type: `click`,
-                    })
-                ).toBe(true)
+                expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(true)
             })
         })
 
         it(`should capture "click" events on <button> elements`, () => {
-            const button1 = document.createElement(`button`)
-            const button2 = document.createElement(`input`)
+            const button1 = document!.createElement(`button`)
+            const button2 = document!.createElement(`input`)
             button2.setAttribute(`type`, `button`)
-            const button3 = document.createElement(`input`)
+            const button3 = document!.createElement(`input`)
             button3.setAttribute(`type`, `submit`)
             ;[button1, button2, button3].forEach((button) => {
-                expect(
-                    shouldCaptureDomEvent(button, {
-                        type: `click`,
-                    })
-                ).toBe(true)
+                expect(shouldCaptureDomEvent(button, makeMouseEvent({}))).toBe(true)
             })
         })
 
         it(`should protect against bad inputs`, () => {
-            expect(
-                shouldCaptureDomEvent(null, {
-                    type: `click`,
-                })
-            ).toBe(false)
-            expect(
-                shouldCaptureDomEvent(undefined, {
-                    type: `click`,
-                })
-            ).toBe(false)
-            expect(
-                shouldCaptureDomEvent(`div`, {
-                    type: `click`,
-                })
-            ).toBe(false)
+            expect(shouldCaptureDomEvent(null as unknown as Element, makeMouseEvent({}))).toBe(false)
+            expect(shouldCaptureDomEvent(undefined as unknown as Element, makeMouseEvent({}))).toBe(false)
+            expect(shouldCaptureDomEvent(`div` as unknown as Element, makeMouseEvent({}))).toBe(false)
         })
 
         it(`should NOT capture "click" events on <form> elements`, () => {
-            expect(
-                shouldCaptureDomEvent(document.createElement(`form`), {
-                    type: `click`,
-                })
-            ).toBe(false)
+            expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
         ;[`html`].forEach((tagName) => {
             it(`should NOT capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(
-                    shouldCaptureDomEvent(document.createElement(tagName), {
-                        type: `click`,
-                    })
-                ).toBe(false)
+                expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
             })
         })
     })
 
     describe(`isSensitiveElement`, () => {
         it(`should not include input elements`, () => {
-            expect(isSensitiveElement(document.createElement(`input`))).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`input`))).toBe(true)
         })
 
         it(`should not include select elements`, () => {
-            expect(isSensitiveElement(document.createElement(`select`))).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`select`))).toBe(true)
         })
 
         it(`should not include textarea elements`, () => {
-            expect(isSensitiveElement(document.createElement(`textarea`))).toBe(true)
+            expect(isSensitiveElement(document!.createElement(`textarea`))).toBe(true)
         })
 
         it(`should not include elements where contenteditable="true"`, () => {
-            const editable = document.createElement(`div`)
-            const noneditable = document.createElement(`div`)
+            const editable = document!.createElement(`div`)
+            const noneditable = document!.createElement(`div`)
 
             editable.setAttribute(`contenteditable`, `true`)
             noneditable.setAttribute(`contenteditable`, `false`)
@@ -208,17 +184,20 @@ describe(`Autocapture utility functions`, () => {
     })
 
     describe(`shouldCaptureElement`, () => {
-        let el, input, parent1, parent2
+        let el: HTMLDivElement
+        let input: HTMLInputElement
+        let parent1: HTMLDivElement
+        let parent2: HTMLDivElement
 
         beforeEach(() => {
-            el = document.createElement(`div`)
-            input = document.createElement(`input`)
-            parent1 = document.createElement(`div`)
-            parent2 = document.createElement(`div`)
+            el = document!.createElement(`div`)
+            input = document!.createElement(`input`)
+            parent1 = document!.createElement(`div`)
+            parent2 = document!.createElement(`div`)
             parent1.appendChild(el)
             parent1.appendChild(input)
             parent2.appendChild(parent1)
-            document.body.appendChild(parent2)
+            document!.body.appendChild(parent2)
         })
 
         it(`should include sensitive elements with class "ph-include"`, () => {
@@ -237,8 +216,10 @@ describe(`Autocapture utility functions`, () => {
         })
 
         it(`should not include elements with a parent that have class "ph-no-capture" as properties`, () => {
+            expect(shouldCaptureElement(el)).toBe(true)
+
             parent2.className = `ph-no-capture`
-            el.type = `text`
+
             expect(shouldCaptureElement(el)).toBe(false)
         })
 
@@ -273,8 +254,11 @@ describe(`Autocapture utility functions`, () => {
                 `SsN`,
             ]
             sensitiveNames.forEach((name) => {
-                el.name = name
-                expect(shouldCaptureElement(el)).toBe(false)
+                input.name = ''
+                expect(shouldCaptureElement(input)).toBe(true)
+
+                input.name = name
+                expect(shouldCaptureElement(input)).toBe(false)
             })
         })
 
@@ -283,32 +267,32 @@ describe(`Autocapture utility functions`, () => {
         // instead of a string, removing the element from the page. Ensure this issue is mitigated.
         it(`shouldn't inadvertently replace DOM nodes`, () => {
             // setup
-            el.replace = sinon.spy()
+            ;(el as any).replace = sinon.spy()
 
             // test
-            parent1.name = el
+            input.name = el as any
             shouldCaptureElement(parent1) // previously this would cause el.replace to be called
-            expect(el.replace.called).toBe(false)
-            parent1.name = undefined
+            expect((el as any).replace.called).toBe(false)
+            input.name = ''
 
-            parent1.id = el
+            parent1.id = el as any
             shouldCaptureElement(parent2) // previously this would cause el.replace to be called
-            expect(el.replace.called).toBe(false)
-            parent1.id = undefined
+            expect((el as any).replace.called).toBe(false)
+            parent1.id = ''
 
-            parent1.type = el
+            input.type = el as any
             shouldCaptureElement(parent2) // previously this would cause el.replace to be called
-            expect(el.replace.called).toBe(false)
-            parent1.type = undefined
+            expect((el as any).replace.called).toBe(false)
+            input.type = ''
 
             // cleanup
-            el.replace = undefined
+            ;(el as any).replace = undefined
         })
     })
 
     describe(`shouldCaptureValue`, () => {
         it(`should return false when the value is null`, () => {
-            expect(shouldCaptureValue(null)).toBe(false)
+            expect(shouldCaptureValue(null as unknown as string)).toBe(false)
         })
 
         it(`should not include numbers that look like valid credit cards`, () => {
@@ -349,21 +333,21 @@ describe(`Autocapture utility functions`, () => {
             expect(isAngularStyleAttr('class-name')).toBe(false)
         })
         it('should be safe for non-string attribute names', () => {
-            expect(isAngularStyleAttr(1)).toBe(false)
-            expect(isAngularStyleAttr(null)).toBe(false)
+            expect(isAngularStyleAttr(1 as unknown as string)).toBe(false)
+            expect(isAngularStyleAttr(null as unknown as string)).toBe(false)
         })
     })
 
     describe(`getDirectAndNestedSpanText`, () => {
         it(`should return direct text on the element with no children`, () => {
-            const el = document.createElement(`button`)
+            const el = document!.createElement(`button`)
             el.innerHTML = `test`
             expect(getDirectAndNestedSpanText(el)).toBe('test')
         })
         it(`should return the direct text on the el and text from child spans`, () => {
-            const parent = document.createElement(`button`)
+            const parent = document!.createElement(`button`)
             parent.innerHTML = `test`
-            const child = document.createElement(`span`)
+            const child = document!.createElement(`span`)
             child.innerHTML = `test 1`
             parent.appendChild(child)
             expect(getDirectAndNestedSpanText(parent)).toBe('test test 1')
@@ -372,26 +356,26 @@ describe(`Autocapture utility functions`, () => {
 
     describe(`getNestedSpanText`, () => {
         it(`should return an empty string if there are no children or text`, () => {
-            const el = document.createElement(`button`)
+            const el = document!.createElement(`button`)
             expect(getNestedSpanText(el)).toBe('')
         })
         it(`should return the text from sibling child spans`, () => {
-            const parent = document.createElement(`button`)
-            const child1 = document.createElement(`span`)
+            const parent = document!.createElement(`button`)
+            const child1 = document!.createElement(`span`)
             child1.innerHTML = `test`
             parent.appendChild(child1)
             expect(getNestedSpanText(parent)).toBe('test')
-            const child2 = document.createElement(`span`)
+            const child2 = document!.createElement(`span`)
             child2.innerHTML = `test2`
             parent.appendChild(child2)
             expect(getNestedSpanText(parent)).toBe('test test2')
         })
         it(`should return the text from nested child spans`, () => {
-            const parent = document.createElement(`button`)
-            const child1 = document.createElement(`span`)
+            const parent = document!.createElement(`button`)
+            const child1 = document!.createElement(`span`)
             child1.innerHTML = `test`
             parent.appendChild(child1)
-            const child2 = document.createElement(`span`)
+            const child2 = document!.createElement(`span`)
             child2.innerHTML = `test2`
             child1.appendChild(child2)
             expect(getNestedSpanText(parent)).toBe('test test2')
