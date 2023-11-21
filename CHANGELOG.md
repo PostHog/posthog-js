@@ -1,3 +1,7 @@
+## 1.92.1 - 2023-11-21
+
+- feat: payload capture - move timing into copied plugin (#902)
+
 ## 1.92.0 - 2023-11-20
 
 - feat: Create elements chain string as we store it (#823)
