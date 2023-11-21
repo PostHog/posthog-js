@@ -11,23 +11,20 @@ import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugin
 // rrweb/network@1 code starts
 // most of what is below here will be removed when rrweb release their code for this
 // see https://github.com/rrweb-io/rrweb/pull/1105
-
 /// <reference lib="dom" />
-
 // NB adopted from https://github.com/rrweb-io/rrweb/pull/1105 which looks like it will be accepted into rrweb
 // however, in the PR, it throws when the performance observer data is not available
 // and assumes it is running in a browser with the Request API (i.e. not IE11)
 // copying here so that we can use it before rrweb adopt it
-
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
-import { InitiatorType, NetworkRecordOptions, NetworkRequest, Headers } from './types'
-import { _isBoolean, _isFunction, _isArray, _isUndefined, _isNull } from './utils/type-utils'
+import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from './types'
+import { _isArray, _isBoolean, _isFunction, _isNull, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { defaultNetworkOptions } from './extensions/replay/config'
 
 export type NetworkData = {
-    requests: NetworkRequest[]
+    requests: CapturedNetworkRequest[]
     isInitial?: boolean
 }
 
@@ -97,6 +94,12 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
 }
 
 function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
+    // if we are only observing timings then we could have a single observer for all types, with buffer true,
+    // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
+    // will deal with those.
+    // so we have a block which captures requests from before fetch/xhr is wrapped
+    // these are marked `isInitial` so playback can display them differently if needed
+    // they will never have method/status/headers/body because they are pre-wrapping that provides that
     if (options.recordInitialRequests) {
         const initialPerformanceEntries = win.performance
             .getEntries()
@@ -106,38 +109,41 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
                     (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
             )
         cb({
-            requests: initialPerformanceEntries.map((entry) => ({
-                url: entry.name,
-                initiatorType: entry.initiatorType as InitiatorType,
-                status: 'responseStatus' in entry ? entry.responseStatus : undefined,
-                startTime: Math.round(entry.startTime),
-                endTime: Math.round(entry.responseEnd),
-            })),
+            requests: initialPerformanceEntries.flatMap((entry) =>
+                prepareRequest(entry, undefined, undefined, {}, true)
+            ),
             isInitial: true,
         })
     }
     const observer = new win.PerformanceObserver((entries) => {
-        const performanceEntries = entries
-            .getEntries()
-            .filter(
-                (entry): entry is ObservedPerformanceEntry =>
-                    isNavigationTiming(entry) ||
-                    (isResourceTiming(entry) &&
-                        options.initiatorTypes.includes(entry.initiatorType as InitiatorType) &&
-                        entry.initiatorType !== 'xmlhttprequest' &&
-                        entry.initiatorType !== 'fetch')
-            )
+        // if recordBody or recordHeaders is true then we don't want to record fetch or xhr here
+        // as the wrapped functions will do that. Otherwise, this filter becomes a noop
+        // because we do want to record them here
+        const wrappedInitiatorFilter = (entry: ObservedPerformanceEntry) =>
+            options.recordBody || options.recordHeaders
+                ? entry.initiatorType !== 'xmlhttprequest' && entry.initiatorType !== 'fetch'
+                : true
+
+        const performanceEntries = entries.getEntries().filter(
+            (entry): entry is ObservedPerformanceEntry =>
+                isNavigationTiming(entry) ||
+                (isResourceTiming(entry) &&
+                    options.initiatorTypes.includes(entry.initiatorType as InitiatorType) &&
+                    // TODO if we are _only_ capturing timing we don't want to filter initiator here
+                    wrappedInitiatorFilter(entry))
+        )
+
         cb({
-            requests: performanceEntries.map((entry) => ({
-                url: entry.name,
-                initiatorType: entry.initiatorType as InitiatorType,
-                status: 'responseStatus' in entry ? entry.responseStatus : undefined,
-                startTime: Math.round(entry.startTime),
-                endTime: Math.round(entry.responseEnd),
-            })),
+            requests: performanceEntries.flatMap((entry) => prepareRequest(entry, undefined, undefined, {})),
         })
     })
-    observer.observe({ entryTypes: ['navigation', 'resource'] })
+    // compat checked earlier
+    // eslint-disable-next-line compat/compat
+    const entryTypes = PerformanceObserver.supportedEntryTypes.filter((x) =>
+        options.performanceEntryTypeToObserve.includes(x)
+    )
+    // initial records are gathered above, so we don't need to observe and buffer each type separately
+    observer.observe({ entryTypes })
     return () => {
         observer.disconnect()
     }
@@ -224,7 +230,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // check IE earlier than this, we only initialize if Request is present
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url)
-                const networkRequest: Partial<NetworkRequest> = {}
+                const networkRequest: Partial<CapturedNetworkRequest> = {}
                 let after: number | undefined
                 let before: number | undefined
                 const requestHeaders: Headers = {}
@@ -280,19 +286,8 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                             if (_isNull(entry)) {
                                 return
                             }
-                            const request: NetworkRequest = {
-                                url: entry.name,
-                                method: req.method,
-                                initiatorType: entry.initiatorType as InitiatorType,
-                                status: xhr.status,
-                                startTime: Math.round(entry.startTime),
-                                endTime: Math.round(entry.responseEnd),
-                                requestHeaders: networkRequest.requestHeaders,
-                                requestBody: networkRequest.requestBody,
-                                responseHeaders: networkRequest.responseHeaders,
-                                responseBody: networkRequest.responseBody,
-                            }
-                            cb({ requests: [request] })
+                            const requests = prepareRequest(entry, req.method, xhr?.status, networkRequest)
+                            cb({ requests })
                         })
                         .catch(() => {
                             //
@@ -305,6 +300,69 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
     return () => {
         restorePatch()
     }
+}
+
+/**
+ *  Check if this PerformanceEntry is either a PerformanceResourceTiming or a PerformanceNavigationTiming
+ *  NB PerformanceNavigationTiming extends PerformanceResourceTiming
+ *  Here we don't care which interface it implements as both expose `serverTimings`
+ */
+const exposesServerTiming = (event: PerformanceEntry): event is PerformanceResourceTiming =>
+    event.entryType === 'navigation' || event.entryType === 'resource'
+
+function prepareRequest(
+    entry: PerformanceResourceTiming,
+    method: string | undefined,
+    status: number | undefined,
+    networkRequest: Partial<CapturedNetworkRequest>,
+    isInitial?: boolean
+): CapturedNetworkRequest[] {
+    // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
+    // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
+    // can't start observer if performance.now() is not available
+    // eslint-disable-next-line compat/compat
+    const timeOrigin = Math.floor(Date.now() - performance.now())
+    // clickhouse can't ingest timestamps that are floats
+    // (in this case representing fractions of a millisecond we don't care about anyway)
+    const timestamp = Math.floor(timeOrigin + entry.startTime)
+
+    const requests: CapturedNetworkRequest[] = [
+        {
+            ...entry.toJSON(),
+            startTime: Math.round(entry.startTime),
+            endTime: Math.round(entry.responseEnd),
+            timeOrigin,
+            timestamp,
+            method: method,
+            initiatorType: entry.initiatorType as InitiatorType,
+            status,
+            requestHeaders: networkRequest.requestHeaders,
+            requestBody: networkRequest.requestBody,
+            responseHeaders: networkRequest.responseHeaders,
+            responseBody: networkRequest.responseBody,
+            isInitial,
+        },
+    ]
+
+    if (exposesServerTiming(entry)) {
+        for (const timing of entry.serverTiming || []) {
+            requests.push({
+                timeOrigin,
+                timestamp,
+                startTime: Math.round(entry.startTime),
+                name: timing.name,
+                duration: timing.duration,
+                // the spec has a closed list of possible types
+                // https://developer.mozilla.org/en-US/docs/Web/API/PerformanceEntry/entryType
+                // but, we need to know this was a server timing so that we know to
+                // match it to the appropriate navigation or resource timing
+                // that matching will have to be on timestamp and $current_url
+                entryType: 'serverTiming',
+            })
+        }
+    }
+
+    return requests
 }
 
 function initFetchObserver(
@@ -328,7 +386,7 @@ function initFetchObserver(
             // eslint-disable-next-line compat/compat
             const req = new Request(url, init)
             let res: Response | undefined
-            const networkRequest: Partial<NetworkRequest> = {}
+            const networkRequest: Partial<CapturedNetworkRequest> = {}
             let after: number | undefined
             let before: number | undefined
             try {
@@ -376,19 +434,8 @@ function initFetchObserver(
                         if (_isNull(entry)) {
                             return
                         }
-                        const request: NetworkRequest = {
-                            url: entry.name,
-                            method: req.method,
-                            initiatorType: entry.initiatorType as InitiatorType,
-                            status: res?.status,
-                            startTime: Math.round(entry.startTime),
-                            endTime: Math.round(entry.responseEnd),
-                            requestHeaders: networkRequest.requestHeaders,
-                            requestBody: networkRequest.requestBody,
-                            responseHeaders: networkRequest.responseHeaders,
-                            responseBody: networkRequest.responseBody,
-                        }
-                        cb({ requests: [request] })
+                        const requests = prepareRequest(entry, req.method, res?.status, networkRequest)
+                        cb({ requests })
                     })
                     .catch(() => {
                         //
@@ -416,7 +463,7 @@ function initNetworkObserver(
     ) as Required<NetworkRecordOptions>
 
     const cb: networkCallback = (data) => {
-        const requests: NetworkRequest[] = []
+        const requests: CapturedNetworkRequest[] = []
         data.requests.forEach((request) => {
             const maskedRequest = networkOptions.maskRequestFn(request)
             if (maskedRequest) {
@@ -429,8 +476,15 @@ function initNetworkObserver(
         }
     }
     const performanceObserver = initPerformanceObserver(cb, win, networkOptions)
-    const xhrObserver = initXhrObserver(cb, win, networkOptions)
-    const fetchObserver = initFetchObserver(cb, win, networkOptions)
+
+    // only wrap fetch and xhr if headers or body are being recorded
+    let xhrObserver: listenerHandler = () => {}
+    let fetchObserver: listenerHandler = () => {}
+    if (networkOptions.recordHeaders || networkOptions.recordBody) {
+        xhrObserver = initXhrObserver(cb, win, networkOptions)
+        fetchObserver = initFetchObserver(cb, win, networkOptions)
+    }
+
     return () => {
         performanceObserver()
         xhrObserver()

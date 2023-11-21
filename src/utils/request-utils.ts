@@ -2,8 +2,25 @@ import { _each, _isValidRegex } from './'
 
 import { _isArray, _isUndefined } from './type-utils'
 import { logger } from './logger'
+import { document } from './globals'
 
 const localDomains = ['localhost', '127.0.0.1']
+
+/**
+ * IE11 doesn't support `new URL`
+ * so we can create an anchor element and use that to parse the URL
+ * there's a lot of overlap between HTMLHyperlinkElementUtils and URL
+ * meaning useful properties like `pathname` are available on both
+ */
+export const convertToURL = (url: string): HTMLAnchorElement | null => {
+    const location = document?.createElement('a')
+    if (_isUndefined(location)) {
+        return null
+    }
+
+    location.href = url
+    return location
+}
 
 export const _isUrlMatchingRegex = function (url: string, pattern: string): boolean {
     if (!_isValidRegex(pattern)) return false

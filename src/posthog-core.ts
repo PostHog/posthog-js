@@ -14,7 +14,6 @@ import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { WebPerformanceObserver } from './extensions/replay/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -212,9 +211,6 @@ const create_phlib = function (
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance.webPerformance = new WebPerformanceObserver(instance)
-    instance.webPerformance.startObservingIfEnabled()
-
     if (instance.config.__preview_measure_pageview_stats) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
@@ -253,6 +249,19 @@ const create_phlib = function (
     return instance
 }
 
+class DeprecatedWebPerformanceObserver {
+    get _forceAllowLocalhost(): boolean {
+        return this.__forceAllowLocalhost
+    }
+    set _forceAllowLocalhost(value: boolean) {
+        logger.error(
+            'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
+        )
+        this.__forceAllowLocalhost = value
+    }
+    private __forceAllowLocalhost: boolean = false
+}
+
 /**
  * PostHog Library Object
  * @constructor
@@ -277,7 +286,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
-    webPerformance?: WebPerformanceObserver
+    webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>

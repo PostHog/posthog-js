@@ -1124,4 +1124,9 @@ describe('posthog core', () => {
             )
         })
     })
+
+    test('deprecated web performance observer still exposes _forceAllowLocalhost', () => {
+        expect(given.lib.webPerformance._forceAllowLocalhost).toBe(false)
+        expect(() => given.lib.webPerformance._forceAllowLocalhost).not.toThrow()
+    })
 })
