@@ -159,9 +159,9 @@ export interface SessionRecordingOptions {
     inlineStylesheet?: boolean
     recorderVersion?: 'v1' | 'v2'
     recordCrossOriginIframes?: boolean
-    /** Modify the network request before it is captured. Returning null stops it being captured */
-    // deprecated - use maskCapturedNetworkRequestFn instead
+    /** @deprecated - use maskCapturedNetworkRequestFn instead  */
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
+    /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
     // properties below here are ALPHA, don't rely on them, they may change without notice
     // TODO which of these do we actually expose?
@@ -422,12 +422,12 @@ export type NetworkRecordOptions = {
     payloadSizeLimitBytes: number
 }
 
-// deprecated - use CapturedNetworkRequest instead
+/** @deprecated - use CapturedNetworkRequest instead  */
 export type NetworkRequest = {
     url: string
 }
 
-// In rrweb this is called NetworkRequest but we already exposed that as having only URL
+// In rrweb this is called NetworkRequest, but we already exposed that as having only URL
 // we also want to vary from the rrweb NetworkRequest because we want to include
 // all PerformanceEntry properties too.
 // that has 4 required properties
@@ -435,7 +435,7 @@ export type NetworkRequest = {
 //     readonly entryType: string;
 //     readonly name: string;
 //     readonly startTime: DOMHighResTimeStamp;
-// properties below here are ALPHA, don't rely on them, they may change without notice
+// NB: properties below here are ALPHA, don't rely on them, they may change without notice
 export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     // properties below here are ALPHA, don't rely on them, they may change without notice
     method?: string
