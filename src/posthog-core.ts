@@ -250,13 +250,16 @@ const create_phlib = function (
 }
 
 class DeprecatedWebPerformanceObserver {
-    set forceAllowLocalhost(value: boolean) {
+    get _forceAllowLocalhost(): boolean {
+        return this.__forceAllowLocalhost
+    }
+    set _forceAllowLocalhost(value: boolean) {
         logger.error(
             'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
         )
-        this._forceAllowLocalhost = value
+        this.__forceAllowLocalhost = value
     }
-    private _forceAllowLocalhost: boolean = false
+    private __forceAllowLocalhost: boolean = false
 }
 
 /**
@@ -283,7 +286,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
-    webPerformance?: DeprecatedWebPerformanceObserver
+    webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
@@ -445,7 +448,6 @@ export class PostHog {
         this.__request_queue = []
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
-        this.webPerformance = new DeprecatedWebPerformanceObserver()
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
