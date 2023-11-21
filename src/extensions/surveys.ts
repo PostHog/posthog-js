@@ -283,6 +283,9 @@ const style = (id: string, appearance: SurveyAppearance | null) => {
               gap: 8px;
               max-width: 100%;
           }
+          .multiple-choice-options .choice-option-open label span {
+              width: 100%;
+          }
           .multiple-choice-options .choice-option-open input:disabled + label {
               opacity: 0.6;
           }
@@ -624,6 +627,7 @@ export const createMultipleChoicePopup = (
     const surveyQuestionChoices = question.choices
     const isSingleChoice = question.type === 'single_choice'
     const isOptional = !!question.optional
+    const hasOpenChoice = !!question.has_open_choice
 
     const form = `
     <div class="survey-${survey.id}-box">
@@ -637,8 +641,8 @@ export const createMultipleChoicePopup = (
             .map((option, idx) => {
                 let choiceClass = 'choice-option'
                 let val = option
-                if (option.startsWith('OPENlabel=')) {
-                    option = `${option.slice('OPENlabel='.length)}: <input type="text" value="">`
+                if (hasOpenChoice && idx === surveyQuestionChoices.length - 1) {
+                    option = `<span>${option}:</span><input type="text" value="">`
                     choiceClass += ' choice-option-open'
                     val = ''
                 }
@@ -734,6 +738,7 @@ export const createMultipleChoicePopup = (
                     checkInput.disabled = true
                     checkInput.checked = false
                 }
+                formElement.dispatchEvent(new Event('change'))
             }
         })
     }

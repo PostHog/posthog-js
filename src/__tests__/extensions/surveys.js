@@ -291,7 +291,8 @@ describe('survey display logic', () => {
                         question: 'Which types of content would you like to see more of?',
                         description: 'This is a question description',
                         type: 'multiple_choice',
-                        choices: ['Tutorials', 'Product Updates', 'Events', 'OPENlabel=Other'],
+                        choices: ['Tutorials', 'Product Updates', 'Events', 'Other'],
+                        has_open_choice: true,
                     },
                 ],
             },
@@ -308,6 +309,7 @@ describe('survey display logic', () => {
             .querySelector('input[type=text]')
         openChoiceTextInput.value = 'NEW VALUE 1'
         openChoiceTextInput.dispatchEvent(new Event('input'))
+        expect(singleQuestionSurveyForm.querySelector('.form-submit').disabled).toEqual(false)
         checkboxInputValues = [...checkboxInputs].map((input) => input.value)
         expect(checkboxInputValues).toEqual(['Tutorials', 'Product Updates', 'Events', 'NEW VALUE 1'])
         checkboxInputs[0].click()
@@ -339,7 +341,8 @@ describe('survey display logic', () => {
                         question: 'Which features do you use the most?',
                         description: 'This is a question description',
                         type: 'single_choice',
-                        choices: ['Surveys', 'Feature flags', 'Analytics', 'OPENlabel=Another Feature'],
+                        choices: ['Surveys', 'Feature flags', 'Analytics', 'Another Feature'],
+                        has_open_choice: true,
                     },
                 ],
             },
@@ -356,6 +359,7 @@ describe('survey display logic', () => {
             .querySelector('input[type=text]')
         openChoiceTextInput.value = 'NEW VALUE 2'
         openChoiceTextInput.dispatchEvent(new Event('input'))
+        expect(singleQuestionSurveyForm.querySelector('.form-submit').disabled).toEqual(false)
         radioInputValues = [...radioInputs].map((input) => input.value)
         expect(radioInputValues).toEqual(['Surveys', 'Feature flags', 'Analytics', 'NEW VALUE 2'])
         const radioInputsChecked = [...radioInputs].map((input) => input.checked)
