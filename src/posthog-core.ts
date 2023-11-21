@@ -108,7 +108,7 @@ export const defaultConfig = (): PostHogConfig => ({
     autocapture: true,
     rageclick: true,
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
-    persistence: 'cookie',
+    persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
     cookie_name: '',
     loaded: __NOOP,

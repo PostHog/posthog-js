@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
-import { SESSION_ID, USER_STATE } from '../constants'
+import { CLIENT_SESSION_PROPS, SESSION_ID, USER_STATE } from '../constants'
 import { PostHogConfig } from '../types'
 import Mock = jest.Mock
 
@@ -18,7 +18,7 @@ describe('persistence', () => {
     let library: PostHogPersistence
 
     afterEach(() => {
-        library.clear()
+        library?.clear()
         document.cookie = ''
         referrer = ''
     })
@@ -139,6 +139,7 @@ describe('persistence', () => {
                     distinct_id: 'test',
                 })}`
             )
+            expect(document.cookie).not.toContain('test_prop')
 
             lib.register({ otherProp: 'prop' })
             expect(document.cookie).toContain(
@@ -155,6 +156,29 @@ describe('persistence', () => {
                 })}`
             )
 
+            lib.register({
+                [CLIENT_SESSION_PROPS]: {
+                    sessionId: 'sid',
+                    props: {
+                        initialPathName: '/some/pathname',
+                        referringDomain: '$direct',
+                    },
+                },
+            })
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                    $sesid: [1000, 'sid', 2000],
+                    $client_session_props: {
+                        sessionId: 'sid',
+                        props: {
+                            initialPathName: '/some/pathname',
+                            referringDomain: '$direct',
+                        },
+                    },
+                })}`
+            )
+
             // Clear localstorage to simulate being on a different domain
             localStorage.clear()
 
@@ -163,6 +187,13 @@ describe('persistence', () => {
             expect(newLib.props).toEqual({
                 distinct_id: 'test',
                 $sesid: [1000, 'sid', 2000],
+                $client_session_props: {
+                    sessionId: 'sid',
+                    props: {
+                        initialPathName: '/some/pathname',
+                        referringDomain: '$direct',
+                    },
+                },
             })
         })
     })

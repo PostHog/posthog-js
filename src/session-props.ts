@@ -12,7 +12,7 @@ import { SessionIdManager } from './sessionid'
 import { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 
-interface SessionSourceProps {
+export interface SessionSourceProps {
     initialPathName: string
     referringDomain: string // Is actually host, but named domain for internal consistency. Should contain a port if there is one.
     utm_medium?: string
@@ -22,7 +22,7 @@ interface SessionSourceProps {
     utm_term?: string
 }
 
-interface StoredSessionSourceProps {
+export interface StoredSessionSourceProps {
     sessionId: string
     props: SessionSourceProps
 }
