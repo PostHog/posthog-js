@@ -627,7 +627,7 @@ export const createMultipleChoicePopup = (
     const surveyQuestionChoices = question.choices
     const isSingleChoice = question.type === 'single_choice'
     const isOptional = !!question.optional
-    const hasOpenChoice = !!question.has_open_choice
+    const hasOpenChoice = !!question.hasOpenChoice
 
     const form = `
     <div class="survey-${survey.id}-box">
