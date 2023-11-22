@@ -1,3 +1,7 @@
+## 1.93.0 - 2023-11-22
+
+- feat(surveys): Add open-ended choices for multiple and single choice surveys (#910)
+
 ## 1.92.1 - 2023-11-21
 
 - feat: payload capture - move timing into copied plugin (#902)
