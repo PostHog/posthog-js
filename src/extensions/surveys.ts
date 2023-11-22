@@ -293,12 +293,8 @@ const style = (id: string, appearance: SurveyAppearance | null) => {
               position: relative;
               opacity: 1;
               flex-grow: 1;
-              border: 1.5px solid rgba(0,0,0,.25);
-              border-radius: 2px;
+              border: 0;
               outline: 0;
-          }
-          .multiple-choice-options .choice-option-open label input:focus {
-              border-color: rgba(0,0,0);
           }
           .thank-you-message {
               position: fixed;
