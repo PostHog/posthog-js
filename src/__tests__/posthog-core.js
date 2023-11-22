@@ -276,6 +276,13 @@ describe('posthog core', () => {
 
             expect(given.lib.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
+
+        it('enables elementsChainAsString if given', () => {
+            given('decideResponse', () => ({ elementsChainAsString: true }))
+            given.subject()
+
+            expect(given.lib.elementsChainAsString).toBe(true)
+        })
     })
 
     describe('_calculate_event_properties()', () => {
@@ -1116,5 +1123,10 @@ describe('posthog core', () => {
                 'https://app.posthog.com/replay/sessionId?t=30'
             )
         })
+    })
+
+    test('deprecated web performance observer still exposes _forceAllowLocalhost', () => {
+        expect(given.lib.webPerformance._forceAllowLocalhost).toBe(false)
+        expect(() => given.lib.webPerformance._forceAllowLocalhost).not.toThrow()
     })
 })

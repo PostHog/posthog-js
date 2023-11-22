@@ -1,5 +1,7 @@
-import { NetworkRecordOptions, NetworkRequest, PostHogConfig } from '../../types'
+import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig, Body } from '../../types'
 import { _isFunction } from '../../utils/type-utils'
+import { convertToURL } from '../../utils/request-utils'
+import { logger } from '../../utils/logger'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
     initiatorTypes: [
@@ -25,10 +27,21 @@ export const defaultNetworkOptions: NetworkRecordOptions = {
         'video',
         'xmlhttprequest',
     ],
-    maskRequestFn: (data: NetworkRequest) => data,
+    maskRequestFn: (data: CapturedNetworkRequest) => data,
     recordHeaders: false,
     recordBody: false,
     recordInitialRequests: false,
+    recordPerformance: false,
+    performanceEntryTypeToObserve: [
+        // 'event', // This is too noisy as it covers all browser events
+        'first-input',
+        // 'mark', // Mark is used too liberally. We would need to filter for specific marks
+        // 'measure', // Measure is used too liberally. We would need to filter for specific measures
+        'navigation',
+        'paint',
+        'resource',
+    ],
+    payloadSizeLimitBytes: 1000000,
 }
 
 const HEADER_DENYLIST = [
@@ -47,37 +60,112 @@ const HEADER_DENYLIST = [
     'x-xsrf-token',
 ]
 
-const removeAuthorizationHeader = (data: NetworkRequest): NetworkRequest => {
+// we always remove headers on the deny list because we never want to capture this sensitive data
+const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
     Object.keys(data.requestHeaders ?? {}).forEach((header) => {
         if (HEADER_DENYLIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
     })
     return data
 }
 
+const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/vo/e/']
+// want to ignore posthog paths when capturing requests, or we can get trapped in a loop
+// because calls to PostHog would be reported using a call to PostHog which would be reported....
+const ignorePostHogPaths = (data: CapturedNetworkRequest): CapturedNetworkRequest | undefined => {
+    const url = convertToURL(data.name)
+    if (url && url.pathname && POSTHOG_PATHS_TO_IGNORE.includes(url.pathname)) {
+        return undefined
+    }
+    return data
+}
+
+function redactPayload(
+    payload: Body,
+    headers: Record<string, any> | undefined,
+    limit: number,
+    description: string
+): Body {
+    const requestContentLength = headers?.['content-length']
+    // in the interests of bundle size and the complexity of estimating payload size
+    // we only check the content-length header if it's present
+    // this might mean we can't always limit the payload, but that's better than
+    // having lots of code shipped to every browser that will rarely run
+    if (requestContentLength && parseInt(requestContentLength) > limit) {
+        return `${description} body too large to record`
+    }
+    return payload
+}
+
+// people can have arbitrarily large payloads on their site, but we don't want to ingest them
+const limitPayloadSize = (
+    options: NetworkRecordOptions
+): ((data: CapturedNetworkRequest | undefined) => CapturedNetworkRequest | undefined) => {
+    // the smallest of 1MB or the specified limit if there is one
+    const limit = Math.min(1000000, options.payloadSizeLimitBytes ?? 1000000)
+
+    return (data) => {
+        if (data?.requestBody) {
+            data.requestBody = redactPayload(data.requestBody, data.requestHeaders, limit, 'Request')
+        }
+
+        if (data?.responseBody) {
+            data.responseBody = redactPayload(data.responseBody, data.responseHeaders, limit, 'Response')
+        }
+
+        return data
+    }
+}
+
 /**
  *  whether a maskRequestFn is provided or not,
- *  we ensure that we remove the Authorization header from requests
+ *  we ensure that we remove the denied header from requests
  *  we _never_ want to record that header by accident
  *  if someone complains then we'll add an opt-in to let them override it
  */
 export const buildNetworkRequestOptions = (
     instanceConfig: PostHogConfig,
-    remoteNetworkOptions: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'>
+    remoteNetworkOptions: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
 ): NetworkRecordOptions => {
     const config = instanceConfig.session_recording as NetworkRecordOptions
     // client can always disable despite remote options
     const canRecordHeaders = config.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
     const canRecordBody = config.recordBody === false ? false : remoteNetworkOptions.recordBody
+    const canRecordPerformance = config.recordPerformance === false ? false : remoteNetworkOptions.recordPerformance
 
-    config.maskRequestFn = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
+    const payloadLimiter = limitPayloadSize(config)
+
+    const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
+        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d)))
+
+    const hasDeprecatedMaskFunction = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
+
+    if (hasDeprecatedMaskFunction && _isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)) {
+        logger.warn(
+            'Both `maskNetworkRequestFn` and `maskCapturedNetworkRequestFn` are defined. `maskNetworkRequestFn` will be ignored.'
+        )
+    }
+
+    if (hasDeprecatedMaskFunction) {
+        instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
+            const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
+            return {
+                ...data,
+                name: cleanedURL?.url,
+            } as CapturedNetworkRequest
+        }
+    }
+
+    config.maskRequestFn = _isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
         ? (data) => {
-              const cleanedRequest = removeAuthorizationHeader(data)
-              return instanceConfig.session_recording.maskNetworkRequestFn?.(cleanedRequest) ?? undefined
+              const cleanedRequest = enforcedCleaningFn(data)
+              return cleanedRequest
+                  ? instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined
+                  : undefined
           }
         : undefined
 
     if (!config.maskRequestFn) {
-        config.maskRequestFn = removeAuthorizationHeader
+        config.maskRequestFn = enforcedCleaningFn
     }
 
     return {
@@ -85,5 +173,7 @@ export const buildNetworkRequestOptions = (
         ...config,
         recordHeaders: canRecordHeaders,
         recordBody: canRecordBody,
+        recordPerformance: canRecordPerformance,
+        recordInitialRequests: canRecordPerformance,
     }
 }

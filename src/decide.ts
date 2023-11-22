@@ -62,7 +62,6 @@ export class Decide {
         this.instance.toolbar.afterDecideResponse(response)
         this.instance.sessionRecording?.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
-        this.instance.webPerformance?.afterDecideResponse(response)
         this.instance._afterDecideResponse(response)
 
         if (!this.instance.config.advanced_disable_feature_flags_on_first_load) {

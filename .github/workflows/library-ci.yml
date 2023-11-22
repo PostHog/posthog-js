@@ -39,7 +39,7 @@ jobs:
             - run: yarn install && yarn build
 
             - name: Cypress run
-              uses: cypress-io/github-action@v4
+              uses: cypress-io/github-action@v6
 
     functional:
         name: Functional tests

@@ -12,21 +12,17 @@ describe('Event capture', () => {
 
     // :TRICKY: Use a custom start command over beforeEach to deal with given2 not being ready yet.
     const start = ({ waitForDecide = true } = {}) => {
-        cy.route({
-            method: 'POST',
-            url: '**/decide/*',
-            response: {
-                config: {
-                    enable_collect_everything: true,
-                },
-                editorParams: {},
-                featureFlags: ['session-recording-player'],
-                isAuthenticated: false,
-                sessionRecording: given.sessionRecording,
-                supportedCompression: given.supportedCompression,
-                excludedDomains: [],
-                autocaptureExceptions: false,
+        cy.intercept('POST', '**/decide/*', {
+            config: {
+                enable_collect_everything: true,
             },
+            editorParams: {},
+            featureFlags: ['session-recording-player'],
+            isAuthenticated: false,
+            sessionRecording: given.sessionRecording,
+            supportedCompression: given.supportedCompression,
+            excludedDomains: [],
+            autocaptureExceptions: false,
         }).as('decide')
 
         cy.visit('./playground/cypress-full')
@@ -220,8 +216,9 @@ describe('Event capture', () => {
     it('makes a single decide request', () => {
         start()
 
-        cy.wait(200)
-        cy.shouldBeCalled('decide', 1)
+        cy.get('@decide.all').then((calls) => {
+            expect(calls.length).to.equal(1)
+        })
 
         cy.phCaptures().should('include', '$pageview')
         cy.get('@decide').should(({ request }) => {
@@ -238,7 +235,8 @@ describe('Event capture', () => {
 
         it('captures $snapshot events', () => {
             start()
-
+            // de-flake the test
+            cy.wait(100)
             cy.phCaptures().should('include', '$snapshot')
         })
 
@@ -322,17 +320,24 @@ describe('Event capture', () => {
             it('contains the correct payload after an event', () => {
                 start()
                 // Pageview will be sent immediately
-                cy.wait('@capture').should(({ request, url }) => {
-                    expect(request.headers).to.eql({
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    })
+                cy.wait('@capture').should(({ request }) => {
+                    expect(request.headers['content-type']).to.eql('application/x-www-form-urlencoded')
 
-                    expect(url).to.match(urlWithVersion)
+                    expect(request.url).to.match(urlWithVersion)
                     const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
                     const captures = JSON.parse(Buffer.from(data, 'base64'))
 
                     expect(captures['event']).to.equal('$pageview')
                 })
+
+                // the code below is going to trigger an event capture
+                // we want to assert on the request
+                cy.intercept('POST', '**/e/*', async (request) => {
+                    expect(request.headers['content-type']).to.eq('text/plain')
+
+                    const captures = await getGzipEncodedPayload(request)
+                    expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event'])
+                }).as('capture-assertion')
 
                 cy.get('[data-cy-custom-event-button]').click()
                 cy.phCaptures().should('have.length', 3)
@@ -340,13 +345,7 @@ describe('Event capture', () => {
                 cy.phCaptures().should('include', '$autocapture')
                 cy.phCaptures().should('include', 'custom-event')
 
-                cy.wait('@capture').its('requestBody.type').should('deep.equal', 'text/plain')
-
-                cy.get('@capture').should(async ({ requestBody }) => {
-                    const captures = await getGzipEncodedPayload(requestBody)
-
-                    expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event'])
-                })
+                cy.wait('@capture-assertion')
             })
         })
     })
@@ -374,11 +373,12 @@ describe('Event capture', () => {
             cy.get('[data-cy-input]')
                 .type('hello posthog!')
                 .then(() => {
-                    const requests = cy
-                        .state('requests')
-                        .filter(({ alias }) => alias === 'session-recording' || alias === 'recorder')
-                    expect(requests.length).to.be.equal(0)
+                    cy.get('@session-recording.all').then((calls) => {
+                        expect(calls.length).to.equal(0)
+                    })
                 })
+
+            cy.phCaptures().should('not.include', '$snapshot')
         })
     })
 
@@ -394,8 +394,9 @@ describe('Event capture', () => {
         it('makes a single decide request on start', () => {
             start()
 
-            cy.wait(200)
-            cy.shouldBeCalled('decide', 1)
+            cy.get('@decide.all').then((calls) => {
+                expect(calls.length).to.equal(1)
+            })
 
             cy.get('@decide').should(({ request }) => {
                 const payload = getBase64EncodedPayload(request)
@@ -419,14 +420,19 @@ describe('Event capture', () => {
             start()
 
             cy.wait(200)
-            cy.shouldBeCalled('decide', 1)
+            cy.get('@decide.all').then((calls) => {
+                expect(calls.length).to.equal(1)
+            })
 
             cy.posthog().invoke('group', 'company', 'id:6')
             cy.posthog().invoke('group', 'playlist', 'id:77')
             cy.posthog().invoke('group', 'anothergroup', 'id:99')
 
             cy.wait('@decide')
-            cy.shouldBeCalled('decide', 2)
+
+            cy.get('@decide.all').then((calls) => {
+                expect(calls.length).to.equal(2)
+            })
         })
     })
 })
