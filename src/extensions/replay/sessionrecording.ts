@@ -389,6 +389,11 @@ export class SessionRecording {
             // We check if the lastActivityTimestamp is old enough to go idle
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
+                this.rrwebRecord?.addCustomEvent('sessionIdle', {
+                    reason: 'user inactivity',
+                    timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
+                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+                })
             }
         }
 
@@ -397,6 +402,10 @@ export class SessionRecording {
             if (this.isIdle) {
                 // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
                 this.isIdle = false
+                this.rrwebRecord?.addCustomEvent('sessionNoLongerIdle', {
+                    reason: 'user activity',
+                    type: event.type,
+                })
                 this._tryTakeFullSnapshot()
             }
         }

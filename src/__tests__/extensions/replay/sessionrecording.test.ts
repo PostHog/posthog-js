@@ -42,6 +42,7 @@ function makeDecideResponse(partialResponse: Partial<DecideResponse>) {
 }
 
 describe('SessionRecording', () => {
+    const _addCustomEvent = jest.fn()
     let _emit: any
     let posthog: PostHog
     let sessionRecording: SessionRecording
@@ -54,6 +55,8 @@ describe('SessionRecording', () => {
 
     beforeEach(() => {
         assignableWindow.rrwebRecord = jest.fn()
+        _addCustomEvent.mockClear()
+        assignableWindow.rrwebRecord = _addCustomEvent
         assignableWindow.rrwebConsoleRecord = {
             getRecordConsolePlugin: jest.fn(),
         }
@@ -283,6 +286,7 @@ describe('SessionRecording', () => {
                 return () => {}
             })
             assignableWindow.rrwebRecord.takeFullSnapshot = mockFullSnapshot
+            assignableWindow.rrwebRecord.addCustomEvent = _addCustomEvent
             ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
         })
 
@@ -369,7 +373,7 @@ describe('SessionRecording', () => {
                     expect(sessionRecording['sessionId']).not.toBe(lastSessionId)
                     lastSessionId = sessionRecording['sessionId']
 
-                    emitValues.push(sessionRecording.status)
+                    emitValues.push(sessionRecording['status'])
                 }
 
                 // the random number generator won't always be exactly 0.5, but it should be close
@@ -998,6 +1002,11 @@ describe('SessionRecording', () => {
                         timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000,
                     })
                     expect(sessionRecording['isIdle']).toEqual(true)
+                    expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', {
+                        reason: 'user inactivity',
+                        threshold: 300000,
+                        timeSinceLastActive: 300900,
+                    })
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
                     expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
@@ -1011,6 +1020,10 @@ describe('SessionRecording', () => {
                         timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000,
                     })
                     expect(sessionRecording['isIdle']).toEqual(false)
+                    expect(_addCustomEvent).toHaveBeenCalledWith('sessionNoLongerIdle', {
+                        reason: 'user activity',
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                    })
                     expect(sessionRecording['_lastActivityTimestamp']).toEqual(
                         lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
                     )
