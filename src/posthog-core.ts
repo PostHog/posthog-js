@@ -4,7 +4,6 @@ import {
     _each,
     _eachArray,
     _extend,
-    _isBlockedUA,
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
@@ -15,7 +14,6 @@ import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { WebPerformanceObserver } from './extensions/replay/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -58,6 +56,7 @@ import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
+import { _isBlockedUA } from './utils/blocked-uas'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -212,9 +211,6 @@ const create_phlib = function (
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance.webPerformance = new WebPerformanceObserver(instance)
-    instance.webPerformance.startObservingIfEnabled()
-
     if (instance.config.__preview_measure_pageview_stats) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
@@ -253,6 +249,19 @@ const create_phlib = function (
     return instance
 }
 
+class DeprecatedWebPerformanceObserver {
+    get _forceAllowLocalhost(): boolean {
+        return this.__forceAllowLocalhost
+    }
+    set _forceAllowLocalhost(value: boolean) {
+        logger.error(
+            'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
+        )
+        this.__forceAllowLocalhost = value
+    }
+    private __forceAllowLocalhost: boolean = false
+}
+
 /**
  * PostHog Library Object
  * @constructor
@@ -277,7 +286,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
-    webPerformance?: WebPerformanceObserver
+    webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
@@ -287,6 +296,7 @@ export class PostHog {
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
+    elementsChainAsString: boolean
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
@@ -310,6 +320,7 @@ export class PostHog {
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
         this.analyticsDefaultEndpoint = '/e/'
+        this.elementsChainAsString = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -535,6 +546,10 @@ export class PostHog {
 
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
+        }
+
+        if (response.elementsChainAsString) {
+            this.elementsChainAsString = response.elementsChainAsString
         }
     }
 

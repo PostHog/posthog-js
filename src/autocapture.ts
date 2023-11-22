@@ -13,6 +13,7 @@ import {
     isAngularStyleAttr,
     isDocumentFragment,
     getDirectAndNestedSpanText,
+    getElementsChainString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
@@ -255,9 +256,13 @@ const autocapture = {
 
             const props = _extend(
                 this._getDefaultProperties(e.type),
-                {
-                    $elements: elementsJson,
-                },
+                instance.elementsChainAsString
+                    ? {
+                          $elements_chain: getElementsChainString(elementsJson),
+                      }
+                    : {
+                          $elements: elementsJson,
+                      },
                 elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
                 this._getCustomProperties(targetElementList),
                 autocaptureAugmentProperties

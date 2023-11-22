@@ -88,6 +88,7 @@ module.exports = {
             files: 'cypress/**/*',
             globals: {
                 cy: true,
+                Cypress: true,
             },
         },
     ],

@@ -1,4 +1,4 @@
-import { _getQueryParam } from './request-utils'
+import { _getQueryParam, convertToURL } from './request-utils'
 import { _isNull, _isUndefined } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
@@ -256,9 +256,7 @@ export const _info = {
         if (!document?.referrer) {
             return '$direct'
         }
-        const parser = document.createElement('a') // Unfortunately we cannot use new URL due to IE11
-        parser.href = document.referrer
-        return parser.host
+        return convertToURL(document.referrer)?.host || '$direct'
     },
 
     properties: function (): Properties {

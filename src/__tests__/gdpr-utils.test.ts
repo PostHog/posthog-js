@@ -3,6 +3,8 @@ import sinon from 'sinon'
 import * as gdpr from '../gdpr-utils'
 
 import { _isNull } from '../utils/type-utils'
+import { document, assignableWindow } from '../utils/globals'
+import { GDPROptions } from '../types'
 
 const TOKENS = [
     `test-token`,
@@ -13,23 +15,28 @@ const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
 const CUSTOM_PERSISTENCE_PREFIX = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
 
 function deleteAllCookies() {
-    var cookies = document.cookie.split(';')
+    const cookies = document.cookie.split(';')
 
-    for (var i = 0; i < cookies.length; i++) {
-        var cookie = cookies[i]
-        var eqPos = cookie.indexOf('=')
-        var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
+    for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i]
+        const eqPos = cookie.indexOf('=')
+        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
         document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT'
     }
 }
 
-function forPersistenceTypes(runTests) {
+function forPersistenceTypes(runTests: any) {
     ;[`cookie`, `localStorage`, `localStorage+cookie`].forEach(function (persistenceType) {
         describe(persistenceType, runTests.bind(null, persistenceType))
     })
 }
 
-function assertPersistenceValue(persistenceType, token, value, persistencePrefix = DEFAULT_PERSISTENCE_PREFIX) {
+function assertPersistenceValue(
+    persistenceType: GDPROptions['persistenceType'],
+    token: string,
+    value: string | number | null,
+    persistencePrefix = DEFAULT_PERSISTENCE_PREFIX
+) {
     if (persistenceType === `cookie`) {
         if (_isNull(value)) {
             expect(document.cookie).not.toContain(token)
@@ -38,9 +45,9 @@ function assertPersistenceValue(persistenceType, token, value, persistencePrefix
         }
     } else {
         if (_isNull(value)) {
-            expect(window.localStorage.getItem(persistencePrefix + token)).toBeNull()
+            expect(assignableWindow.localStorage.getItem(persistencePrefix + token)).toBeNull()
         } else {
-            expect(window.localStorage.getItem(persistencePrefix + token)).toBe(`${value}`)
+            expect(assignableWindow.localStorage.getItem(persistencePrefix + token)).toBe(`${value}`)
         }
     }
 }
@@ -51,12 +58,12 @@ describe(`GDPR utils`, () => {
 
     afterEach(() => {
         document.getElementsByTagName('html')[0].innerHTML = ''
-        window.localStorage.clear()
+        assignableWindow.localStorage.clear()
         deleteAllCookies()
     })
 
     describe(`optIn`, () => {
-        forPersistenceTypes(function (persistenceType) {
+        forPersistenceTypes(function (persistenceType: GDPROptions['persistenceType']) {
             it(`should set a cookie marking the user as opted-in for a given token`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optIn(token, { persistenceType })
@@ -92,7 +99,7 @@ describe(`GDPR utils`, () => {
 
             it(`shouldn't capture an event if the user has opted out`, () => {
                 TOKENS.forEach((token) => {
-                    let capture = sinon.spy()
+                    const capture = sinon.spy()
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optOut(token, { capture, persistenceType })
                     expect(capture.notCalled).toBe(true)
@@ -101,7 +108,7 @@ describe(`GDPR utils`, () => {
 
             it(`should capture an event if the user has opted in`, () => {
                 TOKENS.forEach((token) => {
-                    let capture = sinon.spy()
+                    const capture = sinon.spy()
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optIn(token, { persistenceType })
                     gdpr.optIn(token, { capture, persistenceType })
@@ -111,7 +118,7 @@ describe(`GDPR utils`, () => {
 
             it(`should capture an event if the user is switching opt from out to in`, () => {
                 TOKENS.forEach((token) => {
-                    let capture = sinon.spy()
+                    const capture = sinon.spy()
                     gdpr.optOut(token, { persistenceType })
                     gdpr.optIn(token, { capture, persistenceType })
                     expect(capture.calledOnce).toBe(true)
@@ -141,7 +148,7 @@ describe(`GDPR utils`, () => {
     })
 
     describe(`optOut`, () => {
-        forPersistenceTypes(function (persistenceType) {
+        forPersistenceTypes(function (persistenceType: GDPROptions['persistenceType']) {
             it(`should set a cookie marking the user as opted-out for a given token`, () => {
                 TOKENS.forEach((token) => {
                     gdpr.optOut(token, { persistenceType })
@@ -168,8 +175,8 @@ describe(`GDPR utils`, () => {
 
             it(`shouldn't capture an event if the user is switching opt from in to out`, () => {
                 TOKENS.forEach((token) => {
-                    let capture = sinon.spy()
-                    gdpr.optIn(token)
+                    const capture = sinon.spy()
+                    gdpr.optIn(token, {})
                     gdpr.optOut(token, { capture, persistenceType })
                     expect(capture.calledOnce).toBe(false)
                 })
@@ -198,7 +205,7 @@ describe(`GDPR utils`, () => {
     })
 
     describe(`hasOptedIn`, () => {
-        forPersistenceTypes(function (persistenceType) {
+        forPersistenceTypes(function (persistenceType: GDPROptions['persistenceType']) {
             it(`should return 'false' if the user hasn't opted in for a given token`, () => {
                 TOKENS.forEach((token) => {
                     expect(gdpr.hasOptedIn(token, { persistenceType })).toBe(false)
@@ -214,7 +221,7 @@ describe(`GDPR utils`, () => {
 
             it(`should return 'false' if the user opts in for any other token`, () => {
                 const token = TOKENS[0]
-                gdpr.optIn(token)
+                gdpr.optIn(token, {})
 
                 TOKENS.filter((otherToken) => otherToken !== token).forEach((otherToken) => {
                     expect(gdpr.hasOptedIn(otherToken, { persistenceType })).toBe(false)
@@ -267,7 +274,7 @@ describe(`GDPR utils`, () => {
                     expect(
                         gdpr.hasOptedIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
                     ).toBe(true)
-                    gdpr.optOut(token)
+                    gdpr.optOut(token, {})
                     expect(
                         gdpr.hasOptedIn(token, { persistencePrefix: CUSTOM_PERSISTENCE_PREFIX, persistenceType })
                     ).toBe(true)
@@ -281,7 +288,7 @@ describe(`GDPR utils`, () => {
     })
 
     describe(`hasOptedOut`, () => {
-        forPersistenceTypes(function (persistenceType) {
+        forPersistenceTypes(function (persistenceType: GDPROptions['persistenceType']) {
             it(`should return 'false' if the user hasn't opted out for a given token`, () => {
                 TOKENS.forEach((token) => {
                     expect(gdpr.hasOptedOut(token, { persistenceType })).toBe(false)
@@ -364,7 +371,7 @@ describe(`GDPR utils`, () => {
     })
 
     describe(`clearOptInOut`, () => {
-        forPersistenceTypes(function (persistenceType) {
+        forPersistenceTypes(function (persistenceType: GDPROptions['persistenceType']) {
             it(`should delete any opt cookies for a given token`, () => {
                 ;[gdpr.optIn, gdpr.optOut].forEach((optFunc) => {
                     TOKENS.forEach((token) => {
@@ -450,7 +457,7 @@ describe(`GDPR utils`, () => {
                             persistencePrefix: CUSTOM_PERSISTENCE_PREFIX,
                         })
                     ).toBe(true)
-                    gdpr.clearOptInOut(token)
+                    gdpr.clearOptInOut(token, {})
                     expect(
                         gdpr.hasOptedOut(token, {
                             persistenceType,

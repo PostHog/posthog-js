@@ -1,3 +1,15 @@
+## 1.92.1 - 2023-11-21
+
+- feat: payload capture - move timing into copied plugin (#902)
+
+## 1.92.0 - 2023-11-20
+
+- feat: Create elements chain string as we store it (#823)
+- Move blocked UAs to own file (#905)
+- chore: deflake a test (#904)
+- chore: convert more tests to TS (#903)
+- latest cypress action version (#900)
+
 ## 1.91.1 - 2023-11-15
 
 - fix(surveys): button text field fix (#899)
