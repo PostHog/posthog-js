@@ -170,7 +170,7 @@ describe('Decide', () => {
             expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
         })
 
-        it('Make sure receivedFeatureFlags is called with empty if advanced_disable_feature_flags_on_first_load is set', () => {
+        it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags_on_first_load is set', () => {
             given('decideResponse', () => ({
                 enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
@@ -180,6 +180,27 @@ describe('Decide', () => {
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags_on_first_load: true,
+            }))
+
+            given.subject()
+
+            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+
+            expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags is set', () => {
+            given('decideResponse', () => ({
+                enable_collect_everything: true,
+                featureFlags: { 'test-flag': true },
+            }))
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+                advanced_disable_feature_flags: true,
             }))
 
             given.subject()

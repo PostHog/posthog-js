@@ -64,7 +64,10 @@ export class Decide {
         autocapture.afterDecideResponse(response, this.instance)
         this.instance._afterDecideResponse(response)
 
-        if (!this.instance.config.advanced_disable_feature_flags_on_first_load) {
+        if (
+            !this.instance.config.advanced_disable_feature_flags_on_first_load &&
+            !this.instance.config.advanced_disable_feature_flags
+        ) {
             this.instance.featureFlags.receivedFeatureFlags(response)
         }
 
