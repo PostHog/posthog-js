@@ -1,3 +1,7 @@
+## 1.93.2 - 2023-11-23
+
+- fix(flags): Make sure we don't override flags when decide is disabled (#911)
+
 ## 1.93.1 - 2023-11-23
 
 - feat: send idle markers in session (#909)
