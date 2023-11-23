@@ -1,3 +1,7 @@
+## 1.93.1 - 2023-11-23
+
+- feat: send idle markers in session (#909)
+
 ## 1.93.0 - 2023-11-22
 
 - feat(surveys): Add open-ended choices for multiple and single choice surveys (#910)
