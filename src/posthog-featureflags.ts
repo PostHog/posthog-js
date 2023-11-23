@@ -170,6 +170,10 @@ export class PostHogFeatureFlags {
     }
 
     _reloadFeatureFlagsRequest(): void {
+        if (this.instance.config.advanced_disable_feature_flags) {
+            return
+        }
+
         this.setReloadingPaused(true)
         const token = this.instance.config.token
         const personProperties = this.instance.get_property(STORED_PERSON_PROPERTIES_KEY)

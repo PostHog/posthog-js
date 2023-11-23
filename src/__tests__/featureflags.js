@@ -559,25 +559,37 @@ describe('featureflags', () => {
                 ...given.instance.config,
                 advanced_disable_feature_flags: true,
             }
+            given.instance.persistence.register({
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'random-feature': 'xatu',
+                },
+            })
 
             given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'beta-feature': true,
+                'random-feature': 'xatu',
+            })
+
+            // check reload request was not sent
+            expect(given.instance._send_request).not.toHaveBeenCalled()
+
+            // check the same for other ways to call reload flags
+
+            given.featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
 
             jest.runAllTimers()
 
             expect(given.featureFlags.getFlagVariants()).toEqual({
-                first: 'variant-1',
-                second: true,
+                'beta-feature': true,
+                'random-feature': 'xatu',
             })
 
-            // check the request sent disable_flags
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
-                token: 'random fake token',
-                distinct_id: 'blah id',
-                person_properties: { a: 'b', c: 'd' },
-                disable_flags: true,
-            })
+            // check reload request was not sent
+            expect(given.instance._send_request).not.toHaveBeenCalled()
         })
     })
 
