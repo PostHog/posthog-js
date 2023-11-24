@@ -83,6 +83,7 @@ export interface PostHogConfig {
     upgrade: boolean
     disable_session_recording: boolean
     disable_persistence: boolean
+    /** @deprecated - use `disable_persistence` instead  */
     disable_cookie: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
