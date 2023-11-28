@@ -434,32 +434,26 @@ export class SessionRecording {
         this.sessionId = sessionId
     }
 
-    private _tryAddCustomEvent(tag: string, payload: any): boolean {
+    private _tryRRwebMethod(rrwebMethod: () => void): boolean {
         if (!this._captureStarted) {
             return false
         }
         try {
-            this.rrwebRecord?.addCustomEvent(tag, payload)
+            rrwebMethod()
             return true
         } catch (e) {
-            // Sometimes a race can occur where the recorder is not fully started yet, so we can't add a custom event
-            logger.error('Error adding custom event.', e)
+            // Sometimes a race can occur where the recorder is not fully started yet
+            logger.error('[Session-Recording] using rrweb when not started.', e)
             return false
         }
     }
 
+    private _tryAddCustomEvent(tag: string, payload: any): boolean {
+        return this._tryRRwebMethod(() => this.rrwebRecord?.addCustomEvent(tag, payload))
+    }
+
     private _tryTakeFullSnapshot(): boolean {
-        if (!this._captureStarted) {
-            return false
-        }
-        try {
-            this.rrwebRecord?.takeFullSnapshot()
-            return true
-        } catch (e) {
-            // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
-            logger.error('Error taking full snapshot.', e)
-            return false
-        }
+        return this._tryRRwebMethod(() => this.rrwebRecord?.takeFullSnapshot())
     }
 
     private _onScriptLoaded() {
