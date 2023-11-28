@@ -402,10 +402,11 @@ export class SessionRecording {
             if (this.isIdle) {
                 // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
                 this.isIdle = false
-                this._tryTakeFullSnapshot({
-                    tag: 'sessionNoLongerIdle',
-                    payload: { reason: 'user activity', type: event.type },
+                this.rrwebRecord?.addCustomEvent('sessionNoLongerIdle', {
+                    reason: 'user activity',
+                    type: event.type,
                 })
+                this._tryTakeFullSnapshot()
             }
         }
 
@@ -433,31 +434,19 @@ export class SessionRecording {
         this.sessionId = sessionId
     }
 
-    private _tryTakeFullSnapshot(withCustomEvent?: { tag: string; payload: any }): void {
+    private _tryTakeFullSnapshot(): boolean {
+        // TODO this should ignore based on emit?
         if (!this._captureStarted) {
-            return
+            return false
         }
-        // try the same action three times 50 milliseconds apart
-        // if it fails all three times then we give up
-        // this is to account for the fact that the recorder might not be started yet
-        let tries = 0
-        const retryingFn = () => {
-            tries++
-            if (tries > 3) {
-                logger.warn('Could not take full snapshot after 150 milliseconds. Giving up.')
-                return
-            }
-
-            try {
-                if (withCustomEvent) {
-                    this.rrwebRecord?.addCustomEvent(withCustomEvent.tag, withCustomEvent.payload)
-                }
-                this.rrwebRecord?.takeFullSnapshot()
-            } catch (e) {
-                setTimeout(retryingFn, 50)
-            }
+        try {
+            this.rrwebRecord?.takeFullSnapshot()
+            return true
+        } catch (e) {
+            // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
+            logger.error('Error taking full snapshot.', e)
+            return false
         }
-        retryingFn()
     }
 
     private _onScriptLoaded() {
