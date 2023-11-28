@@ -389,7 +389,7 @@ export class SessionRecording {
             // We check if the lastActivityTimestamp is old enough to go idle
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
-                this.rrwebRecord?.addCustomEvent('sessionIdle', {
+                this._tryAddCustomEvent('sessionIdle', {
                     reason: 'user inactivity',
                     timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
                     threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
@@ -402,7 +402,7 @@ export class SessionRecording {
             if (this.isIdle) {
                 // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
                 this.isIdle = false
-                this.rrwebRecord?.addCustomEvent('sessionNoLongerIdle', {
+                this._tryAddCustomEvent('sessionNoLongerIdle', {
                     reason: 'user activity',
                     type: event.type,
                 })
@@ -434,19 +434,26 @@ export class SessionRecording {
         this.sessionId = sessionId
     }
 
-    private _tryTakeFullSnapshot(): boolean {
-        // TODO this should ignore based on emit?
+    private _tryRRwebMethod(rrwebMethod: () => void): boolean {
         if (!this._captureStarted) {
             return false
         }
         try {
-            this.rrwebRecord?.takeFullSnapshot()
+            rrwebMethod()
             return true
         } catch (e) {
-            // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
-            logger.error('Error taking full snapshot.', e)
+            // Sometimes a race can occur where the recorder is not fully started yet
+            logger.error('[Session-Recording] using rrweb when not started.', e)
             return false
         }
+    }
+
+    private _tryAddCustomEvent(tag: string, payload: any): boolean {
+        return this._tryRRwebMethod(() => this.rrwebRecord?.addCustomEvent(tag, payload))
+    }
+
+    private _tryTakeFullSnapshot(): boolean {
+        return this._tryRRwebMethod(() => this.rrwebRecord?.takeFullSnapshot())
     }
 
     private _onScriptLoaded() {
@@ -541,7 +548,7 @@ export class SessionRecording {
                     if (!href) {
                         return
                     }
-                    this.rrwebRecord?.addCustomEvent('$pageview', { href })
+                    this._tryAddCustomEvent('$pageview', { href })
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)
