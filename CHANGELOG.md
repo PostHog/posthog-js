@@ -1,3 +1,8 @@
+## 1.93.3 - 2023-11-28
+
+- fix: safer custom event on return from idle (#913)
+- Add deprecation notice for disable_cookie (#912)
+
 ## 1.93.2 - 2023-11-23
 
 - fix(flags): Make sure we don't override flags when decide is disabled (#911)
