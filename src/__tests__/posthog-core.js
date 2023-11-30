@@ -234,6 +234,26 @@ describe('posthog core', () => {
                 undefined
             )
         })
+
+        it('includes $site_name from config', () => {
+            given('config', () => ({
+                site_name: 'test site name',
+                property_blacklist: [],
+                _onCapture: jest.fn(),
+            }))
+            const event = given.subject()
+            expect(event.properties['$site_name']).toBe('test site name')
+        })
+
+        it('doesnt include $site_name if not set', () => {
+            given('config', () => ({
+                site_name: undefined,
+                property_blacklist: [],
+                _onCapture: jest.fn(),
+            }))
+            const event = given.subject()
+            expect(event.properties).not.toHaveProperty('$site_name')
+        })
     })
 
     describe('_afterDecideResponse', () => {
