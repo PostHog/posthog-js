@@ -988,6 +988,10 @@ export class PostHog {
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
 
+        if (this.config.site_name) {
+            properties['$site_name'] = this.config.site_name
+        }
+
         // note: extend writes to the first object, so lets make sure we
         // don't write to the persistence properties object and info
         // properties object by passing in a new object

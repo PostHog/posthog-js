@@ -124,6 +124,7 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
+    site_name?: string
     __preview_measure_pageview_stats?: boolean
     __preview_send_client_session_params?: boolean
 }

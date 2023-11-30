@@ -15,6 +15,7 @@ if (typeof window !== 'undefined') {
         },
         debug: true,
         __preview_send_client_session_params: true,
+        site_name: 'playground-nextjs',
     })
     ;(window as any).posthog = posthog
 }
