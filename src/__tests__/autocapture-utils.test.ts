@@ -400,8 +400,14 @@ describe(`Autocapture utility functions`, () => {
     })
 
     describe('getClassNames', () => {
-        it('should return an empty string with no elements', () => {
+        it('should cope when there is no classNames attribute', () => {
             const el = document!.createElement('div')
+            const classNames = getClassNames(el)
+            expect(classNames).toEqual([])
+        })
+        it('should cope when there is an empty classNames attribute', () => {
+            const el = document!.createElement('div')
+            el.className = ''
             const classNames = getClassNames(el)
             expect(classNames).toEqual([])
         })

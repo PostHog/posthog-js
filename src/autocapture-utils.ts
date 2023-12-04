@@ -22,6 +22,8 @@ export function getClassNames(el: Element): string[] {
             className =
                 ('baseVal' in el.className ? (el.className as any).baseVal : null) || el.getAttribute('class') || ''
             break
+        default:
+            className = ''
     }
 
     return className.length ? _trim(className).split(/\s+/) : []
