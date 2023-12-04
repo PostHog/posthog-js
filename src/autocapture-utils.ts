@@ -8,7 +8,7 @@ import { window } from './utils/globals'
 /*
  * Get the className of an element, accounting for edge cases where element.className is an object
  *
- * In use the classes are always split before being used. Because this is a string it can contain unexpected characters
+ * Because this is a string it can contain unexpected characters
  * So, this method safely splits the className and returns that array.
  */
 export function getClassNames(el: Element): string[] {
