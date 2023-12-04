@@ -1,9 +1,3 @@
-/*
- * Get the className of an element, accounting for edge cases where element.className is an object
- * @param {Element} el - element to get the className of
- * @returns {string} the element's class
- */
-
 import { AutocaptureConfig, Properties } from 'types'
 import { _each, _entries, _includes, _trim } from './utils'
 
@@ -11,17 +5,26 @@ import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 
-export function getClassName(el: Element): string {
+/*
+ * Get the className of an element, accounting for edge cases where element.className is an object
+ *
+ * In use the classes are always split before being used. Because this is a string it can contain unexpected characters
+ * So, this method safely splits the className and returns that array.
+ */
+export function getClassNames(el: Element): string[] {
+    let className = ''
     switch (typeof el.className) {
         case 'string':
-            return el.className
+            className = el.className
+            break
         // TODO: when is this ever used?
         case 'object': // handle cases where className might be SVGAnimatedString or some other type
-            return ('baseVal' in el.className ? (el.className as any).baseVal : null) || el.getAttribute('class') || ''
-        default:
-            // future proof
-            return ''
+            className =
+                ('baseVal' in el.className ? (el.className as any).baseVal : null) || el.getAttribute('class') || ''
+            break
     }
+
+    return className.length ? _trim(className).split(/\s+/) : []
 }
 
 /*
@@ -203,13 +206,13 @@ export function shouldCaptureDomEvent(
  */
 export function shouldCaptureElement(el: Element): boolean {
     for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
-        const classes = getClassName(curEl).split(' ')
+        const classes = getClassNames(curEl)
         if (_includes(classes, 'ph-sensitive') || _includes(classes, 'ph-no-capture')) {
             return false
         }
     }
 
-    if (_includes(getClassName(el).split(' '), 'ph-include')) {
+    if (_includes(getClassNames(el), 'ph-include')) {
         return true
     }
 

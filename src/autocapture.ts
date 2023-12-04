@@ -1,6 +1,6 @@
 import { _bind_instance_methods, _each, _extend, _includes, _register_event, _safewrap_instance_methods } from './utils'
 import {
-    getClassName,
+    getClassNames,
     getSafeText,
     isElementNode,
     isSensitiveElement,
@@ -89,9 +89,9 @@ const autocapture = {
             }
         }
 
-        const classes = getClassName(elem)
+        const classes = getClassNames(elem)
         if (classes.length > 0)
-            props['classes'] = classes.split(' ').filter(function (c) {
+            props['classes'] = classes.filter(function (c) {
                 return c !== ''
             })
 
@@ -219,7 +219,7 @@ const autocapture = {
                 }
 
                 // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
-                const classes = getClassName(el).split(' ')
+                const classes = getClassNames(el)
                 if (_includes(classes, 'ph-no-capture')) {
                     explicitNoCapture = true
                 }
