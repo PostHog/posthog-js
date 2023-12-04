@@ -1284,7 +1284,7 @@ export class PostHog {
         }
 
         if (isDistinctIdStringLike(new_distinct_id)) {
-            logger.error(
+            logger.critical(
                 `The string "${new_distinct_id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
             )
             return
