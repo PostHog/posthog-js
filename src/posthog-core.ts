@@ -1712,6 +1712,8 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
+            // We assume the api_host is without a trailing slash in most places throughout the codebase
+            this.config.api_host = this.config.api_host.replace(/\/$/, '')
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 
