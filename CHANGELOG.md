@@ -1,3 +1,7 @@
+## 1.93.6 - 2023-12-05
+
+- fix: Sanitize given api_host urls to not have a trailing slash (#920)
+
 ## 1.93.5 - 2023-12-05
 
 - fix: handle newlines in classnames (#919)
