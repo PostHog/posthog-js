@@ -487,3 +487,7 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     // for the hostname
     return hostname.split('.').slice(-2).join('.') !== 'herokuapp.com'
 }
+
+export function isDistinctIdStringLike(value: string): boolean {
+    return ['distinct_id', 'distinctid'].includes(value.toLowerCase())
+}

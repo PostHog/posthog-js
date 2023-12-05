@@ -7,6 +7,7 @@ import {
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
+    isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, window } from './utils/globals'
 import { autocapture } from './autocapture'
@@ -1279,6 +1280,13 @@ export class PostHog {
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
             logger.error('Unique user id has not been set in posthog.identify')
+            return
+        }
+
+        if (isDistinctIdStringLike(new_distinct_id)) {
+            logger.critical(
+                `The string "${new_distinct_id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
+            )
             return
         }
 
