@@ -1,3 +1,7 @@
+## 1.93.4 - 2023-12-05
+
+- feat: Show warning if identifying with "distinct_id" (#918)
+
 ## 1.93.3 - 2023-11-28
 
 - fix: safer custom event on return from idle (#913)
