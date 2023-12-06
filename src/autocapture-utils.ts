@@ -6,7 +6,7 @@ import { logger } from './utils/logger'
 import { window } from './utils/globals'
 
 export function splitClassString(s: string): string[] {
-    return s ? s.split(/\s+/) : []
+    return s ? _trim(s).split(/\s+/) : []
 }
 
 /*
