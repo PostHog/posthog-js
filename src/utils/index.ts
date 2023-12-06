@@ -395,7 +395,7 @@ export const _register_event = (function () {
         } else {
             const ontype = 'on' + type
             const old_handler = (element as any)[ontype] // can be undefined
-                ;(element as any)[ontype] = makeHandler(element, handler, old_handler)
+            ;(element as any)[ontype] = makeHandler(element, handler, old_handler)
         }
     }
 
