@@ -243,7 +243,7 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
             result = {} as T
             _each(value, (val, key) => {
                 if (!COPY_IN_PROGRESS_SET.has(val)) {
-                    ; (result as any)[key] = internalDeepCircularCopy(val, key)
+                    ;(result as any)[key] = internalDeepCircularCopy(val, key)
                 }
             })
         }
@@ -395,7 +395,7 @@ export const _register_event = (function () {
         } else {
             const ontype = 'on' + type
             const old_handler = (element as any)[ontype] // can be undefined
-                ; (element as any)[ontype] = makeHandler(element, handler, old_handler)
+                ;(element as any)[ontype] = makeHandler(element, handler, old_handler)
         }
     }
 
@@ -440,10 +440,10 @@ export const _register_event = (function () {
         return event
     }
     fixEvent.preventDefault = function () {
-        ; (this as any as Event).returnValue = false
+        ;(this as any as Event).returnValue = false
     }
     fixEvent.stopPropagation = function () {
-        ; (this as any as Event).cancelBubble = true
+        ;(this as any as Event).cancelBubble = true
     }
 
     return register_event
