@@ -40,7 +40,7 @@ export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = docume
     if (['localhost', '127.0.0.1'].includes(hostname)) return ''
 
     const list = hostname.split('.')
-    let len = list.length
+    let len = Math.min(list.length, 8) // paranoia - we know this number should be small
     const key = 'dmn_chk_' + uuidv7()
     const R = new RegExp('(^|;)\\s*' + key + '=1')
 
