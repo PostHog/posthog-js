@@ -1,3 +1,7 @@
+## 1.93.8 - 2023-12-07
+
+
+
 ## 1.93.7 - 2023-12-07
 
 - chore: redirect users to the supportModal when implementation errors occur (#921)
