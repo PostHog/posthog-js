@@ -140,6 +140,12 @@ export const cookieStore: PersistentStore = {
                 '; SameSite=Lax; path=/' +
                 cdomain +
                 secure
+
+            // 4096 bytes is the size at which some browsers (e.g. firefox) will not store a cookie, warn slightly before that
+            if (new_cookie_val.length > 4096 * 0.9) {
+                logger.warn('cookieStore warning: large cookie, len=' + new_cookie_val.length)
+            }
+
             document.cookie = new_cookie_val
             return new_cookie_val
         } catch (err) {
