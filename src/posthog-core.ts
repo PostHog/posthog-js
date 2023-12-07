@@ -92,12 +92,12 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
  */
 // http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
 // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-const USE_XHR = window?.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
+const USE_REQUEST = window?.fetch || (window?.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest())
 
 // IE<10 does not support cross-origin XHR's but script tags
 // with defer won't block window.onload; ENQUEUE_REQUESTS
 // should only be true for Opera<12
-let ENQUEUE_REQUESTS = !USE_XHR && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
+let ENQUEUE_REQUESTS = !USE_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
@@ -608,7 +608,7 @@ export class PostHog {
             return null
         }
 
-        if (USE_XHR) {
+        if (USE_REQUEST) {
             return function (response) {
                 callback(response, data)
             }
@@ -678,7 +678,7 @@ export class PostHog {
         }
 
         options = _extend(DEFAULT_OPTIONS, options || {})
-        if (!USE_XHR) {
+        if (!USE_REQUEST) {
             options.method = 'GET'
         }
 
@@ -696,7 +696,7 @@ export class PostHog {
                 // send beacon is a best-effort, fire-and-forget mechanism on page unload,
                 // we don't want to throw errors here
             }
-        } else if (USE_XHR || !document) {
+        } else if (USE_REQUEST || !document) {
             try {
                 request({
                     url: url,
