@@ -83,6 +83,7 @@ export interface PostHogConfig {
     upgrade: boolean
     disable_session_recording: boolean
     disable_persistence: boolean
+    /** @deprecated - use `disable_persistence` instead  */
     disable_cookie: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
@@ -159,9 +160,10 @@ export interface SessionRecordingOptions {
     inlineStylesheet?: boolean
     recorderVersion?: 'v1' | 'v2'
     recordCrossOriginIframes?: boolean
-    /** Modify the network request before it is captured. Returning null stops it being captured */
-    // TODO this has to work for both capture mechanisms? 😱
+    /** @deprecated - use maskCapturedNetworkRequestFn instead  */
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
+    /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
+    maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
     // properties below here are ALPHA, don't rely on them, they may change without notice
     // TODO which of these do we actually expose?
     // if this isn't provided a default will be used
@@ -371,6 +373,11 @@ export type Body =
     | ArrayBufferView
     | ArrayBuffer
     | FormData
+    // rrweb uses URLSearchParams and ReadableStream<Uint8Array>
+    // as part of the union for this type
+    // because they don't support IE11
+    // but, we do 🫠
+    // what's going to happen here in IE11?
     | URLSearchParams
     | ReadableStream<Uint8Array>
     | null
@@ -404,26 +411,46 @@ export type InitiatorType =
 
 export type NetworkRecordOptions = {
     initiatorTypes?: InitiatorType[]
-    maskRequestFn?: (data: NetworkRequest) => NetworkRequest | undefined
+    maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined
     recordHeaders?: boolean | { request: boolean; response: boolean }
     recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
     recordInitialRequests?: boolean
+    // whether to record PerformanceEntry events for network requests
+    recordPerformance?: boolean
+    // the PerformanceObserver will only observe these entry types
+    performanceEntryTypeToObserve: string[]
+    // the maximum size of the request/response body to record
+    // NB this will be at most 1MB even if set larger
+    payloadSizeLimitBytes: number
 }
 
-// extending this to match the rrweb NetworkRequest type
-// it is different in that the rrweb type will have initator type, starttime, and endtime
-// as required properties. but we don't want to require them here
-// because we've previously exposed this type as only having `url`
+/** @deprecated - use CapturedNetworkRequest instead  */
 export type NetworkRequest = {
     url: string
+}
+
+// In rrweb this is called NetworkRequest, but we already exposed that as having only URL
+// we also want to vary from the rrweb NetworkRequest because we want to include
+// all PerformanceEntry properties too.
+// that has 4 required properties
+//     readonly duration: DOMHighResTimeStamp;
+//     readonly entryType: string;
+//     readonly name: string;
+//     readonly startTime: DOMHighResTimeStamp;
+// NB: properties below here are ALPHA, don't rely on them, they may change without notice
+export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     // properties below here are ALPHA, don't rely on them, they may change without notice
     method?: string
     initiatorType?: InitiatorType
     status?: number
+    timeOrigin?: number
+    timestamp?: number
     startTime?: number
     endTime?: number
     requestHeaders?: Headers
     requestBody?: Body
     responseHeaders?: Headers
     responseBody?: Body
+    // was this captured before fetch/xhr could have been wrapped
+    isInitial?: boolean
 }

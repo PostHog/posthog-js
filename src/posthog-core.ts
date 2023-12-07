@@ -7,6 +7,7 @@ import {
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
+    isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, window } from './utils/globals'
 import { autocapture } from './autocapture'
@@ -14,7 +15,6 @@ import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { WebPerformanceObserver } from './extensions/replay/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -212,9 +212,6 @@ const create_phlib = function (
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance.webPerformance = new WebPerformanceObserver(instance)
-    instance.webPerformance.startObservingIfEnabled()
-
     if (instance.config.__preview_measure_pageview_stats) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
@@ -253,6 +250,19 @@ const create_phlib = function (
     return instance
 }
 
+class DeprecatedWebPerformanceObserver {
+    get _forceAllowLocalhost(): boolean {
+        return this.__forceAllowLocalhost
+    }
+    set _forceAllowLocalhost(value: boolean) {
+        logger.error(
+            'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
+        )
+        this.__forceAllowLocalhost = value
+    }
+    private __forceAllowLocalhost: boolean = false
+}
+
 /**
  * PostHog Library Object
  * @constructor
@@ -277,7 +287,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
-    webPerformance?: WebPerformanceObserver
+    webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
@@ -1273,6 +1283,13 @@ export class PostHog {
             return
         }
 
+        if (isDistinctIdStringLike(new_distinct_id)) {
+            logger.critical(
+                `The string "${new_distinct_id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
+            )
+            return
+        }
+
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
@@ -1703,6 +1720,8 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
+            // We assume the api_host is without a trailing slash in most places throughout the codebase
+            this.config.api_host = this.config.api_host.replace(/\/$/, '')
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 

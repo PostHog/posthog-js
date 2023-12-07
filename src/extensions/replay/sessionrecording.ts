@@ -24,6 +24,7 @@ import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isU
 import { logger } from '../../utils/logger'
 import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
+import { isLocalhost } from '../../utils/request-utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -102,6 +103,9 @@ export class SessionRecording {
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
 
+    // Util to help developers working on this feature manually override
+    _forceAllowLocalhostNetworkCapture = false
+
     public get started(): boolean {
         // TODO could we use status instead of _captureStarted?
         return this._captureStarted
@@ -148,7 +152,11 @@ export class SessionRecording {
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
-    private get networkPayloadCapture(): Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined {
+    // network payload capture config has three parts
+    // each can be configured server side or client side
+    private get networkPayloadCapture():
+        | Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
+        | undefined {
         const networkPayloadCapture_server_side = this.instance.get_property(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
         const networkPayloadCapture_client_side = {
             recordHeaders: this.instance.config.session_recording?.recordHeaders,
@@ -158,7 +166,12 @@ export class SessionRecording {
             networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
         const bodyEnabled =
             networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
-        return headersEnabled || bodyEnabled ? { recordHeaders: headersEnabled, recordBody: bodyEnabled } : undefined
+        const performanceEnabled =
+            this.instance.config.capture_performance || networkPayloadCapture_server_side?.capturePerformance
+
+        return headersEnabled || bodyEnabled || performanceEnabled
+            ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: performanceEnabled }
+            : undefined
     }
 
     /**
@@ -265,7 +278,10 @@ export class SessionRecording {
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
-                [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: response.sessionRecording?.networkPayloadCapture,
+                [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: {
+                    capturePerformance: response.capturePerformance,
+                    ...response.sessionRecording?.networkPayloadCapture,
+                },
             })
         }
 
@@ -373,6 +389,11 @@ export class SessionRecording {
             // We check if the lastActivityTimestamp is old enough to go idle
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
+                this._tryAddCustomEvent('sessionIdle', {
+                    reason: 'user inactivity',
+                    timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
+                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+                })
             }
         }
 
@@ -381,6 +402,10 @@ export class SessionRecording {
             if (this.isIdle) {
                 // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
                 this.isIdle = false
+                this._tryAddCustomEvent('sessionNoLongerIdle', {
+                    reason: 'user activity',
+                    type: event.type,
+                })
                 this._tryTakeFullSnapshot()
             }
         }
@@ -409,19 +434,26 @@ export class SessionRecording {
         this.sessionId = sessionId
     }
 
-    private _tryTakeFullSnapshot(): boolean {
-        // TODO this should ignore based on emit?
+    private _tryRRwebMethod(rrwebMethod: () => void): boolean {
         if (!this._captureStarted) {
             return false
         }
         try {
-            this.rrwebRecord?.takeFullSnapshot()
+            rrwebMethod()
             return true
         } catch (e) {
-            // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
-            logger.error('Error taking full snapshot.', e)
+            // Sometimes a race can occur where the recorder is not fully started yet
+            logger.error('[Session-Recording] using rrweb when not started.', e)
             return false
         }
+    }
+
+    private _tryAddCustomEvent(tag: string, payload: any): boolean {
+        return this._tryRRwebMethod(() => this.rrwebRecord?.addCustomEvent(tag, payload))
+    }
+
+    private _tryTakeFullSnapshot(): boolean {
+        return this._tryRRwebMethod(() => this.rrwebRecord?.takeFullSnapshot())
     }
 
     private _onScriptLoaded() {
@@ -485,6 +517,11 @@ export class SessionRecording {
             plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
         }
         if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
+            if (isLocalhost() && !this._forceAllowLocalhostNetworkCapture) {
+                logger.info('[SessionReplay-NetworkCapture] not started because we are on localhost.')
+                return
+            }
+
             plugins.push(
                 assignableWindow.getRecordNetworkPlugin(
                     buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
@@ -511,7 +548,7 @@ export class SessionRecording {
                     if (!href) {
                         return
                     }
-                    this.rrwebRecord?.addCustomEvent('$pageview', { href })
+                    this._tryAddCustomEvent('$pageview', { href })
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)

@@ -261,11 +261,12 @@ const style = (id: string, appearance: SurveyAppearance | null) => {
               display: inline-block;
               opacity: 100% !important;
           }
-          .multiple-choice-options input[type=checkbox]:checked + label {
-              font-weight: bold;
-          }
           .multiple-choice-options input:checked + label {
+              font-weight: bold;
               border: 1.5px solid rgba(0,0,0);
+          }
+          .multiple-choice-options input:checked + label input {
+              font-weight: bold;
           }
           .multiple-choice-options label {
               width: 100%;
@@ -274,6 +275,26 @@ const style = (id: string, appearance: SurveyAppearance | null) => {
               border: 1.5px solid rgba(0,0,0,.25);
               border-radius: 4px;
               background: white;
+          }
+          .multiple-choice-options .choice-option-open label {
+              padding-right: 30px;
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+              max-width: 100%;
+          }
+          .multiple-choice-options .choice-option-open label span {
+              width: 100%;
+          }
+          .multiple-choice-options .choice-option-open input:disabled + label {
+              opacity: 0.6;
+          }
+          .multiple-choice-options .choice-option-open label input {
+              position: relative;
+              opacity: 1;
+              flex-grow: 1;
+              border: 0;
+              outline: 0;
           }
           .thank-you-message {
               position: fixed;
@@ -600,8 +621,9 @@ export const createMultipleChoicePopup = (
     const surveyQuestion = question.question
     const surveyDescription = question.description
     const surveyQuestionChoices = question.choices
-    const singleOrMultiSelect = question.type
+    const isSingleChoice = question.type === 'single_choice'
     const isOptional = !!question.optional
+    const hasOpenChoice = !!question.hasOpenChoice
 
     const form = `
     <div class="survey-${survey.id}-box">
@@ -613,9 +635,22 @@ export const createMultipleChoicePopup = (
         <div class="multiple-choice-options">
         ${surveyQuestionChoices
             .map((option, idx) => {
-                const inputType = singleOrMultiSelect === 'single_choice' ? 'radio' : 'checkbox'
-                const singleOrMultiSelectString = `<div class="choice-option"><input type=${inputType} id=surveyQuestion${questionIndex}Choice${idx} name="question${questionIndex}" value="${option}">
-            <label class="auto-text-color" for=surveyQuestion${questionIndex}Choice${idx}>${option}</label><span class="choice-check auto-text-color">${checkSVG}</span></div>`
+                let choiceClass = 'choice-option'
+                let val = option
+                if (hasOpenChoice && idx === surveyQuestionChoices.length - 1) {
+                    option = `<span>${option}:</span><input type="text" value="">`
+                    choiceClass += ' choice-option-open'
+                    val = ''
+                }
+                const inputType = isSingleChoice ? 'radio' : 'checkbox'
+                const singleOrMultiSelectString = `<div class="${choiceClass}">
+                    <input type="${inputType}" id=surveyQuestion${questionIndex}Choice${idx}
+                        name="question${questionIndex}" value="${val}" ${val ? '' : 'disabled'}>
+                    <label class="auto-text-color" for=surveyQuestion${questionIndex}Choice${idx}>
+                        ${option}
+                    </label>
+                    <span class="choice-check auto-text-color">${checkSVG}</span>
+                </div>`
                 return singleOrMultiSelectString
             })
             .join(' ')}
@@ -639,14 +674,13 @@ export const createMultipleChoicePopup = (
             onsubmit: (e: Event) => {
                 e.preventDefault()
                 const targetElement = e.target as HTMLFormElement
-                const selectedChoices =
-                    singleOrMultiSelect === 'single_choice'
-                        ? (targetElement.querySelector('input[type=radio]:checked') as HTMLInputElement)?.value
-                        : [
-                              ...(targetElement.querySelectorAll(
-                                  'input[type=checkbox]:checked'
-                              ) as NodeListOf<HTMLInputElement>),
-                          ].map((choice) => choice.value)
+                const selectedChoices = isSingleChoice
+                    ? (targetElement.querySelector('input[type=radio]:checked') as HTMLInputElement)?.value
+                    : [
+                          ...(targetElement.querySelectorAll(
+                              'input[type=checkbox]:checked'
+                          ) as NodeListOf<HTMLInputElement>),
+                      ].map((choice) => choice.value)
                 posthog.capture('survey sent', {
                     $survey_name: survey.name,
                     $survey_id: survey.id,
@@ -670,14 +704,37 @@ export const createMultipleChoicePopup = (
     }
     if (!isOptional) {
         formElement.addEventListener('change', () => {
-            const selectedChoices: NodeListOf<HTMLInputElement> =
-                singleOrMultiSelect === 'single_choice'
-                    ? formElement.querySelectorAll('input[type=radio]:checked')
-                    : formElement.querySelectorAll('input[type=checkbox]:checked')
+            const selectedChoices: NodeListOf<HTMLInputElement> = isSingleChoice
+                ? formElement.querySelectorAll('input[type=radio]:checked')
+                : formElement.querySelectorAll('input[type=checkbox]:checked')
             if ((selectedChoices.length ?? 0) > 0) {
                 ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = false
             } else {
                 ;(formElement.querySelector('.form-submit') as HTMLButtonElement).disabled = true
+            }
+        })
+    }
+    const openChoiceWrappers = formElement.querySelectorAll('.choice-option-open')
+    for (const openChoiceWrapper of openChoiceWrappers) {
+        const textInput = openChoiceWrapper.querySelector('input[type=text]') as HTMLInputElement
+        const inputType = isSingleChoice ? 'radio' : 'checkbox'
+        const checkInput = openChoiceWrapper.querySelector(`input[type=${inputType}]`) as HTMLInputElement
+        openChoiceWrapper.addEventListener('click', () => {
+            if (checkInput?.checked || checkInput?.disabled) textInput?.focus()
+        })
+        textInput.addEventListener('click', (e) => e.stopPropagation())
+        textInput.addEventListener('input', (e) => {
+            const textInput = e.target as HTMLInputElement
+            if (checkInput) {
+                checkInput.value = textInput.value
+                if (textInput.value) {
+                    checkInput.disabled = false
+                    checkInput.checked = true
+                } else {
+                    checkInput.disabled = true
+                    checkInput.checked = false
+                }
+                formElement.dispatchEvent(new Event('change'))
             }
         })
     }

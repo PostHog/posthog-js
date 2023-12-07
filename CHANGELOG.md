@@ -1,3 +1,42 @@
+## 1.93.7 - 2023-12-07
+
+- chore: redirect users to the supportModal when implementation errors occur (#921)
+- chore: Add comment to remind about updating the plugin-server (#924)
+- add wbraid and gbraid to campaignParams (#923)
+
+## 1.93.6 - 2023-12-05
+
+- fix: Sanitize given api_host urls to not have a trailing slash (#920)
+
+## 1.93.5 - 2023-12-05
+
+- fix: handle newlines in classnames (#919)
+
+## 1.93.4 - 2023-12-05
+
+- feat: Show warning if identifying with "distinct_id" (#918)
+
+## 1.93.3 - 2023-11-28
+
+- fix: safer custom event on return from idle (#913)
+- Add deprecation notice for disable_cookie (#912)
+
+## 1.93.2 - 2023-11-23
+
+- fix(flags): Make sure we don't override flags when decide is disabled (#911)
+
+## 1.93.1 - 2023-11-23
+
+- feat: send idle markers in session (#909)
+
+## 1.93.0 - 2023-11-22
+
+- feat(surveys): Add open-ended choices for multiple and single choice surveys (#910)
+
+## 1.92.1 - 2023-11-21
+
+- feat: payload capture - move timing into copied plugin (#902)
+
 ## 1.92.0 - 2023-11-20
 
 - feat: Create elements chain string as we store it (#823)
