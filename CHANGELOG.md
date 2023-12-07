@@ -1,3 +1,9 @@
+## 1.93.7 - 2023-12-07
+
+- chore: redirect users to the supportModal when implementation errors occur (#921)
+- chore: Add comment to remind about updating the plugin-server (#924)
+- add wbraid and gbraid to campaignParams (#923)
+
 ## 1.93.6 - 2023-12-05
 
 - fix: Sanitize given api_host urls to not have a trailing slash (#920)
