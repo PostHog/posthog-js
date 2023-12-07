@@ -1102,7 +1102,10 @@ describe('Autocapture system', () => {
         it('returns elementsChain correctly with newlines in css', () => {
             const elTarget = document.createElement('a')
             elTarget.setAttribute('href', 'http://test.com')
-            elTarget.setAttribute('class', 'test-class\n test-class2 test-class3       test-class4  \r\n test-class5')
+            elTarget.setAttribute(
+                'class',
+                '\ftest-class\n test-class2\ttest-class3       test-class4  \r\n test-class5'
+            )
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
 
