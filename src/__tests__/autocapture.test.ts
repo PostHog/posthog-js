@@ -1085,18 +1085,46 @@ describe('Autocapture system', () => {
             const e = {
                 target: elTarget,
                 type: 'click',
-            }
+            } as unknown as MouseEvent
 
             const newLib = {
                 ...lib,
                 elementsChainAsString: true,
-            }
+            } as PostHog
 
             autocapture._captureEvent(e, newLib)
             const props1 = getCapturedProps(newLib.capture)
 
             expect(props1['$elements_chain']).toBeDefined()
             expect(props1['$elements']).toBeUndefined()
+        })
+
+        it('returns elementsChain correctly with newlines in css', () => {
+            const elTarget = document.createElement('a')
+            elTarget.setAttribute('href', 'http://test.com')
+            elTarget.setAttribute(
+                'class',
+                '\ftest-class\n test-class2\ttest-class3       test-class4  \r\n test-class5'
+            )
+            const elParent = document.createElement('span')
+            elParent.appendChild(elTarget)
+
+            const e = {
+                target: elTarget,
+                type: 'click',
+            } as unknown as MouseEvent
+
+            const newLib = {
+                ...lib,
+                elementsChainAsString: true,
+            } as PostHog
+
+            autocapture._captureEvent(e, newLib)
+            const props1 = getCapturedProps(newLib.capture)
+
+            expect(props1['$elements_chain']).toBe(
+                'a.test-class,test-class2,test-class3,test-class4,test-class5:nth-child="1"nth-of-type="1"href="http://test.com"attr__href="http://test.com"attr__class="test-class,test-class2,test-class3,test-class4,test-class5";span:nth-child="1"nth-of-type="1"'
+            )
         })
     })
 

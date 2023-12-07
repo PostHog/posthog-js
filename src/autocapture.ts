@@ -14,6 +14,7 @@ import {
     isDocumentFragment,
     getDirectAndNestedSpanText,
     getElementsChainString,
+    splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
@@ -104,7 +105,14 @@ const autocapture = {
             if (elementAttributeIgnorelist?.includes(attr.name)) return
 
             if (!maskInputs && shouldCaptureValue(attr.value) && !isAngularStyleAttr(attr.name)) {
-                props['attr__' + attr.name] = limitText(1024, attr.value)
+                let value = attr.value
+                if (attr.name === 'class') {
+                    // html attributes can _technically_ contain linebreaks,
+                    // but we're very intolerant of them in the class string,
+                    // so we strip them.
+                    value = splitClassString(value).join()
+                }
+                props['attr__' + attr.name] = limitText(1024, value)
             }
         })
 

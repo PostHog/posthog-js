@@ -425,7 +425,7 @@ describe(`Autocapture utility functions`, () => {
         })
         it('should cope with a class list with unexpected new lines', () => {
             const el = document!.createElement('div')
-            el.className = '  class1\r\n   \r\n     \n     class2  '
+            el.className = '  class1\r\n   \r\n     \n  \t\f   class2  \t'
             const classNames = getClassNames(el)
             expect(classNames).toEqual(['class1', 'class2'])
         })

@@ -5,6 +5,10 @@ import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 
+export function splitClassString(s: string): string[] {
+    return s ? _trim(s).split(/\s+/) : []
+}
+
 /*
  * Get the className of an element, accounting for edge cases where element.className is an object
  *
@@ -26,7 +30,7 @@ export function getClassNames(el: Element): string[] {
             className = ''
     }
 
-    return className.length ? _trim(className).split(/\s+/) : []
+    return splitClassString(className)
 }
 
 /*
@@ -444,6 +448,6 @@ function extractAttrClass(el: Properties): PHElement['attr_class'] {
     } else if (_isArray(attr_class)) {
         return attr_class
     } else {
-        return attr_class.split(' ')
+        return splitClassString(attr_class)
     }
 }
