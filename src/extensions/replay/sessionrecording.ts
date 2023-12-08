@@ -16,7 +16,7 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
-import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
+import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
 import { _timestamp, loadScript } from '../../utils'
 
@@ -511,29 +511,11 @@ export class SessionRecording {
                 },
             })
 
-        const plugins = []
-
-        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
-            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
-        }
-        if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
-            if (isLocalhost() && !this._forceAllowLocalhostNetworkCapture) {
-                logger.info('[SessionReplay-NetworkCapture] not started because we are on localhost.')
-                return
-            }
-
-            plugins.push(
-                assignableWindow.getRecordNetworkPlugin(
-                    buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
-                )
-            )
-        }
-
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
-            plugins,
+            plugins: this._gatherRRWebPlugins(),
             ...sessionRecordingOptions,
         })
 
@@ -558,6 +540,30 @@ export class SessionRecording {
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
         this.isIdle = false
+    }
+
+    private _gatherRRWebPlugins() {
+        const plugins: RecordPlugin<unknown>[] = []
+
+        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
+        }
+
+        if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
+            const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
+
+            if (canRecordNetwork) {
+                plugins.push(
+                    assignableWindow.getRecordNetworkPlugin(
+                        buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
+                    )
+                )
+            } else {
+                logger.info('[SessionReplay-NetworkCapture] not started because we are on localhost.')
+            }
+        }
+
+        return plugins
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
