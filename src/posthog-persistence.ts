@@ -64,8 +64,10 @@ export class PostHogPersistence {
                 config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
             ) === -1
         ) {
-            logger.critical('Unknown persistence type ' + config['persistence'] + '; falling back to cookie')
-            config['persistence'] = 'cookie'
+            logger.critical(
+                'Unknown persistence type ' + config['persistence'] + '; falling back to localStorage+cookie'
+            )
+            config['persistence'] = 'localStorage+cookie'
         }
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
@@ -77,8 +79,15 @@ export class PostHogPersistence {
             this.storage = sessionStore
         } else if (storage_type === 'memory') {
             this.storage = memoryStore
-        } else {
+        } else if (storage_type === 'cookie') {
             this.storage = cookieStore
+        } else {
+            // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
+            if (localPlusCookieStore.is_supported()) {
+                this.storage = localPlusCookieStore
+            } else {
+                this.storage = cookieStore
+            }
         }
 
         this.user_state = 'anonymous'
