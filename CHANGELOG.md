@@ -1,17 +1,11 @@
 ## 1.94.1 - 2023-12-09
 
-
+- fix: incorrect localhost handling (#930) 
 
 ## 1.94.0 - 2023-12-08
 
-
-
-## 1.93.8 - 2023-12-07
-
-
-
-## 1.93.7 - 2023-12-07
-
+- feat: Swap to localstorage+cookie as default (#927)
+- fix: sanitize class string more (#925) 
 - chore: redirect users to the supportModal when implementation errors occur (#921)
 - chore: Add comment to remind about updating the plugin-server (#924)
 - add wbraid and gbraid to campaignParams (#923)
