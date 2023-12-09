@@ -1,3 +1,27 @@
+## 1.94.1 - 2023-12-09
+
+- fix: incorrect localhost handling (#930) 
+
+## 1.94.0 - 2023-12-08
+
+- feat: Swap to localstorage+cookie as default (#927)
+- fix: sanitize class string more (#925) 
+- chore: redirect users to the supportModal when implementation errors occur (#921)
+- chore: Add comment to remind about updating the plugin-server (#924)
+- add wbraid and gbraid to campaignParams (#923)
+
+## 1.93.6 - 2023-12-05
+
+- fix: Sanitize given api_host urls to not have a trailing slash (#920)
+
+## 1.93.5 - 2023-12-05
+
+- fix: handle newlines in classnames (#919)
+
+## 1.93.4 - 2023-12-05
+
+- feat: Show warning if identifying with "distinct_id" (#918)
+
 ## 1.93.3 - 2023-11-28
 
 - fix: safer custom event on return from idle (#913)

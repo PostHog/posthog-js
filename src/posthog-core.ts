@@ -7,6 +7,7 @@ import {
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
+    isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, window } from './utils/globals'
 import { autocapture } from './autocapture'
@@ -107,7 +108,7 @@ export const defaultConfig = (): PostHogConfig => ({
     autocapture: true,
     rageclick: true,
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
-    persistence: 'cookie',
+    persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
     cookie_name: '',
     loaded: __NOOP,
@@ -1282,6 +1283,13 @@ export class PostHog {
             return
         }
 
+        if (isDistinctIdStringLike(new_distinct_id)) {
+            logger.critical(
+                `The string "${new_distinct_id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
+            )
+            return
+        }
+
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
@@ -1712,6 +1720,8 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
+            // We assume the api_host is without a trailing slash in most places throughout the codebase
+            this.config.api_host = this.config.api_host.replace(/\/$/, '')
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 

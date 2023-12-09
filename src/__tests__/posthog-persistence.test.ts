@@ -18,7 +18,7 @@ describe('persistence', () => {
     let library: PostHogPersistence
 
     afterEach(() => {
-        library.clear()
+        library?.clear()
         document.cookie = ''
         referrer = ''
     })
@@ -114,13 +114,13 @@ describe('persistence', () => {
         it('should migrate data from cookies to localStorage', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', 'cookie'))
             lib.register_once({ distinct_id: 'testy', test_prop: 'test_value' }, undefined, undefined)
-            expect(document.cookie).toContain(
-                'ph__posthog=%7B%22distinct_id%22%3A%22testy%22%2C%22test_prop%22%3A%22test_value%22%7D'
+            expect(document.cookie).toEqual(
+                '; ph__posthog=%7B%22distinct_id%22%3A%22testy%22%2C%22test_prop%22%3A%22test_value%22%7D'
             )
             const lib2 = new PostHogPersistence(makePostHogConfig('bla', 'localStorage+cookie'))
-            expect(document.cookie).toContain('ph__posthog=%7B%22distinct_id%22%3A%22testy%22%7D')
+            expect(document.cookie).toEqual('; ph__posthog=%7B%22distinct_id%22%3A%22testy%22%7D')
             lib2.register({ test_prop2: 'test_val', distinct_id: 'test2' })
-            expect(document.cookie).toContain('ph__posthog=%7B%22distinct_id%22%3A%22test2%22%7D')
+            expect(document.cookie).toEqual('; ph__posthog=%7B%22distinct_id%22%3A%22test2%22%7D')
             expect(lib2.props).toEqual({ distinct_id: 'test2', test_prop: 'test_value', test_prop2: 'test_val' })
             lib2.remove()
             expect(localStorage.getItem('ph__posthog')).toEqual(null)
@@ -139,6 +139,7 @@ describe('persistence', () => {
                     distinct_id: 'test',
                 })}`
             )
+            expect(document.cookie).not.toContain('test_prop')
 
             lib.register({ otherProp: 'prop' })
             expect(document.cookie).toContain(

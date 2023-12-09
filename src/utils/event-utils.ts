@@ -16,6 +16,7 @@ function isSafari(userAgent: string): boolean {
 
 export const _info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {
+        // Should be kept in sync with https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
         const campaign_keywords = [
             'utm_source',
             'utm_medium',
@@ -23,6 +24,8 @@ export const _info = {
             'utm_content',
             'utm_term',
             'gclid',
+            'gbraid',
+            'wbraid',
             'fbclid',
             'msclkid',
         ].concat(customParams || [])

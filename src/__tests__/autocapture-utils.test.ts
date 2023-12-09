@@ -12,6 +12,7 @@ import {
     getNestedSpanText,
     getDirectAndNestedSpanText,
     getElementsChainString,
+    getClassNames,
 } from '../autocapture-utils'
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
@@ -395,6 +396,38 @@ describe(`Autocapture utility functions`, () => {
             ])
 
             expect(elementChain).toEqual('div:text="text"nth-child="1"nth-of-type="2"')
+        })
+    })
+
+    describe('getClassNames', () => {
+        it('should cope when there is no classNames attribute', () => {
+            const el = document!.createElement('div')
+            const classNames = getClassNames(el)
+            expect(classNames).toEqual([])
+        })
+        it('should cope when there is an empty classNames attribute', () => {
+            const el = document!.createElement('div')
+            el.className = ''
+            const classNames = getClassNames(el)
+            expect(classNames).toEqual([])
+        })
+        it('should cope with a normal class list', () => {
+            const el = document!.createElement('div')
+            el.className = 'class1 class2'
+            const classNames = getClassNames(el)
+            expect(classNames).toEqual(['class1', 'class2'])
+        })
+        it('should cope with a class list with empty strings and tabs', () => {
+            const el = document!.createElement('div')
+            el.className = '  class1        class2  '
+            const classNames = getClassNames(el)
+            expect(classNames).toEqual(['class1', 'class2'])
+        })
+        it('should cope with a class list with unexpected new lines', () => {
+            const el = document!.createElement('div')
+            el.className = '  class1\r\n   \r\n     \n  \t\f   class2  \t'
+            const classNames = getClassNames(el)
+            expect(classNames).toEqual(['class1', 'class2'])
         })
     })
 })
