@@ -24,6 +24,7 @@ export const _info = {
             'utm_content',
             'utm_term',
             'gclid',
+            'gad_source',
             'gbraid',
             'wbraid',
             'fbclid',
