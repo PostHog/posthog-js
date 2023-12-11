@@ -1,3 +1,8 @@
+## 1.94.2 - 2023-12-11
+
+- fix: cache subdomain discovery (#928)
+- chore: corrects the changelog (#931)
+
 ## 1.94.1 - 2023-12-09
 
 - fix: incorrect localhost handling (#930) 
