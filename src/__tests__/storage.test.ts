@@ -1,8 +1,16 @@
 import { window } from '../../src/utils/globals'
-import { resetSessionStorageSupported, seekFirstNonPublicSubDomain, sessionStore } from '../storage'
+import {
+    resetSessionStorageSupported,
+    seekFirstNonPublicSubDomain,
+    resetSubDomainCache,
+    sessionStore,
+} from '../storage'
 
 describe('sessionStore', () => {
     describe('seekFirstNonPublicSubDomain', () => {
+        beforeEach(() => {
+            resetSubDomainCache()
+        })
         const mockDocumentDotCookie = {
             value_: '',
 

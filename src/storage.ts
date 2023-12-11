@@ -8,6 +8,13 @@ import { window, document } from './utils/globals'
 import { uuidv7 } from './uuidv7'
 
 const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
+// we store the discovered subdomain in memory because it might be read multiple times
+let firstNonPublicSubDomain = ''
+
+// helper to allow tests to clear this "cache"
+export const resetSubDomainCache = () => {
+    firstNonPublicSubDomain = ''
+}
 
 /**
  * Browsers don't offer a way to check if something is a public suffix
@@ -23,17 +30,21 @@ const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
  * inspired by https://github.com/AngusFu/browser-root-domain
  */
 export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = document): string {
+    if (firstNonPublicSubDomain) {
+        return firstNonPublicSubDomain
+    }
+
     if (!cookieJar) {
         return ''
     }
     if (['localhost', '127.0.0.1'].includes(hostname)) return ''
 
     const list = hostname.split('.')
-    let len = list.length
+    let len = Math.min(list.length, 8) // paranoia - we know this number should be small
     const key = 'dmn_chk_' + uuidv7()
     const R = new RegExp('(^|;)\\s*' + key + '=1')
 
-    while (len--) {
+    while (!firstNonPublicSubDomain && len--) {
         const candidate = list.slice(len).join('.')
         const candidateCookieValue = key + '=1;domain=.' + candidate
 
@@ -43,10 +54,11 @@ export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = docume
         if (R.test(cookieJar.cookie)) {
             // the cookie was accepted by the browser, remove the test cookie
             cookieJar.cookie = candidateCookieValue + ';expires=' + Y1970
-            return candidate
+            firstNonPublicSubDomain = candidate
         }
     }
-    return ''
+
+    return firstNonPublicSubDomain
 }
 
 const DOMAIN_MATCH_REGEX = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
