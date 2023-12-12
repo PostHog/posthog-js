@@ -110,7 +110,7 @@ const autocapture = {
                     // html attributes can _technically_ contain linebreaks,
                     // but we're very intolerant of them in the class string,
                     // so we strip them.
-                    value = splitClassString(value).join()
+                    value = splitClassString(value).join(' ')
                 }
                 props['attr__' + attr.name] = limitText(1024, value)
             }
