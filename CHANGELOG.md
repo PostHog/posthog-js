@@ -1,3 +1,7 @@
+## 1.94.3 - 2023-12-12
+
+- fix: class string separator (#935)
+
 ## 1.94.2 - 2023-12-11
 
 - fix: cache subdomain discovery (#928)
