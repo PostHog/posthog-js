@@ -47,6 +47,7 @@ export class SurveysWidget {
                     survey.style.display = survey.style.display === 'none' ? 'block' : 'none'
                 }
             })
+            widget.setAttribute('PHWidgetSurveyClickListener', 'true')
             survey?.addEventListener('PHSurveyClosed', () => (survey.style.display = 'none'))
         }
     }

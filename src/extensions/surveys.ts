@@ -90,16 +90,37 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     posthog?.getActiveMatchingSurveys((surveys) => {
         const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
         nonAPISurveys.forEach((survey) => {
-            if (
-                survey.type === SurveyType.Widget &&
-                document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0
-            ) {
-                if (survey.appearance?.widgetType !== 'selector') {
+            if (survey.type === SurveyType.Widget) {
+                if (
+                    survey.appearance?.widgetType === 'tab' &&
+                    document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0
+                ) {
                     handleWidget(posthog, survey)
-                } else if (survey.appearance?.widgetType === 'selector') {
-                    const widgetSelector = document.querySelector(survey.appearance.widgetSelector || '')
-                    if (widgetSelector) {
-                        handleWidget(posthog, survey)
+                }
+                if (survey.appearance?.widgetType === 'selector' && survey.appearance?.widgetSelector) {
+                    const selectorOnPage = document.querySelector(survey.appearance.widgetSelector)
+                    if (selectorOnPage) {
+                        if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0) {
+                            handleWidget(posthog, survey)
+                        } else if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 1) {
+                            // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
+                            if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
+                                const surveyPopup = document
+                                    .querySelector(`.PostHogWidget${survey.id}`)
+                                    ?.shadowRoot?.querySelector(`.survey-${survey.id}-form`) as HTMLFormElement
+                                selectorOnPage.addEventListener('click', () => {
+                                    if (surveyPopup) {
+                                        surveyPopup.style.display =
+                                            surveyPopup.style.display === 'none' ? 'block' : 'none'
+                                        surveyPopup.addEventListener(
+                                            'PHSurveyClosed',
+                                            () => (surveyPopup.style.display = 'none')
+                                        )
+                                    }
+                                })
+                                selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
+                            }
+                        }
                     }
                 }
             }
