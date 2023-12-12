@@ -1,3 +1,7 @@
+## 1.94.4 - 2023-12-12
+
+- Add a few more blocked uas (#936)
+
 ## 1.94.3 - 2023-12-12
 
 - fix: class string separator (#935)
