@@ -1,10 +1,6 @@
-import {
-    createShadow,
-    callSurveys,
-    generateSurveys,
-    createMultipleQuestionSurvey,
-    createRatingsPopup,
-} from '../../extensions/surveys'
+import { createShadow, callSurveys, generateSurveys } from '../../extensions/surveys'
+import { SurveyType } from '../../posthog-surveys-types'
+import { createMultipleQuestionSurvey, createRatingsPopup } from '../../extensions/surveys/surveys-utils'
 
 describe('survey display logic', () => {
     beforeEach(() => {
@@ -25,6 +21,7 @@ describe('survey display logic', () => {
         {
             id: 'testSurvey1',
             name: 'Test survey 1',
+            type: SurveyType.Popover,
             appearance: null,
             questions: [
                 {
@@ -124,6 +121,7 @@ describe('survey display logic', () => {
             {
                 id: 'testSurvey2',
                 name: 'Test survey 2',
+                type: SurveyType.Popover,
                 appearance: null,
                 conditions: { seenSurveyWaitPeriodInDays: 10 },
                 questions: [
@@ -174,6 +172,7 @@ describe('survey display logic', () => {
             {
                 id: 'testSurvey2',
                 name: 'Test survey 2',
+                type: SurveyType.Popover,
                 appearance: null,
                 conditions: { seenSurveyWaitPeriodInDays: 10 },
                 questions: [
@@ -206,6 +205,7 @@ describe('survey display logic', () => {
             {
                 id: 'testSurvey2',
                 name: 'Test survey 2',
+                type: SurveyType.Popover,
                 appearance: null,
                 questions: [
                     {
@@ -241,6 +241,7 @@ describe('survey display logic', () => {
             {
                 id: 'testSurvey2',
                 name: 'Test survey 2',
+                type: SurveyType.Popover,
                 appearance: null,
                 questions: [
                     {
@@ -257,6 +258,7 @@ describe('survey display logic', () => {
             {
                 id: 'testSurvey3',
                 name: 'Test survey 3',
+                type: SurveyType.Popover,
                 appearance: null,
                 questions: [
                     {
@@ -285,6 +287,7 @@ describe('survey display logic', () => {
             {
                 id: 'testSurvey2',
                 name: 'Test survey 2',
+                type: SurveyType.Popover,
                 appearance: null,
                 questions: [
                     {
@@ -335,6 +338,7 @@ describe('survey display logic', () => {
             {
                 id: 'testSurvey2',
                 name: 'Test survey 2',
+                type: SurveyType.Popover,
                 appearance: null,
                 questions: [
                     {
@@ -377,5 +381,121 @@ describe('survey display logic', () => {
                 ['$survey_responded/testSurvey2']: true,
             },
         })
+    })
+})
+
+describe('survey widget', () => {
+    beforeEach(() => {
+        // we have to manually reset the DOM before each test
+        document.getElementsByTagName('html')[0].innerHTML = ''
+        localStorage.clear()
+        jest.clearAllMocks()
+    })
+
+    let mockSurveys = [
+        {
+            id: 'testWidget1',
+            name: 'Test widget 1',
+            type: SurveyType.Widget,
+            appearance: { widgetType: 'tab' },
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    type: 'rating',
+                    display: 'number',
+                    scale: 10,
+                    lower_bound_label: 'Not Satisfied',
+                    upper_bound_label: 'Very Satisfied',
+                },
+            ],
+        },
+        {
+            id: 'testWidget2',
+            name: 'Test widget 2',
+            type: SurveyType.Widget,
+            appearance: { widgetType: 'tab' },
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    type: 'rating',
+                    display: 'emoji',
+                    scale: 3,
+                    lower_bound_label: 'Not Satisfied',
+                    upper_bound_label: 'Very Satisfied',
+                },
+            ],
+        },
+    ]
+    const mockPostHog = {
+        getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
+        get_session_replay_url: jest.fn(),
+        capture: jest.fn().mockImplementation((eventName) => eventName),
+    }
+
+    test('there can be multiple widgets on the same page as long as they are unique', () => {
+        callSurveys(mockPostHog, false)
+        const widget = document
+            .getElementsByClassName(`PostHogWidget${mockSurveys[0].id}`)[0]
+            .shadowRoot.querySelectorAll('.ph-survey-widget-tab')
+        expect(widget.length).toEqual(1)
+        expect(document.querySelectorAll("div[class^='PostHogWidget']").length).toEqual(2)
+        callSurveys(mockPostHog, false)
+        expect(document.querySelectorAll("div[class^='PostHogWidget']").length).toEqual(2)
+    })
+
+    test('tab type widgets show and close the survey when clicked', () => {
+        mockSurveys.pop()
+        callSurveys(mockPostHog, false)
+        const shadow = document.getElementsByClassName(`PostHogWidget${mockSurveys[0].id}`)[0].shadowRoot
+        const widget = shadow.querySelectorAll('.ph-survey-widget-tab')
+        widget[0].click()
+        const survey = shadow.querySelectorAll(`.survey-${mockSurveys[0].id}-form`)[0]
+        expect(survey.style.display).toEqual('block')
+        widget[0].click()
+        expect(survey.style.display).toEqual('none')
+    })
+
+    test('selector type widget can only display the survey when the selector is present on the page', () => {
+        mockSurveys = [
+            {
+                id: 'testWidget3',
+                name: 'Test widget 3',
+                type: SurveyType.Widget,
+                appearance: { widgetType: 'selector', widgetSelector: '.user-widget-button' },
+                questions: [
+                    {
+                        question: 'How satisfied are you with our newest product?',
+                        description: 'This is a question description',
+                        type: 'rating',
+                        display: 'emoji',
+                        scale: 3,
+                        lower_bound_label: 'Not Satisfied',
+                        upper_bound_label: 'Very Satisfied',
+                    },
+                ],
+            },
+        ]
+        callSurveys(mockPostHog, false)
+        expect(document.getElementsByClassName(`PostHogWidget${mockSurveys[0].id}`).length).toEqual(0)
+        const button = document.createElement('button')
+        button.className = 'user-widget-button'
+        document.body.appendChild(button)
+        callSurveys(mockPostHog, false)
+        expect(document.getElementsByClassName(`PostHogWidget${mockSurveys[0].id}`).length).toEqual(1)
+        // widget should only be created once
+        callSurveys(mockPostHog, false)
+        expect(document.getElementsByClassName(`PostHogWidget${mockSurveys[0].id}`).length).toEqual(1)
+        // expect survey style display to be none initially
+        const shadow = document.getElementsByClassName(`PostHogWidget${mockSurveys[0].id}`)[0].shadowRoot
+        const survey = shadow.querySelectorAll(`.survey-testWidget3-form`)[0]
+        expect(survey.style.display).toEqual('none')
+
+        // click on the button to show the survey test
+        button.click()
+        expect(survey.style.display).toEqual('block')
+        survey.querySelectorAll('.form-cancel')[0].click()
+        expect(survey.style.display).toEqual('none')
     })
 })

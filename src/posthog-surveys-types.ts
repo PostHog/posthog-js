@@ -23,6 +23,11 @@ export interface SurveyAppearance {
     borderColor?: string
     position?: 'left' | 'right' | 'center'
     placeholder?: string
+    // widget options
+    widgetType?: 'button' | 'tab' | 'selector'
+    widgetSelector?: string
+    widgetLabel?: string
+    widgetColor?: string
     // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
@@ -31,6 +36,7 @@ export interface SurveyAppearance {
 export enum SurveyType {
     Popover = 'popover',
     API = 'api',
+    Widget = 'widget',
 }
 
 export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
