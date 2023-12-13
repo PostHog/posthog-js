@@ -642,7 +642,6 @@ export const createMultipleChoicePopup = (
         </div>
         <div class="survey-question auto-text-color">${surveyQuestion}</div>
         ${surveyDescription ? `<span class="description auto-text-color">${surveyDescription}</span>` : ''}
-        random words in the description testing
         <div class="multiple-choice-options">
         ${surveyQuestionChoices
             .map((option, idx) => {
