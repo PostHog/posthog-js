@@ -1,3 +1,7 @@
+## 1.95.1 - 2023-12-13
+
+- Remove debug code from survey-utils (#937)
+
 ## 1.95.0 - 2023-12-12
 
 - feat(surveys): custom and tab widget (#933)
