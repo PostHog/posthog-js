@@ -14,12 +14,13 @@ describe('Session ID manager', () => {
     let config = {
         persistence_name: 'persistance-name',
     }
+    let storedSessionIdData
 
     given('subject', () => given.sessionIdManager.checkAndGetSessionAndWindowId(given.readOnly, timestamp))
     given('sessionIdManager', () => new SessionIdManager(config, given.persistence))
 
     given('persistence', () => ({
-        props: { [SESSION_ID]: given.storedSessionIdData },
+        props: { [SESSION_ID]: storedSessionIdData },
         register: jest.fn(),
         disabled: disablePersistence,
     }))
@@ -64,10 +65,10 @@ describe('Session ID manager', () => {
     })
 
     describe('stored session data', () => {
-        given('storedSessionIdData', () => [now, 'oldSessionID', timestampOfSessionStart])
         beforeEach(() => {
             sessionStore.parse.mockReturnValue('oldWindowID')
             timestampOfSessionStart = now - 3600
+            storedSessionIdData = [now, 'oldSessionID', timestampOfSessionStart]
         })
 
         it('reuses old ids and updates the session timestamp if not much time has passed', () => {
@@ -86,7 +87,7 @@ describe('Session ID manager', () => {
             const oldTimestamp = now - thirtyMinutesAndOneSecond
             const sessionStart = oldTimestamp - 1000
 
-            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', sessionStart])
+            storedSessionIdData = [oldTimestamp, 'oldSessionID', sessionStart]
             given('readOnly', () => true)
 
             expect(given.subject).toEqual({
@@ -114,7 +115,7 @@ describe('Session ID manager', () => {
 
         it('generates a new session id and window id, and saves it when >30m since last event', () => {
             const oldTimestamp = 1602107460000
-            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', timestampOfSessionStart])
+            storedSessionIdData = [oldTimestamp, 'oldSessionID', timestampOfSessionStart]
 
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
@@ -130,7 +131,7 @@ describe('Session ID manager', () => {
         it('generates a new session id and window id, and saves it when >24 hours since start timestamp', () => {
             const oldTimestamp = 1602107460000
             const twentyFourHours = 3600 * 24
-            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', timestampOfSessionStart])
+            storedSessionIdData = [oldTimestamp, 'oldSessionID', timestampOfSessionStart]
             given('timestamp', () => timestampOfSessionStart + twentyFourHours)
 
             expect(given.subject).toEqual({
@@ -148,7 +149,7 @@ describe('Session ID manager', () => {
         it('generates a new session id and window id, and saves it when >24 hours since start timestamp even when readonly is true', () => {
             const oldTimestamp = 1602107460000
             const twentyFourHoursAndOneSecond = (3600 * 24 + 1) * 1000
-            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', timestampOfSessionStart])
+            storedSessionIdData = [oldTimestamp, 'oldSessionID', timestampOfSessionStart]
             timestamp = timestampOfSessionStart + twentyFourHoursAndOneSecond
             now = timestamp + 1000
             given('readOnly', () => true)
@@ -168,7 +169,7 @@ describe('Session ID manager', () => {
         it('uses the current time if no timestamp is provided', () => {
             const now = new Date().getTime()
             const oldTimestamp = 1601107460000
-            given('storedSessionIdData', () => [oldTimestamp, 'oldSessionID', timestampOfSessionStart])
+            storedSessionIdData = [oldTimestamp, 'oldSessionID', timestampOfSessionStart]
             timestamp = undefined
             expect(given.subject).toEqual({
                 windowId: 'newUUID',
@@ -181,7 +182,7 @@ describe('Session ID manager', () => {
         })
 
         it('populates the session start timestamp for a browser with no start time stored', () => {
-            given('storedSessionIdData', () => [timestamp, 'oldSessionID'])
+            storedSessionIdData = [timestamp, 'oldSessionID']
             expect(given.subject).toEqual({
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
@@ -229,7 +230,7 @@ describe('Session ID manager', () => {
             expect(given.persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
         })
         it('a new session id is generated when called', () => {
-            given('storedSessionIdData', () => [null, null, null])
+            storedSessionIdData = [null, null, null]
             expect(given.sessionIdManager._getSessionId()).toEqual([null, null, null])
             expect(given.subject).toMatchObject({
                 windowId: 'newUUID',
