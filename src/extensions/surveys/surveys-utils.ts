@@ -587,8 +587,8 @@ export const createOpenTextOrLinkPopup = (
                         [`$survey_responded/${survey.id}`]: true,
                     },
                 })
-                if (surveyQuestionType === 'link') {
-                    window.open(question.link || undefined)
+                if (surveyQuestionType === 'link' && question.link) {
+                    window.open(question.link)
                 }
                 window.setTimeout(() => {
                     window.dispatchEvent(new Event('PHSurveySent'))
