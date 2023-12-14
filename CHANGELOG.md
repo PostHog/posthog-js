@@ -1,3 +1,8 @@
+## 1.96.0 - 2023-12-14
+
+- make link survey link optional (#938)
+- fix: import nuxt composables from #imports (#879)
+
 ## 1.95.1 - 2023-12-13
 
 - Remove debug code from survey-utils (#937)
