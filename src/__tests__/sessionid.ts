@@ -2,23 +2,27 @@ import { SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
 import { uuidv7 } from '../uuidv7'
+import { PostHogConfig, Properties } from '../types'
+import { PostHogPersistence } from '../posthog-persistence'
+import { assignableWindow } from '../utils/globals'
 
 jest.mock('../uuidv7')
 jest.mock('../storage')
 
 describe('Session ID manager', () => {
-    let timestamp
-    let now
-    let timestampOfSessionStart
-    let config = {
+    let timestamp: number | undefined
+    let now: number
+    let timestampOfSessionStart: number
+    const config: Partial<PostHogConfig> = {
         persistence_name: 'persistance-name',
     }
 
-    let persistence
+    let persistence: { props: Properties } & Partial<PostHogPersistence>
 
-    const subject = (sessionIdManager, isReadOnly) =>
+    const subject = (sessionIdManager: SessionIdManager, isReadOnly?: boolean) =>
         sessionIdManager.checkAndGetSessionAndWindowId(isReadOnly, timestamp)
-    const sessionIdMgr = (phPersistence) => new SessionIdManager(config, phPersistence)
+    const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) =>
+        new SessionIdManager(config, phPersistence as PostHogPersistence)
 
     const originalDate = Date
 
@@ -31,10 +35,9 @@ describe('Session ID manager', () => {
             register: jest.fn(),
             disabled: false,
         }
-
-        sessionStore.is_supported.mockReturnValue(true)
+        ;(sessionStore.is_supported as jest.Mock).mockReturnValue(true)
         jest.spyOn(global, 'Date').mockImplementation(() => new originalDate(now))
-        uuidv7.mockReturnValue('newUUID')
+        ;(uuidv7 as jest.Mock).mockReturnValue('newUUID')
     })
 
     describe('new session id manager', () => {
@@ -65,7 +68,7 @@ describe('Session ID manager', () => {
 
     describe('stored session data', () => {
         beforeEach(() => {
-            sessionStore.parse.mockReturnValue('oldWindowID')
+            ;(sessionStore.parse as jest.Mock).mockReturnValue('oldWindowID')
             timestampOfSessionStart = now - 3600
             persistence.props[SESSION_ID] = [now, 'oldSessionID', timestampOfSessionStart]
         })
@@ -82,7 +85,7 @@ describe('Session ID manager', () => {
         })
 
         it('reuses old ids and does not update the session timestamp if  > 30m pass and readOnly is true', () => {
-            let thirtyMinutesAndOneSecond = 60 * 60 * 30 + 1
+            const thirtyMinutesAndOneSecond = 60 * 60 * 30 + 1
             const oldTimestamp = now - thirtyMinutesAndOneSecond
             const sessionStart = oldTimestamp - 1000
 
@@ -99,7 +102,7 @@ describe('Session ID manager', () => {
         })
 
         it('generates only a new window id, and saves it when there is no previous window id set', () => {
-            sessionStore.parse.mockReturnValue(null)
+            ;(sessionStore.parse as jest.Mock).mockReturnValue(null)
             expect(subject(sessionIdMgr(persistence))).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'oldSessionID',
@@ -194,22 +197,22 @@ describe('Session ID manager', () => {
     describe('window id storage', () => {
         it('stores and retrieves a window_id', () => {
             const sessionIdManager = sessionIdMgr(persistence)
-            sessionIdManager._setWindowId('newWindowId')
-            expect(sessionIdManager._getWindowId()).toEqual('newWindowId')
+            sessionIdManager['_setWindowId']('newWindowId')
+            expect(sessionIdManager['_getWindowId']()).toEqual('newWindowId')
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newWindowId')
         })
         it('stores and retrieves a window_id if persistance is disabled and storage is not used', () => {
             persistence.disabled = true
             const sessionIdManager = sessionIdMgr(persistence)
-            sessionIdManager._setWindowId('newWindowId')
-            expect(sessionIdManager._getWindowId()).toEqual('newWindowId')
+            sessionIdManager['_setWindowId']('newWindowId')
+            expect(sessionIdManager['_getWindowId']()).toEqual('newWindowId')
             expect(sessionStore.set).not.toHaveBeenCalled()
         })
         it('stores and retrieves a window_id if sessionStorage is not supported', () => {
-            sessionStore.is_supported.mockReturnValue(false)
+            ;(sessionStore.is_supported as jest.Mock).mockReturnValue(false)
             const sessionIdManager = sessionIdMgr(persistence)
-            sessionIdManager._setWindowId('newWindowId')
-            expect(sessionIdManager._getWindowId()).toEqual('newWindowId')
+            sessionIdManager['_setWindowId']('newWindowId')
+            expect(sessionIdManager['_getWindowId']()).toEqual('newWindowId')
             expect(sessionStore.set).not.toHaveBeenCalled()
         })
     })
@@ -217,11 +220,11 @@ describe('Session ID manager', () => {
     describe('session id storage', () => {
         it('stores and retrieves a session id and timestamp', () => {
             const sessionIdManager = sessionIdMgr(persistence)
-            sessionIdManager._setSessionId('newSessionId', 1603107460000, 1603107460000)
+            sessionIdManager['_setSessionId']('newSessionId', 1603107460000, 1603107460000)
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [1603107460000, 'newSessionId', 1603107460000],
             })
-            expect(sessionIdManager._getSessionId()).toEqual([1603107460000, 'newSessionId', 1603107460000])
+            expect(sessionIdManager['_getSessionId']()).toEqual([1603107460000, 'newSessionId', 1603107460000])
         })
     })
 
@@ -232,7 +235,7 @@ describe('Session ID manager', () => {
         })
         it('a new session id is generated when called', () => {
             persistence.props[SESSION_ID] = [null, null, null]
-            expect(sessionIdMgr(persistence)._getSessionId()).toEqual([null, null, null])
+            expect(sessionIdMgr(persistence)['_getSessionId']()).toEqual([null, null, null])
             expect(subject(sessionIdMgr(persistence))).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
@@ -243,33 +246,33 @@ describe('Session ID manager', () => {
     describe('primary_window_exists_storage_key', () => {
         it('if primary_window_exists key does not exist, do not cycle window id', () => {
             // setup
-            sessionStore.parse.mockImplementation((storeKey) =>
+            ;(sessionStore.parse as jest.Mock).mockImplementation((storeKey: string) =>
                 storeKey === 'ph_persistance-name_primary_window_exists' ? undefined : 'oldWindowId'
             )
             // expect
-            expect(sessionIdMgr(persistence)._windowId).toEqual('oldWindowId')
+            expect(sessionIdMgr(persistence)['_windowId']).toEqual('oldWindowId')
             expect(sessionStore.remove).toHaveBeenCalledTimes(0)
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
         })
         it('if primary_window_exists key exists, cycle window id', () => {
             // setup
-            sessionStore.parse.mockImplementation((storeKey) =>
+            ;(sessionStore.parse as jest.Mock).mockImplementation((storeKey: string) =>
                 storeKey === 'ph_persistance-name__primary_window_exists' ? true : 'oldWindowId'
             )
             // expect
-            expect(sessionIdMgr(persistence)._windowId).toEqual(undefined)
+            expect(sessionIdMgr(persistence)['_windowId']).toEqual(undefined)
             expect(sessionStore.remove).toHaveBeenCalledWith('ph_persistance-name_window_id')
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_primary_window_exists', true)
         })
     })
 
     describe('custom session_idle_timeout_seconds', () => {
-        const mockSessionManager = (timeout) =>
+        const mockSessionManager = (timeout: number | undefined) =>
             new SessionIdManager(
                 {
                     session_idle_timeout_seconds: timeout,
                 },
-                persistence
+                persistence as PostHogPersistence
             )
 
         beforeEach(() => {
@@ -277,16 +280,17 @@ describe('Session ID manager', () => {
         })
 
         it('uses the custom session_idle_timeout_seconds if within bounds', () => {
-            window.POSTHOG_DEBUG = true
-            expect(mockSessionManager(61)._sessionTimeoutMs).toEqual(61 * 1000)
+            assignableWindow.POSTHOG_DEBUG = true
+            expect(mockSessionManager(61)['_sessionTimeoutMs']).toEqual(61 * 1000)
             expect(console.warn).toBeCalledTimes(0)
-            expect(mockSessionManager(59)._sessionTimeoutMs).toEqual(60 * 1000)
+            expect(mockSessionManager(59)['_sessionTimeoutMs']).toEqual(60 * 1000)
             expect(console.warn).toBeCalledTimes(1)
-            expect(mockSessionManager(30 * 60 - 1)._sessionTimeoutMs).toEqual((30 * 60 - 1) * 1000)
+            expect(mockSessionManager(30 * 60 - 1)['_sessionTimeoutMs']).toEqual((30 * 60 - 1) * 1000)
             expect(console.warn).toBeCalledTimes(1)
-            expect(mockSessionManager(30 * 60 + 1)._sessionTimeoutMs).toEqual(30 * 60 * 1000)
+            expect(mockSessionManager(30 * 60 + 1)['_sessionTimeoutMs']).toEqual(30 * 60 * 1000)
             expect(console.warn).toBeCalledTimes(2)
-            expect(mockSessionManager('foobar')._sessionTimeoutMs).toEqual(30 * 60 * 1000)
+            // @ts-expect-error - test invalid input
+            expect(mockSessionManager('foobar')['_sessionTimeoutMs']).toEqual(30 * 60 * 1000)
             expect(console.warn).toBeCalledTimes(3)
         })
     })
