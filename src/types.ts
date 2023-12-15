@@ -164,19 +164,9 @@ export interface SessionRecordingOptions {
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
     /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
-    // properties below here are ALPHA, don't rely on them, they may change without notice
-    // TODO which of these do we actually expose?
-    // if this isn't provided a default will be used
-    // this only applies to the payload recorder
-    // TODO I guess it should apply to the other recorder to
-    initiatorTypes?: InitiatorType[]
-    recordHeaders?: boolean | { request: boolean; response: boolean }
-    // true means record all bodies
-    // false means record no bodies
-    // string[] means record bodies matching the provided content-type headers
-    recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
-    // I can't think why you wouldn't want this... so
-    // recordInitialRequests?: boolean
+    // our settings here only support a subset of those proposed for rrweb's network capture plugin
+    recordHeaders?: boolean
+    recordBody?: boolean
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
