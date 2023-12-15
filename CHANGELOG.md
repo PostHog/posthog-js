@@ -1,3 +1,9 @@
+## 1.96.1 - 2023-12-15
+
+- Add gas_source to campaign params (#934)
+- feat: simplify payload config compared to rrweb proposal (#939)
+- feat: remove given from another test file (#940)
+
 ## 1.96.0 - 2023-12-14
 
 - make link survey link optional (#938)
