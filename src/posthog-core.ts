@@ -1725,7 +1725,12 @@ export class PostHog {
             this.config.api_host = this.config.api_host.replace(/\/$/, '')
 
             if (!this.config.asset_host) {
-                this.config.asset_host = this.config.api_host
+                // Default asset_host to api_host
+                // Map to our static domains for the default posthog API endpoints.
+                this.config.asset_host = {
+                    "https://app.posthog.com": "https://app-static-prod.posthog.com",
+                    "https://eu.posthog.com": "https://app-static.eu.posthog.com",
+                }[this.config.api_host] || this.config.api_host;
             }
 
             this.persistence?.update_config(this.config)
