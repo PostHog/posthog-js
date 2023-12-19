@@ -103,6 +103,7 @@ export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
     api_method: 'POST',
     api_transport: 'XHR',
+    asset_host: null,
     ui_host: null,
     token: '',
     autocapture: true,
@@ -1722,6 +1723,11 @@ export class PostHog {
 
             // We assume the api_host is without a trailing slash in most places throughout the codebase
             this.config.api_host = this.config.api_host.replace(/\/$/, '')
+
+            if (!this.config.asset_host) {
+                this.config.asset_host = this.config.api_host
+            }
+
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 

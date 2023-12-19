@@ -76,7 +76,7 @@ export class Decide {
         const surveysGenerator = window?.extendPostHogWithSurveys
 
         if (response['surveys'] && !surveysGenerator) {
-            loadScript(this.instance.config.api_host + `/static/surveys.js`, (err) => {
+            loadScript(this.instance.config.asset_host + `/static/surveys.js`, (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)
                 }
@@ -95,7 +95,7 @@ export class Decide {
             !!response['autocaptureExceptions'] &&
             _isUndefined(exceptionAutoCaptureAddedToWindow)
         ) {
-            loadScript(this.instance.config.api_host + `/static/exception-autocapture.js`, (err) => {
+            loadScript(this.instance.config.asset_host + `/static/exception-autocapture.js`, (err) => {
                 if (err) {
                     return logger.error(`Could not load exception autocapture script`, err)
                 }

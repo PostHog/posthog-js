@@ -362,7 +362,7 @@ export class SessionRecording {
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
         if (this.instance.__loaded_recorder_version !== this.recordingVersion) {
-            loadScript(this.instance.config.api_host + `/static/${recorderJS}?v=${Config.LIB_VERSION}`, (err) => {
+            loadScript(this.instance.config.asset_host + `/static/${recorderJS}?v=${Config.LIB_VERSION}`, (err) => {
                 if (err) {
                     return logger.error(`Could not load ${recorderJS}`, err)
                 }
