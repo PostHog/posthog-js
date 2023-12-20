@@ -86,6 +86,7 @@ interface SnapshotBuffer {
 export class SessionRecording {
     private instance: PostHog
     private _endpoint: string
+    private _api_host?: string
     private flushBufferTimer?: any
     private buffer?: SnapshotBuffer
     private mutationRateLimiter?: MutationRateLimiter
@@ -202,6 +203,7 @@ export class SessionRecording {
         this.instance = instance
         this._captureStarted = false
         this._endpoint = BASE_ENDPOINT
+        this._api_host = undefined
         this.stopRrweb = undefined
         this.receivedDecide = false
 
@@ -296,6 +298,10 @@ export class SessionRecording {
 
         if (response.sessionRecording?.endpoint) {
             this._endpoint = response.sessionRecording?.endpoint
+        }
+
+        if (response.sessionRecording?.api_host) {
+            this._api_host = response.sessionRecording?.api_host
         }
 
         if (_isNumber(this._sampleRate)) {
@@ -714,6 +720,7 @@ export class SessionRecording {
             transport: 'XHR',
             method: 'POST',
             endpoint: this._endpoint,
+            api_host: this._api_host,
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
             _metrics: {

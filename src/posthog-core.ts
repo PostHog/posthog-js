@@ -297,6 +297,7 @@ export class PostHog {
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
+    analyticsDefaultApiHost?: string
     elementsChainAsString: boolean
 
     SentryIntegration: typeof SentryIntegration
@@ -321,6 +322,7 @@ export class PostHog {
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
         this.analyticsDefaultEndpoint = '/e/'
+        this.analyticsDefaultApiHost = undefined
         this.elementsChainAsString = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
@@ -547,6 +549,10 @@ export class PostHog {
 
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
+        }
+
+        if (response.analytics?.api_host) {
+            this.analyticsDefaultApiHost = response.analytics.api_host
         }
 
         if (response.elementsChainAsString) {
@@ -904,7 +910,7 @@ export class PostHog {
         logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
-        const url = this.config.api_host + (options.endpoint || this.analyticsDefaultEndpoint)
+        const url = (options.api_host || this.analyticsDefaultApiHost || this.config.api_host) + (options.endpoint || this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 

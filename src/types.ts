@@ -192,6 +192,7 @@ export interface CaptureOptions extends XHROptions {
     _metrics?: Properties
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     endpoint?: string /** defaults to '/e/' */
+    api_host?: string /** defaults to global api host */
     send_instantly?: boolean /** if set skips the batched queue */
     timestamp?: Date
 }
@@ -230,6 +231,7 @@ export interface DecideResponse {
     capturePerformance?: boolean
     analytics?: {
         endpoint?: string
+        api_host?: string
     }
     elementsChainAsString?: boolean
     // this is currently in development and may have breaking changes without a major version bump
@@ -241,6 +243,7 @@ export interface DecideResponse {
           }
     sessionRecording?: {
         endpoint?: string
+        api_host?: string
         consoleLogRecordingEnabled?: boolean
         recorderVersion?: 'v1' | 'v2'
         // the API returns a decimal between 0 and 1 as a string

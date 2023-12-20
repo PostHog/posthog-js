@@ -234,6 +234,39 @@ describe('posthog core', () => {
                 undefined
             )
         })
+
+        it('sends payloads to alternative api_host if given', () => {
+            given.lib._afterDecideResponse({ analytics: { api_host: 'https://c.posthog.com' } })
+            given.lib.capture('event-name', { foo: 'bar', length: 0 })
+
+            expect(given.lib._send_request).toHaveBeenCalledWith(
+                'https://c.posthog.com/e/',
+                expect.any(Object),
+                expect.any(Object),
+                undefined
+            )
+        })
+
+        it('sends payloads to overriden api_host if given', () => {
+            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { api_host: 'https://s.posthog.com', endpoint: '/s/' })
+            expect(given.lib._send_request).toHaveBeenCalledWith(
+                'https://s.posthog.com/s/',
+                expect.any(Object),
+                expect.any(Object),
+                undefined
+            )
+        })
+
+        it('sends payloads to overriden api_host, even if alternative api_host is set', () => {
+            given.lib._afterDecideResponse({ analytics: { api_host: 'https://c.posthog.com' } })
+            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { api_host: 'https://s.posthog.com' })
+            expect(given.lib._send_request).toHaveBeenCalledWith(
+                'https://s.posthog.com/e/',
+                expect.any(Object),
+                expect.any(Object),
+                undefined
+            )
+        })
     })
 
     describe('_afterDecideResponse', () => {
