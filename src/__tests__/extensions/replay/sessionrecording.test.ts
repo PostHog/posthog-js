@@ -427,6 +427,7 @@ describe('SessionRecording', () => {
                 sessionId: sessionId,
                 size: 30,
                 windowId: 'windowId',
+                startTime: expect.any(Number),
             })
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
@@ -593,6 +594,7 @@ describe('SessionRecording', () => {
                 sessionId: sessionId,
                 size: 39,
                 windowId: 'windowId',
+                startTime: expect.any(Number),
             })
         })
 
@@ -1066,26 +1068,10 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('can report no duration when no data', () => {
+        it('buffer always has a start time', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording['status']).toBe('buffering')
-            expect(sessionRecording['sessionDuration']).toBe(null)
-        })
-
-        it('can report zero duration', () => {
-            sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording['status']).toBe('buffering')
-            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp }))
-            expect(sessionRecording['sessionDuration']).toBe(0)
-        })
-
-        it('can report a duration', () => {
-            sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording['status']).toBe('buffering')
-            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording['sessionDuration']).toBe(100)
+            expect(typeof sessionRecording['buffer']!.startTime).toBe('number')
         })
 
         it('starts with an undefined minimum duration', () => {
@@ -1110,11 +1096,11 @@ describe('SessionRecording', () => {
             )
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording['status']).toBe('active')
-            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording['sessionDuration']).toBe(100)
-            expect(sessionRecording['_minimumDuration']).toBe(1500)
 
+            const bufferStartTime = sessionRecording['buffer']!.startTime
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: bufferStartTime + 100 }))
+
+            expect(sessionRecording['_minimumDuration']).toBe(1500)
             expect(sessionRecording['buffer']?.data.length).toBe(1)
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
@@ -1130,14 +1116,13 @@ describe('SessionRecording', () => {
             )
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording['status']).toBe('active')
-            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            const bufferStartTimestamp = sessionRecording['buffer']!.startTime
 
             // if we have some data in the buffer and the buffer has a session id but then the session id changes
             // then the session duration will be negative, and we will never flush the buffer
             // this setup isn't quite that but does simulate the behaviour closely enough
-            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp - 1000 }))
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: bufferStartTimestamp - 1000 }))
 
-            expect(sessionRecording['sessionDuration']).toBe(-1000)
             expect(sessionRecording['_minimumDuration']).toBe(1500)
 
             expect(sessionRecording['buffer']?.data.length).toBe(1)
@@ -1155,18 +1140,18 @@ describe('SessionRecording', () => {
             )
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording['status']).toBe('active')
-            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
-            expect(sessionRecording['sessionDuration']).toBe(100)
-            expect(sessionRecording['_minimumDuration']).toBe(1500)
+            const bufferStartTimestamp = sessionRecording['buffer']!.startTime
 
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: bufferStartTimestamp + 100 }))
+
+            expect(sessionRecording['_minimumDuration']).toBe(1500)
             expect(sessionRecording['buffer']?.data.length).toBe(1)
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).not.toHaveBeenCalled()
 
-            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1501 }))
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: bufferStartTimestamp + 1501 }))
 
             expect(sessionRecording['buffer']?.data.length).toBe(2)
             // call the private method to avoid waiting for the timer
@@ -1174,10 +1159,9 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording['buffer']?.data.length).toBe(undefined)
-            expect(sessionRecording['sessionDuration']).toBe(null)
-            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1502 }))
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: bufferStartTimestamp + 1502 }))
             expect(sessionRecording['buffer']?.data.length).toBe(1)
-            expect(sessionRecording['sessionDuration']).toBe(1502)
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 

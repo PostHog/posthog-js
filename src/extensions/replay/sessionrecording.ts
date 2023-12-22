@@ -81,6 +81,13 @@ interface SnapshotBuffer {
     data: any[]
     sessionId: string | null
     windowId: string | null
+    // we bugger replay data in memory, when a minimum duration is set this can lead to confusing behaviour
+    // so, minimum duration is minimum duration buffered in memory since last page refresh
+    // i.e. if min duration is 6 seconds, and you visit three pages (with full refresh) for 2 seconds
+    // we will enver flush to the backend
+    // if you visit three pages _in a SPA_ for 2 seconds each we would flush as the buffer
+    // survives client side navigation
+    startTime: number
 }
 
 export class SessionRecording {
@@ -126,12 +133,6 @@ export class SessionRecording {
         } else {
             return null
         }
-    }
-
-    private get sessionDuration(): number | null {
-        const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
-        const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 
     private get isRecordingEnabled() {
@@ -638,6 +639,7 @@ export class SessionRecording {
             data: [],
             sessionId: this.sessionId,
             windowId: this.windowId,
+            startTime: Date.now(),
         }
     }
 
@@ -654,12 +656,13 @@ export class SessionRecording {
         }
 
         const minimumDuration = this._minimumDuration
-        const sessionDuration = this.sessionDuration
+        const lastTime = this.buffer?.data[this.buffer?.data.length - 1]?.timestamp || 0
+        const currentDuration = lastTime - (this.buffer?.startTime || 0)
         // if we have old data in the buffer but the session has rotated then the
         // session duration might be negative, in that case we want to flush the buffer
-        const isPositiveSessionDuration = _isNumber(sessionDuration) && sessionDuration >= 0
+        const isPositiveCurrentDuration = _isNumber(currentDuration) && currentDuration >= 0
         const isBelowMinimumDuration =
-            _isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
+            _isNumber(minimumDuration) && isPositiveCurrentDuration && currentDuration < minimumDuration
 
         if (this.status === 'buffering' || isBelowMinimumDuration) {
             this.flushBufferTimer = setTimeout(() => {
