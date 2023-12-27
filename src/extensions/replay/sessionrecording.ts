@@ -474,6 +474,7 @@ export class SessionRecording {
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            recordCanvas: false,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
@@ -517,6 +518,12 @@ export class SessionRecording {
             },
             plugins: this._gatherRRWebPlugins(),
             ...sessionRecordingOptions,
+            recordCanvas: true,
+            ...(userSessionRecordingOptions.recordCanvas && {
+                recordCanvas: true,
+                sampling: { canvas: 4 },
+                dataURLOptions: { quality: 0.6 },
+            }),
         })
 
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
