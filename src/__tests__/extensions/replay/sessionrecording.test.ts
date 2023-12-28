@@ -404,7 +404,7 @@ describe('SessionRecording', () => {
                 plugins: [],
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
-                checkoutEveryNms: 120000,
+                checkoutEveryNms: 4 * 60 * 1000,
             })
         })
 

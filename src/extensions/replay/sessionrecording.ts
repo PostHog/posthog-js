@@ -431,8 +431,7 @@ export class SessionRecording {
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
-            // two minutes in milliseconds
-            checkoutEveryNms: 2 * 60 * 1000,
+            checkoutEveryNms: 4 * 60 * 1000,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
