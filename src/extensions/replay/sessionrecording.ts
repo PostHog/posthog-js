@@ -8,7 +8,6 @@ import {
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    META_EVENT_TYPE,
     MutationRateLimiter,
     recordOptions,
     rrwebRecord,
@@ -389,11 +388,6 @@ export class SessionRecording {
             // We check if the lastActivityTimestamp is old enough to go idle
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
-                this._tryAddCustomEvent('sessionIdle', {
-                    reason: 'user inactivity',
-                    timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
-                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
-                })
             }
         }
 
@@ -402,11 +396,6 @@ export class SessionRecording {
             if (this.isIdle) {
                 // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
                 this.isIdle = false
-                this._tryAddCustomEvent('sessionNoLongerIdle', {
-                    reason: 'user activity',
-                    type: event.type,
-                })
-                this._tryTakeFullSnapshot()
             }
         }
 
@@ -420,40 +409,8 @@ export class SessionRecording {
             event.timestamp
         )
 
-        const sessionIdChanged = this.sessionId !== sessionId
-        const windowIdChanged = this.windowId !== windowId
-
-        if (
-            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-            (windowIdChanged || sessionIdChanged)
-        ) {
-            this._tryTakeFullSnapshot()
-        }
-
         this.windowId = windowId
         this.sessionId = sessionId
-    }
-
-    private _tryRRwebMethod(rrwebMethod: () => void): boolean {
-        if (!this._captureStarted) {
-            return false
-        }
-        try {
-            rrwebMethod()
-            return true
-        } catch (e) {
-            // Sometimes a race can occur where the recorder is not fully started yet
-            logger.error('[Session-Recording] using rrweb when not started.', e)
-            return false
-        }
-    }
-
-    private _tryAddCustomEvent(tag: string, payload: any): boolean {
-        return this._tryRRwebMethod(() => this.rrwebRecord?.addCustomEvent(tag, payload))
-    }
-
-    private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRwebMethod(() => this.rrwebRecord?.takeFullSnapshot())
     }
 
     private _onScriptLoaded() {
@@ -474,6 +431,8 @@ export class SessionRecording {
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            // two minutes in milliseconds
+            checkoutEveryNms: 2 * 60 * 1000,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
@@ -530,7 +489,7 @@ export class SessionRecording {
                     if (!href) {
                         return
                     }
-                    this._tryAddCustomEvent('$pageview', { href })
+                    this.rrwebRecord?.addCustomEvent('$pageview', { href })
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)
