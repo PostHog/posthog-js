@@ -57,6 +57,7 @@ export default function Home() {
                 <div className="buttons">
                     <Link href="/animations">Animations</Link>
                     <Link href="/iframe">Iframe</Link>
+                    <Link href="/canvas">Canvas</Link>
                     <Link href="/media">Media</Link>
                     <Link href="/long">Long</Link>
                 </div>

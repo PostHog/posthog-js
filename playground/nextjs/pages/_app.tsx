@@ -12,6 +12,7 @@ if (typeof window !== 'undefined') {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://app.posthog.com',
         session_recording: {
             recordCrossOriginIframes: true,
+            recordCanvas: true,
         },
         debug: true,
         __preview_send_client_session_params: true,

@@ -167,7 +167,7 @@ export interface SessionRecordingOptions {
     // our settings here only support a subset of those proposed for rrweb's network capture plugin
     recordHeaders?: boolean
     recordBody?: boolean
-    recordCanvas?: boolean
+    recordCanvas: boolean
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void

@@ -518,11 +518,12 @@ export class SessionRecording {
             },
             plugins: this._gatherRRWebPlugins(),
             ...sessionRecordingOptions,
-            recordCanvas: true,
             ...(userSessionRecordingOptions.recordCanvas && {
-                recordCanvas: true,
                 sampling: { canvas: 4 },
-                dataURLOptions: { quality: 0.6 },
+                dataURLOptions: {
+                    type: 'image/webp',
+                    quality: 0.6,
+                },
             }),
         })
 
