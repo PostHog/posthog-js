@@ -1,6 +1,10 @@
-import { _each, _HTTPBuildQuery, logger } from './utils'
+import { _each } from './utils'
 import Config from './config'
 import { PostData, XHROptions, XHRParams } from './types'
+import { _HTTPBuildQuery } from './utils/request-utils'
+
+import { _isArray, _isFunction, _isNumber, _isUint8Array, _isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 export const addParamsToURL = (
     url: string,
@@ -17,7 +21,7 @@ export const addParamsToURL = (
         const params = halves[1].split('&')
         for (const p of params) {
             const key = p.split('=')[0]
-            if (args[key]) {
+            if (!_isUndefined(args[key])) {
                 delete args[key]
             }
         }
@@ -29,7 +33,7 @@ export const addParamsToURL = (
 
 export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHROptions>): string | BlobPart | null => {
     if (options.blob && data.buffer) {
-        return new Blob([data.buffer], { type: 'text/plain' })
+        return new Blob([_isUint8Array(data) ? data : data.buffer], { type: 'text/plain' })
     }
 
     if (options.sendBeacon || options.blob) {
@@ -42,8 +46,8 @@ export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHR
     }
 
     let body_data
-    const isUint8Array = (d: unknown): d is Uint8Array => Object.prototype.toString.call(d) === '[object Uint8Array]'
-    if (Array.isArray(data) || isUint8Array(data)) {
+
+    if (_isArray(data) || _isUint8Array(data)) {
         // TODO: eh? passing an Array here?
         body_data = 'data=' + encodeURIComponent(data as any)
     } else {
@@ -66,9 +70,13 @@ export const xhr = ({
     retriesPerformedSoFar,
     retryQueue,
     onXHRError,
-    timeout = 10000,
-    onRateLimited,
+    timeout = 60000,
+    onResponse,
 }: XHRParams) => {
+    if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
+        url = addParamsToURL(url, { retry_count: retriesPerformedSoFar }, {})
+    }
+
     const req = new XMLHttpRequest()
     req.open(options.method || 'GET', url, true)
 
@@ -87,8 +95,9 @@ export const xhr = ({
     // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
     req.withCredentials = true
     req.onreadystatechange = () => {
+        // XMLHttpRequest.DONE == 4, except in safari 4
         if (req.readyState === 4) {
-            // XMLHttpRequest.DONE == 4, except in safari 4
+            onResponse?.(req)
             if (req.status === 200) {
                 if (callback) {
                     let response
@@ -101,12 +110,12 @@ export const xhr = ({
                     callback(response)
                 }
             } else {
-                if (typeof onXHRError === 'function') {
+                if (_isFunction(onXHRError)) {
                     onXHRError(req)
                 }
 
-                // don't retry certain errors
-                if ([401, 403, 404, 500].indexOf(req.status) < 0) {
+                // don't retry errors between 400 and 500 inclusive
+                if (req.status < 400 || req.status > 500) {
                     retryQueue.enqueue({
                         url,
                         data,
@@ -117,13 +126,7 @@ export const xhr = ({
                     })
                 }
 
-                if (req.status === 429) {
-                    onRateLimited?.(req)
-                }
-
-                if (callback) {
-                    callback({ status: 0 })
-                }
+                callback?.({ status: 0 })
             }
         }
     }

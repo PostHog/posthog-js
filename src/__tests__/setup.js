@@ -1,8 +1,8 @@
 beforeEach(() => {
-    console.error = (message) => {
-        throw new Error(`Unexpected console.error: ${message}`)
+    console.error = (...args) => {
+        throw new Error(`Unexpected console.error: ${args}`)
     }
-    console.warn = (message) => {
-        throw new Error(`Unexpected console.warn: ${message}`)
+    console.warn = (...args) => {
+        throw new Error(`Unexpected console.warn: ${args}`)
     }
 })

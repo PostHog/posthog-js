@@ -225,11 +225,15 @@ describe('identify()', () => {
         it('does not update user', () => {
             console.error = jest.fn()
 
+            given.lib.debug()
             given.subject()
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
             expect(given.overrides.register).not.toHaveBeenCalled()
-            expect(console.error).toHaveBeenCalledWith('Unique user id has not been set in posthog.identify')
+            expect(console.error).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                'Unique user id has not been set in posthog.identify'
+            )
         })
     })
 

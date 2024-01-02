@@ -11,10 +11,14 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { _each, _includes, _isNumber, _isString, window } from './utils'
+import { _each, _includes } from './utils'
+import { window } from './utils/globals'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
 import { PostHog } from './posthog-core'
+
+import { _isNumber, _isString } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 /**
  * A function used to capture a PostHog event (e.g. PostHogLib.capture)
@@ -154,11 +158,11 @@ function _getStorageValue(token: string, options: GDPROptions) {
 function _hasDoNotTrackFlagOn(options: GDPROptions) {
     if (options && options.respectDnt) {
         const win = (options && options.window) || window
-        const nav = win['navigator'] || {}
+        const nav = win?.navigator
         let hasDntOn = false
         _each(
             [
-                nav['doNotTrack'], // standard
+                nav?.doNotTrack, // standard
                 (nav as any)['msDoNotTrack'],
                 (win as any)['doNotTrack'],
             ],
@@ -188,7 +192,7 @@ function _hasDoNotTrackFlagOn(options: GDPROptions) {
  */
 function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
     if (!_isString(token) || !token.length) {
-        console.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
+        logger.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
         return
     }
 
@@ -210,15 +214,15 @@ function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
     }
 }
 
-export function userOptedOut(posthog: PostHog, silenceErrors: boolean | undefined) {
+export function userOptedOut(posthog: PostHog) {
     let optedOut = false
 
     try {
-        const token = posthog.get_config('token')
-        const respectDnt = posthog.get_config('respect_dnt')
-        const persistenceType = posthog.get_config('opt_out_capturing_persistence_type')
-        const persistencePrefix = posthog.get_config('opt_out_capturing_cookie_prefix') || undefined
-        const win = posthog.get_config('window' as any) as Window | undefined // used to override window during browser tests
+        const token = posthog.config.token
+        const respectDnt = posthog.config.respect_dnt
+        const persistenceType = posthog.config.opt_out_capturing_persistence_type
+        const persistencePrefix = posthog.config.opt_out_capturing_cookie_prefix || undefined
+        const win = (posthog.config as any).window as Window | undefined // used to override window during browser tests
 
         if (token) {
             // if there was an issue getting the token, continue method execution as normal
@@ -230,41 +234,7 @@ export function userOptedOut(posthog: PostHog, silenceErrors: boolean | undefine
             })
         }
     } catch (err) {
-        if (!silenceErrors) {
-            console.error('Unexpected error when checking capturing opt-out status: ' + err)
-        }
+        logger.error('Unexpected error when checking capturing opt-out status: ' + err)
     }
     return optedOut
-}
-
-/**
- * Wrap a method with a check for whether the user is opted out of data capturing and cookies/localstorage for the given token
- * If the user has opted out, return early instead of executing the method.
- * If a callback argument was provided, execute it passing the 0 error code.
- * @param {PostHog} posthog - the posthog instance
- * @param {function} method - wrapped method to be executed if the user has not opted out
- * @param silenceErrors
- * @returns {*} the result of executing method OR undefined if the user has opted out
- */
-export function addOptOutCheck<M extends (...args: any[]) => any = (...args: any[]) => any>(
-    posthog: PostHog,
-    method: M,
-    silenceErrors?: boolean
-): M {
-    return function (...args) {
-        const optedOut = userOptedOut(posthog, silenceErrors)
-
-        if (!optedOut) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            return method.apply(this, args)
-        }
-
-        const callback = args[args.length - 1]
-        if (typeof callback === 'function') {
-            callback(0)
-        }
-
-        return
-    } as M
 }

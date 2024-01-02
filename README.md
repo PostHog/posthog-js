@@ -9,7 +9,7 @@ This README is intended for developing the library itself.
 ## Testing
 
 Unit tests: run `yarn test`.
-Cypress: run `yarn serve` to have a test server running and separately `yarn cypress` to launch Cypress test engine.
+Cypress: run `yarn start` to have a test server running and separately `yarn cypress` to launch Cypress test engine.
 
 ### Running TestCafe E2E tests with BrowserStack
 
@@ -70,7 +70,7 @@ Install Yalc to link a local version of `posthog-js` in another JS project: `npm
 ## Releasing a new version
 
 Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) – automatically.
- 
+  
 If you want to release a new version without a PR (e.g. because you forgot to use the label), check out the `master` branch and run `npm version [major | minor | patch] && git push --tags` - this will trigger the automated release process just like the label.
 
 ### Prereleases

@@ -1,7 +1,16 @@
-import { _getHashParam, _register_event, loadScript, logger } from '../utils'
+import { _register_event, _try, loadScript } from '../utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, ToolbarParams } from '../types'
 import { POSTHOG_MANAGED_HOSTS } from './cloud'
+import { _getHashParam } from '../utils/request-utils'
+import { logger } from '../utils/logger'
+import { window, document, assignableWindow } from '../utils/globals'
+
+// TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
+// To get ahead of this we grab it as soon as the posthog-js is parsed
+const STATE_FROM_WINDOW = window?.location
+    ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
+    : null
 
 export class Toolbar {
     instance: PostHog
@@ -31,10 +40,16 @@ export class Toolbar {
      * 2. From session storage under the key `toolbarParams` if the toolbar was initialized on a previous page
      */
     maybeLoadToolbar(
-        location = window.location,
+        location: Location | undefined = undefined,
         localStorage: Storage | undefined = undefined,
-        history = window.history
+        history: History | undefined = undefined
     ): boolean {
+        if (!window || !document) {
+            return false
+        }
+        location = location ?? window.location
+        history = history ?? window.history
+
         try {
             // Before running the code we check if we can access localStorage, if not we opt-out
             if (!localStorage) {
@@ -46,13 +61,27 @@ export class Toolbar {
                 }
 
                 // If localStorage was undefined, and localStorage is supported we set the default value
-                localStorage = window.localStorage
+                localStorage = window?.localStorage
             }
 
-            const stateHash = _getHashParam(location.hash, '__posthog') || _getHashParam(location.hash, 'state')
-            const state = stateHash ? JSON.parse(decodeURIComponent(stateHash)) : null
-            const parseFromUrl = state && state['action'] === 'ph_authorize'
+            /**
+             * Info about the state
+             * The state is a json object
+             * 1. (Legacy) The state can be `state={}` as a urlencoded object of info. In this case
+             * 2. The state should now be found in `__posthog={}` and can be base64 encoded or urlencoded.
+             * 3. Base64 encoding is preferred and will gradually be rolled out everywhere
+             */
+
+            const stateHash =
+                STATE_FROM_WINDOW || _getHashParam(location.hash, '__posthog') || _getHashParam(location.hash, 'state')
+
             let toolbarParams: ToolbarParams
+            const state = stateHash
+                ? _try(() => JSON.parse(atob(decodeURIComponent(stateHash)))) ||
+                  _try(() => JSON.parse(decodeURIComponent(stateHash)))
+                : null
+
+            const parseFromUrl = state && state['action'] === 'ph_authorize'
 
             if (parseFromUrl) {
                 // happens if they are initializing the toolbar using an old snippet
@@ -79,7 +108,7 @@ export class Toolbar {
                 delete toolbarParams.userIntent
             }
 
-            if (toolbarParams['token'] && this.instance.get_config('token') === toolbarParams['token']) {
+            if (toolbarParams['token'] && this.instance.config.token === toolbarParams['token']) {
                 this.loadToolbar(toolbarParams)
                 return true
             } else {
@@ -91,25 +120,25 @@ export class Toolbar {
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
-        if ((window as any)['_postHogToolbarLoaded']) {
+        if (!window || assignableWindow['_postHogToolbarLoaded']) {
             return false
         }
         // only load the toolbar once, even if there are multiple instances of PostHogLib
-        ;(window as any)['_postHogToolbarLoaded'] = true
+        assignableWindow['_postHogToolbarLoaded'] = true
 
-        // By design array.js, recorder.js, and toolbar.js are served from Django with no or limited caching, not from our CDN
-        // Django respects the query params for caching, returning a 304 if appropriate
-        const host = this.instance.get_config('api_host')
-        const timestampToNearestThirtySeconds = Math.floor(Date.now() / 30000) * 30000
-        const toolbarUrl = `${host}${
-            host.endsWith('/') ? '' : '/'
-        }static/toolbar.js?_ts=${timestampToNearestThirtySeconds}`
+        const host = this.instance.config.api_host
+        // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
+        // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
+        const fiveMinutesInMillis = 5 * 60 * 1000
+        // this ensures that we bust the cache periodically
+        const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
+        const toolbarUrl = `${host}${host.endsWith('/') ? '' : '/'}static/toolbar.js?t=${timestampToNearestFiveMinutes}`
         const disableToolbarMetrics =
-            !POSTHOG_MANAGED_HOSTS.includes(this.instance.get_config('api_host')) &&
-            this.instance.get_config('advanced_disable_toolbar_metrics')
+            !POSTHOG_MANAGED_HOSTS.includes(this.instance.config.api_host) &&
+            this.instance.config.advanced_disable_toolbar_metrics
 
         const toolbarParams = {
-            token: this.instance.get_config('token'),
+            token: this.instance.config.token,
             ...params,
             apiURL: host, // defaults to api_host from the instance config if nothing else set
             ...(disableToolbarMetrics ? { instrument: false } : {}),
@@ -123,12 +152,12 @@ export class Toolbar {
                 logger.error('Failed to load toolbar', err)
                 return
             }
-            ;((window as any)['ph_load_toolbar'] || (window as any)['ph_load_editor'])(toolbarParams, this.instance)
+            ;(assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor'])(toolbarParams, this.instance)
         })
         // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
         // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
         _register_event(window, 'turbolinks:load', () => {
-            ;(window as any)['_postHogToolbarLoaded'] = false
+            assignableWindow['_postHogToolbarLoaded'] = false
             this.loadToolbar(toolbarParams)
         })
         return true
@@ -141,9 +170,9 @@ export class Toolbar {
 
     /** @deprecated Use "maybeLoadToolbar" instead. */
     maybeLoadEditor(
-        location = window.location,
+        location: Location | undefined = undefined,
         localStorage: Storage | undefined = undefined,
-        history = window.history
+        history: History | undefined = undefined
     ): boolean {
         return this.maybeLoadToolbar(location, localStorage, history)
     }

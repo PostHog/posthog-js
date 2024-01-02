@@ -1,8 +1,11 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, xhr } from './send-request'
 import { QueuedRequestData, RetryQueueElement } from './types'
-import Config from './config'
 import { RateLimiter } from './rate-limiter'
+
+import { _isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
+import { window } from './utils/globals'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -40,7 +43,7 @@ export class RetryQueue extends RequestQueueScaffold {
         this.onXHRError = onXHRError
         this.rateLimiter = rateLimiter
 
-        if (typeof window !== 'undefined' && 'onLine' in window.navigator) {
+        if (!_isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
                 this._handleWeAreNowOnline()
@@ -60,7 +63,13 @@ export class RetryQueue extends RequestQueueScaffold {
         const retryAt = new Date(Date.now() + msToNextRetry)
 
         this.queue.push({ retryAt, requestData })
-        console.warn(`Enqueued failed request for retry in ${msToNextRetry}`)
+
+        let logMessage = `Enqueued failed request for retry in ${msToNextRetry}`
+        if (!navigator.onLine) {
+            logMessage += ' (Browser is offline)'
+        }
+        logger.warn(logMessage)
+
         if (!this.isPolling) {
             this.isPolling = true
             this.poll()
@@ -99,22 +108,18 @@ export class RetryQueue extends RequestQueueScaffold {
             const { url, data, options } = requestData
 
             if (this.rateLimiter.isRateLimited(options._batchKey)) {
-                if (Config.DEBUG) {
-                    console.warn('[PostHog RetryQueue] is quota limited. Dropping request.')
-                }
+                logger.warn('[RetryQueue] is quota limited. Dropping request.')
                 continue
             }
 
             try {
                 // we've had send beacon in place for at least 2 years
                 // eslint-disable-next-line compat/compat
-                window.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+                window?.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
             } catch (e) {
                 // Note sendBeacon automatically retries, and after the first retry it will lose reference to contextual `this`.
                 // This means in some cases `this.getConfig` will be undefined.
-                if (Config.DEBUG) {
-                    console.error(e)
-                }
+                logger.error(e)
             }
         }
         this.queue = []
@@ -122,9 +127,6 @@ export class RetryQueue extends RequestQueueScaffold {
 
     _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }: QueuedRequestData): void {
         if (this.rateLimiter.isRateLimited(options._batchKey)) {
-            if (Config.DEBUG) {
-                console.warn('[PostHog RetryQueue] in quota limited mode. Dropping request.')
-            }
             return
         }
 
@@ -137,7 +139,7 @@ export class RetryQueue extends RequestQueueScaffold {
             callback,
             retryQueue: this,
             onXHRError: this.onXHRError,
-            onRateLimited: this.rateLimiter.on429Response,
+            onResponse: this.rateLimiter.checkForLimiting,
         })
     }
 

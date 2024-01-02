@@ -4,6 +4,7 @@ import { RetryQueue } from './retry-queue'
 
 export type Property = any
 export type Properties = Record<string, Property>
+
 export interface CaptureResult {
     uuid: string
     event: string
@@ -44,6 +45,12 @@ export interface AutocaptureConfig {
      * e.g. ['[ph-capture]']
      */
     css_selector_allowlist?: string[]
+
+    /**
+     * Exclude certain element attributes from autocapture
+     * E.g. ['aria-label'] or [data-attr-pii]
+     */
+    element_attribute_ignorelist?: string[]
 }
 
 export type UUIDVersion = 'og' | 'v7'
@@ -63,8 +70,11 @@ export interface PostHogConfig {
     loaded: (posthog_instance: PostHog) => void
     store_google: boolean
     custom_campaign_params: string[]
+    // a list of strings to be tested against navigator.userAgent to determine if the source is a bot
+    // this is **added to** the default list of bots that we check
+    // defaults to the empty array
+    custom_blocked_useragents: string[]
     save_referrer: boolean
-    test: boolean
     verbose: boolean
     capture_pageview: boolean
     capture_pageleave: boolean
@@ -73,6 +83,7 @@ export interface PostHogConfig {
     upgrade: boolean
     disable_session_recording: boolean
     disable_persistence: boolean
+    /** @deprecated - use `disable_persistence` instead  */
     disable_cookie: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
@@ -113,10 +124,8 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
-    // we are replacing the OG uuid generation code, with newer faster UUIDv7
-    // this is a temporary flag to allow us to test the new UUID generation code
-    // this flag *will be deleted* in a future version of PostHog-js
-    uuid_version?: UUIDVersion
+    __preview_measure_pageview_stats?: boolean
+    __preview_send_client_session_params?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -146,13 +155,18 @@ export interface SessionRecordingOptions {
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
-    /** Modify the network request before it is captured. Returning null stops it being captured */
-    maskNetworkRequestFn?: ((url: NetworkRequest) => NetworkRequest | null | undefined) | null
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recorderVersion?: 'v1' | 'v2'
     recordCrossOriginIframes?: boolean
+    /** @deprecated - use maskCapturedNetworkRequestFn instead  */
+    maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
+    /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
+    maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
+    // our settings here only support a subset of those proposed for rrweb's network capture plugin
+    recordHeaders?: boolean
+    recordBody?: boolean
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
@@ -199,7 +213,7 @@ export interface XHRParams extends QueuedRequestData {
     retryQueue: RetryQueue
     onXHRError: (req: XMLHttpRequest) => void
     timeout?: number
-    onRateLimited?: (req: XMLHttpRequest) => void
+    onResponse?: (req: XMLHttpRequest) => void
 }
 
 export interface DecideResponse {
@@ -214,6 +228,10 @@ export interface DecideResponse {
     errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
     capturePerformance?: boolean
+    analytics?: {
+        endpoint?: string
+    }
+    elementsChainAsString?: boolean
     // this is currently in development and may have breaking changes without a major version bump
     autocaptureExceptions?:
         | boolean
@@ -225,7 +243,13 @@ export interface DecideResponse {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
         recorderVersion?: 'v1' | 'v2'
+        // the API returns a decimal between 0 and 1 as a string
+        sampleRate?: string | null
+        minimumDurationMilliseconds?: number
+        linkedFlag?: string | null
+        networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     }
+    surveys?: boolean
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
@@ -330,6 +354,93 @@ export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
 }
 
+export type Headers = Record<string, string>
+
+export type Body =
+    | string
+    | Document
+    | Blob
+    | ArrayBufferView
+    | ArrayBuffer
+    | FormData
+    // rrweb uses URLSearchParams and ReadableStream<Uint8Array>
+    // as part of the union for this type
+    // because they don't support IE11
+    // but, we do 🫠
+    // what's going to happen here in IE11?
+    | URLSearchParams
+    | ReadableStream<Uint8Array>
+    | null
+
+/* for rrweb/network@1
+ ** when that is released as part of rrweb this can be removed
+ ** don't rely on this type, it may change without notice
+ */
+export type InitiatorType =
+    | 'audio'
+    | 'beacon'
+    | 'body'
+    | 'css'
+    | 'early-hint'
+    | 'embed'
+    | 'fetch'
+    | 'frame'
+    | 'iframe'
+    | 'icon'
+    | 'image'
+    | 'img'
+    | 'input'
+    | 'link'
+    | 'navigation'
+    | 'object'
+    | 'ping'
+    | 'script'
+    | 'track'
+    | 'video'
+    | 'xmlhttprequest'
+
+export type NetworkRecordOptions = {
+    initiatorTypes?: InitiatorType[]
+    maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined
+    recordHeaders?: boolean | { request: boolean; response: boolean }
+    recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
+    recordInitialRequests?: boolean
+    // whether to record PerformanceEntry events for network requests
+    recordPerformance?: boolean
+    // the PerformanceObserver will only observe these entry types
+    performanceEntryTypeToObserve: string[]
+    // the maximum size of the request/response body to record
+    // NB this will be at most 1MB even if set larger
+    payloadSizeLimitBytes: number
+}
+
+/** @deprecated - use CapturedNetworkRequest instead  */
 export type NetworkRequest = {
     url: string
+}
+
+// In rrweb this is called NetworkRequest, but we already exposed that as having only URL
+// we also want to vary from the rrweb NetworkRequest because we want to include
+// all PerformanceEntry properties too.
+// that has 4 required properties
+//     readonly duration: DOMHighResTimeStamp;
+//     readonly entryType: string;
+//     readonly name: string;
+//     readonly startTime: DOMHighResTimeStamp;
+// NB: properties below here are ALPHA, don't rely on them, they may change without notice
+export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
+    // properties below here are ALPHA, don't rely on them, they may change without notice
+    method?: string
+    initiatorType?: InitiatorType
+    status?: number
+    timeOrigin?: number
+    timestamp?: number
+    startTime?: number
+    endTime?: number
+    requestHeaders?: Headers
+    requestBody?: Body
+    responseHeaders?: Headers
+    responseBody?: Body
+    // was this captured before fetch/xhr could have been wrapped
+    isInitial?: boolean
 }

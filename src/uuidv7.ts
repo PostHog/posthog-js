@@ -9,6 +9,10 @@
  */
 
 // polyfill for IE11
+import { window } from './utils/globals'
+
+import { _isNumber, _isUndefined } from './utils/type-utils'
+
 if (!Math.trunc) {
     Math.trunc = function (v) {
         return v < 0 ? Math.ceil(v) : Math.floor(v)
@@ -18,7 +22,7 @@ if (!Math.trunc) {
 // polyfill for IE11
 if (!Number.isInteger) {
     Number.isInteger = function (value) {
-        return typeof value === 'number' && isFinite(value) && Math.floor(value) === value
+        return _isNumber(value) && isFinite(value) && Math.floor(value) === value
     }
 }
 
@@ -140,13 +144,13 @@ class V7Generator {
      */
     generate(): UUID {
         const value = this.generateOrAbort()
-        if (value !== undefined) {
+        if (!_isUndefined(value)) {
             return value
         } else {
             // reset state and resume
             this.timestamp = 0
             const valueAfterReset = this.generateOrAbort()
-            if (valueAfterReset === undefined) {
+            if (_isUndefined(valueAfterReset)) {
                 throw new Error('Could not generate UUID after timestamp reset')
             }
             return valueAfterReset
@@ -203,6 +207,7 @@ declare const UUIDV7_DENY_WEAK_RNG: boolean
 /** Stores `crypto.getRandomValues()` available in the environment. */
 let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buffer) => {
     // fall back on Math.random() unless the flag is set to true
+    // TRICKY: don't use the _isUndefined method here as can't pass the reference
     if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {
         throw new Error('no cryptographically strong RNG available')
     }
@@ -214,7 +219,7 @@ let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buf
 }
 
 // detect Web Crypto API
-if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+if (window && !_isUndefined(window.crypto) && crypto.getRandomValues) {
     getRandomValues = (buffer) => crypto.getRandomValues(buffer)
 }
 

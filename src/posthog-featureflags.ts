@@ -9,14 +9,18 @@ import {
     JsonType,
     RequestCallback,
 } from './types'
+import { PostHogPersistence } from './posthog-persistence'
+
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
-    PostHogPersistence,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
-} from './posthog-persistence'
+} from './constants'
+
+import { _isArray } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -42,7 +46,7 @@ export const parseFeatureFlagDecideResponse = (
     const flagPayloads = response['featureFlagPayloads']
     if (flags) {
         // using the v1 api
-        if (Array.isArray(flags)) {
+        if (_isArray(flags)) {
             const $enabled_feature_flags: Record<string, boolean> = {}
             if (flags) {
                 for (let i = 0; i < flags.length; i++) {
@@ -111,7 +115,7 @@ export class PostHogFeatureFlags {
             }
         }
         if (!this._override_warning) {
-            console.warn('[PostHog] Overriding feature flags!', {
+            logger.warn(' Overriding feature flags!', {
                 enabledFlags,
                 overriddenFlags,
                 finalFlags,
@@ -166,8 +170,12 @@ export class PostHogFeatureFlags {
     }
 
     _reloadFeatureFlagsRequest(): void {
+        if (this.instance.config.advanced_disable_feature_flags) {
+            return
+        }
+
         this.setReloadingPaused(true)
-        const token = this.instance.get_config('token')
+        const token = this.instance.config.token
         const personProperties = this.instance.get_property(STORED_PERSON_PROPERTIES_KEY)
         const groupProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY)
         const json_data = JSON.stringify({
@@ -177,12 +185,12 @@ export class PostHogFeatureFlags {
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: personProperties,
             group_properties: groupProperties,
-            disable_flags: this.instance.get_config('advanced_disable_feature_flags') || undefined,
+            disable_flags: this.instance.config.advanced_disable_feature_flags || undefined,
         })
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            this.instance.get_config('api_host') + '/decide/?v=3',
+            this.instance.config.api_host + '/decide/?v=3',
             { data: encoded_data },
             { method: 'POST' },
             this.instance._prepare_callback((response) => {
@@ -210,7 +218,7 @@ export class PostHogFeatureFlags {
      */
     getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
         if (!this.instance.decideEndpointWasHit && !(this.getFlags() && this.getFlags().length > 0)) {
-            console.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
         const flagValue = this.getFlagVariants()[key]
@@ -219,7 +227,7 @@ export class PostHogFeatureFlags {
 
         if (options.send_event || !('send_event' in options)) {
             if (!(key in flagCallReported) || !flagCallReported[key].includes(flagReportValue)) {
-                if (Array.isArray(flagCallReported[key])) {
+                if (_isArray(flagCallReported[key])) {
                     flagCallReported[key].push(flagReportValue)
                 } else {
                     flagCallReported[key] = [flagReportValue]
@@ -249,7 +257,7 @@ export class PostHogFeatureFlags {
      */
     isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
         if (!this.instance.decideEndpointWasHit && !(this.getFlags() && this.getFlags().length > 0)) {
-            console.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
+            logger.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
         return !!this.getFeatureFlag(key, options)
@@ -286,11 +294,15 @@ export class PostHogFeatureFlags {
      * @param {Object|Array|String} flags Flags to override with.
      */
     override(flags: boolean | string[] | Record<string, string | boolean>): void {
+        if (!this.instance.__loaded || !this.instance.persistence) {
+            return logger.uninitializedWarning('posthog.feature_flags.override')
+        }
+
         this._override_warning = false
 
         if (flags === false) {
             this.instance.persistence?.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-        } else if (Array.isArray(flags)) {
+        } else if (_isArray(flags)) {
             const flagsObj: Record<string, string | boolean> = {}
             for (let i = 0; i < flags.length; i++) {
                 flagsObj[flags[i]] = true
@@ -345,9 +357,7 @@ export class PostHogFeatureFlags {
 
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request(
-                `${this.instance.get_config('api_host')}/api/early_access_features/?token=${this.instance.get_config(
-                    'token'
-                )}`,
+                `${this.instance.config.api_host}/api/early_access_features/?token=${this.instance.config.token}`,
                 {},
                 { method: 'GET' },
                 (response) => {

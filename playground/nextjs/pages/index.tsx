@@ -1,7 +1,6 @@
 import Head from 'next/head'
 import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
-import { useEffect, useState } from 'react'
-import { Player, Controls } from '@lottiefiles/react-lottie-player'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -36,6 +35,10 @@ export default function Home() {
                 <div className="buttons">
                     <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
                     <button data-attr="autocapture-button">Autocapture buttons</button>
+                    <a data-attr="autocapture-button" href="#">
+                        <span>Autocapture a &gt; span</span>
+                    </a>
+
                     <button className="ph-no-capture">Ignore certain elements</button>
 
                     <button onClick={() => posthog?.identify('user-' + randomID())}>Identify</button>
@@ -54,6 +57,8 @@ export default function Home() {
                 <div className="buttons">
                     <Link href="/animations">Animations</Link>
                     <Link href="/iframe">Iframe</Link>
+                    <Link href="/media">Media</Link>
+                    <Link href="/long">Long</Link>
                 </div>
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>

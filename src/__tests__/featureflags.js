@@ -8,26 +8,25 @@ jest.spyOn(global, 'setTimeout')
 
 describe('featureflags', () => {
     given('decideEndpointWasHit', () => false)
-    given('config', () => ({
-        token: 'testtoken',
+
+    const config = {
+        token: 'random fake token',
         persistence: 'memory',
-    })),
-        given('instance', () => ({
-            get_config: jest.fn().mockImplementation((key) => given.config[key]),
-            get_distinct_id: () => 'blah id',
-            getGroups: () => {},
-            _prepare_callback: (callback) => callback,
-            persistence: new PostHogPersistence(given.config),
-            register: (props) => given.instance.persistence.register(props),
-            unregister: (key) => given.instance.persistence.unregister(key),
-            get_property: (key) => given.instance.persistence.props[key],
-            capture: () => {},
-            decideEndpointWasHit: given.decideEndpointWasHit,
-            _send_request: jest
-                .fn()
-                .mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
-            reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
-        }))
+    }
+    given('instance', () => ({
+        config,
+        get_distinct_id: () => 'blah id',
+        getGroups: () => {},
+        _prepare_callback: (callback) => callback,
+        persistence: new PostHogPersistence(config),
+        register: (props) => given.instance.persistence.register(props),
+        unregister: (key) => given.instance.persistence.unregister(key),
+        get_property: (key) => given.instance.persistence.props[key],
+        capture: () => {},
+        decideEndpointWasHit: given.decideEndpointWasHit,
+        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+        reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
+    }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
 
@@ -68,6 +67,7 @@ describe('featureflags', () => {
     })
 
     it('should warn if decide endpoint was not hit and no flags exist', () => {
+        window.POSTHOG_DEBUG = true
         given.featureFlags.instance.decideEndpointWasHit = false
         given.instance.persistence.unregister('$enabled_feature_flags')
         given.instance.persistence.unregister('$active_feature_flags')
@@ -75,6 +75,7 @@ describe('featureflags', () => {
         expect(given.featureFlags.getFlags()).toEqual([])
         expect(given.featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
         expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
             'isFeatureEnabled for key "beta-feature" failed. Feature flags didn\'t load in time.'
         )
 
@@ -82,6 +83,7 @@ describe('featureflags', () => {
 
         expect(given.featureFlags.getFeatureFlag('beta-feature')).toEqual(undefined)
         expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
             'getFeatureFlag for key "beta-feature" failed. Feature flags didn\'t load in time.'
         )
     })
@@ -216,11 +218,6 @@ describe('featureflags', () => {
             },
         }))
 
-        given('config', () => ({
-            token: 'random fake token',
-            persistence: 'memory',
-        }))
-
         it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
             var called = false
             let _flags = []
@@ -323,10 +320,12 @@ describe('featureflags', () => {
             earlyAccessFeatures: [EARLY_ACCESS_FEATURE_FIRST],
         }))
 
-        given('config', () => ({
-            token: 'random fake token',
-            api_host: 'https://decide.com',
-        }))
+        beforeEach(() => {
+            given.instance.config = {
+                ...given.instance.config,
+                api_host: 'https://decide.com',
+            }
+        })
 
         it('getEarlyAccessFeatures requests early access features if not present', () => {
             given.featureFlags.getEarlyAccessFeatures((data) => {
@@ -467,11 +466,6 @@ describe('featureflags', () => {
             },
         }))
 
-        given('config', () => ({
-            token: 'random fake token',
-            persistence: 'memory',
-        }))
-
         it('on providing anonDistinctId', () => {
             given.featureFlags.setAnonymousDistinctId('rando_id')
             given.featureFlags.reloadFeatureFlags()
@@ -561,29 +555,41 @@ describe('featureflags', () => {
         })
 
         it('on providing config advanced_disable_feature_flags', () => {
-            given('config', () => ({
-                token: 'random fake token',
-                persistence: 'memory',
+            given.instance.config = {
+                ...given.instance.config,
                 advanced_disable_feature_flags: true,
-            }))
+            }
+            given.instance.persistence.register({
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'random-feature': 'xatu',
+                },
+            })
+
             given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'beta-feature': true,
+                'random-feature': 'xatu',
+            })
+
+            // check reload request was not sent
+            expect(given.instance._send_request).not.toHaveBeenCalled()
+
+            // check the same for other ways to call reload flags
+
+            given.featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
 
             jest.runAllTimers()
 
             expect(given.featureFlags.getFlagVariants()).toEqual({
-                first: 'variant-1',
-                second: true,
+                'beta-feature': true,
+                'random-feature': 'xatu',
             })
 
-            // check the request sent disable_flags
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
-                token: 'random fake token',
-                distinct_id: 'blah id',
-                person_properties: { a: 'b', c: 'd' },
-                disable_flags: true,
-            })
+            // check reload request was not sent
+            expect(given.instance._send_request).not.toHaveBeenCalled()
         })
     })
 
@@ -593,11 +599,6 @@ describe('featureflags', () => {
                 first: 'variant-1',
                 second: true,
             },
-        }))
-
-        given('config', () => ({
-            token: 'random fake token',
-            persistence: 'memory',
         }))
 
         it('on providing personProperties updates properties successively', () => {
@@ -736,11 +737,6 @@ describe('featureflags', () => {
             errorsWhileComputingFlags: true,
         }))
 
-        given('config', () => ({
-            token: 'random fake token',
-            persistence: 'memory',
-        }))
-
         it('should return combined results', () => {
             given.featureFlags.reloadFeatureFlags()
 
@@ -761,11 +757,6 @@ describe('featureflags', () => {
         given('decideResponse', () => ({
             featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
             errorsWhileComputingFlags: false,
-        }))
-
-        given('config', () => ({
-            token: 'random fake token',
-            persistence: 'memory',
         }))
 
         it('should return combined results', () => {

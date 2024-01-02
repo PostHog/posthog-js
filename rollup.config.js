@@ -47,6 +47,30 @@ export default [
         plugins: [...plugins],
     },
     {
+        input: 'src/loader-surveys.ts',
+        output: [
+            {
+                file: 'dist/surveys.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [...plugins],
+    },
+    {
+        input: 'src/loader-exception-autocapture.ts',
+        output: [
+            {
+                file: 'dist/exception-autocapture.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [...plugins],
+    },
+    {
         input: 'src/loader-globals.ts',
         output: [
             {

@@ -1,6 +1,6 @@
 import '@/styles/globals.css'
 
-import { useEffect } from 'react'
+import React, { useEffect } from 'react'
 import type { AppProps } from 'next/app'
 import { useRouter } from 'next/router'
 
@@ -13,6 +13,8 @@ if (typeof window !== 'undefined') {
         session_recording: {
             recordCrossOriginIframes: true,
         },
+        debug: true,
+        __preview_send_client_session_params: true,
     })
     ;(window as any).posthog = posthog
 }

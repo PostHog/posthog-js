@@ -21,6 +21,7 @@ import 'given2/setup'
 // require('./commands')
 
 // Add console errors into cypress logs.
+// eslint-disable-next-line no-undef
 Cypress.on('window:before:load', (win) => {
     cy.spy(win.console, 'error')
     cy.spy(win.console, 'warn')
@@ -29,11 +30,9 @@ Cypress.on('window:before:load', (win) => {
 })
 
 beforeEach(() => {
-    cy.server()
-
-    cy.route('POST', '**/decide/*').as('decide')
-    cy.route('POST', '**/e/*').as('capture')
-    cy.route('POST', '**/ses/*').as('session-recording')
+    cy.intercept('POST', '**/decide/*').as('decide')
+    cy.intercept('POST', '**/e/*').as('capture')
+    cy.intercept('POST', '**/ses/*').as('session-recording')
 
     cy.readFile('dist/array.full.js').then((body) => {
         cy.intercept('**/static/array.full.js', { body })

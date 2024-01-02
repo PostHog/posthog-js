@@ -1,16 +1,6 @@
+import { _bind_instance_methods, _each, _extend, _includes, _register_event, _safewrap_instance_methods } from './utils'
 import {
-    _bind_instance_methods,
-    _each,
-    _extend,
-    _includes,
-    _isFunction,
-    _isUndefined,
-    _register_event,
-    _safewrap_instance_methods,
-    logger,
-} from './utils'
-import {
-    getClassName,
+    getClassNames,
     getSafeText,
     isElementNode,
     isSensitiveElement,
@@ -23,11 +13,24 @@ import {
     isAngularStyleAttr,
     isDocumentFragment,
     getDirectAndNestedSpanText,
+    getElementsChainString,
+    splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './posthog-persistence'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
+
+import { _isBoolean, _isFunction, _isNull, _isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
+import { window, document } from './utils/globals'
+
+function limitText(length: number, text: string): string {
+    if (text.length > length) {
+        return text.slice(0, length) + '...'
+    }
+    return text
+}
 
 const autocapture = {
     _initializedTokens: [] as string[],
@@ -35,11 +38,10 @@ const autocapture = {
     _isAutocaptureEnabled: false as boolean,
 
     _setIsAutocaptureEnabled: function (instance: PostHog): void {
-        const disabled_server_side =
-            this._isDisabledServerSide === null
-                ? !!instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
-                : this._isDisabledServerSide
-        const enabled_client_side = !!instance.get_config('autocapture')
+        const disabled_server_side = _isNull(this._isDisabledServerSide)
+            ? !!instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+            : this._isDisabledServerSide
+        const enabled_client_side = !!instance.config.autocapture
         this._isAutocaptureEnabled = enabled_client_side && !disabled_server_side
     },
 
@@ -82,24 +84,35 @@ const autocapture = {
         }
         if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
             if (tag_name.toLowerCase() === 'a' || tag_name.toLowerCase() === 'button') {
-                props['$el_text'] = getDirectAndNestedSpanText(elem)
+                props['$el_text'] = limitText(1024, getDirectAndNestedSpanText(elem))
             } else {
-                props['$el_text'] = getSafeText(elem)
+                props['$el_text'] = limitText(1024, getSafeText(elem))
             }
         }
 
-        const classes = getClassName(elem)
+        const classes = getClassNames(elem)
         if (classes.length > 0)
-            props['classes'] = classes.split(' ').filter(function (c) {
+            props['classes'] = classes.filter(function (c) {
                 return c !== ''
             })
 
+        // capture the deny list here because this not-a-class class makes it tricky to use this.config in the function below
+        const elementAttributeIgnorelist = this.config?.element_attribute_ignorelist
         _each(elem.attributes, function (attr: Attr) {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
 
+            if (elementAttributeIgnorelist?.includes(attr.name)) return
+
             if (!maskInputs && shouldCaptureValue(attr.value) && !isAngularStyleAttr(attr.name)) {
-                props['attr__' + attr.name] = attr.value
+                let value = attr.value
+                if (attr.name === 'class') {
+                    // html attributes can _technically_ contain linebreaks,
+                    // but we're very intolerant of them in the class string,
+                    // so we strip them.
+                    value = splitClassString(value).join(' ')
+                }
+                props['attr__' + attr.name] = limitText(1024, value)
             }
         })
 
@@ -128,7 +141,7 @@ const autocapture = {
 
     _extractCustomPropertyValue: function (customProperty: AutoCaptureCustomProperty): string {
         const propValues: string[] = []
-        _each(document.querySelectorAll(customProperty['css_selector']), function (matchedElem) {
+        _each(document?.querySelectorAll(customProperty['css_selector']), function (matchedElem) {
             let value
 
             if (['input', 'select'].indexOf(matchedElem.tagName.toLowerCase()) > -1) {
@@ -149,7 +162,7 @@ const autocapture = {
         const props: Properties = {} // will be deleted
         _each(this._customProperties, (customProperty) => {
             _each(customProperty['event_selectors'], (eventSelector) => {
-                const eventElements = document.querySelectorAll(eventSelector)
+                const eventElements = document?.querySelectorAll(eventSelector)
                 _each(eventElements, (eventElement) => {
                     if (_includes(targetElementList, eventElement) && shouldCaptureElement(eventElement)) {
                         props[customProperty['name']] = this._extractCustomPropertyValue(customProperty)
@@ -162,7 +175,7 @@ const autocapture = {
 
     _getEventTarget: function (e: Event): Element | null {
         // https://developer.mozilla.org/en-US/docs/Web/API/Event/target#Compatibility_notes
-        if (typeof e.target === 'undefined') {
+        if (_isUndefined(e.target)) {
             return (e.srcElement as Element) || null
         } else {
             if ((e.target as HTMLElement)?.shadowRoot) {
@@ -214,7 +227,7 @@ const autocapture = {
                 }
 
                 // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
-                const classes = getClassName(el).split(' ')
+                const classes = getClassNames(el)
                 if (_includes(classes, 'ph-no-capture')) {
                     explicitNoCapture = true
                 }
@@ -222,8 +235,8 @@ const autocapture = {
                 elementsJson.push(
                     this._getPropertiesFromElement(
                         el,
-                        instance.get_config('mask_all_element_attributes'),
-                        instance.get_config('mask_all_text')
+                        instance.config.mask_all_element_attributes,
+                        instance.config.mask_all_text
                     )
                 )
 
@@ -231,7 +244,7 @@ const autocapture = {
                 _extend(autocaptureAugmentProperties, augmentProperties)
             })
 
-            if (!instance.get_config('mask_all_text')) {
+            if (!instance.config.mask_all_text) {
                 // if the element is a button or anchor tag get the span text from any
                 // children and include it as/with the text property on the parent element
                 if (target.tagName.toLowerCase() === 'a' || target.tagName.toLowerCase() === 'button') {
@@ -251,9 +264,14 @@ const autocapture = {
 
             const props = _extend(
                 this._getDefaultProperties(e.type),
-                {
-                    $elements: elementsJson,
-                },
+                instance.elementsChainAsString
+                    ? {
+                          $elements_chain: getElementsChainString(elementsJson),
+                      }
+                    : {
+                          $elements: elementsJson,
+                      },
+                elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
                 this._getCustomProperties(targetElementList),
                 autocaptureAugmentProperties
             )
@@ -266,12 +284,18 @@ const autocapture = {
     // only reason is to stub for unit tests
     // since you can't override window.location props
     _navigate: function (href: string): void {
+        if (!window) {
+            return
+        }
         window.location.href = href
     },
 
     _addDomEventHandlers: function (instance: PostHog): void {
+        if (!window || !document) {
+            return
+        }
         const handler = (e: Event) => {
-            e = e || window.event
+            e = e || window?.event
             this._captureEvent(e, instance)
         }
         _register_event(document, 'submit', handler, false, true)
@@ -284,7 +308,7 @@ const autocapture = {
     config: undefined as AutocaptureConfig | undefined,
 
     init: function (instance: PostHog): void {
-        if (typeof instance.__autocapture !== 'boolean') {
+        if (!_isBoolean(instance.__autocapture)) {
             this.config = instance.__autocapture
         }
 
@@ -293,13 +317,13 @@ const autocapture = {
             this.config.url_allowlist = this.config.url_allowlist.map((url) => new RegExp(url))
         }
 
-        this.rageclicks = new RageClick(instance.get_config('rageclick'))
+        this.rageclicks = new RageClick(instance.config.rageclick)
     },
 
     afterDecideResponse: function (response: DecideResponse, instance: PostHog): void {
-        const token = instance.get_config('token')
+        const token = instance.config.token
         if (this._initializedTokens.indexOf(token) > -1) {
-            logger.log('autocapture already initialized for token "' + token + '"')
+            logger.info('autocapture already initialized for token "' + token + '"')
             return
         }
 
@@ -333,7 +357,7 @@ const autocapture = {
 
     // this is a mechanism to ramp up CE with no server-side interaction.
     // when CE is active, every page load results in a decide request. we
-    // need to gently ramp this up so we don't overload decide. this decides
+    // need to gently ramp this up, so we don't overload decide. this decides
     // deterministically if CE is enabled for this project by modding the char
     // value of the project token.
     enabledForProject: function (
@@ -354,7 +378,7 @@ const autocapture = {
     },
 
     isBrowserSupported: function (): boolean {
-        return _isFunction(document.querySelectorAll)
+        return _isFunction(document?.querySelectorAll)
     },
 }
 
