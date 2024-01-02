@@ -1,4 +1,4 @@
-import { init_as_module, PostHog } from '../posthog-core'
+import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
@@ -6,6 +6,7 @@ import { autocapture } from '../autocapture'
 import { truth } from './helpers/truth'
 import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
+import { uuidv7 } from '../uuidv7'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
@@ -14,8 +15,7 @@ jest.mock('../gdpr-utils', () => ({
 jest.mock('../decide')
 
 given('lib', () => {
-    const posthog = new PostHog()
-    posthog._init('testtoken', given.config, 'testhog')
+    const posthog = _posthog.init('testtoken', given.config, uuidv7())
     posthog.debug()
     return Object.assign(posthog, given.overrides)
 })
@@ -498,8 +498,6 @@ describe('posthog core', () => {
     })
 
     describe('bootstrapping feature flags', () => {
-        given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
-
         given('overrides', () => ({
             _send_request: jest.fn(),
             capture: jest.fn(),
@@ -516,7 +514,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('abcd')
             expect(given.lib.persistence.get_user_state()).toBe('anonymous')
@@ -542,7 +539,6 @@ describe('posthog core', () => {
                 get_device_id: () => 'og-device-id',
             }))
 
-            given.subject()
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('og-device-id')
             expect(given.lib.persistence.get_user_state()).toBe('identified')
@@ -558,7 +554,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             expect(given.lib.get_distinct_id()).not.toBe('abcd')
             expect(given.lib.get_distinct_id()).not.toEqual(undefined)
             expect(given.lib.getFeatureFlag('multivariant')).toBe('variant-1')
@@ -589,7 +584,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             expect(given.lib.getFeatureFlagPayload('multivariant')).toBe('some-payload')
             expect(given.lib.getFeatureFlagPayload('enabled')).toEqual({ another: 'value' })
             expect(given.lib.getFeatureFlagPayload('jsonString')).toEqual({ a: 'payload' })
@@ -604,7 +598,6 @@ describe('posthog core', () => {
                 bootstrap: {},
             }))
 
-            given.subject()
             expect(given.lib.get_distinct_id()).not.toBe('abcd')
             expect(given.lib.get_distinct_id()).not.toEqual(undefined)
             expect(given.lib.getFeatureFlag('multivariant')).toBe(undefined)
@@ -626,7 +619,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             given.lib.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(true)
         })
@@ -640,7 +632,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             given.lib.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(false)
         })
@@ -654,7 +645,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             given.lib.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(false)
         })
@@ -662,7 +652,6 @@ describe('posthog core', () => {
 
     describe('init()', () => {
         jest.spyOn(window, 'window', 'get')
-        given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 
         given('overrides', () => ({
             get_distinct_id: () => given.distinct_id,
@@ -682,7 +671,6 @@ describe('posthog core', () => {
         given('advanced_disable_decide', () => true)
 
         it('can set an xhr error handler', () => {
-            init_as_module()
             const fakeOnXHRError = 'configured error'
             given('subject', () =>
                 given.lib.init(
@@ -697,7 +685,6 @@ describe('posthog core', () => {
         })
 
         it('does not load decide endpoint on advanced_disable_decide', () => {
-            given.subject()
             expect(given.decide).toBe(undefined)
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
         })
@@ -706,44 +693,31 @@ describe('posthog core', () => {
             given('config', () => ({
                 api_host: 'https://example.com/custom/',
             }))
-            given.subject()
 
             expect(given.lib.config.api_host).toBe('https://example.com/custom')
         })
 
         it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
-            given('overrides', () => ({
-                __loaded_recorder_version: undefined,
-            }))
             delete window.rrweb
             window.rrweb = { record: undefined }
             delete window.rrwebRecord
             window.rrwebRecord = undefined
-            given.subject()
             expect(given.lib.__loaded_recorder_version).toEqual(undefined)
         })
 
         it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
-            given('overrides', () => ({
-                __loaded_recorder_version: undefined,
-            }))
             delete window.rrweb
             window.rrweb = { record: 'anything', version: '1.1.3' }
             delete window.rrwebRecord
             window.rrwebRecord = 'is possible'
-            given.subject()
             expect(given.lib.__loaded_recorder_version).toMatch(/^1\./) // start with 1.?.?
         })
 
-        it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
-            given('overrides', () => ({
-                __loaded_recorder_version: undefined,
-            }))
+        it('set __loaded_recorder_version flag to v2 if recording script has been included', () => {
             delete window.rrweb
             window.rrweb = { record: 'anything', version: '2.0.0-alpha.6' }
             delete window.rrwebRecord
             window.rrwebRecord = 'is possible'
-            given.subject()
             expect(given.lib.__loaded_recorder_version).toMatch(/^2\./) // start with 2.?.?
         })
 
@@ -754,6 +728,7 @@ describe('posthog core', () => {
                     startRecordingIfEnabled: jest.fn(),
                 },
                 toolbar: {
+                    maybeLoadToolbar: jest.fn(),
                     afterDecideResponse: jest.fn(),
                 },
                 persistence: {
@@ -762,15 +737,11 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
-
             jest.spyOn(given.lib.toolbar, 'afterDecideResponse').mockImplementation()
             jest.spyOn(given.lib.sessionRecording, 'afterDecideResponse').mockImplementation()
             jest.spyOn(given.lib.persistence, 'register').mockImplementation()
 
             // Autocapture
-            expect(given.lib.__autocapture).toEqual(undefined)
-            expect(autocapture.init).not.toHaveBeenCalled()
             expect(autocapture.afterDecideResponse).not.toHaveBeenCalled()
 
             // Feature flags
@@ -790,8 +761,6 @@ describe('posthog core', () => {
             it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
                 given('distinct_id', () => undefined)
 
-                given.subject()
-
                 expect(given.lib.register_once).toHaveBeenCalledWith(
                     {
                         $device_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
@@ -804,8 +773,6 @@ describe('posthog core', () => {
             it('does not set distinct_id/$device_id if distinct_id is unset', () => {
                 given('distinct_id', () => 'existing-id')
 
-                given.subject()
-
                 expect(given.lib.register_once).not.toHaveBeenCalled()
             })
 
@@ -814,8 +781,6 @@ describe('posthog core', () => {
                 given('config', () => ({
                     get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
                 }))
-
-                given.subject()
 
                 expect(given.lib.register_once).toHaveBeenCalledWith(
                     {
