@@ -761,19 +761,16 @@ describe('posthog core', () => {
             it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
                 given('distinct_id', () => undefined)
 
-                expect(given.lib.register_once).toHaveBeenCalledWith(
-                    {
-                        $device_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
-                        distinct_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
-                    },
-                    ''
-                )
+                expect(given.lib.persistence.props).toMatchObject({
+                    $device_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
+                    distinct_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
+                })
             })
 
             it('does not set distinct_id/$device_id if distinct_id is unset', () => {
                 given('distinct_id', () => 'existing-id')
 
-                expect(given.lib.register_once).not.toHaveBeenCalled()
+                expect(given.lib.persistence.props.distinct_id).not.toEqual('existing-id')
             })
 
             it('uses config.get_device_id for uuid generation if passed', () => {
@@ -782,13 +779,10 @@ describe('posthog core', () => {
                     get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
                 }))
 
-                expect(given.lib.register_once).toHaveBeenCalledWith(
-                    {
-                        $device_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
-                        distinct_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
-                    },
-                    ''
-                )
+                expect(given.lib.persistence.props).toMatchObject({
+                    $device_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
+                    distinct_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
+                })
             })
         })
     })
