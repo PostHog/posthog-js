@@ -41,7 +41,6 @@ describe('posthog core', () => {
 
         given('overrides', () => ({
             __loaded: true,
-            // config: given.config,
             persistence: {
                 remove_event_timer: jest.fn(),
                 properties: jest.fn(),
