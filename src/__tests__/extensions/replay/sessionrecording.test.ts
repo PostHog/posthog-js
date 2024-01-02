@@ -404,7 +404,24 @@ describe('SessionRecording', () => {
                 plugins: [],
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
+                recordCanvas: false,
             })
+        })
+
+        it('calls includes canvas params if enabled', () => {
+            posthog.config.session_recording.recordCanvas = true
+            // access private method 🤯
+            sessionRecording['_onScriptLoaded']()
+            expect(assignableWindow.rrwebRecord).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    recordCanvas: true,
+                    sampling: { canvas: 4 },
+                    dataURLOptions: {
+                        type: 'image/webp',
+                        quality: 0.6,
+                    },
+                })
+            )
         })
 
         it('records events emitted before and after starting recording', () => {
