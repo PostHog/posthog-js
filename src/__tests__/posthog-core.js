@@ -3,7 +3,6 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
 
-import { truth } from './helpers/truth'
 import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
@@ -14,13 +13,17 @@ jest.mock('../gdpr-utils', () => ({
 }))
 jest.mock('../decide')
 
-given('lib', () => {
-    const posthog = _posthog.init('testtoken', given.config, uuidv7())
-    posthog.debug()
-    return Object.assign(posthog, given.overrides)
-})
-
 describe('posthog core', () => {
+    given('lib', () => {
+        const posthog = _posthog.init('testtoken', given.config, uuidv7())
+        posthog.debug()
+        return Object.assign(posthog, given.overrides)
+    })
+
+    afterEach(() => {
+        // Make sure there's no cached persistence
+        given.lib.persistence?.clear?.()
+    })
     describe('capture()', () => {
         given('eventName', () => '$event')
 
@@ -38,7 +41,7 @@ describe('posthog core', () => {
 
         given('overrides', () => ({
             __loaded: true,
-            config: given.config,
+            // config: given.config,
             persistence: {
                 remove_event_timer: jest.fn(),
                 properties: jest.fn(),
@@ -760,11 +763,16 @@ describe('posthog core', () => {
         describe('device id behavior', () => {
             it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
                 given('distinct_id', () => undefined)
+                given('config', () => ({
+                    get_device_id: (uuid) => uuid,
+                }))
 
                 expect(given.lib.persistence.props).toMatchObject({
-                    $device_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
-                    distinct_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
+                    $device_id: expect.stringMatching(/^[0-9a-f-]+$/),
+                    distinct_id: expect.stringMatching(/^[0-9a-f-]+$/),
                 })
+
+                expect(given.lib.persistence.props.$device_id).toEqual(given.lib.persistence.props.distinct_id)
             })
 
             it('does not set distinct_id/$device_id if distinct_id is unset', () => {
@@ -780,8 +788,8 @@ describe('posthog core', () => {
                 }))
 
                 expect(given.lib.persistence.props).toMatchObject({
-                    $device_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
-                    distinct_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
+                    $device_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
+                    distinct_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
                 })
             })
         })

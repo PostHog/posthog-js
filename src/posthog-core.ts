@@ -427,6 +427,7 @@ export class PostHog {
             // or the device id if something was already stored
             // in the persitence
             const uuid = this.config.get_device_id(uuidv7())
+
             this.register_once(
                 {
                     distinct_id: uuid,
@@ -1717,7 +1718,7 @@ export class PostHog {
      * @param {String} property_name The name of the super property you want to retrieve
      */
     get_property(property_name: string): Property | undefined {
-        return this.persistence?.['props'][property_name]
+        return this.persistence?.props[property_name]
     }
 
     /**
@@ -1740,7 +1741,7 @@ export class PostHog {
      * @param {String} property_name The name of the session super property you want to retrieve
      */
     getSessionProperty(property_name: string): Property | undefined {
-        return this.sessionPersistence?.['props'][property_name]
+        return this.sessionPersistence?.props[property_name]
     }
 
     toString(): string {
