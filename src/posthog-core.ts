@@ -346,23 +346,25 @@ export class PostHog {
         this.sessionRecording = new SessionRecording(this)
         this.sessionRecording.startRecordingIfEnabled()
 
-        this.webPerformance = new WebPerformanceObserver(this)
-        this.webPerformance.startObservingIfEnabled()
+        this.sessionRecording = new SessionRecording(this)
+        this.sessionRecording.startRecordingIfEnabled()
 
-        this.exceptionAutocapture = new ExceptionObserver(this)
+        if (this.config.__preview_measure_pageview_stats) {
+            this.pageViewManager.startMeasuringScrollPosition()
+        }
 
-        this.__autocapture = this.get_config('autocapture')
+        this.__autocapture = this.config.autocapture
         autocapture._setIsAutocaptureEnabled(this)
         if (autocapture._isAutocaptureEnabled) {
-            this.__autocapture = this.get_config('autocapture')
+            this.__autocapture = this.config.autocapture
             const num_buckets = 100
             const num_enabled_buckets = 100
-            if (!autocapture.enabledForProject(this.get_config('token'), num_buckets, num_enabled_buckets)) {
+            if (!autocapture.enabledForProject(this.config.token, num_buckets, num_enabled_buckets)) {
                 this.__autocapture = false
-                logger.log('Not in active bucket: disabling Automatic Event Collection.')
+                logger.info('Not in active bucket: disabling Automatic Event Collection.')
             } else if (!autocapture.isBrowserSupported()) {
                 this.__autocapture = false
-                logger.log('Disabling Automatic Event Collection because this browser is not supported')
+                logger.info('Disabling Automatic Event Collection because this browser is not supported')
             } else {
                 autocapture.init(this)
             }
@@ -370,7 +372,7 @@ export class PostHog {
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
-        Config.DEBUG = Config.DEBUG || this.get_config('debug')
+        Config.DEBUG = Config.DEBUG || this.config.debug
 
         this._gdpr_init()
 
