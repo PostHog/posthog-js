@@ -9,7 +9,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { assignableWindow, window } from './utils/globals'
+import { window } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -295,14 +295,14 @@ export class PostHog {
     //
     _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog | void {
         if (!token) {
-            console.warn(
+            logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
             )
             return
         }
 
         if (this.__loaded) {
-            console.warn('You have already initialized PostHog! Re-initialising is a no-op')
+            logger.warn('You have already initialized PostHog! Re-initialising is a no-op')
             return
         }
 
