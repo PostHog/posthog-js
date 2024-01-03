@@ -404,7 +404,6 @@ describe('SessionRecording', () => {
                 plugins: [],
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
-                recordCanvas: false,
             })
         })
 

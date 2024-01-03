@@ -167,7 +167,6 @@ export interface SessionRecordingOptions {
     // our settings here only support a subset of those proposed for rrweb's network capture plugin
     recordHeaders?: boolean
     recordBody?: boolean
-    recordCanvas: boolean
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
@@ -247,6 +246,10 @@ export interface DecideResponse {
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
+        recordCanvas?: boolean | null
+        canvasFps?: number | null
+        // the API returns a decimal between 0 and 1 as a string
+        canvasQuality?: string | null
         linkedFlag?: string | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     }
