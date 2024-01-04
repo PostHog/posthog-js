@@ -8,16 +8,6 @@ function onPageLoad() {
 
 describe('Surveys', () => {
     given('options', () => ({}))
-    let mockSurveys = [
-        {
-            id: '123',
-            name: 'Test survey',
-            active: true,
-            type: 'popover',
-            start_date: '2021-01-01T00:00:00Z',
-            questions: [{ type: 'open', question: 'What is your role?' }],
-        },
-    ]
     beforeEach(() => {
         cy.intercept('POST', '**/decide/*', {
             config: { enable_collect_everything: false },
@@ -51,23 +41,24 @@ describe('Surveys', () => {
     })
 
     it('shows confirmation message after submitting', () => {
-        mockSurveys = [
-            {
-                id: '1234',
-                name: 'Test survey 2',
-                active: true,
-                type: 'popover',
-                start_date: '2021-01-01T00:00:00Z',
-                questions: [{ type: 'rating', display: 'number', scale: 10, question: 'Would you recommend surveys?' }],
-                appearance: {
-                    displayThankYouMessage: true,
-                    thankyouMessageHeader: 'Thanks!',
-                    thankyouMessageBody: 'We appreciate your feedback.',
-                },
-            },
-        ]
         cy.intercept('GET', '**/surveys/*', {
-            surveys: mockSurveys,
+            surveys: [
+                {
+                    id: '1234',
+                    name: 'Test survey 2',
+                    active: true,
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [
+                        { type: 'rating', display: 'number', scale: 10, question: 'Would you recommend surveys?' },
+                    ],
+                    appearance: {
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thanks!',
+                        thankyouMessageBody: 'We appreciate your feedback.',
+                    },
+                },
+            ],
         }).as('surveys')
         cy.visit('./playground/cypress')
         onPageLoad()
