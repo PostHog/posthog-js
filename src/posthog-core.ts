@@ -998,6 +998,7 @@ export class PostHog {
             properties['$browser_type'] = _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
                 ? 'bot'
                 : 'browser'
+            properties['$useragent'] = userAgent
         }
 
         // note: extend writes to the first object, so lets make sure we

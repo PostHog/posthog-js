@@ -161,6 +161,7 @@ describe('posthog core', () => {
             const event = given.subject()
             expect(hook).toHaveBeenCalledWith('$event')
             expect(event.properties['$browser_type']).toEqual('bot')
+            expect(event.properties['$useragent']).toContain('Googlebot')
 
             // eslint-disable-next-line no-import-assign
             globals['userAgent'] = originalUseragent
