@@ -90,6 +90,8 @@ export interface PostHogConfig {
     ip: boolean
     opt_out_capturing_by_default: boolean
     opt_out_persistence_by_default: boolean
+    /** Opt out of user agent filtering such as googlebot or other bots. Defaults to `false` */
+    opt_out_useragent_filter: boolean
     opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean

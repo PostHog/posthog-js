@@ -48,9 +48,9 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'storebot-google',
 ]
 
-// _.isBlockedUA()
-// This is to block various web spiders from executing our JS and
-// sending false capturing data
+/**
+ * Block various web spiders from executing our JS and sending false capturing data
+ */
 export const _isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
     if (!ua) {
         return false
