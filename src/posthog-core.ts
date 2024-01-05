@@ -994,8 +994,11 @@ export class PostHog {
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
 
-        properties['$browser_type'] =
-            userAgent && _isBlockedUA(userAgent, this.config.custom_blocked_useragents) ? 'bot' : 'browser'
+        if (userAgent) {
+            properties['$browser_type'] = _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+                ? 'bot'
+                : 'browser'
+        }
 
         // note: extend writes to the first object, so lets make sure we
         // don't write to the persistence properties object and info
