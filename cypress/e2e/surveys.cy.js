@@ -1,4 +1,5 @@
 /// <reference types="cypress" />
+import { getBase64EncodedPayload } from '../support/compression'
 
 function onPageLoad() {
     cy.posthogInit(given.options)
@@ -26,7 +27,7 @@ describe('Surveys', () => {
                     active: true,
                     type: 'popover',
                     start_date: '2021-01-01T00:00:00Z',
-                    questions: [{ type: 'open', question: 'What is your role?' }],
+                    questions: [{ type: 'open', question: 'What is your role?', description: 'test description' }],
                 },
             ],
         }).as('surveys')
@@ -35,6 +36,8 @@ describe('Surveys', () => {
         cy.wait(500)
         const survey = cy.get('.PostHogSurvey123').shadow()
         survey.find('.survey-123-form').should('be.visible')
+        cy.get('.PostHogSurvey123').shadow().find('.survey-question').should('have.text', 'What is your role?')
+        cy.get('.PostHogSurvey123').shadow().find('.description').should('have.text', 'test description')
         survey.find('.question-textarea-wrapper').type('product engineer')
         cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
         cy.phCaptures().should('include', 'survey sent')
@@ -118,5 +121,64 @@ describe('Surveys', () => {
         cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(2).click()
         cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(3).click()
         expect(cy.get('.PostHogSurvey12345').shadow().find('.thank-you-message').should('be.visible'))
+    })
+
+    describe('survey response capture', () => {
+        it('captures survey shown and survey dismissed events', () => {
+            cy.visit('./playground/cypress')
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        active: true,
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [{ type: 'open', question: 'What is a survey event capture test?' }],
+                    },
+                ],
+            }).as('surveys')
+            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            onPageLoad()
+            // first capture is $pageview
+            cy.wait('@capture-assertion')
+            cy.wait('@capture-assertion').then(async ({ request }) => {
+                const captures = await getBase64EncodedPayload(request)
+                expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown'])
+            })
+            cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
+            cy.wait('@capture-assertion').then(async ({ request }) => {
+                const captures = await getBase64EncodedPayload(request)
+                expect(captures.map(({ event }) => event)).to.deep.equal(['survey dismissed'])
+            })
+        })
+
+        it('captures survey sent event', () => {
+            cy.visit('./playground/cypress')
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        active: true,
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [{ type: 'open', question: 'What is a survey event capture test?' }],
+                    },
+                ],
+            }).as('surveys')
+            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.question-textarea-wrapper').type('product engineer')
+            cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
+            cy.wait('@capture-assertion')
+            cy.wait('@capture-assertion').then(async ({ request }) => {
+                const captures = await getBase64EncodedPayload(request)
+                expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey sent'])
+                expect(captures[1].properties).to.contain({ $survey_id: '123', $survey_response: 'product engineer' })
+            })
+        })
     })
 })
