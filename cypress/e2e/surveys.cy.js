@@ -87,7 +87,7 @@ describe('Surveys', () => {
                             type: 'multiple_choice',
                             choices: ['Tutorials', 'Product Updates', 'Events', 'Other'],
                         },
-                        { type: 'open', question: 'Why?', optional: true },
+                        { type: 'open', question: 'Why?' },
                         {
                             type: 'rating',
                             display: 'emoji',
@@ -110,6 +110,7 @@ describe('Surveys', () => {
                 },
             ],
         }).as('surveys')
+        cy.intercept('POST', '**/e/*').as('capture-assertion')
         cy.visit('./playground/cypress')
         onPageLoad()
         cy.wait(500)
@@ -117,9 +118,26 @@ describe('Surveys', () => {
         cy.get('.PostHogSurvey12345').shadow().find('#surveyQuestion0Choice1').click()
         cy.get('.PostHogSurvey12345').shadow().find('#surveyQuestion0Choice2').click()
         cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(0).click()
+        cy.get('.PostHogSurvey12345')
+            .shadow()
+            .find('.question-textarea-wrapper')
+            .first()
+            .type('Because I want to learn more about PostHog')
         cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(1).click()
         cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(2).click()
         cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(3).click()
+        cy.wait('@capture-assertion')
+        cy.wait('@capture-assertion').then(async ({ request }) => {
+            const captures = await getBase64EncodedPayload(request)
+            expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey sent'])
+            expect(captures[1].properties['$survey_response']).to.deep.equal(['Product Updates', 'Events'])
+            expect(captures[1].properties).to.contain({
+                $survey_id: '12345',
+                $survey_response_1: 'Because I want to learn more about PostHog',
+                $survey_response_2: null,
+                $survey_response_3: 'link clicked',
+            })
+        })
         expect(cy.get('.PostHogSurvey12345').shadow().find('.thank-you-message').should('be.visible'))
     })
 
@@ -143,14 +161,10 @@ describe('Surveys', () => {
             onPageLoad()
             // first capture is $pageview
             cy.wait('@capture-assertion')
-            cy.wait('@capture-assertion').then(async ({ request }) => {
-                const captures = await getBase64EncodedPayload(request)
-                expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown'])
-            })
             cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getBase64EncodedPayload(request)
-                expect(captures.map(({ event }) => event)).to.deep.equal(['survey dismissed'])
+                expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey dismissed'])
             })
         })
 
