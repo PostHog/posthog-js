@@ -369,7 +369,6 @@ describe('posthog core', () => {
 
         it('returns calculated properties', () => {
             expect(given.subject).toEqual({
-                $browser_type: 'browser',
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -384,7 +383,6 @@ describe('posthog core', () => {
             given('property_blacklist', () => ['$lib', 'persistent'])
 
             expect(given.subject).toEqual({
-                $browser_type: 'browser',
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
