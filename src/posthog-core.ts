@@ -103,6 +103,7 @@ export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
     api_method: 'POST',
     api_transport: 'XHR',
+    asset_host: undefined,
     ui_host: null,
     token: '',
     autocapture: true,
@@ -1605,6 +1606,9 @@ export class PostHog {
      *       // the original web app host needs to be passed here so that links to the web app are still convenient.
      *       ui_host: 'https://app.posthog.com',
      *
+     *       // Host to load static assets from. If undefined falls back to api_host
+     *       asset_host: undefined,
+     *
      *       // Automatically capture clicks, form submissions and change events
      *       autocapture: true
      *
@@ -1742,6 +1746,9 @@ export class PostHog {
             // us.posthog.com is only for the web app, so we don't allow that to be used as a capture endpoint
             if (this.config.api_host === 'https://us.posthog.com') {
                 this.config.api_host = 'https://app.posthog.com'
+            }
+            if (this.config.asset_host === undefined) {
+                this.config.asset_host = this.config.api_host
             }
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)

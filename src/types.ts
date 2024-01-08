@@ -59,6 +59,7 @@ export interface PostHogConfig {
     api_host: string
     api_method: string
     api_transport: string
+    asset_host?: string
     ui_host: string | null
     token: string
     autocapture: boolean | AutocaptureConfig

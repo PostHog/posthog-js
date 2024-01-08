@@ -89,6 +89,7 @@ describe('SessionRecording', () => {
 
         config = {
             api_host: 'https://test.com',
+            asset_host: 'https://test.com',
             disable_session_recording: false,
             enable_recording_console_log: false,
             autocapture: false, // Assert that session recording works even if `autocapture = false`
