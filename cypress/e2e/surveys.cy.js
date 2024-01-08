@@ -13,7 +13,6 @@ describe('Surveys', () => {
         cy.intercept('POST', '**/decide/*', {
             config: { enable_collect_everything: false },
             editorParams: {},
-            featureFlags: ['session-recording-player'],
             surveys: true,
             isAuthenticated: false,
         }).as('decide')
