@@ -33,6 +33,7 @@ beforeEach(() => {
     cy.intercept('POST', '**/decide/*').as('decide')
     cy.intercept('POST', '**/e/*').as('capture')
     cy.intercept('POST', '**/ses/*').as('session-recording')
+    cy.intercept('GET', '**/surveys/*').as('surveys')
 
     cy.readFile('dist/array.full.js').then((body) => {
         cy.intercept('**/static/array.full.js', { body })
@@ -44,5 +45,9 @@ beforeEach(() => {
 
     cy.readFile('dist/recorder.js').then((body) => {
         cy.intercept('**/static/recorder.js*', { body }).as('recorder')
+    })
+
+    cy.readFile('dist/surveys.js').then((body) => {
+        cy.intercept('**/static/surveys.js*', { body })
     })
 })
