@@ -1,3 +1,7 @@
+## 1.97.1 - 2024-01-09
+
+- fix(surveys): fix feedback widget bugs (#953)
+
 ## 1.97.0 - 2024-01-09
 
 - fix: add a comment explaining browser type prop (#952)
