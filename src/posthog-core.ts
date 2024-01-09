@@ -130,6 +130,7 @@ export const defaultConfig = (): PostHogConfig => ({
     ip: true,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
+    opt_out_useragent_filter: false,
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
@@ -866,7 +867,11 @@ export class PostHog {
             return
         }
 
-        if (userAgent && _isBlockedUA(userAgent, this.config.custom_blocked_useragents)) {
+        if (
+            userAgent &&
+            !this.config.opt_out_useragent_filter &&
+            _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+        ) {
             return
         }
 
@@ -987,6 +992,12 @@ export class PostHog {
         if (!_isUndefined(start_timestamp)) {
             const duration_in_ms = new Date().getTime() - start_timestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+        }
+
+        if (userAgent && this.config.opt_out_useragent_filter) {
+            properties['$browser_type'] = _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+                ? 'bot'
+                : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -1630,6 +1641,9 @@ export class PostHog {
      *
      *       // opt users out of browser data storage by this PostHog instance by default
      *       opt_out_persistence_by_default: false
+     *
+     *       // opt out of user agent filtering such as googlebot or other bots
+     *       opt_out_useragent_filter: false
      *
      *       // persistence mechanism used by opt-in/opt-out methods - cookie
      *       // or localStorage - falls back to cookie if localStorage is unavailable
