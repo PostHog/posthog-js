@@ -994,6 +994,8 @@ export class PostHog {
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
 
+        // this is only added when this.config.opt_out_useragent_filter is true,
+        // or it would always add "browser"
         if (userAgent && this.config.opt_out_useragent_filter) {
             properties['$browser_type'] = _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
                 ? 'bot'
