@@ -18,11 +18,13 @@ export class SurveysWidget {
     instance: PostHog
     survey: Survey
     shadow: any
+    widget?: any
 
-    constructor(instance: PostHog, survey: Survey) {
+    constructor(instance: PostHog, survey: Survey, widget?: any) {
         this.instance = instance
         this.survey = survey
         this.shadow = this.createWidgetShadow()
+        this.widget = widget
     }
 
     createWidget(): void {
@@ -36,26 +38,27 @@ export class SurveysWidget {
         } else if (this.survey.appearance?.widgetType === 'button') {
             widget = this.createButtonWidget()
         }
+        this.widget = widget
         if (this.survey.appearance?.widgetType !== 'selector') {
-            this.shadow.appendChild(widget)
+            this.shadow.appendChild(this.widget)
         }
         setTextColors(this.shadow)
         // reposition survey next to widget when opened
-        if (surveyPopup && this.survey.appearance?.widgetType === 'tab' && widget) {
+        if (surveyPopup && this.survey.appearance?.widgetType === 'tab' && this.widget) {
             surveyPopup.style.bottom = 'auto'
             surveyPopup.style.borderBottom = `1.5px solid ${this.survey.appearance?.borderColor || '#c9c6c6'}`
             surveyPopup.style.borderRadius = '10px'
-            const widgetPos = widget.getBoundingClientRect()
+            const widgetPos = this.widget.getBoundingClientRect()
             surveyPopup.style.top = '50%'
             surveyPopup.style.left = `${widgetPos.right - 360}px`
         }
-        if (widget) {
-            widget.addEventListener('click', () => {
+        if (this.widget) {
+            this.widget.addEventListener('click', () => {
                 if (surveyPopup) {
                     surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
                 }
             })
-            widget.setAttribute('PHWidgetSurveyClickListener', 'true')
+            this.widget.setAttribute('PHWidgetSurveyClickListener', 'true')
             surveyPopup?.addEventListener('PHSurveyClosed', () => (surveyPopup.style.display = 'none'))
         }
     }
@@ -121,7 +124,18 @@ export class SurveysWidget {
             if (this.survey.appearance?.displayThankYouMessage) {
                 window.addEventListener('PHSurveySent', () => {
                     const thankYouElement = createThankYouMessage(this.survey)
+                    if (thankYouElement && this.survey.appearance?.widgetType === 'tab') {
+                        thankYouElement.style.bottom = 'auto'
+                        thankYouElement.style.borderBottom = `1.5px solid ${
+                            this.survey.appearance?.borderColor || '#c9c6c6'
+                        }`
+                        thankYouElement.style.borderRadius = '10px'
+                        const widgetPos = this.widget.getBoundingClientRect()
+                        thankYouElement.style.top = '50%'
+                        thankYouElement.style.left = `${widgetPos.right - 400}px`
+                    }
                     this.shadow.appendChild(thankYouElement)
+                    // reposition thank you box next to widget when opened
                     const cancelButtons = thankYouElement.querySelectorAll('.form-cancel, .form-submit')
                     for (const button of cancelButtons) {
                         button.addEventListener('click', () => {
