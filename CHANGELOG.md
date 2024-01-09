@@ -1,3 +1,10 @@
+## 1.97.0 - 2024-01-09
+
+- fix: add a comment explaining browser type prop (#952)
+- feat: add opt_out_useragent_filter and $browser_type (#949)
+- chore(surveys): add basic survey e2e tests (#948)
+- Tidying and removing of old value (#941)
+
 ## 1.96.1 - 2023-12-15
 
 - Add gas_source to campaign params (#934)
