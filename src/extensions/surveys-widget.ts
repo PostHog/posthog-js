@@ -8,7 +8,7 @@ import {
     style,
 } from './surveys/surveys-utils'
 import { document as _document, window as _window } from '../utils/globals'
-import { createThankYouMessage } from './surveys'
+import { addCancelListeners, createThankYouMessage } from './surveys'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const document = _document as Document
@@ -59,7 +59,18 @@ export class SurveysWidget {
                 }
             })
             this.widget.setAttribute('PHWidgetSurveyClickListener', 'true')
-            surveyPopup?.addEventListener('PHSurveyClosed', () => (surveyPopup.style.display = 'none'))
+            if (surveyPopup) {
+                window.addEventListener('PHSurveySent', () => {
+                    if (surveyPopup) {
+                        surveyPopup.style.display = 'none'
+                    }
+                    const tabs = document
+                        ?.getElementsByClassName(`PostHogWidget${this.survey.id}`)[0]
+                        ?.shadowRoot?.querySelectorAll('.tab') as NodeListOf<HTMLElement>
+                    tabs.forEach((tab) => (tab.style.display = 'none'))
+                    showQuestion(0, this.survey.id, this.survey.type)
+                })
+            }
         }
     }
 
@@ -103,6 +114,13 @@ export class SurveysWidget {
                 : createSingleQuestionSurvey(this.instance, this.survey, this.survey.questions[0])
         if (widgetSurvey) {
             widgetSurvey.style.display = 'none'
+            addCancelListeners(this.instance, widgetSurvey as HTMLFormElement, this.survey.id, this.survey.name)
+            if (this.survey.appearance?.whiteLabel) {
+                const allBrandingElements = widgetSurvey.getElementsByClassName('footer-branding')
+                for (const brandingElement of allBrandingElements) {
+                    ;(brandingElement as HTMLAnchorElement).style.display = 'none'
+                }
+            }
             this.shadow.appendChild(widgetSurvey)
             if (this.survey.questions.length > 1) {
                 const currentQuestion = 0
@@ -115,12 +133,6 @@ export class SurveysWidget {
                 $survey_id: this.survey.id,
                 sessionRecordingUrl: this.instance.get_session_replay_url?.(),
             })
-            if (this.survey.appearance?.whiteLabel) {
-                const allBrandingElements = widgetSurvey.getElementsByClassName('footer-branding')
-                for (const brandingElement of allBrandingElements) {
-                    ;(brandingElement as HTMLAnchorElement).style.display = 'none'
-                }
-            }
             if (this.survey.appearance?.displayThankYouMessage) {
                 window.addEventListener('PHSurveySent', () => {
                     const thankYouElement = createThankYouMessage(this.survey)
@@ -160,8 +172,6 @@ export class SurveysWidget {
                 })
             }
         }
-        // add survey cancel listener
-        widgetSurvey?.addEventListener('PHSurveyClosed', () => (widgetSurvey.style.display = 'none'))
         return widgetSurvey as HTMLFormElement
     }
 
