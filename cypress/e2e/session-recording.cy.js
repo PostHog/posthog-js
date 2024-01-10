@@ -273,7 +273,7 @@ describe('Session recording', () => {
 
                         expect(captures[0]['properties']['$session_id']).to.be.a('string')
                         expect(captures[0]['properties']['$session_id']).not.to.eq(firstSessionId)
-
+                        cy.log(captures[0]['properties']['$snapshot_data'])
                         expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(0)
                         expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
