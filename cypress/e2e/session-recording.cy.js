@@ -44,8 +44,9 @@ describe('Session recording', () => {
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
                         // Making a set from the rest should all be 3 - incremental snapshots
-                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(2)
+                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(3)
                         expect(new Set(incrementalSnapshots.map((s) => s.type))).to.deep.equal(new Set([3]))
                     })
                 })
@@ -84,9 +85,10 @@ describe('Session recording', () => {
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
                         // Making a set from the rest should all be 3 - incremental snapshots
                         expect(
-                            new Set(captures[1]['properties']['$snapshot_data'].slice(2).map((s) => s.type))
+                            new Set(captures[1]['properties']['$snapshot_data'].slice(3).map((s) => s.type))
                         ).to.deep.equal(new Set([3]))
                     })
                 })
@@ -205,9 +207,10 @@ describe('Session recording', () => {
                     // a meta and then a full snapshot
                     expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                     expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                    expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
 
                     const xPositions = []
-                    for (let i = 2; i < captures[1]['properties']['$snapshot_data'].length; i++) {
+                    for (let i = 3; i < captures[1]['properties']['$snapshot_data'].length; i++) {
                         expect(captures[1]['properties']['$snapshot_data'][i].type).to.equal(3)
                         expect(captures[1]['properties']['$snapshot_data'][i].data.source).to.equal(
                             6,
