@@ -469,11 +469,12 @@ export class SessionRecording {
                 },
             })
 
+        const activePlugins = this._gatherRRWebPlugins()
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
-            plugins: this._gatherRRWebPlugins(),
+            plugins: activePlugins,
             ...sessionRecordingOptions,
         })
 
@@ -498,6 +499,11 @@ export class SessionRecording {
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
         this.isIdle = false
+
+        this._tryAddCustomEvent('$session_options', {
+            sessionRecordingOptions,
+            activePlugins: activePlugins.map((p) => p?.name),
+        })
     }
 
     private _gatherRRWebPlugins() {

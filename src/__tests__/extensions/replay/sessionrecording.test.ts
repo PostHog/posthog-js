@@ -179,11 +179,34 @@ describe('SessionRecording', () => {
             // need to cast as any to mock private methods
             jest.spyOn(sessionRecording as any, 'startCaptureAndTrySendingQueuedSnapshots')
             jest.spyOn(sessionRecording, 'stopRecording')
+            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
         })
 
         it('call startCaptureAndTrySendingQueuedSnapshots if its enabled', () => {
             sessionRecording.startRecordingIfEnabled()
             expect((sessionRecording as any).startCaptureAndTrySendingQueuedSnapshots).toHaveBeenCalled()
+        })
+
+        it('emits an options event', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$session_options', {
+                activePlugins: [],
+                sessionRecordingOptions: {
+                    blockClass: 'ph-no-capture',
+                    blockSelector: undefined,
+                    collectFonts: false,
+                    ignoreClass: 'ph-ignore-input',
+                    inlineStylesheet: true,
+                    maskAllInputs: false,
+                    maskInputFn: undefined,
+                    maskInputOptions: {},
+                    maskTextClass: 'ph-mask',
+                    maskTextFn: undefined,
+                    maskTextSelector: undefined,
+                    recordCrossOriginIframes: false,
+                    slimDOMOptions: {},
+                },
+            })
         })
 
         it('call stopRecording if its not enabled', () => {
