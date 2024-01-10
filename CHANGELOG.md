@@ -1,3 +1,7 @@
+## 1.98.0 - 2024-01-10
+
+- feat: capture session options in a custom event (#954)
+
 ## 1.97.1 - 2024-01-09
 
 - fix(surveys): fix feedback widget bugs (#953)
