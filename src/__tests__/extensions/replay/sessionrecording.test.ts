@@ -54,8 +54,6 @@ describe('SessionRecording', () => {
     let onFeatureFlagsCallback: ((flags: string[]) => void) | null
 
     beforeEach(() => {
-        ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
-
         assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
             _emit = emit
             return () => {}
