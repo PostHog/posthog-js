@@ -500,7 +500,7 @@ export class SessionRecording {
         this._lastActivityTimestamp = Date.now()
         this.isIdle = false
 
-        this._tryAddCustomEvent('$session_options', {
+        this.rrwebRecord?.addCustomEvent('$session_options', {
             sessionRecordingOptions,
             activePlugins: activePlugins.map((p) => p?.name),
         })

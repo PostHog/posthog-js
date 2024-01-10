@@ -54,9 +54,14 @@ describe('SessionRecording', () => {
     let onFeatureFlagsCallback: ((flags: string[]) => void) | null
 
     beforeEach(() => {
-        assignableWindow.rrwebRecord = jest.fn()
+        assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
+            _emit = emit
+            return () => {}
+        })
+        assignableWindow.rrwebRecord.takeFullSnapshot = jest.fn()
+        assignableWindow.rrwebRecord.addCustomEvent = _addCustomEvent
         _addCustomEvent.mockClear()
-        assignableWindow.rrwebRecord = _addCustomEvent
+
         assignableWindow.rrwebConsoleRecord = {
             getRecordConsolePlugin: jest.fn(),
         }
@@ -179,7 +184,6 @@ describe('SessionRecording', () => {
             // need to cast as any to mock private methods
             jest.spyOn(sessionRecording as any, 'startCaptureAndTrySendingQueuedSnapshots')
             jest.spyOn(sessionRecording, 'stopRecording')
-            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
         })
 
         it('call startCaptureAndTrySendingQueuedSnapshots if its enabled', () => {
@@ -189,7 +193,7 @@ describe('SessionRecording', () => {
 
         it('emits an options event', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$session_options', {
+            expect(_addCustomEvent).toHaveBeenCalledWith('$session_options', {
                 activePlugins: [],
                 sessionRecordingOptions: {
                     blockClass: 'ph-no-capture',
@@ -205,6 +209,7 @@ describe('SessionRecording', () => {
                     maskTextSelector: undefined,
                     recordCrossOriginIframes: false,
                     slimDOMOptions: {},
+                    checkoutEveryNms: 10 * 60 * 1000,
                 },
             })
         })
@@ -220,10 +225,6 @@ describe('SessionRecording', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording, 'startRecordingIfEnabled')
             ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
-            assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
-                _emit = emit
-                return () => {}
-            })
         })
 
         it('buffers snapshots until decide is received and drops them if disabled', () => {
@@ -1009,13 +1010,6 @@ describe('SessionRecording', () => {
     })
 
     describe('buffering minimum duration', () => {
-        beforeEach(() => {
-            assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
-                _emit = emit
-                return () => {}
-            })
-        })
-
         it('can report no duration when no data', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording['status']).toBe('buffering')
