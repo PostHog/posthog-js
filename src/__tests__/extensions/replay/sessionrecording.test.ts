@@ -969,78 +969,78 @@ describe('SessionRecording', () => {
                     expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
                 })
             })
+        })
+    })
 
-            describe('idle timeouts', () => {
-                it("enters idle state if the activity is non-user generated and there's no activity for 5 seconds", () => {
-                    sessionRecording.startRecordingIfEnabled()
-                    const lastActivityTimestamp = sessionRecording['_lastActivityTimestamp']
-                    expect(lastActivityTimestamp).toBeGreaterThan(0)
+    describe('idle timeouts', () => {
+        it("enters idle state if the activity is non-user generated and there's no activity for 5 seconds", () => {
+            sessionRecording.startRecordingIfEnabled()
+            const lastActivityTimestamp = sessionRecording['_lastActivityTimestamp']
+            expect(lastActivityTimestamp).toBeGreaterThan(0)
 
-                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
 
-                    _emit({
-                        event: 123,
-                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                        data: {
-                            source: 1,
-                        },
-                        timestamp: lastActivityTimestamp + 100,
-                    })
-                    expect(sessionRecording['isIdle']).toEqual(false)
-                    expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
-
-                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
-
-                    _emit({
-                        event: 123,
-                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                        data: {
-                            source: 0,
-                        },
-                        timestamp: lastActivityTimestamp + 200,
-                    })
-                    expect(sessionRecording['isIdle']).toEqual(false)
-                    expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
-                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
-
-                    // this triggers idle state and isn't a user interaction so does not take a full snapshot
-                    _emit({
-                        event: 123,
-                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                        data: {
-                            source: 0,
-                        },
-                        timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000,
-                    })
-                    expect(sessionRecording['isIdle']).toEqual(true)
-                    expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', {
-                        reason: 'user inactivity',
-                        threshold: 300000,
-                        timeSinceLastActive: 300900,
-                    })
-                    expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
-                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
-
-                    // this triggers idle state _and_ is a user interaction, so we take a full snapshot
-                    _emit({
-                        event: 123,
-                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                        data: {
-                            source: 1,
-                        },
-                        timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000,
-                    })
-                    expect(sessionRecording['isIdle']).toEqual(false)
-                    expect(_addCustomEvent).toHaveBeenCalledWith('sessionNoLongerIdle', {
-                        reason: 'user activity',
-                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                    })
-                    expect(sessionRecording['_lastActivityTimestamp']).toEqual(
-                        lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
-                    )
-                    expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
-                })
+            _emit({
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 1,
+                },
+                timestamp: lastActivityTimestamp + 100,
             })
+            expect(sessionRecording['isIdle']).toEqual(false)
+            expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
+
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+            _emit({
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 0,
+                },
+                timestamp: lastActivityTimestamp + 200,
+            })
+            expect(sessionRecording['isIdle']).toEqual(false)
+            expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+            // this triggers idle state and isn't a user interaction so does not take a full snapshot
+            _emit({
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 0,
+                },
+                timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000,
+            })
+            expect(sessionRecording['isIdle']).toEqual(true)
+            expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', {
+                reason: 'user inactivity',
+                threshold: 300000,
+                timeSinceLastActive: 300900,
+            })
+            expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+            // this triggers idle state _and_ is a user interaction, so we take a full snapshot
+            _emit({
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 1,
+                },
+                timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000,
+            })
+            expect(sessionRecording['isIdle']).toEqual(false)
+            expect(_addCustomEvent).toHaveBeenCalledWith('sessionNoLongerIdle', {
+                reason: 'user activity',
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+            })
+            expect(sessionRecording['_lastActivityTimestamp']).toEqual(
+                lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
+            )
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
         })
     })
 
