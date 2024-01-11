@@ -397,6 +397,7 @@ export class SessionRecording {
             }
         }
 
+        let returningFromIdle = false
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
@@ -406,7 +407,7 @@ export class SessionRecording {
                     reason: 'user activity',
                     type: event.type,
                 })
-                this._tryTakeFullSnapshot()
+                returningFromIdle = true
             }
         }
 
@@ -427,8 +428,9 @@ export class SessionRecording {
         this.sessionId = sessionId
 
         if (
-            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-            (windowIdChanged || sessionIdChanged)
+            returningFromIdle ||
+            ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
+                (windowIdChanged || sessionIdChanged))
         ) {
             this._tryTakeFullSnapshot()
         }

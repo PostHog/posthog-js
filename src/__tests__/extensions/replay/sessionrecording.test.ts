@@ -973,47 +973,75 @@ describe('SessionRecording', () => {
     })
 
     describe('idle timeouts', () => {
-        it("enters idle state if the activity is non-user generated and there's no activity for 5 seconds", () => {
+        it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
             sessionRecording.startRecordingIfEnabled()
             const lastActivityTimestamp = sessionRecording['_lastActivityTimestamp']
             expect(lastActivityTimestamp).toBeGreaterThan(0)
 
             expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
 
-            _emit({
+            // the buffer starts out empty
+            expect(sessionRecording['buffer']).toEqual({
+                data: [],
+                sessionId: null,
+                size: 0,
+                windowId: null,
+            })
+
+            const firstSnapshotEvent = {
                 event: 123,
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 data: {
                     source: 1,
                 },
                 timestamp: lastActivityTimestamp + 100,
-            })
+            }
+            _emit(firstSnapshotEvent)
             expect(sessionRecording['isIdle']).toEqual(false)
             expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
 
             expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
-            _emit({
+            const firstSessionId = sessionRecording['sessionId']
+            // after the first emit the buffer has been initialised but not flushed
+            expect(sessionRecording['buffer']).toEqual({
+                data: [firstSnapshotEvent],
+                sessionId: firstSessionId,
+                size: 68,
+                windowId: expect.any(String),
+            })
+
+            const secondSnapshot = {
                 event: 123,
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 data: {
                     source: 0,
                 },
                 timestamp: lastActivityTimestamp + 200,
-            })
+            }
+            _emit(secondSnapshot)
             expect(sessionRecording['isIdle']).toEqual(false)
             expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
             expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
+            // the second snapshot remains buffered in memory
+            expect(sessionRecording['buffer']).toEqual({
+                data: [firstSnapshotEvent, secondSnapshot],
+                sessionId: firstSessionId,
+                size: 136,
+                windowId: expect.any(String),
+            })
+
             // this triggers idle state and isn't a user interaction so does not take a full snapshot
-            _emit({
+            const thirdSnapshot = {
                 event: 123,
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 data: {
                     source: 0,
                 },
                 timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000,
-            })
+            }
+            _emit(thirdSnapshot)
             expect(sessionRecording['isIdle']).toEqual(true)
             expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', {
                 reason: 'user inactivity',
@@ -1023,15 +1051,25 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_lastActivityTimestamp']).toEqual(lastActivityTimestamp + 100)
             expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
-            // this triggers idle state _and_ is a user interaction, so we take a full snapshot
-            _emit({
+            // the third snapshot is dropped since it switches the session to idle
+            // the custom event doesn't show here since there's not a real rrweb to emit it
+            expect(sessionRecording['buffer']).toEqual({
+                data: [firstSnapshotEvent, secondSnapshot],
+                sessionId: firstSessionId,
+                size: 136,
+                windowId: expect.any(String),
+            })
+
+            // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
+            const fourthSnapshot = {
                 event: 123,
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 data: {
                     source: 1,
                 },
                 timestamp: lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000,
-            })
+            }
+            _emit(fourthSnapshot)
             expect(sessionRecording['isIdle']).toEqual(false)
             expect(_addCustomEvent).toHaveBeenCalledWith('sessionNoLongerIdle', {
                 reason: 'user activity',
@@ -1041,6 +1079,157 @@ describe('SessionRecording', () => {
                 lastActivityTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
             )
             expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+
+            // this interaction is considered part of the existing session because a new session id has not been generated
+            expect(sessionRecording['buffer']).toEqual({
+                data: [firstSnapshotEvent, secondSnapshot, fourthSnapshot],
+                sessionId: firstSessionId,
+                size: 204,
+                windowId: expect.any(String),
+            })
+
+            // because not enough time passed while idle we still have the same session id at the end of this sequence
+            const endingSessionId = sessionRecording['sessionId']
+            expect(endingSessionId).toEqual(firstSessionId)
+        })
+
+        it('rotates session if idle for (MAX_SESSION_IDLE_TIMEOUT) 30 minutes', () => {
+            sessionRecording.startRecordingIfEnabled()
+            const lastActivityTimestamp = sessionRecording['_lastActivityTimestamp']
+            expect(lastActivityTimestamp).toBeGreaterThan(0)
+
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(0)
+
+            // the buffer starts out empty
+            expect(sessionRecording['buffer']).toEqual({
+                data: [],
+                sessionId: null,
+                size: 0,
+                windowId: null,
+            })
+
+            const firstActivityTimestamp = lastActivityTimestamp + 100
+            const firstSnapshotEvent = {
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 1,
+                },
+                timestamp: firstActivityTimestamp,
+            }
+            _emit(firstSnapshotEvent)
+            expect(sessionRecording['isIdle']).toEqual(false)
+            expect(sessionRecording['_lastActivityTimestamp']).toEqual(firstActivityTimestamp)
+
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+            const firstSessionId = sessionRecording['sessionId']
+            // after the first emit the buffer has been initialised but not flushed
+            expect(sessionRecording['buffer']).toEqual({
+                data: [firstSnapshotEvent],
+                sessionId: firstSessionId,
+                size: 68,
+                windowId: expect.any(String),
+            })
+
+            // the session id generator returns a fixed value but we want it to rotate in part of this test
+            sessionIdGeneratorMock.mockClear()
+            const rotatedSessionId = 'rotated-session-id'
+            sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+
+            const secondActivityTimestamp = lastActivityTimestamp + 200
+            const secondSnapshot = {
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 0,
+                },
+                timestamp: secondActivityTimestamp,
+            }
+            _emit(secondSnapshot)
+            expect(sessionRecording['isIdle']).toEqual(false)
+            // TODO why is this not the second activity timestamp 🙃
+            expect(sessionRecording['_lastActivityTimestamp']).toEqual(firstActivityTimestamp)
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+            expect(sessionIdGeneratorMock).not.toHaveBeenCalled()
+
+            // the second snapshot remains buffered in memory
+            expect(sessionRecording['buffer']).toEqual({
+                data: [firstSnapshotEvent, secondSnapshot],
+                sessionId: firstSessionId,
+                size: 136,
+                windowId: expect.any(String),
+            })
+
+            // this triggers idle state and isn't a user interaction so does not take a full snapshot
+            const thirdActivityTimestamp = sessionManager['_sessionTimeoutMs'] + lastActivityTimestamp + 1
+            const thirdSnapshot = {
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 0,
+                },
+                // MAX_SESSION_IDLE_TIMEOUT is 30 minutes in _SECONDS_
+                timestamp: thirdActivityTimestamp,
+            }
+            _addCustomEvent.mockClear()
+            _emit(thirdSnapshot)
+            expect(sessionRecording['isIdle']).toEqual(true)
+            expect(_addCustomEvent.mock.calls).toEqual([
+                [
+                    'sessionIdle',
+                    {
+                        reason: 'user inactivity',
+                        threshold: 300000,
+                        timeSinceLastActive: 1799901,
+                    },
+                ],
+            ])
+            expect(sessionRecording['_lastActivityTimestamp']).toEqual(firstActivityTimestamp)
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(1)
+            expect(sessionIdGeneratorMock).not.toHaveBeenCalled()
+
+            // the third snapshot is dropped since it switches the session to idle
+            // the custom event doesn't show here since there's not a real rrweb to emit it
+            expect(sessionRecording['buffer']).toEqual({
+                data: [firstSnapshotEvent, secondSnapshot],
+                sessionId: firstSessionId,
+                size: 136,
+                windowId: expect.any(String),
+            })
+
+            // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
+            const fourthActivityTimestamp = sessionManager['_sessionTimeoutMs'] + 1000
+            const fourthSnapshot = {
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 1,
+                },
+                timestamp: fourthActivityTimestamp,
+            }
+            _emit(fourthSnapshot)
+            expect(sessionRecording['isIdle']).toEqual(false)
+            expect(_addCustomEvent).toHaveBeenCalledWith('sessionNoLongerIdle', {
+                reason: 'user activity',
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+            })
+            expect(sessionRecording['_lastActivityTimestamp']).toEqual(fourthActivityTimestamp)
+            expect(assignableWindow.rrwebRecord.takeFullSnapshot).toHaveBeenCalledTimes(2)
+            expect(sessionIdGeneratorMock).toHaveBeenCalled()
+
+            // this interaction is considered part of the existing session
+            // even though it's the "last" activity that causes the session to rotate
+            expect(sessionRecording['buffer']).toEqual({
+                data: [firstSnapshotEvent, secondSnapshot, fourthSnapshot],
+                sessionId: firstSessionId,
+                size: 198,
+                windowId: expect.any(String),
+            })
+
+            // but enough time has passed while idle the session id should have changed
+            const endingSessionId = sessionRecording['sessionId']
+            expect(endingSessionId).toEqual(rotatedSessionId)
         })
     })
 
