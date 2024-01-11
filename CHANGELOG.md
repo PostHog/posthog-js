@@ -1,3 +1,7 @@
+## 1.98.2 - 2024-01-11
+
+- fix: Don't allow us.posthog.com to be used (#957)
+
 ## 1.98.1 - 2024-01-11
 
 - fix: set the session id as soon as it changes (#956)
