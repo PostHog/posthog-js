@@ -1,3 +1,8 @@
+## 1.98.1 - 2024-01-11
+
+- fix: set the session id as soon as it changes (#956)
+- fix: simplify test setup (#955)
+
 ## 1.98.0 - 2024-01-10
 
 - feat: capture session options in a custom event (#954)
