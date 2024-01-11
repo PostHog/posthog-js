@@ -54,9 +54,13 @@ describe('SessionRecording', () => {
     let onFeatureFlagsCallback: ((flags: string[]) => void) | null
 
     beforeEach(() => {
-        assignableWindow.rrwebRecord = jest.fn()
-        _addCustomEvent.mockClear()
-        assignableWindow.rrwebRecord = _addCustomEvent
+        assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
+            _emit = emit
+            return () => {}
+        })
+        assignableWindow.rrwebRecord.takeFullSnapshot = jest.fn()
+        assignableWindow.rrwebRecord.addCustomEvent = _addCustomEvent
+
         assignableWindow.rrwebConsoleRecord = {
             getRecordConsolePlugin: jest.fn(),
         }
@@ -219,11 +223,6 @@ describe('SessionRecording', () => {
     describe('afterDecideResponse()', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording, 'startRecordingIfEnabled')
-            ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
-            assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
-                _emit = emit
-                return () => {}
-            })
         })
 
         it('buffers snapshots until decide is received and drops them if disabled', () => {
@@ -302,17 +301,6 @@ describe('SessionRecording', () => {
     })
 
     describe('recording', () => {
-        beforeEach(() => {
-            const mockFullSnapshot = jest.fn()
-            assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
-                _emit = emit
-                return () => {}
-            })
-            assignableWindow.rrwebRecord.takeFullSnapshot = mockFullSnapshot
-            assignableWindow.rrwebRecord.addCustomEvent = _addCustomEvent
-            ;(loadScript as any).mockImplementation((_path: any, callback: any) => callback())
-        })
-
         describe('sampling', () => {
             it('does not emit to capture if the sample rate is 0', () => {
                 sessionRecording.startRecordingIfEnabled()
@@ -1082,13 +1070,6 @@ describe('SessionRecording', () => {
     })
 
     describe('buffering minimum duration', () => {
-        beforeEach(() => {
-            assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
-                _emit = emit
-                return () => {}
-            })
-        })
-
         it('can report no duration when no data', () => {
             sessionRecording.startRecordingIfEnabled()
             expect(sessionRecording['status']).toBe('buffering')
