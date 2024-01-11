@@ -1738,6 +1738,11 @@ export class PostHog {
 
             // We assume the api_host is without a trailing slash in most places throughout the codebase
             this.config.api_host = this.config.api_host.replace(/\/$/, '')
+
+            // us.posthog.com is only for the web app, so we don't allow that to be used as a capture endpoint
+            if (this.config.api_host === 'https://us.posthog.com') {
+                this.config.api_host = 'https://app.posthog.com'
+            }
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 
