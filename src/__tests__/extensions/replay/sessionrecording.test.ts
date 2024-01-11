@@ -251,20 +251,10 @@ describe('SessionRecording', () => {
             expect(sessionRecording['status']).toBe('buffering')
             expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
 
-            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            const incrementalSnapshot = createIncrementalSnapshot({ data: { source: 1 } })
+            _emit(incrementalSnapshot)
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {},
-                        type: 2,
-                    },
-                    {
-                        data: {
-                            source: 1,
-                        },
-                        type: 3,
-                    },
-                ],
+                data: [createFullSnapshot(), incrementalSnapshot],
                 sessionId: sessionId,
                 size: 50,
                 windowId: 'windowId',
