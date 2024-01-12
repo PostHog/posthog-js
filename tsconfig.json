@@ -20,7 +20,13 @@
         "inlineSources": true,
         "resolveJsonModule": true,
         "downlevelIteration": true,
-        "declaration": true
+        "declaration": true,
+        "jsx": "react",
+        "jsxFactory": "h",
+        "paths": {
+            "react": ["./node_modules/preact/compat/"],
+            "react-dom": ["./node_modules/preact/compat/"]
+          }
     },
-    "include": ["src/*.ts"]
+    "include": ["src/*.ts*"]
 }

@@ -1,5 +1,6 @@
 import babel from '@rollup/plugin-babel'
 import json from '@rollup/plugin-json'
+import alias from '@rollup/plugin-alias'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import dts from 'rollup-plugin-dts'
@@ -12,10 +13,19 @@ const plugins = [
     json(),
     resolve({ browser: true, modulesOnly: true }),
     typescript({ sourceMap: true }),
+    alias({
+        entries: [
+          { find: 'react', replacement: 'preact/compat' },
+          { find: 'react-dom/test-utils', replacement: 'preact/test-utils' },
+          { find: 'react-dom', replacement: 'preact/compat' },
+          { find: 'react/jsx-runtime', replacement: 'preact/jsx-runtime' }
+        ]
+      }),
     babel({
         extensions,
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
+        plugins: ['@babel/plugin-transform-react-jsx', { pragma: 'h'}]
     }),
     terser({ toplevel: true }),
     visualizer(),

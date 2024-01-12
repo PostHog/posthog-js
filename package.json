@@ -31,12 +31,15 @@
         "react/package.json"
     ],
     "dependencies": {
-        "fflate": "^0.4.1"
+        "@babel/plugin-transform-react-jsx": "^7.23.4",
+        "fflate": "^0.4.1",
+        "preact": "^10.19.3"
     },
     "devDependencies": {
         "@babel/core": "7.18.9",
         "@babel/preset-env": "7.18.9",
         "@babel/preset-typescript": "^7.18.6",
+        "@rollup/plugin-alias": "^5.1.0",
         "@rollup/plugin-babel": "^5.3.1",
         "@rollup/plugin-json": "^4.1.0",
         "@rollup/plugin-node-resolve": "^13.3.0",
@@ -87,7 +90,7 @@
         "testcafe": "1.19.0",
         "testcafe-browser-provider-browserstack": "1.14.0",
         "tslib": "^2.4.0",
-        "typescript": "^4.7.4",
+        "typescript": "^4.9.0",
         "yargs": "^17.7.2"
     },
     "lint-staged": {
