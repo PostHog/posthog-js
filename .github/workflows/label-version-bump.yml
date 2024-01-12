@@ -36,7 +36,7 @@ jobs:
                   if [[ $BUMP_MAJOR_PRESENT == 'true' ]]; then
                       BUMP_TYPE=major
                   fi
-                  echo "::set-output name=bump-type::$BUMP_TYPE"
+                  echo "bump-type=$BUMP_TYPE" >> $GITHUB_OUTPUT
               env:
                   BUMP_PATCH_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump patch') }}
                   BUMP_MINOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump minor') }}
@@ -48,8 +48,8 @@ jobs:
               run: |
                   OLD_VERSION=$(jq ".version" package.json -r)
                   NEW_VERSION=$(npx semver $OLD_VERSION -i ${{ steps.bump-type.outputs.bump-type }})
-                  echo "::set-output name=old-version::$OLD_VERSION"
-                  echo "::set-output name=new-version::$NEW_VERSION"
+                  echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
+                  echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
             - name: Update version in package.json
               if: steps.bump-type.outputs.bump-type != 'null'
