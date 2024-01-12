@@ -347,6 +347,10 @@ export class SessionRecording {
             return
         }
 
+        if (this.instance.config.opt_out_capturing_by_default) {
+            return
+        }
+
         // We do not switch recorder versions midway through a recording.
         if (this._captureStarted || this.instance.config.disable_session_recording) {
             return
