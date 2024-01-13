@@ -8,33 +8,23 @@ function onPageLoad(options = {}) {
     cy.wait('@recorder')
 }
 
-function assertPostHogEndpointAreNotCalled(expectedCalls) {
-    cy.wait(500)
-    cy.get('@session-recording').then((interceptions) => {
-        if (interceptions) {
-            expect(interceptions).to.have.length(0)
-        } else {
-            cy.log('no session recording endpoint called')
-        }
-    })
-    cy.get('@decide').then((interceptions) => {
-        if (interceptions && expectedCalls && expectedCalls.decide) {
-            expect(interceptions).to.be.an('object')
-        } else if (interceptions) {
-            expect(interceptions).not.to.be.an('object')
-        } else {
-            cy.log('no decide endpoint called')
-        }
-    })
-    cy.get('@recorder').then((interceptions) => {
-        if (interceptions && expectedCalls && expectedCalls.recorder) {
-            expect(interceptions).to.be.an('object')
-        } else if (interceptions) {
-            expect(interceptions).not.to.be.an('object')
-        } else {
-            cy.log('no recorder endpoint called')
-        }
-    })
+/**
+ * Receives an object with keys as the name of the route and values as whether the route should have been called.
+ * e.g. { '@recorder': true, '@decide': false }
+ * the keys must match a `cy.intercept` alias
+ **/
+function assertWhetherPostHogRequestsWereCalled(expectedCalls) {
+    cy.wait(200)
+
+    for (const [key, value] of Object.entries(expectedCalls)) {
+        cy.get(key).then((interceptions) => {
+            if (value) {
+                expect(interceptions).to.be.an('object')
+            } else {
+                expect(interceptions).not.to.be.an('object')
+            }
+        })
+    }
 }
 
 describe('Session recording', () => {
@@ -57,7 +47,11 @@ describe('Session recording', () => {
         it('does not capture events without init', () => {
             cy.get('[data-cy-input]').type('hello world! ')
 
-            assertPostHogEndpointAreNotCalled({ recorder: false, decide: false })
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': false,
+                '@session-recording': false,
+            })
 
             cy.get('[data-cy-input]')
                 .type('hello posthog!')
@@ -69,11 +63,15 @@ describe('Session recording', () => {
         })
 
         it('does not capture events when config opts out by default', () => {
-            onPageLoad({ opt_out_capturing_by_default: true })
+            cy.posthogInit({ opt_out_capturing_by_default: true })
 
             cy.get('[data-cy-input]').type('hello world! ')
 
-            assertPostHogEndpointAreNotCalled({ decide: true, recorder: false })
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': true,
+                '@session-recording': false,
+            })
 
             cy.get('[data-cy-input]')
                 .type('hello posthog!')
