@@ -65,8 +65,6 @@ describe('Session recording', () => {
         it('does not capture events when config opts out by default', () => {
             cy.posthogInit({ opt_out_capturing_by_default: true })
 
-            cy.get('[data-cy-input]').type('hello world! ')
-
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder': false,
                 '@decide': true,
@@ -78,6 +76,38 @@ describe('Session recording', () => {
                 .then(() => {
                     cy.phCaptures({ full: true }).then((captures) => {
                         expect(captures || []).to.deep.equal([])
+                    })
+                })
+        })
+
+        it('can start recording after starting opted out', () => {
+            cy.posthogInit({ opt_out_capturing_by_default: true })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+            // TODO: should we require this call?
+            cy.posthog().invoke('startSessionRecording')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    cy.phCaptures({ full: true }).then((captures) => {
+                        expect(JSON.stringify((captures || []).map((c) => c.event))).to.deep.equal([])
                     })
                 })
         })
