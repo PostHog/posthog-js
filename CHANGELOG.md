@@ -1,3 +1,7 @@
+## 1.99.0 - 2024-01-15
+
+- feat: Support custom scroll selector (#961)
+
 ## 1.98.2 - 2024-01-11
 
 - fix: Don't allow us.posthog.com to be used (#957)
