@@ -128,6 +128,7 @@ export interface PostHogConfig {
     segment?: any
     __preview_measure_pageview_stats?: boolean
     __preview_send_client_session_params?: boolean
+    // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
 }
 
