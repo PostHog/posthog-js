@@ -15,6 +15,7 @@ import {
     getDirectAndNestedSpanText,
     getElementsChainString,
     splitClassString,
+    isSvgElement,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
@@ -197,6 +198,11 @@ const autocapture = {
             if (this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
                 this._captureEvent(e, instance, '$rageclick')
             }
+        }
+
+        // sometimes buttons have svg icons which end up being the target, here we bubble up to the actual button
+        while (target && isSvgElement(target)) {
+            target = target.parentNode as Element | null
         }
 
         if (target && shouldCaptureDomEvent(target, e, this.config)) {

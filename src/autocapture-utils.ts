@@ -107,6 +107,20 @@ export function isDocumentFragment(el: Element | ParentNode | undefined | null):
 }
 
 export const autocaptureCompatibleElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+
+/**
+ * Determines whether the given element is an SVG related element or not.
+ * @param {Element} el - The element to check.
+ * @returns {boolean} Returns true if the element is an SVG related element, false otherwise.
+ */
+export function isSvgElement(el: Element): boolean {
+    return (
+        autocaptureCompatibleElements.indexOf(el.tagName.toLowerCase()) === -1 &&
+        isTag(el, 'svg') &&
+        'ownerSVGElement' in el
+    )
+}
+
 /*
  * Check whether a DOM event should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
