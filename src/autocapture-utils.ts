@@ -116,7 +116,7 @@ export const autocaptureCompatibleElements = ['a', 'button', 'form', 'input', 's
 export function isSvgElement(el: Element): boolean {
     return (
         autocaptureCompatibleElements.indexOf(el.tagName.toLowerCase()) === -1 &&
-        (isTag(el, 'svg') || ('ownerSVGElement' in el && !_isNull(el.ownerSVGElement)))
+        (isTag(el, 'svg') || !!(el as any).ownerSVGElement)
     )
 }
 
