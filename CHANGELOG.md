@@ -1,3 +1,7 @@
+## 1.100.0 - 2024-01-15
+
+- Enable scroll stats by default (#962)
+
 ## 1.99.0 - 2024-01-15
 
 - feat: Support custom scroll selector (#961)
