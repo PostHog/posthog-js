@@ -1747,7 +1747,7 @@ export class PostHog {
             if (this.config.api_host === 'https://us.posthog.com') {
                 this.config.api_host = 'https://app.posthog.com'
             }
-            if (this.config.asset_host === undefined) {
+            if (_isUndefined(this.config.asset_host)) {
                 this.config.asset_host = this.config.api_host
             }
             this.persistence?.update_config(this.config)
