@@ -213,7 +213,7 @@ const create_phlib = function (
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    if (instance.config.__preview_measure_pageview_stats) {
+    if (!instance.config.disable_scroll_properties) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
@@ -966,7 +966,7 @@ export class PostHog {
             properties = _extend(properties, sessionProps)
         }
 
-        if (this.config.__preview_measure_pageview_stats) {
+        if (!this.config.disable_scroll_properties) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
                 performanceProperties = this.pageViewManager.doPageView()
