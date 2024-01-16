@@ -9,7 +9,7 @@ import { visualizer } from 'rollup-plugin-visualizer'
 
 const plugins = [
     json(),
-    resolve({ browser: true, modulesOnly: true }),
+    resolve({ browser: true }),
     typescript({ sourceMap: true }),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
@@ -47,13 +47,15 @@ export default [
     },
     {
         input: 'src/loader-surveys.ts',
-        external: ['preact'],
         output: [
             {
                 file: 'dist/surveys.js',
                 sourcemap: true,
                 format: 'iife',
                 name: 'posthog',
+                globals: {
+                    preact: 'preact',
+                },
             },
         ],
         plugins: [...plugins],
