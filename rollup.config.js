@@ -1,6 +1,5 @@
 import babel from '@rollup/plugin-babel'
 import json from '@rollup/plugin-json'
-import alias from '@rollup/plugin-alias'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import dts from 'rollup-plugin-dts'
@@ -8,29 +7,19 @@ import pkg from './package.json'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 
-const extensions = ['.js', '.jsx', '.ts', '.tsx']
 const plugins = [
     json(),
     resolve({ browser: true, modulesOnly: true }),
     typescript({ sourceMap: true }),
-    alias({
-        entries: [
-          { find: 'react', replacement: 'preact/compat' },
-          { find: 'react-dom/test-utils', replacement: 'preact/test-utils' },
-          { find: 'react-dom', replacement: 'preact/compat' },
-          { find: 'react/jsx-runtime', replacement: 'preact/jsx-runtime' }
-        ]
-      }),
     babel({
-        extensions,
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
-        presets: ['@babel/preset-env'],
-        plugins: ['@babel/plugin-transform-react-jsx', { pragma: 'h'}]
     }),
     terser({ toplevel: true }),
     visualizer(),
 ]
 
+/** @type {import('rollup').RollupOptions[]} */
 export default [
     {
         input: 'src/loader-recorder.ts',
@@ -58,6 +47,7 @@ export default [
     },
     {
         input: 'src/loader-surveys.ts',
+        external: ['preact'],
         output: [
             {
                 file: 'dist/surveys.js',

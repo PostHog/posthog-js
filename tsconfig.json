@@ -21,12 +21,9 @@
         "resolveJsonModule": true,
         "downlevelIteration": true,
         "declaration": true,
-        "jsx": "react",
+        "jsx": "preserve",
         "jsxFactory": "h",
-        "paths": {
-            "react": ["./node_modules/preact/compat/"],
-            "react-dom": ["./node_modules/preact/compat/"]
-          }
+        "jsxFragmentFactory": "Fragment"
     },
     "include": ["src/*.ts*"]
 }
