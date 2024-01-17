@@ -1,3 +1,24 @@
+## 1.100.0 - 2024-01-15
+
+- Enable scroll stats by default (#962)
+
+## 1.99.0 - 2024-01-15
+
+- feat: Support custom scroll selector (#961)
+
+## 1.98.2 - 2024-01-11
+
+- fix: Don't allow us.posthog.com to be used (#957)
+
+## 1.98.1 - 2024-01-11
+
+- fix: set the session id as soon as it changes (#956)
+- fix: simplify test setup (#955)
+
+## 1.98.0 - 2024-01-10
+
+- feat: capture session options in a custom event (#954)
+
 ## 1.97.1 - 2024-01-09
 
 - fix(surveys): fix feedback widget bugs (#953)

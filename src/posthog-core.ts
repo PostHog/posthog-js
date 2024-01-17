@@ -213,7 +213,7 @@ const create_phlib = function (
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    if (instance.config.__preview_measure_pageview_stats) {
+    if (!instance.config.disable_scroll_properties) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
@@ -326,7 +326,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewManager = new PageViewManager()
+        this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 
@@ -966,7 +966,7 @@ export class PostHog {
             properties = _extend(properties, sessionProps)
         }
 
-        if (this.config.__preview_measure_pageview_stats) {
+        if (!this.config.disable_scroll_properties) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
                 performanceProperties = this.pageViewManager.doPageView()
@@ -1738,6 +1738,11 @@ export class PostHog {
 
             // We assume the api_host is without a trailing slash in most places throughout the codebase
             this.config.api_host = this.config.api_host.replace(/\/$/, '')
+
+            // us.posthog.com is only for the web app, so we don't allow that to be used as a capture endpoint
+            if (this.config.api_host === 'https://us.posthog.com') {
+                this.config.api_host = 'https://app.posthog.com'
+            }
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 
