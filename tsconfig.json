@@ -20,7 +20,10 @@
         "inlineSources": true,
         "resolveJsonModule": true,
         "downlevelIteration": true,
-        "declaration": true
+        "declaration": true,
+        "jsx": "preserve",
+        "jsxFactory": "h",
+        "jsxFragmentFactory": "Fragment"
     },
-    "include": ["src/*.ts"]
+    "include": ["src/*.ts*"]
 }
