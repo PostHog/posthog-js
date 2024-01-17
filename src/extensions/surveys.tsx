@@ -13,7 +13,6 @@ import {
     posthogLogo,
     style,
 } from './surveys/surveys-utils'
-import * as Preact from 'preact'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -91,7 +90,6 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     posthog?.getActiveMatchingSurveys((surveys) => {
         const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
         nonAPISurveys.forEach((survey) => {
-            Preact.render(<div>Hello world!!!</div>, document.body) // TODO: This is just for testing, remove
             if (survey.type === SurveyType.Widget) {
                 if (
                     survey.appearance?.widgetType === 'tab' &&
