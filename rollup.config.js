@@ -14,6 +14,7 @@ const plugins = [
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
+        presets: ['@babel/preset-env'],
     }),
     terser({ toplevel: true }),
     visualizer(),
