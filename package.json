@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.96.1",
+    "version": "1.100.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -31,15 +31,18 @@
         "react/package.json"
     ],
     "dependencies": {
-        "fflate": "^0.4.1"
+        "fflate": "^0.4.1",
+        "preact": "^10.19.3"
     },
     "devDependencies": {
         "@babel/core": "7.18.9",
+        "@babel/plugin-syntax-decorators": "^7.23.3",
+        "@babel/plugin-transform-react-jsx": "^7.23.4",
         "@babel/preset-env": "7.18.9",
         "@babel/preset-typescript": "^7.18.6",
         "@rollup/plugin-babel": "^5.3.1",
         "@rollup/plugin-json": "^4.1.0",
-        "@rollup/plugin-node-resolve": "^13.3.0",
+        "@rollup/plugin-node-resolve": "^15.2.3",
         "@rollup/plugin-terser": "^0.4.0",
         "@rollup/plugin-typescript": "^8.3.3",
         "@rrweb/types": "^2.0.0-alpha.11",
@@ -50,12 +53,12 @@
         "@types/react-dom": "^18.0.10",
         "@types/sinon": "^17.0.1",
         "@types/uuid": "^9.0.1",
-        "@typescript-eslint/eslint-plugin": "^6.4.0",
-        "@typescript-eslint/parser": "^6.4.0",
+        "@typescript-eslint/eslint-plugin": "^6.19.0",
+        "@typescript-eslint/parser": "^6.19.0",
         "babel-eslint": "10.1.0",
         "babel-jest": "^26.6.3",
         "cypress": "13.5.1",
-        "eslint": "8.20.0",
+        "eslint": "8.56.0",
         "eslint-config-posthog-js": "link:./eslint-rules",
         "eslint-config-prettier": "^8.5.0",
         "eslint-plugin-compat": "^4.1.4",
@@ -77,7 +80,7 @@
         "node-fetch": "^2.6.1",
         "posthog-js": "link:.",
         "prettier": "^2.7.1",
-        "rollup": "^2.77.0",
+        "rollup": "^2.78.0",
         "rollup-plugin-dts": "^4.2.2",
         "rollup-plugin-visualizer": "^5.9.0",
         "rrweb": "2.0.0-alpha.11",
@@ -87,7 +90,7 @@
         "testcafe": "1.19.0",
         "testcafe-browser-provider-browserstack": "1.14.0",
         "tslib": "^2.4.0",
-        "typescript": "^4.7.4",
+        "typescript": "^4.9.0",
         "yargs": "^17.7.2"
     },
     "lint-staged": {

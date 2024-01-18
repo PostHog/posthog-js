@@ -413,6 +413,7 @@ export class SessionRecording {
             }
         }
 
+        let returningFromIdle = false
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
@@ -422,7 +423,7 @@ export class SessionRecording {
                     reason: 'user activity',
                     type: event.type,
                 })
-                this._tryTakeFullSnapshot()
+                returningFromIdle = true
             }
         }
 
@@ -439,15 +440,16 @@ export class SessionRecording {
         const sessionIdChanged = this.sessionId !== sessionId
         const windowIdChanged = this.windowId !== windowId
 
+        this.windowId = windowId
+        this.sessionId = sessionId
+
         if (
-            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-            (windowIdChanged || sessionIdChanged)
+            returningFromIdle ||
+            ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
+                (windowIdChanged || sessionIdChanged))
         ) {
             this._tryTakeFullSnapshot()
         }
-
-        this.windowId = windowId
-        this.sessionId = sessionId
     }
 
     private _tryRRwebMethod(rrwebMethod: () => void): boolean {
@@ -533,11 +535,12 @@ export class SessionRecording {
                 },
             })
 
+        const activePlugins = this._gatherRRWebPlugins()
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
-            plugins: this._gatherRRWebPlugins(),
+            plugins: activePlugins,
             ...sessionRecordingOptions,
         })
 
@@ -562,6 +565,11 @@ export class SessionRecording {
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
         this.isIdle = false
+
+        this._tryAddCustomEvent('$session_options', {
+            sessionRecordingOptions,
+            activePlugins: activePlugins.map((p) => p?.name),
+        })
     }
 
     private _gatherRRWebPlugins() {

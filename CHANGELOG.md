@@ -1,3 +1,35 @@
+## 1.100.0 - 2024-01-15
+
+- Enable scroll stats by default (#962)
+
+## 1.99.0 - 2024-01-15
+
+- feat: Support custom scroll selector (#961)
+
+## 1.98.2 - 2024-01-11
+
+- fix: Don't allow us.posthog.com to be used (#957)
+
+## 1.98.1 - 2024-01-11
+
+- fix: set the session id as soon as it changes (#956)
+- fix: simplify test setup (#955)
+
+## 1.98.0 - 2024-01-10
+
+- feat: capture session options in a custom event (#954)
+
+## 1.97.1 - 2024-01-09
+
+- fix(surveys): fix feedback widget bugs (#953)
+
+## 1.97.0 - 2024-01-09
+
+- fix: add a comment explaining browser type prop (#952)
+- feat: add opt_out_useragent_filter and $browser_type (#949)
+- chore(surveys): add basic survey e2e tests (#948)
+- Tidying and removing of old value (#941)
+
 ## 1.96.1 - 2023-12-15
 
 - Add gas_source to campaign params (#934)

@@ -130,6 +130,7 @@ export const defaultConfig = (): PostHogConfig => ({
     ip: true,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
+    opt_out_useragent_filter: false,
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
@@ -212,7 +213,7 @@ const create_phlib = function (
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    if (instance.config.__preview_measure_pageview_stats) {
+    if (!instance.config.disable_scroll_properties) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
@@ -325,7 +326,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewManager = new PageViewManager()
+        this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 
@@ -866,7 +867,11 @@ export class PostHog {
             return
         }
 
-        if (userAgent && _isBlockedUA(userAgent, this.config.custom_blocked_useragents)) {
+        if (
+            userAgent &&
+            !this.config.opt_out_useragent_filter &&
+            _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+        ) {
             return
         }
 
@@ -961,7 +966,7 @@ export class PostHog {
             properties = _extend(properties, sessionProps)
         }
 
-        if (this.config.__preview_measure_pageview_stats) {
+        if (!this.config.disable_scroll_properties) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
                 performanceProperties = this.pageViewManager.doPageView()
@@ -987,6 +992,14 @@ export class PostHog {
         if (!_isUndefined(start_timestamp)) {
             const duration_in_ms = new Date().getTime() - start_timestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+        }
+
+        // this is only added when this.config.opt_out_useragent_filter is true,
+        // or it would always add "browser"
+        if (userAgent && this.config.opt_out_useragent_filter) {
+            properties['$browser_type'] = _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+                ? 'bot'
+                : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -1631,6 +1644,9 @@ export class PostHog {
      *       // opt users out of browser data storage by this PostHog instance by default
      *       opt_out_persistence_by_default: false
      *
+     *       // opt out of user agent filtering such as googlebot or other bots
+     *       opt_out_useragent_filter: false
+     *
      *       // persistence mechanism used by opt-in/opt-out methods - cookie
      *       // or localStorage - falls back to cookie if localStorage is unavailable
      *       opt_out_capturing_persistence_type: 'localStorage'
@@ -1722,6 +1738,11 @@ export class PostHog {
 
             // We assume the api_host is without a trailing slash in most places throughout the codebase
             this.config.api_host = this.config.api_host.replace(/\/$/, '')
+
+            // us.posthog.com is only for the web app, so we don't allow that to be used as a capture endpoint
+            if (this.config.api_host === 'https://us.posthog.com') {
+                this.config.api_host = 'https://app.posthog.com'
+            }
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 

@@ -90,6 +90,8 @@ export interface PostHogConfig {
     ip: boolean
     opt_out_capturing_by_default: boolean
     opt_out_persistence_by_default: boolean
+    /** Opt out of user agent filtering such as googlebot or other bots. Defaults to `false` */
+    opt_out_useragent_filter: boolean
     opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean
@@ -124,8 +126,10 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
-    __preview_measure_pageview_stats?: boolean
     __preview_send_client_session_params?: boolean
+    disable_scroll_properties?: boolean
+    // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
+    scroll_root_selector?: string | string[]
 }
 
 export interface OptInOutCapturingOptions {
