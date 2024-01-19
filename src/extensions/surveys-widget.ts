@@ -106,7 +106,7 @@ export class SurveysWidget {
     }
 
     private createSurveyForWidget(): HTMLFormElement | null {
-        const surveyStyleSheet = style(this.survey.id, this.survey.appearance)
+        const surveyStyleSheet = style(this.survey.appearance)
         this.shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
         const widgetSurvey =
             this.survey.questions.length > 1

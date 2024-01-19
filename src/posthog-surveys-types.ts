@@ -54,7 +54,7 @@ export interface BasicSurveyQuestion extends SurveyQuestionBase {
 
 export interface LinkSurveyQuestion extends SurveyQuestionBase {
     type: SurveyQuestionType.Link
-    link: string | null
+    link?: string | null
 }
 
 export interface RatingSurveyQuestion extends SurveyQuestionBase {

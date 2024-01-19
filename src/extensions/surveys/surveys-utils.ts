@@ -16,7 +16,7 @@ import { window as _window, document as _document } from '../../utils/globals'
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-export const style = (id: string, appearance: SurveyAppearance | null) => {
+export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
         right: 'right: 30px;',
@@ -26,7 +26,7 @@ export const style = (id: string, appearance: SurveyAppearance | null) => {
           `,
     }
     return `
-          .survey-${id}-form {
+          .survey-form {
               position: fixed;
               margin: 0px;
               bottom: 0px;
@@ -41,7 +41,7 @@ export const style = (id: string, appearance: SurveyAppearance | null) => {
               width: 100%;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}
           }
-          .survey-${id}-form .tab {
+          .survey-form .tab {
               display: none;
           }
           .form-submit[disabled] {
@@ -49,14 +49,14 @@ export const style = (id: string, appearance: SurveyAppearance | null) => {
               filter: grayscale(100%);
               cursor: not-allowed;
           }
-          .survey-${id}-form {
+          .survey-form {
               flex-direction: column;
               background: ${appearance?.backgroundColor || '#eeeded'};
               border-top-left-radius: 10px;
               border-top-right-radius: 10px;
               box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
           }
-          .survey-${id}-form textarea {
+          .survey-form textarea {
               color: #2d2d2d;
               font-size: 14px;
               font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
@@ -131,7 +131,7 @@ export const style = (id: string, appearance: SurveyAppearance | null) => {
               background: ${appearance?.backgroundColor || '#eeeded'};
               text-decoration: none;
           }
-          .survey-${id}-box {
+          .survey-box {
               padding: 20px 25px 10px;
               display: flex;
               flex-direction: column;
@@ -163,19 +163,19 @@ export const style = (id: string, appearance: SurveyAppearance | null) => {
           .rating-options {
               margin-top: 14px;
           }
-          .rating-options-buttons {
+          .rating-options-number {
               display: grid;
               border-radius: 6px;
               overflow: hidden;
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
           }
-          .rating-options-buttons > .ratings-number {
+          .rating-options-number > .ratings-number {
               border-right: 1px solid ${appearance?.borderColor || '#c9c6c6'};
           }
-          .rating-options-buttons > .ratings-number:last-of-type {
+          .rating-options-number > .ratings-number:last-of-type {
               border-right: 0px;
           }
-          .rating-options-buttons .rating-active {
+          .rating-options-number .rating-active {
               background: ${appearance?.ratingButtonActiveColor || 'black'};
           }
           .rating-options-emoji {
@@ -339,7 +339,7 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
         multiple_choice: createMultipleChoicePopup,
     }
     const multipleQuestionForm = Object.assign(document.createElement('form'), {
-        className: `survey-${survey.id}-form`,
+        className: 'survey-form',
         onsubmit: (e: Event) => {
             e.preventDefault()
             const multipleQuestionResponses: Record<string, string | number | string[] | null> = {}
@@ -430,7 +430,7 @@ export const createRatingsPopup = (
     const isOptional = !!question.optional
     const ratingOptionsElement = document.createElement('div')
     if (displayType === 'number') {
-        ratingOptionsElement.className = 'rating-options-buttons'
+        ratingOptionsElement.className = 'rating-options-number'
         ratingOptionsElement.style.gridTemplateColumns = `repeat(${scale - starting + 1}, minmax(0, 1fr))`
         for (let i = starting; i <= scale; i++) {
             const buttonElement = document.createElement('button')
@@ -454,7 +454,7 @@ export const createRatingsPopup = (
         }
     }
     const ratingsForm = `
-    <div class="survey-${survey.id}-box">
+    <div class="survey-box">
         <div class="cancel-btn-wrapper">
             <button class="form-cancel" type="cancel">${cancelSVG}</button>
         </div>
@@ -485,7 +485,7 @@ export const createRatingsPopup = (
     let formElement: HTMLFormElement | HTMLDivElement
     if (survey.questions.length === 1) {
         formElement = Object.assign(document.createElement('form'), {
-            className: `survey-${survey.id}-form`,
+            className: 'survey-form',
             innerHTML: ratingsForm,
             onsubmit: (e: Event) => {
                 e.preventDefault()
@@ -545,7 +545,7 @@ export const createOpenTextOrLinkPopup = (
     const questionText = question.question
     const isOptional = !!question.optional
     const form = `
-    <div class="survey-${survey.id}-box">
+    <div class="survey-box">
         <div class="cancel-btn-wrapper">
             <button class="form-cancel" type="cancel">${cancelSVG}</button>
         </div>
@@ -573,7 +573,7 @@ export const createOpenTextOrLinkPopup = (
     let formElement: HTMLFormElement | HTMLDivElement
     if (survey.questions.length === 1) {
         formElement = Object.assign(document.createElement('form'), {
-            className: `survey-${survey.id}-form`,
+            className: 'survey-form',
             innerHTML: form,
             onsubmit: function (e: any) {
                 e.preventDefault()
@@ -637,7 +637,7 @@ export const createMultipleChoicePopup = (
     const hasOpenChoice = !!question.hasOpenChoice
 
     const form = `
-    <div class="survey-${survey.id}-box">
+    <div class="survey-box">
         <div class="cancel-btn-wrapper">
             <button class="form-cancel" type="cancel">${cancelSVG}</button>
         </div>
@@ -680,7 +680,7 @@ export const createMultipleChoicePopup = (
     let formElement: HTMLFormElement | HTMLDivElement
     if (survey.questions.length === 1) {
         formElement = Object.assign(document.createElement('form'), {
-            className: `survey-${survey.id}-form`,
+            className: 'survey-form',
             innerHTML: form,
             onsubmit: (e: Event) => {
                 e.preventDefault()
@@ -801,6 +801,19 @@ export function nextQuestion(currentQuestionIdx: number, surveyId: string, surve
 
     tabs[currentQuestionIdx].style.display = 'none'
     showQuestion(currentQuestionIdx + 1, surveyId, surveyType)
+}
+
+export const defaultSurveyAppearance = {
+    backgroundColor: '#eeeded',
+    submitButtonColor: 'black',
+    ratingButtonColor: 'white',
+    ratingButtonActiveColor: 'black',
+    borderColor: '#c9c6c6',
+    placeholder: 'Start typing...',
+    whiteLabel: false,
+    displayThankYouMessage: true,
+    thankYouMessageHeader: 'Thank you for your feedback!',
+    position: 'right',
 }
 
 export const satisfiedEmoji =
