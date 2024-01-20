@@ -3,7 +3,7 @@
  * e.g. { '@recorder': true, '@decide': false }
  * the keys must match a `cy.intercept` alias
  **/
-export function assertWhetherPostHogRequestsWereCalled(expectedCalls) {
+export function assertWhetherPostHogRequestsWereCalled(expectedCalls: Record<string, boolean>) {
     cy.wait(200)
 
     for (const [key, value] of Object.entries(expectedCalls)) {
