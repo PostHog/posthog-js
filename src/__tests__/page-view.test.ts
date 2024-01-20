@@ -1,4 +1,5 @@
 import { PageViewManager } from '../page-view'
+import { PostHog } from '../posthog-core'
 
 const mockWindowGetter = jest.fn()
 jest.mock('../utils/globals', () => ({
@@ -10,6 +11,9 @@ jest.mock('../utils/globals', () => ({
 
 describe('PageView ID manager', () => {
     describe('doPageView', () => {
+        const instance: PostHog = {
+            config: {},
+        } as any
         beforeEach(() => {
             mockWindowGetter.mockReturnValue({
                 location: {
@@ -41,7 +45,7 @@ describe('PageView ID manager', () => {
                 },
             })
 
-            const pageViewIdManager = new PageViewManager()
+            const pageViewIdManager = new PageViewManager(instance)
             pageViewIdManager.doPageView()
 
             // force the manager to update the scroll data by calling an internal method
@@ -72,7 +76,7 @@ describe('PageView ID manager', () => {
                 },
             })
 
-            const pageViewIdManager = new PageViewManager()
+            const pageViewIdManager = new PageViewManager(instance)
             pageViewIdManager.doPageView()
 
             // force the manager to update the scroll data by calling an internal method
@@ -90,7 +94,7 @@ describe('PageView ID manager', () => {
         })
 
         it('can handle scroll updates before doPageView is called', () => {
-            const pageViewIdManager = new PageViewManager()
+            const pageViewIdManager = new PageViewManager(instance)
 
             pageViewIdManager._updateScrollData()
             const firstPageView = pageViewIdManager.doPageView()
@@ -101,7 +105,7 @@ describe('PageView ID manager', () => {
         })
 
         it('should include the pathname', () => {
-            const pageViewIdManager = new PageViewManager()
+            const pageViewIdManager = new PageViewManager(instance)
 
             const firstPageView = pageViewIdManager.doPageView()
             expect(firstPageView.$prev_pageview_pathname).toBeUndefined()

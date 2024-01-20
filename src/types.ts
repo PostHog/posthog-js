@@ -126,8 +126,10 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
-    __preview_measure_pageview_stats?: boolean
     __preview_send_client_session_params?: boolean
+    disable_scroll_properties?: boolean
+    // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
+    scroll_root_selector?: string | string[]
 }
 
 export interface OptInOutCapturingOptions {

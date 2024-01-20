@@ -59,6 +59,7 @@ export default function Home() {
                     <Link href="/iframe">Iframe</Link>
                     <Link href="/media">Media</Link>
                     <Link href="/long">Long</Link>
+                    <Link href="/longmain">Long Main</Link>
                 </div>
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>
