@@ -1,3 +1,5 @@
+import { DecideResponse, PostHogConfig } from '../../src/types'
+
 export const start = ({
     waitForDecide = true,
     initPosthog = true,
@@ -5,18 +7,25 @@ export const start = ({
     options = {},
     decideResponseOverrides = {
         config: { enable_collect_everything: true },
-        sessionRecording: false,
+        sessionRecording: undefined,
+        isAuthenticated: false,
+        capturePerformance: true,
     },
     url = './playground/cypress-full',
-} = {}) => {
+}: {
+    waitForDecide?: boolean
+    initPosthog?: boolean
+    resetOnInit?: boolean
+    options?: Partial<PostHogConfig>
+    decideResponseOverrides?: Partial<DecideResponse>
+    url?: string
+}) => {
     const decideResponse = {
         editorParams: {},
         featureFlags: ['session-recording-player'],
-        isAuthenticated: false,
         supportedCompression: ['gzip-js'],
         excludedDomains: [],
         autocaptureExceptions: false,
-        capture_performance: true,
         ...decideResponseOverrides,
         config: { enable_collect_everything: true, ...decideResponseOverrides.config },
     }

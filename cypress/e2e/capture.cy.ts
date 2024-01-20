@@ -1,4 +1,5 @@
 /// <reference types="cypress" />
+// @ts-expect-error - you totally can import the package JSON
 import { version } from '../../package.json'
 
 import { getBase64EncodedPayload, getGzipEncodedPayload } from '../support/compression'
@@ -8,7 +9,7 @@ const urlWithVersion = new RegExp(`&ver=${version}`)
 
 describe('Event capture', () => {
     it('captures pageviews, autocapture, custom events', () => {
-        start()
+        start({})
 
         cy.get('[data-cy-custom-event-button]').click()
         cy.phCaptures().should('have.length', 3)
@@ -122,7 +123,7 @@ describe('Event capture', () => {
             start({
                 options: {
                     autocapture: {
-                        css_attribute_allowlist: ['[data-cy-custom-event-button]'],
+                        css_selector_allowlist: ['[data-cy-custom-event-button]'],
                     },
                 },
             })
@@ -151,7 +152,7 @@ describe('Event capture', () => {
     })
 
     it('captures $feature_flag_called', () => {
-        start()
+        start({})
 
         cy.get('[data-cy-feature-flag-button]').click()
 
@@ -193,13 +194,14 @@ describe('Event capture', () => {
     })
 
     it('makes a single decide request', () => {
-        start()
+        start({})
 
         cy.get('@decide.all').then((calls) => {
             expect(calls.length).to.equal(1)
         })
 
         cy.phCaptures().should('include', '$pageview')
+        // @ts-expect-error - TS is wrong that get returns HTMLElement here
         cy.get('@decide').should(({ request }) => {
             const payload = getBase64EncodedPayload(request)
             expect(payload.token).to.equal('test_token')
@@ -218,6 +220,7 @@ describe('Event capture', () => {
             cy.phCaptures().should('include', 'custom-event')
 
             cy.wait('@capture')
+            // @ts-expect-error - TS is wrong that get returns HTMLElement here
             cy.get('@capture').should(({ request }) => {
                 const captures = getBase64EncodedPayload(request)
 
@@ -241,7 +244,7 @@ describe('Event capture', () => {
 
     describe('user opts out after start', () => {
         it('does not send any autocapture/custom events after that', () => {
-            start()
+            start({})
 
             cy.posthog().invoke('opt_out_capturing')
 
@@ -272,14 +275,14 @@ describe('Event capture', () => {
     describe('decoding the payload', () => {
         describe('gzip-js supported', () => {
             it('contains the correct payload after an event', () => {
-                start()
+                start({})
                 // Pageview will be sent immediately
                 cy.wait('@capture').should(({ request }) => {
                     expect(request.headers['content-type']).to.eql('application/x-www-form-urlencoded')
 
                     expect(request.url).to.match(urlWithVersion)
                     const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-                    const captures = JSON.parse(Buffer.from(data, 'base64'))
+                    const captures = JSON.parse(Buffer.from(data, 'base64').toString())
 
                     expect(captures['event']).to.equal('$pageview')
                 })
@@ -351,6 +354,7 @@ describe('Event capture', () => {
                 expect(calls.length).to.equal(1)
             })
 
+            // @ts-expect-error - TS is wrong that get returns HTMLElement here
             cy.get('@decide').should(({ request }) => {
                 const payload = getBase64EncodedPayload(request)
                 expect(payload).to.deep.equal({

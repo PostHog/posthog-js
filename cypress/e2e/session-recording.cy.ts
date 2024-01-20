@@ -13,7 +13,7 @@ describe('Session recording', () => {
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
-                    capture_performance: true,
+                    capturePerformance: true,
                 },
             })
 
@@ -49,7 +49,7 @@ describe('Session recording', () => {
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
-                    capture_performance: true,
+                    capturePerformance: true,
                 },
                 url: './playground/cypress',
             })
@@ -80,7 +80,7 @@ describe('Session recording', () => {
         })
 
         it('captures snapshots when the mouse moves', () => {
-            let sessionId = null
+            let sessionId: string | null = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
@@ -143,7 +143,7 @@ describe('Session recording', () => {
         })
 
         it('continues capturing to the same session when the page reloads', () => {
-            let sessionId = null
+            let sessionId: string | null = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
@@ -218,7 +218,7 @@ describe('Session recording', () => {
         })
 
         it('rotates sessions after 24 hours', () => {
-            let firstSessionId = null
+            let firstSessionId: string | null = null
 
             // first we start a session and give it some activity
             cy.get('[data-cy-input]').type('hello world! ')

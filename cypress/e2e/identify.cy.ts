@@ -4,14 +4,13 @@ import { start } from '../support/setup'
 
 describe('identify()', () => {
     beforeEach(() => {
-        start()
+        start({})
     })
 
     it('uses the v7 uuid format', () => {
         cy.posthog().invoke('capture', 'an-anonymous-event')
         cy.phCaptures({ full: true }).then((events) => {
-            cy.log(events)
-            let deviceIds = new Set(events.map((e) => e.properties['$device_id']))
+            const deviceIds = new Set(events.map((e) => e.properties['$device_id']))
             expect(deviceIds.size).to.eql(1)
             const [deviceId] = deviceIds
             expect(deviceId.length).to.be.eql(36)
