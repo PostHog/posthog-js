@@ -1,11 +1,13 @@
 export const start = ({
     waitForDecide = true,
     initPosthog = true,
+    resetOnInit = false,
     options = {},
     decideResponseOverrides = {
         config: { enable_collect_everything: true },
         sessionRecording: false,
     },
+    url = './playground/cypress-full',
 } = {}) => {
     const decideResponse = {
         editorParams: {},
@@ -20,10 +22,14 @@ export const start = ({
     }
     cy.intercept('POST', '**/decide/*', decideResponse).as('decide')
 
-    cy.visit('./playground/cypress-full')
+    cy.visit(url)
 
     if (initPosthog) {
         cy.posthogInit(options)
+    }
+
+    if (resetOnInit) {
+        cy.posthog().invoke('reset', true)
     }
 
     if (waitForDecide) {

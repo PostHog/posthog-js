@@ -1,33 +1,22 @@
 /// <reference types="cypress" />
 
 import { _isNull } from '../../src/utils/type-utils'
-
-function onPageLoad(options = {}) {
-    cy.posthogInit(options)
-    cy.wait('@decide')
-    cy.wait('@recorder')
-}
+import { start } from '../support/setup'
 
 describe('Session recording', () => {
     describe('array.full.js', () => {
-        beforeEach(() => {
-            cy.intercept('POST', '**/decide/*', {
-                config: { enable_collect_everything: false },
-                editorParams: {},
-                featureFlags: ['session-recording-player'],
-                isAuthenticated: false,
-                sessionRecording: {
-                    endpoint: '/ses/',
-                },
-                capture_performance: true,
-            }).as('decide')
-
-            cy.visit('./playground/cypress-full')
-            cy.posthogInit({})
-            cy.wait('@decide')
-        })
-
         it('captures session events', () => {
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                    },
+                    capture_performance: true,
+                },
+            })
+
             cy.get('[data-cy-input]').type('hello world! ')
             cy.wait(500)
             cy.get('[data-cy-input]')
@@ -53,20 +42,18 @@ describe('Session recording', () => {
 
     describe('array.js', () => {
         beforeEach(() => {
-            cy.intercept('POST', '**/decide/*', {
-                config: { enable_collect_everything: false },
-                editorParams: {},
-                featureFlags: ['session-recording-player'],
-                isAuthenticated: false,
-                sessionRecording: {
-                    endpoint: '/ses/',
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                    },
+                    capture_performance: true,
                 },
-                supportedCompression: ['gzip', 'lz64'],
-                capture_performance: true,
-            }).as('decide')
-
-            cy.visit('./playground/cypress')
-            onPageLoad()
+                url: './playground/cypress',
+            })
+            cy.wait('@recorder')
         })
 
         it('captures session events', () => {
@@ -176,7 +163,9 @@ describe('Session recording', () => {
             cy.resetPhCaptures()
             // and refresh the page
             cy.reload()
-            onPageLoad()
+            cy.posthogInit({})
+            cy.wait('@decide')
+            cy.wait('@recorder')
 
             cy.get('body')
                 .trigger('mousemove', { clientX: 200, clientY: 300 })

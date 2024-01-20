@@ -1,14 +1,13 @@
 /// <reference types="cypress" />
 import { getBase64EncodedPayload } from '../support/compression'
 
-function onPageLoad() {
-    cy.posthogInit(given.options)
+function onPageLoad(options = {}) {
+    cy.posthogInit(options)
     cy.wait('@decide')
     cy.wait('@surveys')
 }
 
 describe('Surveys', () => {
-    given('options', () => ({}))
     beforeEach(() => {
         cy.intercept('POST', '**/decide/*', {
             config: { enable_collect_everything: false },

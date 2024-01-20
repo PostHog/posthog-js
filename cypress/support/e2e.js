@@ -13,12 +13,7 @@
 // https://on.cypress.io/configuration
 // ***********************************************************
 
-// Import commands.js using ES2015 syntax:
 import './commands'
-import 'given2/setup'
-
-// Alternatively you can use CommonJS syntax:
-// require('./commands')
 
 // Add console errors into cypress logs.
 // eslint-disable-next-line no-undef

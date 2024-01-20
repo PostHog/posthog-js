@@ -1,17 +1,10 @@
 /// <reference types="cypress" />
 
-function setup(initOptions) {
-    cy.visit('./playground/cypress-full')
-    cy.posthogInit({ ...initOptions })
-    // reset and clear device ID so that we can test the uuid format
-    // without worrying about the previous test's device ID
-    cy.posthog().invoke('reset', true)
-    cy.wait('@decide')
-}
+import { start } from '../support/setup'
 
 describe('identify()', () => {
     beforeEach(() => {
-        setup()
+        start()
     })
 
     it('uses the v7 uuid format', () => {
