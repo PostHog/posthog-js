@@ -41,9 +41,6 @@ export const style = (appearance: SurveyAppearance | null) => {
               width: 100%;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}
           }
-          .survey-form .tab {
-              display: none;
-          }
           .form-submit[disabled] {
               opacity: 0.6;
               filter: grayscale(100%);
@@ -803,7 +800,7 @@ export function nextQuestion(currentQuestionIdx: number, surveyId: string, surve
     showQuestion(currentQuestionIdx + 1, surveyId, surveyType)
 }
 
-export const defaultSurveyAppearance = {
+export const defaultSurveyAppearance: SurveyAppearance = {
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
     ratingButtonColor: 'white',

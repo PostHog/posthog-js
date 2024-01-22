@@ -1,5 +1,5 @@
 import { PostHog } from 'posthog-core'
-import { LinkSurveyQuestion, Survey, SurveyAppearance, SurveyQuestionType, SurveyType } from '../posthog-surveys-types'
+import { BasicSurveyQuestion, LinkSurveyQuestion, Survey, SurveyAppearance, SurveyQuestion, SurveyQuestionType, SurveyType } from '../posthog-surveys-types'
 import { SurveysWidget } from './surveys-widget'
 
 import { window as _window, document as _document } from '../utils/globals'
@@ -13,6 +13,8 @@ import {
     // posthogLogo,
     style,
     getTextColor,
+    defaultSurveyAppearance,
+    nextQuestion,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { useState, useEffect } from 'preact/hooks'
@@ -143,66 +145,66 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                 if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<Surveys posthog={posthog} survey={survey} />, shadow)
-                    let surveyPopup
-                    if (survey.questions.length < 2) {
-                        surveyPopup = createSingleQuestionSurvey(
-                            posthog,
-                            survey,
-                            survey.questions[0]
-                        ) as HTMLFormElement
-                    } else {
-                        surveyPopup = createMultipleQuestionSurvey(posthog, survey)
-                    }
-                    // if (surveyPopup) {
-                    //     addCancelListeners(posthog, surveyPopup, survey.id, survey.name)
-                    //     if (survey.appearance?.whiteLabel) {
-                    //         const allBrandingElements = surveyPopup.getElementsByClassName('footer-branding')
-                    //         for (const brandingElement of allBrandingElements) {
-                    //             ; (brandingElement as HTMLAnchorElement).style.display = 'none'
-                    //         }
-                    //     }
-                    // shadow.appendChild(surveyPopup)
-                    // }
-                    // if (survey.questions.length > 1) {
-                    //     const currentQuestion = 0
-                    //     showQuestion(currentQuestion, survey.id, survey.type)
-                    // }
-                    // setTextColors(shadow)
-                    // window.dispatchEvent(new Event('PHSurveyShown'))
-                    // posthog.capture('survey shown', {
-                    //     $survey_name: survey.name,
-                    //     $survey_id: survey.id,
-                    //     sessionRecordingUrl: posthog.get_session_replay_url?.(),
-                    // })
-                    // localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
-                    // if (survey.appearance?.displayThankYouMessage) {
-                    //     window.addEventListener('PHSurveySent', () => {
-                    //         const thankYouElement = createThankYouMessage(survey)
-                    //         shadow.appendChild(thankYouElement)
-                    //         const cancelButtons = thankYouElement.querySelectorAll('.form-cancel, .form-submit')
-                    //         for (const button of cancelButtons) {
-                    //             button.addEventListener('click', () => {
-                    //                 thankYouElement.remove()
-                    //             })
-                    //         }
-                    //         const countdownEl = thankYouElement.querySelector('.thank-you-message-countdown')
-                    //         if (survey.appearance?.autoDisappear && countdownEl) {
-                    //             let count = 3
-                    //             countdownEl.textContent = `(${count})`
-                    //             const countdown = setInterval(() => {
-                    //                 count -= 1
-                    //                 if (count <= 0) {
-                    //                     clearInterval(countdown)
-                    //                     thankYouElement.remove()
-                    //                     return
-                    //                 }
-                    //                 countdownEl.textContent = `(${count})`
-                    //             }, 1000)
-                    //         }
-                    //         setTextColors(shadow)
-                    //     })
-                    // }
+                    // let surveyPopup
+                    // if (survey.questions.length < 2) {
+                    //     surveyPopup = createSingleQuestionSurvey(
+                    //         posthog,
+                    //         survey,
+                    //         survey.questions[0]
+                    //     ) as HTMLFormElement
+                    // } else {
+                    //     surveyPopup = createMultipleQuestionSurvey(posthog, survey)
                 }
+                // if (surveyPopup) {
+                //     addCancelListeners(posthog, surveyPopup, survey.id, survey.name)
+                //     if (survey.appearance?.whiteLabel) {
+                //         const allBrandingElements = surveyPopup.getElementsByClassName('footer-branding')
+                //         for (const brandingElement of allBrandingElements) {
+                //             ; (brandingElement as HTMLAnchorElement).style.display = 'none'
+                //         }
+                //     }
+                // shadow.appendChild(surveyPopup)
+                // }
+                // if (survey.questions.length > 1) {
+                //     const currentQuestion = 0
+                //     showQuestion(currentQuestion, survey.id, survey.type)
+                // }
+                // setTextColors(shadow)
+                // window.dispatchEvent(new Event('PHSurveyShown'))
+                // posthog.capture('survey shown', {
+                //     $survey_name: survey.name,
+                //     $survey_id: survey.id,
+                //     sessionRecordingUrl: posthog.get_session_replay_url?.(),
+                // })
+                // localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
+                // if (survey.appearance?.displayThankYouMessage) {
+                //     window.addEventListener('PHSurveySent', () => {
+                //         const thankYouElement = createThankYouMessage(survey)
+                //         shadow.appendChild(thankYouElement)
+                //         const cancelButtons = thankYouElement.querySelectorAll('.form-cancel, .form-submit')
+                //         for (const button of cancelButtons) {
+                //             button.addEventListener('click', () => {
+                //                 thankYouElement.remove()
+                //             })
+                //         }
+                //         const countdownEl = thankYouElement.querySelector('.thank-you-message-countdown')
+                //         if (survey.appearance?.autoDisappear && countdownEl) {
+                //             let count = 3
+                //             countdownEl.textContent = `(${count})`
+                //             const countdown = setInterval(() => {
+                //                 count -= 1
+                //                 if (count <= 0) {
+                //                     clearInterval(countdown)
+                //                     thankYouElement.remove()
+                //                     return
+                //                 }
+                //                 countdownEl.textContent = `(${count})`
+                //             }, 1000)
+                //         }
+                //         setTextColors(shadow)
+                //     })
+                // }
+                // }
             }
         })
     }, forceReload)
@@ -284,8 +286,24 @@ export function PostHogLogo({ backgroundColor }: { backgroundColor?: string }) {
         <a href="https://posthog.com" target="_blank" rel="noopener" ref={backgroundColorRef} style={{ backgroundColor: backgroundColor, color: textColor }} className="footer-branding auto-text-color">Survey by {posthogLogo}</a>
     )
 }
-
+const sendSurveyEvent = (responses: Record<string, string | number | string[] | null> = {}, survey: Survey, posthog: PostHog) => {
+    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
+    posthog.capture('survey sent', {
+        $survey_name: survey.name,
+        $survey_id: survey.id,
+        $survey_questions: survey.questions.map((question) => question.question),
+        sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        ...responses,
+        $set: {
+            [`$survey_responded/${survey.id}`]: true,
+        },
+    })
+    window.dispatchEvent(new Event('PHSurveySent'))
+}
 export function Surveys({ posthog, survey }: { posthog: PostHog, survey: Survey }) {
+    const [showConfirmation, setShowConfirmation] = useState(false)
+    const [showSurveyQuestion, setShowSurveyQuestion] = useState(true)
+
     useEffect(() => {
         window.dispatchEvent(new Event('PHSurveyShown'))
         posthog.capture('survey shown', {
@@ -297,6 +315,7 @@ export function Surveys({ posthog, survey }: { posthog: PostHog, survey: Survey 
 
         window.addEventListener('PHSurveyClosed', () => {
             localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
+            console.log('survey dismissed')
             posthog.capture('survey dismissed', {
                 $survey_name: survey.name,
                 $survey_id: survey.id,
@@ -305,60 +324,73 @@ export function Surveys({ posthog, survey }: { posthog: PostHog, survey: Survey 
                     [`$survey_dismissed/${survey.id}`]: true,
                 },
             })
+            setShowSurveyQuestion(false)
+        })
+
+        window.addEventListener('PHSurveySent', () => {
+            setShowSurveyQuestion(false)
+            setShowConfirmation(true)
+            // setTimeout(() => {
+            //     setShowConfirmation(true)
+            // }, 500)
         })
     }, [])
-
+    console.log('show confirmation', showConfirmation)
     return (
         <>
-            <SurveyQuestion survey={survey} />
-            {survey.appearance?.displayThankYouMessage && <ConfirmationMessage confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'} confirmationDescription={survey.appearance?.thankYouMessageDescription || ''} appearance={survey.appearance || {}} />}
+            {showSurveyQuestion && <Questions survey={survey} posthog={posthog} />}
+            {survey.appearance?.displayThankYouMessage && showConfirmation &&
+                <ConfirmationMessage confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'} confirmationDescription={survey.appearance?.thankYouMessageDescription || ''} appearance={survey.appearance || {}} />
+            }
         </>
     )
 }
 
-export function SurveyQuestion({ survey }: { survey: Survey }) {
-    const sendSurveyEvent = (response: string | number | null) => {
-        console.log('survey sent!', response)
-        dispatchEvent(new Event('PHSurveySent'))
-        localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
-        setTimeout(() => {
-            dispatchEvent(new Event('PHSurveyClosed'))
-        }, 2000)
-    }
+
+
+export function Questions({ survey, posthog }: { survey: Survey, posthog: PostHog }) {
     const backgroundColorRef = Preact.createRef()
     const [textColor, setTextColor] = useState('white')
+    const [questionsResponses, setQuestionsResponses] = useState({})
+    const [currentQuestion, setCurrentQuestion] = useState(0)
     useEffect(() => {
         setTextColor(getTextColor(backgroundColorRef.current))
     }, [])
-    const questionIndex = 0
+
+    const onNextClick = (res: string, idx: number) => {
+        if (idx === survey.questions.length - 1) {
+            sendSurveyEvent(questionsResponses, survey, posthog)
+            return
+        } else {
+            const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
+            setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
+            setCurrentQuestion(idx + 1)
+        }
+    }
+    const isMultipleQuestion = survey.questions.length > 1
+    console.log('questions', currentQuestion, isMultipleQuestion)
+
     return (
         <form
             className="survey-form"
             style={{ color: textColor, borderColor: survey.appearance?.borderColor }}
             ref={backgroundColorRef}
         >
-            {survey.questions[questionIndex].type === SurveyQuestionType.Open && (
-                <OpenTextQuestion
-                    question={survey.questions[0]}
-                    appearance={survey.appearance || {}}
-                    onSubmit={(text) => sendSurveyEvent(text)}
-                />
-            )}
-            {survey.questions[questionIndex].type === SurveyQuestionType.Link && (
-                <LinkQuestion
-                    question={survey.questions[0]}
-                    appearance={survey.appearance || {}}
-                    onSubmit={() => sendSurveyEvent('link clicked')}
-                />
-            )}
-            {survey.questions[questionIndex].type === SurveyQuestionType.Rating && (
-                <RatingQuestion
-                    question={survey.questions[0]}
-                    questionIndex={0}
-                    appearance={survey.appearance || {}}
-                    onSubmit={(rating) => sendSurveyEvent(rating)}
-                />
-            )}
+            {survey.questions.map((question, idx) => {
+                console.log('where am i', isMultipleQuestion, idx)
+                if (isMultipleQuestion) {
+                    return (
+                        <>
+                            {currentQuestion === idx && <div className={`tab question-${idx} ${question.type}`}>
+                                {questionTypeMap(question, idx, survey.appearance || defaultSurveyAppearance, (res) => onNextClick(res, idx))}
+                            </div>}
+                        </>
+                    )
+                }
+                return (
+                    questionTypeMap(survey.questions[idx], idx, survey.appearance || defaultSurveyAppearance, (res) => onNextClick(res, idx))
+                )
+            })}
         </form>
     )
 }
@@ -496,29 +528,36 @@ export function RatingButton({ num, active, questionIndex, appearance, setActive
 }
 
 export function ConfirmationMessage({ confirmationHeader, confirmationDescription, appearance }: { confirmationHeader: string, confirmationDescription: string, appearance: SurveyAppearance }) {
-    const [count, setCount] = useState(3)
-    const [displayConfirmation, setDisplayConfirmation] = useState(true)
+    // const [count, setCount] = useState(3)
+    // const [displayConfirmation, setDisplayConfirmation] = useState(false)
     // useEffect(() => {
-    //     if (appearance.autoDisappear) {
-    //         setInterval(() => {
-    //             setCount(count - 1)
-    //             if (count <= 0) {
-    //                 clearInterval(count)
-    //                 setDisplayConfirmation(false)
-    //                 return
-    //             }
-    //         }, 1000)
-    //     }
+    //     // window.addEventListener('PHSurveySent', () => {
+    //     //     debugger
+    //     //     setTimeout(() => {
+    //     //         setDisplayConfirmation(true)
+    //     //     }, 1000)
+    //     //     // setDisplayConfirmation(true)
+    //     //     if (appearance.autoDisappear) {
+    //     //         setInterval(() => {
+    //     //             setCount(count - 1)
+    //     //             if (count <= 0) {
+    //     //                 clearInterval(count)
+    //     //                 setDisplayConfirmation(false)
+    //     //                 return
+    //     //             }
+    //     //         }, 1000)
+    //     //     }
+    //     // })
     // }, [appearance])
 
     return (
         <>
-            {displayConfirmation &&
+            <div className="thank-you-message">
                 <div className="thank-you-message-container">
                     <Cancel />
                     <h3 className="thank-you-message-header auto-text-color">{confirmationHeader}</h3>
                     <div className="thank-you-message-body">{confirmationDescription}</div>
-                    {appearance.autoDisappear && <div className="thank-you-message-countdown">{count}</div>}
+                    {appearance.autoDisappear && <div className="thank-you-message-countdown">{1}</div>}
                     <BottomSection
                         text={''}
                         submitDisabled={false}
@@ -526,10 +565,61 @@ export function ConfirmationMessage({ confirmationHeader, confirmationDescriptio
                         onSubmit={() => { }}
                     />
                 </div>
-            }
+            </div>
+
         </>
     )
 }
+
+export function MultipleChoiceQuestion({ question, questionIndex, appearance, onSubmit }: { question: any, questionIndex: number, appearance: SurveyAppearance, onSubmit: (text: string) => void }) {
+    const textRef = Preact.createRef()
+    const [text, setText] = useState('')
+    const inputType = question.type === 'single_choice' ? 'radio' : 'checkbox'
+    return (
+        <div className="survey-box" style={{ backgroundColor: appearance.backgroundColor || defaultBackgroundColor }} ref={textRef}>
+            <Cancel />
+            <QuestionHeader question={question.question} description={question.description} backgroundColor={appearance.backgroundColor} />
+            <div className="multiple-choice-options">
+                {question.choices.map((choice: string, idx: number) => {
+                    let choiceClass = 'choice-option'
+                    let val = choice
+                    let option = choice
+                    if (!!question.hasOpenChoice && idx === question.choices.length - 1) {
+                        option = `<span>${option}:</span><input type="text" value="">`
+                        choiceClass += ' choice-option-open'
+                        option = ''
+                    }
+                    return (
+                        <div className={choiceClass}>
+                            <input type={inputType} id={`surveyQuestion${questionIndex}Choice${idx}`} name={`question${questionIndex}`} value={val} disabled={!choice} />
+                            <label className="auto-text-color" htmlFor={`surveyQuestion${questionIndex}Choice${idx}`}>{option}</label>
+                            <span className="choice-check auto-text-color">{checkSVG}</span>
+                        </div>
+                    )
+                })}
+            </div>
+            <BottomSection
+                text={question.buttonText || 'Submit'}
+                submitDisabled={(!text && !question.optional)}
+                appearance={appearance}
+                onSubmit={() => onSubmit(text)}
+            />
+        </div>
+    )
+}
+
+const questionTypeMap = (question: SurveyQuestion, questionIndex: number, appearance: SurveyAppearance, onSubmit: (res: string) => void): JSX.Element => {
+    const mapping = {
+        [SurveyQuestionType.Open]: <OpenTextQuestion question={question} appearance={appearance} onSubmit={onSubmit} />,
+        [SurveyQuestionType.Link]: <LinkQuestion question={question as LinkSurveyQuestion} appearance={appearance} onSubmit={() => { }} />,
+        [SurveyQuestionType.Rating]: <RatingQuestion question={question} appearance={appearance} questionIndex={questionIndex} onSubmit={() => { }} />,
+        [SurveyQuestionType.SingleChoice]: <MultipleChoiceQuestion question={question} appearance={appearance} questionIndex={questionIndex} onSubmit={onSubmit} />,
+        [SurveyQuestionType.MultipleChoice]: <MultipleChoiceQuestion question={question} appearance={appearance} questionIndex={questionIndex} onSubmit={onSubmit} />,
+    }
+    return mapping[question.type]
+
+}
+
 
 export const satisfiedEmoji =
     <svg className="emoji-svg" xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 -960 960 960" width="48"><path d="M626-533q22.5 0 38.25-15.75T680-587q0-22.5-15.75-38.25T626-641q-22.5 0-38.25 15.75T572-587q0 22.5 15.75 38.25T626-533Zm-292 0q22.5 0 38.25-15.75T388-587q0-22.5-15.75-38.25T334-641q-22.5 0-38.25 15.75T280-587q0 22.5 15.75 38.25T334-533Zm146 272q66 0 121.5-35.5T682-393h-52q-23 40-63 61.5T480.5-310q-46.5 0-87-21T331-393h-53q26 61 81 96.5T480-261Zm0 181q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-400Zm0 340q142.375 0 241.188-98.812Q820-337.625 820-480t-98.812-241.188Q622.375-820 480-820t-241.188 98.812Q140-622.375 140-480t98.812 241.188Q337.625-140 480-140Z" /></svg>
