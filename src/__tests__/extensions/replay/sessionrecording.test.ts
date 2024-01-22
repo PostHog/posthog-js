@@ -420,6 +420,50 @@ describe('SessionRecording', () => {
             })
         })
 
+        describe('canvas', () => {
+            it('passes the remote config to rrweb', () => {
+                sessionRecording.startRecordingIfEnabled()
+
+                sessionRecording.afterDecideResponse(
+                    makeDecideResponse({
+                        sessionRecording: { endpoint: '/s/', recordCanvas: true, canvasFps: 6, canvasQuality: '0.2' },
+                    })
+                )
+                expect(sessionRecording['_recordCanvas']).toStrictEqual(true)
+                expect(sessionRecording['_canvasFps']).toStrictEqual(6)
+                expect(sessionRecording['_canvasQuality']).toStrictEqual(0.2)
+
+                sessionRecording['_onScriptLoaded']()
+                expect(assignableWindow.rrwebRecord).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        recordCanvas: true,
+                        sampling: { canvas: 6 },
+                        dataURLOptions: {
+                            type: 'image/webp',
+                            quality: 0.2,
+                        },
+                    })
+                )
+            })
+
+            it('skips when any config variable is missing', () => {
+                sessionRecording.startRecordingIfEnabled()
+
+                sessionRecording.afterDecideResponse(
+                    makeDecideResponse({
+                        sessionRecording: { endpoint: '/s/', recordCanvas: null, canvasFps: null, canvasQuality: null },
+                    })
+                )
+
+                sessionRecording['_onScriptLoaded']()
+
+                const mockParams = assignableWindow.rrwebRecord.mock.calls[0][0]
+                expect(mockParams).not.toHaveProperty('recordCanvas')
+                expect(mockParams).not.toHaveProperty('canvasFps')
+                expect(mockParams).not.toHaveProperty('canvasQuality')
+            })
+        })
+
         it('calls rrweb.record with the right options', () => {
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
             // access private method 🤯
