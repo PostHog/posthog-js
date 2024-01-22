@@ -117,7 +117,7 @@ export default function Home() {
             <main>
                 <h1>Canvas</h1>
 
-                <canvas ref={ref} style={{ width: '50%', height: '50%' }}></canvas>
+                <canvas ref={ref} style={{ width: '200px', height: '200px', display: 'block' }}></canvas>
             </main>
         </>
     )

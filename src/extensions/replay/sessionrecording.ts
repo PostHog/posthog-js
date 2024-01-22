@@ -509,7 +509,7 @@ export class SessionRecording {
             }
         }
 
-        if (!_isNull(this._recordCanvas) && !_isNull(this._canvasFps) && !_isNull(this._canvasQuality)) {
+        if (this._recordCanvas && !_isNull(this._canvasFps) && !_isNull(this._canvasQuality)) {
             sessionRecordingOptions.recordCanvas = true
             sessionRecordingOptions.sampling = { canvas: this._canvasFps }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasQuality }
