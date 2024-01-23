@@ -1,23 +1,17 @@
 import { PostHog } from 'posthog-core'
-import { BasicSurveyQuestion, LinkSurveyQuestion, Survey, SurveyAppearance, SurveyQuestion, SurveyQuestionType, SurveyType } from '../posthog-surveys-types'
+import { BasicSurveyQuestion, LinkSurveyQuestion, MultipleSurveyQuestion, RatingSurveyQuestion, Survey, SurveyAppearance, SurveyQuestion, SurveyQuestionType, SurveyType } from '../posthog-surveys-types'
 import { SurveysWidget } from './surveys-widget'
 
 import { window as _window, document as _document } from '../utils/globals'
 import {
-    createMultipleQuestionSurvey,
-    createSingleQuestionSurvey,
-    showQuestion,
-    setTextColors,
-    // cancelSVG,
     closeSurveyPopup,
-    // posthogLogo,
     style,
     getTextColor,
     defaultSurveyAppearance,
-    nextQuestion,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { useState, useEffect } from 'preact/hooks'
+import { _isNull } from 'utils/type-utils'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -260,6 +254,7 @@ export function BottomSection({ text, submitDisabled, appearance, onSubmit, link
                 <button className="form-submit"
                     ref={backgroundColorRef}
                     disabled={submitDisabled}
+                    type="button"
                     style={{ color: textColor }}
                     onClick={() => {
                         if (link) {
@@ -335,7 +330,7 @@ export function Surveys({ posthog, survey }: { posthog: PostHog, survey: Survey 
             // }, 500)
         })
     }, [])
-    console.log('show confirmation', showConfirmation)
+
     return (
         <>
             {showSurveyQuestion && <Questions survey={survey} posthog={posthog} />}
@@ -357,7 +352,7 @@ export function Questions({ survey, posthog }: { survey: Survey, posthog: PostHo
         setTextColor(getTextColor(backgroundColorRef.current))
     }, [])
 
-    const onNextClick = (res: string, idx: number) => {
+    const onNextClick = (res: string | string[] | number | null, idx: number) => {
         if (idx === survey.questions.length - 1) {
             sendSurveyEvent(questionsResponses, survey, posthog)
             return
@@ -368,7 +363,6 @@ export function Questions({ survey, posthog }: { survey: Survey, posthog: PostHo
         }
     }
     const isMultipleQuestion = survey.questions.length > 1
-    console.log('questions', currentQuestion, isMultipleQuestion)
 
     return (
         <form
@@ -377,7 +371,6 @@ export function Questions({ survey, posthog }: { survey: Survey, posthog: PostHo
             ref={backgroundColorRef}
         >
             {survey.questions.map((question, idx) => {
-                console.log('where am i', isMultipleQuestion, idx)
                 if (isMultipleQuestion) {
                     return (
                         <>
@@ -395,7 +388,7 @@ export function Questions({ survey, posthog }: { survey: Survey, posthog: PostHo
     )
 }
 
-export function OpenTextQuestion({ question, appearance, onSubmit }: { question: any, appearance: SurveyAppearance, onSubmit: (text: string) => void }) {
+export function OpenTextQuestion({ question, appearance, onSubmit }: { question: BasicSurveyQuestion, appearance: SurveyAppearance, onSubmit: (text: string) => void }) {
     const textRef = Preact.createRef()
     const [text, setText] = useState('')
     return (
@@ -413,7 +406,7 @@ export function OpenTextQuestion({ question, appearance, onSubmit }: { question:
     )
 }
 
-export function LinkQuestion({ question, appearance, onSubmit }: { question: LinkSurveyQuestion, appearance: SurveyAppearance, onSubmit: () => void }) {
+export function LinkQuestion({ question, appearance, onSubmit }: { question: LinkSurveyQuestion, appearance: SurveyAppearance, onSubmit: (clicked: string) => void }) {
     return (
         <div className="survey-box">
             <Cancel />
@@ -423,13 +416,13 @@ export function LinkQuestion({ question, appearance, onSubmit }: { question: Lin
                 submitDisabled={false}
                 link={question.link}
                 appearance={appearance}
-                onSubmit={onSubmit}
+                onSubmit={() => onSubmit('link clicked')}
             />
         </div>
     )
 }
 
-export function RatingQuestion({ question, questionIndex, appearance, onSubmit }: { question: any, questionIndex: number, appearance: SurveyAppearance, onSubmit: (rating: number | null) => void }) {
+export function RatingQuestion({ question, questionIndex, appearance, onSubmit }: { question: RatingSurveyQuestion, questionIndex: number, appearance: SurveyAppearance, onSubmit: (rating: number | null) => void }) {
     const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji]
     const fiveScaleEmojis = [dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji]
     const fiveScaleNumbers = [1, 2, 3, 4, 5]
@@ -491,7 +484,7 @@ export function RatingQuestion({ question, questionIndex, appearance, onSubmit }
             </div>
             <BottomSection
                 text={question.buttonText || appearance?.submitButtonText || 'Submit'}
-                submitDisabled={((rating === null) && !question.optional)}
+                submitDisabled={(_isNull(rating) && !question.optional)}
                 appearance={appearance}
                 onSubmit={() => onSubmit(rating)}
             />
@@ -571,9 +564,10 @@ export function ConfirmationMessage({ confirmationHeader, confirmationDescriptio
     )
 }
 
-export function MultipleChoiceQuestion({ question, questionIndex, appearance, onSubmit }: { question: any, questionIndex: number, appearance: SurveyAppearance, onSubmit: (text: string) => void }) {
+export function MultipleChoiceQuestion({ question, questionIndex, appearance, onSubmit }: { question: MultipleSurveyQuestion, questionIndex: number, appearance: SurveyAppearance, onSubmit: (choices: string[]) => void }) {
     const textRef = Preact.createRef()
-    const [text, setText] = useState('')
+    const [selectedChoices, setSelectedChoices] = useState<string[]>([])
+
     const inputType = question.type === 'single_choice' ? 'radio' : 'checkbox'
     return (
         <div className="survey-box" style={{ backgroundColor: appearance.backgroundColor || defaultBackgroundColor }} ref={textRef}>
@@ -591,7 +585,19 @@ export function MultipleChoiceQuestion({ question, questionIndex, appearance, on
                     }
                     return (
                         <div className={choiceClass}>
-                            <input type={inputType} id={`surveyQuestion${questionIndex}Choice${idx}`} name={`question${questionIndex}`} value={val} disabled={!choice} />
+                            <input
+                                type={inputType}
+                                id={`surveyQuestion${questionIndex}Choice${idx}`}
+                                name={`question${questionIndex}`}
+                                value={val}
+                                disabled={!choice}
+                                onInput={() => {
+                                    if (selectedChoices.includes(val)) {
+                                        setSelectedChoices(selectedChoices.filter((choice) => choice !== val))
+                                    } else {
+                                        setSelectedChoices([...selectedChoices, val])
+                                    }
+                                }} />
                             <label className="auto-text-color" htmlFor={`surveyQuestion${questionIndex}Choice${idx}`}>{option}</label>
                             <span className="choice-check auto-text-color">{checkSVG}</span>
                         </div>
@@ -600,21 +606,21 @@ export function MultipleChoiceQuestion({ question, questionIndex, appearance, on
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
-                submitDisabled={(!text && !question.optional)}
+                submitDisabled={(selectedChoices.length === 0 && !question.optional)}
                 appearance={appearance}
-                onSubmit={() => onSubmit(text)}
+                onSubmit={() => onSubmit(selectedChoices)}
             />
         </div>
     )
 }
 
-const questionTypeMap = (question: SurveyQuestion, questionIndex: number, appearance: SurveyAppearance, onSubmit: (res: string) => void): JSX.Element => {
+const questionTypeMap = (question: SurveyQuestion, questionIndex: number, appearance: SurveyAppearance, onSubmit: (res: string | string[] | number | null) => void): JSX.Element => {
     const mapping = {
-        [SurveyQuestionType.Open]: <OpenTextQuestion question={question} appearance={appearance} onSubmit={onSubmit} />,
-        [SurveyQuestionType.Link]: <LinkQuestion question={question as LinkSurveyQuestion} appearance={appearance} onSubmit={() => { }} />,
-        [SurveyQuestionType.Rating]: <RatingQuestion question={question} appearance={appearance} questionIndex={questionIndex} onSubmit={() => { }} />,
-        [SurveyQuestionType.SingleChoice]: <MultipleChoiceQuestion question={question} appearance={appearance} questionIndex={questionIndex} onSubmit={onSubmit} />,
-        [SurveyQuestionType.MultipleChoice]: <MultipleChoiceQuestion question={question} appearance={appearance} questionIndex={questionIndex} onSubmit={onSubmit} />,
+        [SurveyQuestionType.Open]: <OpenTextQuestion question={question as BasicSurveyQuestion} appearance={appearance} onSubmit={onSubmit} />,
+        [SurveyQuestionType.Link]: <LinkQuestion question={question as LinkSurveyQuestion} appearance={appearance} onSubmit={onSubmit} />,
+        [SurveyQuestionType.Rating]: <RatingQuestion question={question as RatingSurveyQuestion} appearance={appearance} questionIndex={questionIndex} onSubmit={onSubmit} />,
+        [SurveyQuestionType.SingleChoice]: <MultipleChoiceQuestion question={question as MultipleSurveyQuestion} appearance={appearance} questionIndex={questionIndex} onSubmit={onSubmit} />,
+        [SurveyQuestionType.MultipleChoice]: <MultipleChoiceQuestion question={question as MultipleSurveyQuestion} appearance={appearance} questionIndex={questionIndex} onSubmit={onSubmit} />,
     }
     return mapping[question.type]
 
