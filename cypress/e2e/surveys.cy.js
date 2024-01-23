@@ -61,7 +61,6 @@ describe('Surveys', () => {
         cy.intercept('POST', '**/e/*').as('capture-assertion')
         cy.visit('./playground/cypress')
         onPageLoad()
-        cy.wait(500)
         cy.get('.PostHogSurvey12345').shadow().find('.survey-form').should('be.visible')
         cy.get('.PostHogSurvey12345').shadow().find('#surveyQuestion0Choice1').click()
         cy.get('.PostHogSurvey12345').shadow().find('#surveyQuestion0Choice2').click()
@@ -71,9 +70,9 @@ describe('Surveys', () => {
             .find('textarea')
             .first()
             .type('Because I want to learn more about PostHog')
-        cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(1).click()
-        cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(2).click()
-        cy.get('.PostHogSurvey12345').shadow().find('.form-submit').eq(3).click()
+        cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
+        cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
+        cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
         cy.wait('@capture-assertion')
         cy.wait('@capture-assertion').then(async ({ request }) => {
             const captures = await getBase64EncodedPayload(request)
@@ -87,6 +86,77 @@ describe('Surveys', () => {
             })
         })
         expect(cy.get('.PostHogSurvey12345').shadow().find('.thank-you-message').should('be.visible'))
+    })
+
+    describe('feedback widget', () => {
+        it('tab widgetType display and survey submit', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        active: true,
+                        type: 'widget',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [
+                            { type: 'open', question: 'Feedback for us?', description: 'widget feedback test' },
+                        ],
+                        appearance: {
+                            widgetLabel: 'Feedback',
+                            widgetType: 'tab',
+                            displayThankYouMessage: true,
+                            thankyouMessageHeader: 'Thanks!',
+                            thankyouMessageBody: 'We appreciate your feedback.',
+                        },
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogWidget123').shadow().find('.survey-form').should('not.exist')
+            cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').click()
+            cy.get('.PostHogWidget123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogWidget123').shadow().find('.survey-question').should('have.text', 'Feedback for us?')
+            cy.get('.PostHogWidget123').shadow().find('.description').should('have.text', 'widget feedback test')
+            cy.get('.PostHogWidget123').shadow().find('textarea').type('this page is broken')
+            cy.get('.PostHogWidget123').shadow().find('.form-submit').click()
+            cy.phCaptures().should('include', 'survey sent')
+        })
+
+        it('does not render a tab if widgetType is custom selector', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        active: true,
+                        type: 'widget',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [
+                            { type: 'open', question: 'Feedback for us?', description: 'widget feedback test' },
+                        ],
+                        appearance: {
+                            widgetLabel: 'Feedback',
+                            widgetType: 'selector',
+                            widgetSelector: '.test-surveys',
+                            displayThankYouMessage: true,
+                            thankyouMessageHeader: 'Thanks!',
+                            thankyouMessageBody: 'We appreciate your feedback.',
+                        },
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').should('not.exist')
+            cy.get('.test-surveys').click()
+            cy.get('.PostHogWidget123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogWidget123').shadow().find('.survey-question').should('have.text', 'Feedback for us?')
+            cy.get('.PostHogWidget123').shadow().find('.description').should('have.text', 'widget feedback test')
+            cy.get('.PostHogWidget123').shadow().find('textarea').type('i love surveys!!')
+            cy.get('.PostHogWidget123').shadow().find('.form-submit').click()
+            cy.phCaptures().should('include', 'survey sent')
+        })
     })
 
     it('shows and submits a basic survey', () => {
@@ -103,13 +173,12 @@ describe('Surveys', () => {
                         displayThankYouMessage: true,
                         thankyouMessageHeader: 'Thanks!',
                         thankyouMessageBody: 'We appreciate your feedback.',
-                    }
+                    },
                 },
             ],
         }).as('surveys')
         cy.visit('./playground/cypress')
         onPageLoad()
-        cy.wait(500)
         const survey = cy.get('.PostHogSurvey123').shadow()
         survey.find('.survey-form').should('be.visible')
         cy.get('.PostHogSurvey123').shadow().find('.survey-question').should('have.text', 'What is your role?')
@@ -144,7 +213,6 @@ describe('Surveys', () => {
         cy.get('.PostHogSurvey1234').shadow().find('.ratings-number').should('be.visible')
         cy.get('.PostHogSurvey1234').shadow().find('.ratings-number').first().click()
         cy.get('.PostHogSurvey1234').shadow().find('.form-submit').click()
-        // cy.wait(500)
         expect(cy.get('.PostHogSurvey1234').shadow().find('.thank-you-message').should('be.visible'))
     })
 
@@ -171,7 +239,11 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getBase64EncodedPayload(request)
-                expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey dismissed'])
+                expect(captures.map(({ event }) => event)).to.deep.equal([
+                    'survey shown',
+                    'survey dismissed',
+                    '$pageleave',
+                ])
             })
         })
 
@@ -186,13 +258,13 @@ describe('Surveys', () => {
                         active: true,
                         type: 'popover',
                         start_date: '2021-01-01T00:00:00Z',
-                        questions: [{ type: 'open', question: 'What is a survey event capture test?' }],
+                        questions: [{ type: 'open', question: 'What is your role?' }],
                     },
                 ],
             }).as('surveys')
             cy.intercept('POST', '**/e/*').as('capture-assertion')
             onPageLoad()
-            cy.get('.PostHogSurvey123').shadow().find('.question-textarea-wrapper').type('product engineer')
+            cy.get('.PostHogSurvey123').shadow().find('textarea').type('product engineer')
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
