@@ -1,3 +1,8 @@
+## 1.101.0 - 2024-01-22
+
+- feat: canvas recording support (#946)
+- refactor(surveys): Use Preact instead of vanilla JS (#963)
+
 ## 1.100.0 - 2024-01-15
 
 - Enable scroll stats by default (#962)

@@ -25,6 +25,7 @@ import { logger } from '../../utils/logger'
 import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
+import { userOptedOut } from '../../gdpr-utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -102,6 +103,9 @@ export class SessionRecording {
     private _linkedFlag: string | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
+    private _recordCanvas: boolean = false
+    private _canvasFps: number | null = null
+    private _canvasQuality: number | null = null
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -292,6 +296,19 @@ export class SessionRecording {
         const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
         this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
 
+        const receivedRecordCanvas = response.sessionRecording?.recordCanvas
+        this._recordCanvas =
+            _isUndefined(receivedRecordCanvas) || _isNull(receivedRecordCanvas) ? false : receivedRecordCanvas
+
+        const receivedCanvasFps = response.sessionRecording?.canvasFps
+        this._canvasFps = _isUndefined(receivedCanvasFps) ? null : receivedCanvasFps
+
+        const receivedCanvasQuality = response.sessionRecording?.canvasQuality
+        this._canvasQuality =
+            _isUndefined(receivedCanvasQuality) || _isNull(receivedCanvasQuality)
+                ? null
+                : parseFloat(receivedCanvasQuality)
+
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
         if (response.sessionRecording?.endpoint) {
@@ -348,7 +365,8 @@ export class SessionRecording {
         }
 
         // We do not switch recorder versions midway through a recording.
-        if (this._captureStarted || this.instance.config.disable_session_recording) {
+        // do not start if explicitly disabled or if the user has opted out
+        if (this._captureStarted || this.instance.config.disable_session_recording || userOptedOut(this.instance)) {
             return
         }
 
@@ -491,6 +509,12 @@ export class SessionRecording {
                 // @ts-ignore
                 sessionRecordingOptions[key] = value
             }
+        }
+
+        if (this._recordCanvas && !_isNull(this._canvasFps) && !_isNull(this._canvasQuality)) {
+            sessionRecordingOptions.recordCanvas = true
+            sessionRecordingOptions.sampling = { canvas: this._canvasFps }
+            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasQuality }
         }
 
         if (!this.rrwebRecord) {

@@ -250,6 +250,10 @@ export interface DecideResponse {
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
+        recordCanvas?: boolean | null
+        canvasFps?: number | null
+        // the API returns a decimal between 0 and 1 as a string
+        canvasQuality?: string | null
         linkedFlag?: string | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     }

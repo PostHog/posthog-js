@@ -1754,7 +1754,13 @@ export class PostHog {
             }
 
             if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
-                if (oldConfig.disable_session_recording !== config.disable_session_recording) {
+                const disable_session_recording_has_changed =
+                    oldConfig.disable_session_recording !== config.disable_session_recording
+                // if opting back in, this config might not have changed
+                const try_enable_after_opt_in =
+                    !userOptedOut(this) && !config.disable_session_recording && !this.sessionRecording.started
+
+                if (disable_session_recording_has_changed || try_enable_after_opt_in) {
                     if (config.disable_session_recording) {
                         this.sessionRecording.stopRecording()
                     } else {
