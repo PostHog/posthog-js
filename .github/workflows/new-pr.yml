@@ -19,9 +19,9 @@ jobs:
                   )
                   echo "::debug::Filtered PR body to $FILTERED_BODY"
                   if [[ -z "${FILTERED_BODY//[[:space:]]/}" ]]; then
-                      echo "is-shame-worthy=true" >> $GITHUB_OUTPUT
+                      echo "is-shame-worthy=true" >> "$GITHUB_OUTPUT"
                   else
-                      echo "is-shame-worthy=false" >> $GITHUB_OUTPUT
+                      echo "is-shame-worthy=false" >> "$GITHUB_OUTPUT"
                   fi
               env:
                   RAW_BODY: ${{ github.event.pull_request.body }}
