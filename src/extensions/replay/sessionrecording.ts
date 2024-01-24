@@ -213,6 +213,14 @@ export class SessionRecording {
             this._flushBuffer()
         })
 
+        window?.addEventListener('offline', () => {
+            this._tryAddCustomEvent('browser offline', {})
+        })
+
+        window?.addEventListener('online', () => {
+            this._tryAddCustomEvent('browser online', {})
+        })
+
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
