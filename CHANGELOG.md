@@ -1,3 +1,8 @@
+## 1.102.0 - 2024-01-24
+
+- feat: send custom event when network status changes (#965)
+- fix: integration test opting out (#959)
+
 ## 1.101.0 - 2024-01-22
 
 - feat: canvas recording support (#946)
