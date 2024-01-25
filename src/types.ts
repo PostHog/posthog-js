@@ -59,6 +59,9 @@ export interface PostHogConfig {
     api_host: string
     api_method: string
     api_transport: string
+     /**
+    * Host to load static assets from. If undefined falls back to api_host
+    **/
     asset_host?: string
     ui_host: string | null
     token: string
