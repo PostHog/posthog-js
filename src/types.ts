@@ -63,6 +63,11 @@ export interface PostHogConfig {
     * Host to load static assets from. If undefined falls back to api_host
     **/
     asset_host?: string
+    /**
+     * PostHog web app,
+     * the web app host can be passed here so that links to the web app are still convenient if the web and API are on different hosts.
+     * we fall back to api_host if this is not provided
+    **/
     ui_host: string | null
     token: string
     autocapture: boolean | AutocaptureConfig
