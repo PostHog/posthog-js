@@ -212,6 +212,11 @@ export class SessionIdManager {
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
+            logger.info('[SessionId] new session ID generated', {
+                sessionId,
+                windowId,
+                changeReason: { noSessionId, activityTimeout, sessionPastMaximumLength },
+            })
             startTimestamp = timestamp
             valuesChanged = true
         } else if (!windowId) {

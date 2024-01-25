@@ -232,6 +232,7 @@ export class SessionRecording {
     startRecordingIfEnabled() {
         if (this.isRecordingEnabled) {
             this.startCaptureAndTrySendingQueuedSnapshots()
+            logger.info('[SessionRecording] started')
         } else {
             this.stopRecording()
             this.clearBuffer()
@@ -243,6 +244,7 @@ export class SessionRecording {
             this.stopRrweb()
             this.stopRrweb = undefined
             this._captureStarted = false
+            logger.info('[SessionRecording] stopped')
         }
     }
 
