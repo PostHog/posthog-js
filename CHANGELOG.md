@@ -1,3 +1,7 @@
+## 1.102.1 - 2024-01-25
+
+- chore: add debug logging for session id/recording (#969)
+
 ## 1.102.0 - 2024-01-24
 
 - feat: send custom event when network status changes (#965)
