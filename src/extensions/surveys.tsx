@@ -12,17 +12,11 @@ import {
 } from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
-import {
-    closeSurveyPopup,
-    style,
-    getTextColor,
-    defaultSurveyAppearance,
-    sendSurveyEvent,
-} from './surveys/surveys-utils'
+import { style, getTextColor, defaultSurveyAppearance, sendSurveyEvent } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow } from './surveys-widget'
 import { useState, useEffect } from 'preact/hooks'
-import { _isNull, _isNumber } from 'utils/type-utils'
+import { _isArray, _isNull, _isNumber } from 'utils/type-utils'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -40,55 +34,6 @@ export const createShadow = (styleSheet: string, surveyId: string) => {
     }
     document.body.appendChild(div)
     return shadow
-}
-
-export const createThankYouMessage = (survey: Survey) => {
-    const thankYouHTML = `
-    <div class="thank-you-message-container">
-        <div class="cancel-btn-wrapper">
-            <button class="form-cancel" type="cancel">${cancelSVG}</button>
-        </div>
-        <h3 class="thank-you-message-header auto-text-color">${
-            survey.appearance?.thankYouMessageHeader || 'Thank you!'
-        }</h3>
-        <div class="thank-you-message-body auto-text-color">${survey.appearance?.thankYouMessageDescription || ''}</div>
-        <button class="form-submit auto-text-color"><span>Close</span><span class="thank-you-message-countdown"></span></button>
-        ${
-            survey.appearance?.whiteLabel
-                ? ''
-                : `<a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>`
-        }
-    </div>
-    `
-    const thankYouElement = Object.assign(document.createElement('div'), {
-        className: `thank-you-message`,
-        innerHTML: thankYouHTML,
-    })
-    return thankYouElement
-}
-
-export const addCancelListeners = (
-    posthog: PostHog,
-    surveyPopup: HTMLFormElement,
-    surveyId: string,
-    surveyEventName: string
-) => {
-    const cancelButtons = surveyPopup.getElementsByClassName('form-cancel')
-    for (const button of cancelButtons) {
-        button.addEventListener('click', (e) => {
-            e.preventDefault()
-            closeSurveyPopup(surveyId, surveyPopup)
-            posthog.capture('survey dismissed', {
-                $survey_name: surveyEventName,
-                $survey_id: surveyId,
-                sessionRecordingUrl: posthog.get_session_replay_url?.(),
-                $set: {
-                    [`$survey_dismissed/${surveyId}`]: true,
-                },
-            })
-        })
-    }
-    window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
 const handleWidget = (posthog: PostHog, survey: Survey) => {
@@ -154,66 +99,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                 if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<Surveys posthog={posthog} survey={survey} />, shadow)
-                    // let surveyPopup
-                    // if (survey.questions.length < 2) {
-                    //     surveyPopup = createSingleQuestionSurvey(
-                    //         posthog,
-                    //         survey,
-                    //         survey.questions[0]
-                    //     ) as HTMLFormElement
-                    // } else {
-                    //     surveyPopup = createMultipleQuestionSurvey(posthog, survey)
                 }
-                // if (surveyPopup) {
-                //     addCancelListeners(posthog, surveyPopup, survey.id, survey.name)
-                //     if (survey.appearance?.whiteLabel) {
-                //         const allBrandingElements = surveyPopup.getElementsByClassName('footer-branding')
-                //         for (const brandingElement of allBrandingElements) {
-                //             ; (brandingElement as HTMLAnchorElement).style.display = 'none'
-                //         }
-                //     }
-                // shadow.appendChild(surveyPopup)
-                // }
-                // if (survey.questions.length > 1) {
-                //     const currentQuestion = 0
-                //     showQuestion(currentQuestion, survey.id, survey.type)
-                // }
-                // setTextColors(shadow)
-                // window.dispatchEvent(new Event('PHSurveyShown'))
-                // posthog.capture('survey shown', {
-                //     $survey_name: survey.name,
-                //     $survey_id: survey.id,
-                //     sessionRecordingUrl: posthog.get_session_replay_url?.(),
-                // })
-                // localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
-                // if (survey.appearance?.displayThankYouMessage) {
-                //     window.addEventListener('PHSurveySent', () => {
-                //         const thankYouElement = createThankYouMessage(survey)
-                //         shadow.appendChild(thankYouElement)
-                //         const cancelButtons = thankYouElement.querySelectorAll('.form-cancel, .form-submit')
-                //         for (const button of cancelButtons) {
-                //             button.addEventListener('click', () => {
-                //                 thankYouElement.remove()
-                //             })
-                //         }
-                //         const countdownEl = thankYouElement.querySelector('.thank-you-message-countdown')
-                //         if (survey.appearance?.autoDisappear && countdownEl) {
-                //             let count = 3
-                //             countdownEl.textContent = `(${count})`
-                //             const countdown = setInterval(() => {
-                //                 count -= 1
-                //                 if (count <= 0) {
-                //                     clearInterval(countdown)
-                //                     thankYouElement.remove()
-                //                     return
-                //                 }
-                //                 countdownEl.textContent = `(${count})`
-                //             }, 1000)
-                //         }
-                //         setTextColors(shadow)
-                //     })
-                // }
-                // }
             }
         })
     }, forceReload)
@@ -247,7 +133,7 @@ export function QuestionHeader({
     return (
         <div style={{ backgroundColor: backgroundColor || defaultBackgroundColor }}>
             <div className="survey-question">{question}</div>
-            <div className="description">{description}</div>
+            {description && <div className="description" dangerouslySetInnerHTML={{ __html: description }} />}
         </div>
     )
 }
@@ -359,12 +245,14 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
         window.addEventListener('PHSurveySent', () => {
             setShowSurveyQuestion(false)
             setShowConfirmation(true)
-            // setTimeout(() => {
-            //     setShowConfirmation(true)
-            // }, 500)
+            if (survey.appearance?.autoDisappear) {
+                setTimeout(() => {
+                    setShowConfirmation(false)
+                }, 5000)
+            }
         })
     }, [])
-    const confirmationBoxLeftStyle = _isNumber(style?.left) ? { left: style.left - 40 } : {}
+    const confirmationBoxLeftStyle = style?.left && _isNumber(style?.left) ? { left: style.left - 40 } : {}
     return (
         <>
             {showSurveyQuestion && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
@@ -513,7 +401,7 @@ export function RatingQuestion({
     onSubmit: (rating: number | null) => void
 }) {
     const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji]
-    const fiveScaleEmojis = [dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji]
+    const fiveScaleEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
     const fiveScaleNumbers = [1, 2, 3, 4, 5]
     const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     const scale = question.scale
@@ -533,17 +421,15 @@ export function RatingQuestion({
                     {question.display === 'emoji' && (
                         <div className="rating-options-emoji">
                             {(question.scale === 3 ? threeScaleEmojis : fiveScaleEmojis).map((emoji, idx) => {
-                                const active = idx === rating
+                                const active = idx + 1 === rating
                                 return (
                                     <button
-                                        className={`ratings-emoji question-${questionIndex}-rating-${idx}`}
+                                        className={`ratings-emoji question-${questionIndex}-rating-${idx} ${
+                                            active ? 'rating-active' : null
+                                        }`}
                                         value={idx + 1}
                                         key={idx}
-                                        style={{
-                                            fill: active
-                                                ? appearance.ratingButtonActiveColor
-                                                : appearance.ratingButtonColor,
-                                        }}
+                                        type="button"
                                         onClick={() => {
                                             setRating(idx + 1)
                                         }}
@@ -643,37 +529,19 @@ export function ConfirmationMessage({
     appearance: SurveyAppearance
     styleOverrides?: React.CSSProperties
 }) {
-    // const [count, setCount] = useState(3)
-    // const [displayConfirmation, setDisplayConfirmation] = useState(false)
-    // useEffect(() => {
-    //     // window.addEventListener('PHSurveySent', () => {
-    //     //     debugger
-    //     //     setTimeout(() => {
-    //     //         setDisplayConfirmation(true)
-    //     //     }, 1000)
-    //     //     // setDisplayConfirmation(true)
-    //     //     if (appearance.autoDisappear) {
-    //     //         setInterval(() => {
-    //     //             setCount(count - 1)
-    //     //             if (count <= 0) {
-    //     //                 clearInterval(count)
-    //     //                 setDisplayConfirmation(false)
-    //     //                 return
-    //     //             }
-    //     //         }, 1000)
-    //     //     }
-    //     // })
-    // }, [appearance])
-
     return (
         <>
             <div className="thank-you-message" style={{ ...styleOverrides }}>
                 <div className="thank-you-message-container">
                     <Cancel />
                     <h3 className="thank-you-message-header auto-text-color">{confirmationHeader}</h3>
-                    <div className="thank-you-message-body">{confirmationDescription}</div>
-                    {appearance.autoDisappear && <div className="thank-you-message-countdown">{1}</div>}
-                    <BottomSection text={''} submitDisabled={false} appearance={appearance} onSubmit={() => {}} />
+                    {confirmationDescription && (
+                        <div
+                            className="thank-you-message-body"
+                            dangerouslySetInnerHTML={{ __html: confirmationDescription }}
+                        />
+                    )}
+                    <BottomSection text={'Close'} submitDisabled={false} appearance={appearance} onSubmit={() => {}} />
                 </div>
             </div>
         </>
@@ -689,12 +557,16 @@ export function MultipleChoiceQuestion({
     question: MultipleSurveyQuestion
     questionIndex: number
     appearance: SurveyAppearance
-    onSubmit: (choices: string[]) => void
+    onSubmit: (choices: string | string[] | null) => void
 }) {
     const textRef = Preact.createRef()
-    const [selectedChoices, setSelectedChoices] = useState<string[]>([])
+    const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
+        question.type === SurveyQuestionType.MultipleChoice ? [] : null
+    )
+    const [openChoiceSelected, setOpenChoiceSelected] = useState(false)
+    const [openEndedInput, setOpenEndedInput] = useState('')
 
-    const inputType = question.type === 'single_choice' ? 'radio' : 'checkbox'
+    const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
     return (
         <div
             className="survey-box"
@@ -711,11 +583,9 @@ export function MultipleChoiceQuestion({
                 {question.choices.map((choice: string, idx: number) => {
                     let choiceClass = 'choice-option'
                     const val = choice
-                    let option = choice
+                    const option = choice
                     if (!!question.hasOpenChoice && idx === question.choices.length - 1) {
-                        option = `<span>${option}:</span><input type="text" value="">`
                         choiceClass += ' choice-option-open'
-                        option = ''
                     }
                     return (
                         <div className={choiceClass}>
@@ -724,17 +594,50 @@ export function MultipleChoiceQuestion({
                                 id={`surveyQuestion${questionIndex}Choice${idx}`}
                                 name={`question${questionIndex}`}
                                 value={val}
-                                disabled={!choice}
+                                // disabled={!choice}
                                 onInput={() => {
-                                    if (selectedChoices.includes(val)) {
-                                        setSelectedChoices(selectedChoices.filter((choice) => choice !== val))
+                                    if (question.hasOpenChoice && idx === question.choices.length - 1) {
+                                        setOpenChoiceSelected(!openChoiceSelected)
                                     } else {
-                                        setSelectedChoices([...selectedChoices, val])
+                                        if (question.type === SurveyQuestionType.SingleChoice) {
+                                            setSelectedChoices(val)
+                                        } else if (
+                                            question.type === SurveyQuestionType.MultipleChoice &&
+                                            _isArray(selectedChoices)
+                                        ) {
+                                            if (selectedChoices.includes(val)) {
+                                                setSelectedChoices(selectedChoices.filter((choice) => choice !== val))
+                                            } else {
+                                                setSelectedChoices([...selectedChoices, val])
+                                            }
+                                        }
                                     }
                                 }}
                             />
                             <label className="auto-text-color" htmlFor={`surveyQuestion${questionIndex}Choice${idx}`}>
-                                {option}
+                                {question.hasOpenChoice && idx === question.choices.length - 1 ? (
+                                    <>
+                                        <span>{option}:</span>
+                                        <input
+                                            type="text"
+                                            id={`surveyQuestion${questionIndex}Choice${idx}Open`}
+                                            name={`question${questionIndex}`}
+                                            onInput={(e) => {
+                                                const userValue = e.currentTarget.value
+                                                if (question.type === SurveyQuestionType.SingleChoice) {
+                                                    setSelectedChoices(userValue)
+                                                } else if (
+                                                    question.type === SurveyQuestionType.MultipleChoice &&
+                                                    _isArray(selectedChoices)
+                                                ) {
+                                                    setOpenEndedInput(userValue)
+                                                }
+                                            }}
+                                        />
+                                    </>
+                                ) : (
+                                    option
+                                )}
                             </label>
                             <span className="choice-check auto-text-color">{checkSVG}</span>
                         </div>
@@ -743,9 +646,20 @@ export function MultipleChoiceQuestion({
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
-                submitDisabled={selectedChoices.length === 0 && !question.optional}
+                submitDisabled={
+                    (_isNull(selectedChoices) || (_isArray(selectedChoices) && selectedChoices.length === 0)) &&
+                    !question.optional
+                }
                 appearance={appearance}
-                onSubmit={() => onSubmit(selectedChoices)}
+                onSubmit={() => {
+                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
+                        if (_isArray(selectedChoices)) {
+                            onSubmit([...selectedChoices, openEndedInput])
+                        }
+                    } else {
+                        onSubmit(selectedChoices)
+                    }
+                }}
             />
         </div>
     )
