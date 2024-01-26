@@ -31,23 +31,23 @@ jobs:
             name: Safari
 
     steps:
-      - name: Check out posthog-js
-        uses: actions/checkout@v2
-
-      - name: Set up Node 18
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
-            node-version: 18
-            cache: 'yarn'
+          version: 8.x.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
 
       - name: Serve static files
         run: python -m http.server 8080 &
 
       - name: Install node dependencies
-        run: yarn
+        run: pnpm install
 
       - name: Set up posthog-js
-        run: yarn build-rollup
+        run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
         run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browserstack }}" --attempts 3
