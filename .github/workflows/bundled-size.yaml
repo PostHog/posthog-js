@@ -6,7 +6,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-
     steps:
       - uses: actions/checkout@v2
 
@@ -29,7 +28,9 @@ jobs:
       - name: Install package.json dependencies with pnpm
         run: pnpm install --frozen-lockfile
 
-      - uses: preactjs/compressed-size-action@v2
-        with:
-          build-script: "build-rollup"
-          compression: "none"
+# auto selects yarn because yarn.lock exists in master :/
+# need to re-enable _after_ moving to pnpm
+#      - uses: preactjs/compressed-size-action@v2
+#        with:
+#          build-script: "build-rollup"
+#          compression: "none"
