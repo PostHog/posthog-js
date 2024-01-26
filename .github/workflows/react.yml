@@ -8,9 +8,12 @@ jobs:
     name: Test with React
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
-          node-version: 18
-          cache: 'yarn'
-      - run: yarn && yarn build && cd react && yarn test
+          version: 8.x.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+      - run: pnpm install && pnpm build && cd react && pnpm test
