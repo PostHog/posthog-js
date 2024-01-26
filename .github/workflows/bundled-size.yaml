@@ -28,9 +28,7 @@ jobs:
       - name: Install package.json dependencies with pnpm
         run: pnpm install --frozen-lockfile
 
-# auto selects yarn because yarn.lock exists in master :/
-# need to re-enable _after_ moving to pnpm
-#      - uses: preactjs/compressed-size-action@v2
-#        with:
-#          build-script: "build-rollup"
-#          compression: "none"
+      - uses: preactjs/compressed-size-action@v2
+        with:
+          build-script: "build-rollup"
+          compression: "none"
