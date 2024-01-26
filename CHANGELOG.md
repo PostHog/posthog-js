@@ -1,3 +1,8 @@
+## 1.103.0 - 2024-01-26
+
+- feat: pnpm patch rrweb (#971)
+- chore: convert to pnpm (#970)
+
 ## 1.102.1 - 2024-01-25
 
 - chore: add debug logging for session id/recording (#969)
