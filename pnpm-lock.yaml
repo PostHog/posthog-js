@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  rrweb@2.0.0-alpha.11:
+    hash: ehkxvj2dnc4d5fb4tq7odeskvu
+    path: patches/rrweb@2.0.0-alpha.11.patch
+
 dependencies:
   fflate:
     specifier: ^0.4.8
@@ -159,7 +164,7 @@ devDependencies:
     version: 5.9.0(rollup@2.79.1)
   rrweb:
     specifier: 2.0.0-alpha.11
-    version: 2.0.0-alpha.11
+    version: 2.0.0-alpha.11(patch_hash=ehkxvj2dnc4d5fb4tq7odeskvu)
   rrweb-snapshot:
     specifier: 2.0.0-alpha.11
     version: 2.0.0-alpha.11
@@ -9073,7 +9078,7 @@ packages:
       rrweb-snapshot: 1.1.14
     dev: true
 
-  /rrweb@2.0.0-alpha.11:
+  /rrweb@2.0.0-alpha.11(patch_hash=ehkxvj2dnc4d5fb4tq7odeskvu):
     resolution: {integrity: sha512-vJ2gNvF+pUG9C2aaau7iSNqhWBSc4BwtUO4FpegOtDObuH4PIaxNJOlgHz82+WxKr9XPm93ER0LqmNpy0KYdKg==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.11
@@ -9085,6 +9090,7 @@ packages:
       rrdom: 2.0.0-alpha.11
       rrweb-snapshot: 2.0.0-alpha.11
     dev: true
+    patched: true
 
   /rsvp@4.8.5:
     resolution: {integrity: sha512-nfMOlASu9OnRJo1mbEk2cz0D56a1MBNrJ7orjRZQG10XDyuvwksKbuXNp6qa+kbn839HwjwhBzhFmdsaEAfauA==}
