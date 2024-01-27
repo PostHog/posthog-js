@@ -1445,4 +1445,33 @@ describe('SessionRecording', () => {
             expect(sessionRecording['buffer']?.data.length).toBe(undefined)
         })
     })
+
+    describe('when rrweb is not available', () => {
+        beforeEach(() => {
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+
+            // fake that rrweb is not available
+            sessionRecording['rrwebRecord'] = undefined
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
+
+            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+        })
+
+        it('queues events', () => {
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+        })
+
+        it('processes the queue when rrweb is available again', () => {
+            // fake that rrweb is available again
+            sessionRecording['rrwebRecord'] = assignableWindow.rrwebRecord
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
+            expect(sessionRecording['rrwebRecord']).not.toBeUndefined()
+        })
+    })
 })

@@ -84,11 +84,23 @@ interface SnapshotBuffer {
     windowId: string | null
 }
 
+interface QueuedRRWebEvent {
+    rrwebMethod: () => void
+    attempt: number
+    // the timestamp this was first put into this queue
+    enqueuedAt: number
+}
+
 export class SessionRecording {
     private instance: PostHog
     private _endpoint: string
     private flushBufferTimer?: any
+
+    // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private buffer?: SnapshotBuffer
+    // and a queue - that contains rrweb events that we want to send to rrweb, but rrweb wasn't able to accept them yet
+    private queuedRRWebEvents: QueuedRRWebEvent[] = []
+
     private mutationRateLimiter?: MutationRateLimiter
     private _captureStarted: boolean
     private stopRrweb: listenerHandler | undefined
@@ -464,26 +476,48 @@ export class SessionRecording {
         }
     }
 
-    private _tryRRwebMethod(rrwebMethod: () => void): boolean {
+    private _tryRRwebMethod(queuedRRWebEvent: QueuedRRWebEvent): boolean {
         if (!this._captureStarted) {
-            return false
+            this.queuedRRWebEvents.push({
+                enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
+                attempt: queuedRRWebEvent.attempt++,
+                rrwebMethod: queuedRRWebEvent.rrwebMethod,
+            })
         }
         try {
-            rrwebMethod()
+            queuedRRWebEvent.rrwebMethod()
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
-            logger.error('[Session-Recording] using rrweb when not started.', e)
+            logger.error('[Session-Recording] could not emit queued rrweb event.', e)
+            this.queuedRRWebEvents.push({
+                enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
+                attempt: queuedRRWebEvent.attempt++,
+                rrwebMethod: queuedRRWebEvent.rrwebMethod,
+            })
             return false
         }
     }
 
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
-        return this._tryRRwebMethod(() => this.rrwebRecord?.addCustomEvent(tag, payload))
+        return this._tryRRwebMethod({
+            // this should throw if rrwebRecord is not available
+            rrwebMethod: () => {
+                const rrwebRecord = this.rrwebRecord
+                rrwebRecord!.addCustomEvent(tag, payload)
+            },
+            enqueuedAt: Date.now(),
+            attempt: 0,
+        })
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRwebMethod(() => this.rrwebRecord?.takeFullSnapshot())
+        return this._tryRRwebMethod({
+            // this should throw if rrwebRecord is not available
+            rrwebMethod: () => this.rrwebRecord?.takeFullSnapshot(),
+            enqueuedAt: Date.now(),
+            attempt: 0,
+        })
     }
 
     private _onScriptLoaded() {
@@ -609,6 +643,8 @@ export class SessionRecording {
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
+        this._processQueuedEvents()
+
         if (!rawEvent || !_isObject(rawEvent)) {
             return
         }
@@ -651,6 +687,40 @@ export class SessionRecording {
             this._captureSnapshotBuffered(properties)
         } else {
             this.clearBuffer()
+        }
+    }
+
+    private _processQueuedEvents() {
+        if (this.queuedRRWebEvents.length) {
+            // if rrweb isn't ready to accept events earlier then we queued them up
+            // now that emit has been called rrweb should be ready to accept them
+            // so, before we process this event, we try our queued events _once_ each
+            // we don't want to risk queuing more things and never exiting this loop!
+            // if they fail here, they'll be pushed into a new queue,
+            // and tried on the next loop.
+            // there is a risk of this queue growing in an uncontrolled manner,
+            // so its length is limited elsewhere
+            // for now this is to help us ensure we can capture events that happen
+            // and try to identify more about when it is failing
+            const itemsToProcess = [...this.queuedRRWebEvents]
+            this.queuedRRWebEvents = []
+            itemsToProcess.forEach((queuedRRWebEvent) => {
+                if (Date.now() - queuedRRWebEvent.enqueuedAt > 2000) {
+                    this._tryAddCustomEvent('rrwebQueueTimeout', {
+                        enqueuedAt: queuedRRWebEvent.enqueuedAt,
+                        attempt: queuedRRWebEvent.attempt,
+                        queueLength: itemsToProcess.length,
+                    })
+                } else {
+                    if (this._tryRRwebMethod(queuedRRWebEvent)) {
+                        this._tryAddCustomEvent('rrwebQueueSuccess', {
+                            enqueuedAt: queuedRRWebEvent.enqueuedAt,
+                            attempt: queuedRRWebEvent.attempt,
+                            queueLength: itemsToProcess.length,
+                        })
+                    }
+                }
+            })
         }
     }
 
