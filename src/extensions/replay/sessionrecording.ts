@@ -476,31 +476,25 @@ export class SessionRecording {
         }
     }
 
-    private _tryRRwebMethod(queuedRRWebEvent: QueuedRRWebEvent): boolean {
-        if (!this._captureStarted) {
-            this.queuedRRWebEvents.push({
-                enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
-                attempt: queuedRRWebEvent.attempt++,
-                rrwebMethod: queuedRRWebEvent.rrwebMethod,
-            })
-        }
+    private _tryRRWebMethod(queuedRRWebEvent: QueuedRRWebEvent): boolean {
         try {
             queuedRRWebEvent.rrwebMethod()
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
             logger.error('[Session-Recording] could not emit queued rrweb event.', e)
-            this.queuedRRWebEvents.push({
-                enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
-                attempt: queuedRRWebEvent.attempt++,
-                rrwebMethod: queuedRRWebEvent.rrwebMethod,
-            })
+            this.queuedRRWebEvents.length < 10 &&
+                this.queuedRRWebEvents.push({
+                    enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
+                    attempt: queuedRRWebEvent.attempt++,
+                    rrwebMethod: queuedRRWebEvent.rrwebMethod,
+                })
             return false
         }
     }
 
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
-        return this._tryRRwebMethod({
+        return this._tryRRWebMethod({
             // this should throw if rrwebRecord is not available
             rrwebMethod: () => {
                 const rrwebRecord = this.rrwebRecord
@@ -512,7 +506,7 @@ export class SessionRecording {
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRwebMethod({
+        return this._tryRRWebMethod({
             // this should throw if rrwebRecord is not available
             rrwebMethod: () => this.rrwebRecord?.takeFullSnapshot(),
             enqueuedAt: Date.now(),
@@ -712,7 +706,7 @@ export class SessionRecording {
                         queueLength: itemsToProcess.length,
                     })
                 } else {
-                    if (this._tryRRwebMethod(queuedRRWebEvent)) {
+                    if (this._tryRRWebMethod(queuedRRWebEvent)) {
                         this._tryAddCustomEvent('rrwebQueueSuccess', {
                             enqueuedAt: queuedRRWebEvent.enqueuedAt,
                             attempt: queuedRRWebEvent.attempt,

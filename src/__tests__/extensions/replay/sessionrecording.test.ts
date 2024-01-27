@@ -1464,6 +1464,16 @@ describe('SessionRecording', () => {
             expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
         })
 
+        it('limits the queue of events', () => {
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+
+            for (let i = 0; i < 100; i++) {
+                sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+            }
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(10)
+        })
+
         it('processes the queue when rrweb is available again', () => {
             // fake that rrweb is available again
             sessionRecording['rrwebRecord'] = assignableWindow.rrwebRecord
