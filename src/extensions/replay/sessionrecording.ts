@@ -484,7 +484,7 @@ export class SessionRecording {
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
-            logger.error('[Session-Recording] could not emit queued rrweb event.', e)
+            logger.warn('[Session-Recording] could not emit queued rrweb event.', e)
             this.queuedRRWebEvents.length < 10 &&
                 this.queuedRRWebEvents.push({
                     enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
@@ -498,10 +498,7 @@ export class SessionRecording {
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
         return this._tryRRWebMethod({
             // this should throw if rrwebRecord is not available
-            rrwebMethod: () => {
-                const rrwebRecord = this.rrwebRecord
-                rrwebRecord!.addCustomEvent(tag, payload)
-            },
+            rrwebMethod: () => this.rrwebRecord!.addCustomEvent(tag, payload),
             enqueuedAt: Date.now(),
             attempt: 0,
         })
@@ -578,7 +575,7 @@ export class SessionRecording {
             })
 
         // rrweb takes a snapshot on initialization,
-        // but we want to take one in five minutes
+        // we want to take one in five minutes
         // if nothing else happens to reset the timer
         this._scheduleFullSnapshot()
 
