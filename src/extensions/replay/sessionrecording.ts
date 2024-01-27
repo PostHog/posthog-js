@@ -119,6 +119,8 @@ export class SessionRecording {
     private _canvasFps: number | null = null
     private _canvasQuality: number | null = null
 
+    private _fullSnapshotTimer?: number
+
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
@@ -575,6 +577,11 @@ export class SessionRecording {
                 },
             })
 
+        // rrweb takes a snapshot on initialization,
+        // but we want to take one in five minutes
+        // if nothing else happens to reset the timer
+        this._scheduleFullSnapshot()
+
         const activePlugins = this._gatherRRWebPlugins()
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
@@ -610,6 +617,16 @@ export class SessionRecording {
             sessionRecordingOptions,
             activePlugins: activePlugins.map((p) => p?.name),
         })
+    }
+
+    private _scheduleFullSnapshot(): void {
+        if (this._fullSnapshotTimer) {
+            clearInterval(this._fullSnapshotTimer)
+        }
+
+        this._fullSnapshotTimer = setInterval(() => {
+            this._tryTakeFullSnapshot()
+        }, 1000 * 60 * 5) // 5 minutes
     }
 
     private _gatherRRWebPlugins() {
@@ -649,6 +666,11 @@ export class SessionRecording {
                 return
             }
             rawEvent.data.href = href
+        }
+
+        if (rawEvent.type === EventType.FullSnapshot) {
+            // we're processing a full snapshot, so we should reset the timer
+            this._scheduleFullSnapshot()
         }
 
         const throttledEvent = this.mutationRateLimiter

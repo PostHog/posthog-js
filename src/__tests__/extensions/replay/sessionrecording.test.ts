@@ -1484,4 +1484,25 @@ describe('SessionRecording', () => {
             expect(sessionRecording['rrwebRecord']).not.toBeUndefined()
         })
     })
+
+    describe('scheduled full snapshots', () => {
+        it('starts out unscheduled', () => {
+            expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
+        })
+
+        it('schedules a snapshot on start', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
+        })
+
+        it('reschedules a snapshot, when we take a full snapshot', () => {
+            sessionRecording.startRecordingIfEnabled()
+            const startTimer = sessionRecording['_fullSnapshotTimer']
+
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(startTimer)
+        })
+    })
 })
