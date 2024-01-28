@@ -16,7 +16,7 @@ import { style, getTextColor, defaultSurveyAppearance, sendSurveyEvent } from '.
 import * as Preact from 'preact'
 import { createWidgetShadow } from './surveys-widget'
 import { useState, useEffect } from 'preact/hooks'
-import { _isArray, _isNull, _isNumber } from 'utils/type-utils'
+import { _isArray, _isNull, _isNumber } from '../utils/type-utils'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -253,6 +253,7 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
         })
     }, [])
     const confirmationBoxLeftStyle = style?.left && _isNumber(style?.left) ? { left: style.left - 40 } : {}
+
     return (
         <>
             {showSurveyQuestion && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}

@@ -1,5 +1,6 @@
 /// <reference types="cypress" />
 import { getBase64EncodedPayload } from '../support/compression'
+import 'cypress-localstorage-commands'
 
 function onPageLoad(options = {}) {
     cy.posthogInit(options)
@@ -52,6 +53,108 @@ describe('Surveys', () => {
         }).as('decide')
     })
 
+    describe('Core display logic', () => {
+        it('shows the same survey to user if they do not dismiss or respond to it', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.reload()
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+        })
+        it('does not show the same survey to user if they have dismissed it before', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('not.exist')
+            cy.getLocalStorage('seenSurvey_123').should('equal', 'true')
+            cy.reload()
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').should('not.exist')
+            cy.getLocalStorage('seenSurvey_123').should('equal', 'true')
+        })
+
+        it('does not show the same survey to user if they responded to it before', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123').shadow().find('textarea').type('This is great!')
+            cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('not.exist')
+            cy.getLocalStorage('seenSurvey_123').should('equal', 'true')
+            cy.reload()
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').should('not.exist')
+            cy.getLocalStorage('seenSurvey_123').should('equal', 'true')
+        })
+
+        it('does not show a survey to user if user has already seen any survey in the wait period', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                        conditions: { seenSurveyWaitPeriodInDays: 10 },
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.getLocalStorage('lastSeenSurveyDate').then((date) => {
+                expect(date.split('T')[0]).to.equal(new Date().toISOString().split('T')[0])
+            })
+            cy.reload()
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').should('not.exist')
+        })
+    })
+
     describe('Survey question types', () => {
         it('shows and submits a basic survey', () => {
             cy.intercept('GET', '**/surveys/*', {
@@ -78,6 +181,28 @@ describe('Surveys', () => {
             survey.find('textarea').type('This is great!')
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
             cy.phCaptures().should('include', 'survey sent')
+        })
+
+        it('rating questions that are on the 10 scale start at 0', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '1234',
+                        name: 'Test survey 2',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [npsRatingQuestion, { ...npsRatingQuestion, scale: 5 }],
+                        appearance: appearanceWithThanks,
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey1234').shadow().find('.ratings-number').should('be.visible')
+            cy.get('.PostHogSurvey1234').shadow().find('.ratings-number').first().should('have.text', '0')
+            cy.get('.PostHogSurvey1234').shadow().find('.ratings-number').first().click()
+            cy.get('.PostHogSurvey1234').shadow().find('.form-submit').click()
+            cy.get('.PostHogSurvey1234').shadow().find('.ratings-number').first().should('have.text', '1')
         })
 
         it('multiple question surveys', () => {

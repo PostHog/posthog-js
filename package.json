@@ -31,6 +31,7 @@
         "react/package.json"
     ],
     "dependencies": {
+        "cypress-localstorage-commands": "^2.2.5",
         "fflate": "^0.4.1",
         "preact": "^10.19.3"
     },
