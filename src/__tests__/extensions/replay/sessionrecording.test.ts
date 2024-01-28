@@ -1445,4 +1445,64 @@ describe('SessionRecording', () => {
             expect(sessionRecording['buffer']?.data.length).toBe(undefined)
         })
     })
+
+    describe('when rrweb is not available', () => {
+        beforeEach(() => {
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+
+            // fake that rrweb is not available
+            sessionRecording['rrwebRecord'] = undefined
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
+
+            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+        })
+
+        it('queues events', () => {
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+        })
+
+        it('limits the queue of events', () => {
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+
+            for (let i = 0; i < 100; i++) {
+                sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+            }
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(10)
+        })
+
+        it('processes the queue when rrweb is available again', () => {
+            // fake that rrweb is available again
+            sessionRecording['rrwebRecord'] = assignableWindow.rrwebRecord
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
+            expect(sessionRecording['rrwebRecord']).not.toBeUndefined()
+        })
+    })
+
+    describe('scheduled full snapshots', () => {
+        it('starts out unscheduled', () => {
+            expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
+        })
+
+        it('schedules a snapshot on start', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
+        })
+
+        it('reschedules a snapshot, when we take a full snapshot', () => {
+            sessionRecording.startRecordingIfEnabled()
+            const startTimer = sessionRecording['_fullSnapshotTimer']
+
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(startTimer)
+        })
+    })
 })
