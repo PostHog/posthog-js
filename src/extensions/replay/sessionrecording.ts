@@ -29,7 +29,9 @@ import { userOptedOut } from '../../gdpr-utils'
 
 const BASE_ENDPOINT = '/s/'
 
-export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+const FIVE_MINUTES = 1000 * 60 * 5
+const TWO_SECONDS = 2000
+export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -90,6 +92,12 @@ interface QueuedRRWebEvent {
     // the timestamp this was first put into this queue
     enqueuedAt: number
 }
+
+const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
+    rrwebMethod,
+    enqueuedAt: Date.now(),
+    attempt: 1,
+})
 
 export class SessionRecording {
     private instance: PostHog
@@ -496,21 +504,11 @@ export class SessionRecording {
     }
 
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
-        return this._tryRRWebMethod({
-            // this should throw if rrwebRecord is not available
-            rrwebMethod: () => this.rrwebRecord!.addCustomEvent(tag, payload),
-            enqueuedAt: Date.now(),
-            attempt: 0,
-        })
+        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.addCustomEvent(tag, payload)))
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRWebMethod({
-            // this should throw if rrwebRecord is not available
-            rrwebMethod: () => this.rrwebRecord?.takeFullSnapshot(),
-            enqueuedAt: Date.now(),
-            attempt: 0,
-        })
+        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
     }
 
     private _onScriptLoaded() {
@@ -623,7 +621,7 @@ export class SessionRecording {
 
         this._fullSnapshotTimer = setInterval(() => {
             this._tryTakeFullSnapshot()
-        }, 1000 * 60 * 5) // 5 minutes
+        }, FIVE_MINUTES) // 5 minutes
     }
 
     private _gatherRRWebPlugins() {
@@ -718,7 +716,7 @@ export class SessionRecording {
             const itemsToProcess = [...this.queuedRRWebEvents]
             this.queuedRRWebEvents = []
             itemsToProcess.forEach((queuedRRWebEvent) => {
-                if (Date.now() - queuedRRWebEvent.enqueuedAt > 2000) {
+                if (Date.now() - queuedRRWebEvent.enqueuedAt > TWO_SECONDS) {
                     this._tryAddCustomEvent('rrwebQueueTimeout', {
                         enqueuedAt: queuedRRWebEvent.enqueuedAt,
                         attempt: queuedRRWebEvent.attempt,
