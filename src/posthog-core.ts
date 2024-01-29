@@ -276,7 +276,7 @@ export class PostHog {
     rateLimiter: RateLimiter
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
-    surveys: PostHogSurveys
+    surveys: ReturnType<typeof PostHogSurveys>
     toolbar: Toolbar
 
     // These are instance-specific state created after initialisation
@@ -327,7 +327,7 @@ export class PostHog {
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
         this.pageViewManager = new PageViewManager(this)
-        this.surveys = new PostHogSurveys(this)
+        this.surveys = PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 
         // NOTE: See the property definition for deprecation notice

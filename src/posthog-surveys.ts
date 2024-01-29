@@ -11,23 +11,17 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
     exact: (conditionsUrl) => window?.location.href === conditionsUrl,
 }
 
-export class PostHogSurveys {
-    instance: PostHog
-
-    constructor(instance: PostHog) {
-        this.instance = instance
-    }
-
-    getSurveys(callback: SurveyCallback, forceReload = false) {
-        const existingSurveys = this.instance.get_property(SURVEYS)
+export const PostHogSurveys = (instance: PostHog) => {
+    const getSurveys = (callback: SurveyCallback, forceReload = false) => {
+        const existingSurveys = instance.get_property(SURVEYS)
         if (!existingSurveys || forceReload) {
-            this.instance._send_request(
-                `${this.instance.config.api_host}/api/surveys/?token=${this.instance.config.token}`,
+            instance._send_request(
+                `${instance.config.api_host}/api/surveys/?token=${instance.config.token}`,
                 {},
                 { method: 'GET' },
                 (response) => {
                     const surveys = response.surveys || []
-                    this.instance.persistence?.register({ [SURVEYS]: surveys })
+                    instance.persistence?.register({ [SURVEYS]: surveys })
                     return callback(surveys)
                 }
             )
@@ -36,8 +30,8 @@ export class PostHogSurveys {
         }
     }
 
-    getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
-        this.getSurveys((surveys) => {
+    const getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false) => {
+        getSurveys((surveys) => {
             const activeSurveys = surveys.filter((survey) => {
                 return !!(survey.start_date && !survey.end_date)
             })
@@ -60,15 +54,20 @@ export class PostHogSurveys {
                     return true
                 }
                 const linkedFlagCheck = survey.linked_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
+                    ? instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
                     : true
                 const targetingFlagCheck = survey.targeting_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
+                    ? instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
                 return linkedFlagCheck && targetingFlagCheck
             })
 
             return callback(targetingMatchedSurveys)
         }, forceReload)
+    }
+
+    return {
+        getSurveys,
+        getActiveMatchingSurveys,
     }
 }

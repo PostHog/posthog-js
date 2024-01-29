@@ -10,7 +10,7 @@ import { window } from '../utils/globals'
 describe('surveys', () => {
     let config: PostHogConfig
     let instance: PostHog
-    let surveys: PostHogSurveys
+    let surveys: ReturnType<typeof PostHogSurveys>
     let surveysResponse: { status?: number; surveys?: Survey[] }
     const originalWindowLocation = window!.location
 
@@ -74,7 +74,7 @@ describe('surveys', () => {
             },
         } as unknown as PostHog
 
-        surveys = new PostHogSurveys(instance)
+        surveys = PostHogSurveys(instance)
 
         Object.defineProperty(window, 'location', {
             configurable: true,
