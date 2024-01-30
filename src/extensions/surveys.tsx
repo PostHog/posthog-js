@@ -138,10 +138,10 @@ export function QuestionHeader({
     )
 }
 
-export function Cancel() {
+export function Cancel({ onClick }: { onClick: () => void }) {
     return (
         <div className="cancel-btn-wrapper">
-            <button className="form-cancel" onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))}>
+            <button className="form-cancel" onClick={onClick}>
                 {cancelSVG}
             </button>
         </div>
@@ -263,6 +263,7 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
                     confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
                     appearance={survey.appearance || {}}
                     styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
+                    onClose={() => setShowConfirmation(false)}
                 />
             )}
         </>
@@ -349,7 +350,7 @@ export function OpenTextQuestion({
             style={{ backgroundColor: appearance.backgroundColor || defaultBackgroundColor }}
             ref={textRef}
         >
-            <Cancel />
+            <Cancel onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -377,7 +378,7 @@ export function LinkQuestion({
 }) {
     return (
         <div className="survey-box">
-            <Cancel />
+            <Cancel onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))} />
             <QuestionHeader question={question.question} description={question.description} />
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -411,7 +412,7 @@ export function RatingQuestion({
 
     return (
         <div className="survey-box">
-            <Cancel />
+            <Cancel onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -523,18 +524,20 @@ export function ConfirmationMessage({
     confirmationHeader,
     confirmationDescription,
     appearance,
+    onClose,
     styleOverrides,
 }: {
     confirmationHeader: string
     confirmationDescription: string
     appearance: SurveyAppearance
+    onClose: () => void
     styleOverrides?: React.CSSProperties
 }) {
     return (
         <>
             <div className="thank-you-message" style={{ ...styleOverrides }}>
                 <div className="thank-you-message-container">
-                    <Cancel />
+                    <Cancel onClick={() => onClose()} />
                     <h3 className="thank-you-message-header auto-text-color">{confirmationHeader}</h3>
                     {confirmationDescription && (
                         <div
@@ -542,7 +545,12 @@ export function ConfirmationMessage({
                             dangerouslySetInnerHTML={{ __html: confirmationDescription }}
                         />
                     )}
-                    <BottomSection text={'Close'} submitDisabled={false} appearance={appearance} onSubmit={() => {}} />
+                    <BottomSection
+                        text={'Close'}
+                        submitDisabled={false}
+                        appearance={appearance}
+                        onSubmit={() => onClose()}
+                    />
                 </div>
             </div>
         </>
@@ -574,7 +582,7 @@ export function MultipleChoiceQuestion({
             style={{ backgroundColor: appearance.backgroundColor || defaultBackgroundColor }}
             ref={textRef}
         >
-            <Cancel />
+            <Cancel onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}

@@ -92,7 +92,7 @@ describe('Surveys', () => {
             onPageLoad()
             cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
             cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
-            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('not.exist')
+            cy.get('.PostHogSurvey123').should('not.exist')
             cy.getLocalStorage('seenSurvey_123').should('equal', 'true')
             cy.reload()
             cy.visit('./playground/cypress')
@@ -119,8 +119,8 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
             cy.get('.PostHogSurvey123').shadow().find('textarea').type('This is great!')
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
-            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('not.exist')
             cy.getLocalStorage('seenSurvey_123').should('equal', 'true')
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('not.exist')
             cy.reload()
             cy.visit('./playground/cypress')
             onPageLoad()
@@ -145,8 +145,9 @@ describe('Surveys', () => {
             cy.visit('./playground/cypress')
             onPageLoad()
             cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.wait(200)
             cy.getLocalStorage('lastSeenSurveyDate').then((date) => {
-                expect(date.split('T')[0]).to.equal(new Date().toISOString().split('T')[0])
+                expect(date?.split('T')?.[0]).to.equal(new Date().toISOString().split('T')[0])
             })
             cy.reload()
             cy.visit('./playground/cypress')
@@ -232,7 +233,10 @@ describe('Surveys', () => {
                 .type('Because I want to learn more about PostHog')
             cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
             cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
+            cy.wait(200)
+            cy.get('.PostHogSurvey12345').shadow().find('.thank-you-message').should('be.visible')
             cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
+            cy.get('.PostHogSurvey12345').shadow().find('.thank-you-message').should('not.exist')
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getBase64EncodedPayload(request)
@@ -244,7 +248,6 @@ describe('Surveys', () => {
                     $survey_response_2: null,
                 })
             })
-            expect(cy.get('.PostHogSurvey12345').shadow().find('.thank-you-message').should('be.visible'))
         })
 
         it('multiple choice questions with open choice', () => {
@@ -554,7 +557,6 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey1234').shadow().find('.ratings-emoji').first().click()
             cy.get('.PostHogSurvey1234').shadow().find('.form-submit').click()
             expect(cy.get('.PostHogSurvey1234').shadow().find('.thank-you-message').should('be.visible'))
-            cy.wait(5000)
             expect(cy.get('.PostHogSurvey1234').shadow().find('.thank-you-message').should('not.exist'))
         })
     })
