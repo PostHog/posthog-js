@@ -230,16 +230,7 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
         localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
 
         window.addEventListener('PHSurveyClosed', () => {
-            posthog.capture('survey dismissed', {
-                $survey_name: survey.name,
-                $survey_id: survey.id,
-                sessionRecordingUrl: posthog.get_session_replay_url?.(),
-                $set: {
-                    [`$survey_dismissed/${survey.id}`]: true,
-                },
-            })
             setShowSurveyQuestion(false)
-            localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
         })
 
         window.addEventListener('PHSurveySent', () => {
@@ -315,7 +306,8 @@ export function Questions({
                                         question,
                                         idx,
                                         survey.appearance || defaultSurveyAppearance,
-                                        (res) => onNextClick(res, idx)
+                                        (res) => onNextClick(res, idx),
+                                        () => closeSurveyPopup(posthog, survey)
                                     )}
                                 </div>
                             )}
@@ -326,21 +318,37 @@ export function Questions({
                     survey.questions[idx],
                     idx,
                     survey.appearance || defaultSurveyAppearance,
-                    (res) => onNextClick(res, idx)
+                    (res) => onNextClick(res, idx),
+                    () => closeSurveyPopup(posthog, survey)
                 )
             })}
         </form>
     )
 }
 
+const closeSurveyPopup = (posthog: PostHog, survey: Survey) => {
+    posthog.capture('survey dismissed', {
+        $survey_name: survey.name,
+        $survey_id: survey.id,
+        sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        $set: {
+            [`$survey_dismissed/${survey.id}`]: true,
+        },
+    })
+    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
+    window.dispatchEvent(new Event('PHSurveyClosed'))
+}
+
 export function OpenTextQuestion({
     question,
     appearance,
     onSubmit,
+    closeSurveyPopup,
 }: {
     question: BasicSurveyQuestion
     appearance: SurveyAppearance
     onSubmit: (text: string) => void
+    closeSurveyPopup: () => void
 }) {
     const textRef = Preact.createRef()
     const [text, setText] = useState('')
@@ -350,7 +358,7 @@ export function OpenTextQuestion({
             style={{ backgroundColor: appearance.backgroundColor || defaultBackgroundColor }}
             ref={textRef}
         >
-            <Cancel onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))} />
+            <Cancel onClick={() => closeSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -371,14 +379,16 @@ export function LinkQuestion({
     question,
     appearance,
     onSubmit,
+    closeSurveyPopup,
 }: {
     question: LinkSurveyQuestion
     appearance: SurveyAppearance
     onSubmit: (clicked: string) => void
+    closeSurveyPopup: () => void
 }) {
     return (
         <div className="survey-box">
-            <Cancel onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))} />
+            <Cancel onClick={() => closeSurveyPopup()} />
             <QuestionHeader question={question.question} description={question.description} />
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -396,11 +406,13 @@ export function RatingQuestion({
     questionIndex,
     appearance,
     onSubmit,
+    closeSurveyPopup,
 }: {
     question: RatingSurveyQuestion
     questionIndex: number
     appearance: SurveyAppearance
     onSubmit: (rating: number | null) => void
+    closeSurveyPopup: () => void
 }) {
     const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji]
     const fiveScaleEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
@@ -412,7 +424,7 @@ export function RatingQuestion({
 
     return (
         <div className="survey-box">
-            <Cancel onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))} />
+            <Cancel onClick={() => closeSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -562,11 +574,13 @@ export function MultipleChoiceQuestion({
     questionIndex,
     appearance,
     onSubmit,
+    closeSurveyPopup,
 }: {
     question: MultipleSurveyQuestion
     questionIndex: number
     appearance: SurveyAppearance
     onSubmit: (choices: string | string[] | null) => void
+    closeSurveyPopup: () => void
 }) {
     const textRef = Preact.createRef()
     const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
@@ -582,7 +596,7 @@ export function MultipleChoiceQuestion({
             style={{ backgroundColor: appearance.backgroundColor || defaultBackgroundColor }}
             ref={textRef}
         >
-            <Cancel onClick={() => window.dispatchEvent(new Event('PHSurveyClosed'))} />
+            <Cancel onClick={() => closeSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -721,14 +735,15 @@ const questionTypeMap = (
     question: SurveyQuestion,
     questionIndex: number,
     appearance: SurveyAppearance,
-    onSubmit: (res: string | string[] | number | null) => void
+    onSubmit: (res: string | string[] | number | null) => void,
+    closeSurveyPopup: () => void
 ): JSX.Element => {
     const mapping = {
         [SurveyQuestionType.Open]: (
-            <OpenTextQuestion question={question as BasicSurveyQuestion} appearance={appearance} onSubmit={onSubmit} />
+            <OpenTextQuestion question={question as BasicSurveyQuestion} appearance={appearance} onSubmit={onSubmit} closeSurveyPopup={closeSurveyPopup} />
         ),
         [SurveyQuestionType.Link]: (
-            <LinkQuestion question={question as LinkSurveyQuestion} appearance={appearance} onSubmit={onSubmit} />
+            <LinkQuestion question={question as LinkSurveyQuestion} appearance={appearance} onSubmit={onSubmit} closeSurveyPopup={closeSurveyPopup}/>
         ),
         [SurveyQuestionType.Rating]: (
             <RatingQuestion
@@ -736,6 +751,7 @@ const questionTypeMap = (
                 appearance={appearance}
                 questionIndex={questionIndex}
                 onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
             />
         ),
         [SurveyQuestionType.SingleChoice]: (
@@ -744,6 +760,7 @@ const questionTypeMap = (
                 appearance={appearance}
                 questionIndex={questionIndex}
                 onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
             />
         ),
         [SurveyQuestionType.MultipleChoice]: (
@@ -752,6 +769,7 @@ const questionTypeMap = (
                 appearance={appearance}
                 questionIndex={questionIndex}
                 onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
             />
         ),
     }
