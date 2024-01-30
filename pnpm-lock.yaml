@@ -87,6 +87,9 @@ devDependencies:
   cypress:
     specifier: 13.6.3
     version: 13.6.3
+  cypress-localstorage-commands:
+    specifier: ^2.2.5
+    version: 2.2.5(cypress@13.6.3)
   eslint:
     specifier: 8.56.0
     version: 8.56.0
@@ -4373,6 +4376,15 @@ packages:
 
   /cuint@0.2.2:
     resolution: {integrity: sha512-d4ZVpCW31eWwCMe1YT3ur7mUDnTXbgwyzaL320DrcRT45rfjYxkt5QWLrmOJ+/UEAI2+fQgKe/fCjR8l4TpRgw==}
+    dev: true
+
+  /cypress-localstorage-commands@2.2.5(cypress@13.6.3):
+    resolution: {integrity: sha512-07zpwzWdY+uPi1NEHFhWQNylIJqRxR78Ile05L6WT8h1Gz0OaxgBSZRuzp+pqUni/3Pk4d2ieq/cSh++ZmujEA==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      cypress: '>=2.1.0'
+    dependencies:
+      cypress: 13.6.3
     dev: true
 
   /cypress@13.6.3:
