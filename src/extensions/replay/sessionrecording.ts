@@ -29,7 +29,9 @@ import { userOptedOut } from '../../gdpr-utils'
 
 const BASE_ENDPOINT = '/s/'
 
-export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+const FIVE_MINUTES = 1000 * 60 * 5
+const TWO_SECONDS = 2000
+export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -84,11 +86,29 @@ interface SnapshotBuffer {
     windowId: string | null
 }
 
+interface QueuedRRWebEvent {
+    rrwebMethod: () => void
+    attempt: number
+    // the timestamp this was first put into this queue
+    enqueuedAt: number
+}
+
+const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
+    rrwebMethod,
+    enqueuedAt: Date.now(),
+    attempt: 1,
+})
+
 export class SessionRecording {
     private instance: PostHog
     private _endpoint: string
     private flushBufferTimer?: any
+
+    // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private buffer?: SnapshotBuffer
+    // and a queue - that contains rrweb events that we want to send to rrweb, but rrweb wasn't able to accept them yet
+    private queuedRRWebEvents: QueuedRRWebEvent[] = []
+
     private mutationRateLimiter?: MutationRateLimiter
     private _captureStarted: boolean
     private stopRrweb: listenerHandler | undefined
@@ -106,6 +126,8 @@ export class SessionRecording {
     private _recordCanvas: boolean = false
     private _canvasFps: number | null = null
     private _canvasQuality: number | null = null
+
+    private _fullSnapshotTimer?: number
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -213,6 +235,14 @@ export class SessionRecording {
             this._flushBuffer()
         })
 
+        window?.addEventListener('offline', () => {
+            this._tryAddCustomEvent('browser offline', {})
+        })
+
+        window?.addEventListener('online', () => {
+            this._tryAddCustomEvent('browser online', {})
+        })
+
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
@@ -224,6 +254,7 @@ export class SessionRecording {
     startRecordingIfEnabled() {
         if (this.isRecordingEnabled) {
             this.startCaptureAndTrySendingQueuedSnapshots()
+            logger.info('[SessionRecording] started')
         } else {
             this.stopRecording()
             this.clearBuffer()
@@ -235,6 +266,7 @@ export class SessionRecording {
             this.stopRrweb()
             this.stopRrweb = undefined
             this._captureStarted = false
+            logger.info('[SessionRecording] stopped')
         }
     }
 
@@ -454,26 +486,29 @@ export class SessionRecording {
         }
     }
 
-    private _tryRRwebMethod(rrwebMethod: () => void): boolean {
-        if (!this._captureStarted) {
-            return false
-        }
+    private _tryRRWebMethod(queuedRRWebEvent: QueuedRRWebEvent): boolean {
         try {
-            rrwebMethod()
+            queuedRRWebEvent.rrwebMethod()
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
-            logger.error('[Session-Recording] using rrweb when not started.', e)
+            logger.warn('[Session-Recording] could not emit queued rrweb event.', e)
+            this.queuedRRWebEvents.length < 10 &&
+                this.queuedRRWebEvents.push({
+                    enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
+                    attempt: queuedRRWebEvent.attempt++,
+                    rrwebMethod: queuedRRWebEvent.rrwebMethod,
+                })
             return false
         }
     }
 
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
-        return this._tryRRwebMethod(() => this.rrwebRecord?.addCustomEvent(tag, payload))
+        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.addCustomEvent(tag, payload)))
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRwebMethod(() => this.rrwebRecord?.takeFullSnapshot())
+        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
     }
 
     private _onScriptLoaded() {
@@ -537,6 +572,11 @@ export class SessionRecording {
                 },
             })
 
+        // rrweb takes a snapshot on initialization,
+        // we want to take one in five minutes
+        // if nothing else happens to reset the timer
+        this._scheduleFullSnapshot()
+
         const activePlugins = this._gatherRRWebPlugins()
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
@@ -574,6 +614,16 @@ export class SessionRecording {
         })
     }
 
+    private _scheduleFullSnapshot(): void {
+        if (this._fullSnapshotTimer) {
+            clearInterval(this._fullSnapshotTimer)
+        }
+
+        this._fullSnapshotTimer = setInterval(() => {
+            this._tryTakeFullSnapshot()
+        }, FIVE_MINUTES) // 5 minutes
+    }
+
     private _gatherRRWebPlugins() {
         const plugins: RecordPlugin<unknown>[] = []
 
@@ -599,6 +649,8 @@ export class SessionRecording {
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
+        this._processQueuedEvents()
+
         if (!rawEvent || !_isObject(rawEvent)) {
             return
         }
@@ -609,6 +661,11 @@ export class SessionRecording {
                 return
             }
             rawEvent.data.href = href
+        }
+
+        if (rawEvent.type === EventType.FullSnapshot) {
+            // we're processing a full snapshot, so we should reset the timer
+            this._scheduleFullSnapshot()
         }
 
         const throttledEvent = this.mutationRateLimiter
@@ -641,6 +698,40 @@ export class SessionRecording {
             this._captureSnapshotBuffered(properties)
         } else {
             this.clearBuffer()
+        }
+    }
+
+    private _processQueuedEvents() {
+        if (this.queuedRRWebEvents.length) {
+            // if rrweb isn't ready to accept events earlier then we queued them up
+            // now that emit has been called rrweb should be ready to accept them
+            // so, before we process this event, we try our queued events _once_ each
+            // we don't want to risk queuing more things and never exiting this loop!
+            // if they fail here, they'll be pushed into a new queue,
+            // and tried on the next loop.
+            // there is a risk of this queue growing in an uncontrolled manner,
+            // so its length is limited elsewhere
+            // for now this is to help us ensure we can capture events that happen
+            // and try to identify more about when it is failing
+            const itemsToProcess = [...this.queuedRRWebEvents]
+            this.queuedRRWebEvents = []
+            itemsToProcess.forEach((queuedRRWebEvent) => {
+                if (Date.now() - queuedRRWebEvent.enqueuedAt > TWO_SECONDS) {
+                    this._tryAddCustomEvent('rrwebQueueTimeout', {
+                        enqueuedAt: queuedRRWebEvent.enqueuedAt,
+                        attempt: queuedRRWebEvent.attempt,
+                        queueLength: itemsToProcess.length,
+                    })
+                } else {
+                    if (this._tryRRWebMethod(queuedRRWebEvent)) {
+                        this._tryAddCustomEvent('rrwebQueueSuccess', {
+                            enqueuedAt: queuedRRWebEvent.enqueuedAt,
+                            attempt: queuedRRWebEvent.attempt,
+                            queueLength: itemsToProcess.length,
+                        })
+                    }
+                }
+            })
         }
     }
 

@@ -1,3 +1,23 @@
+## 1.103.1 - 2024-01-28
+
+- feat: safer rrweb events and regular full snapshots (#973)
+- chore: update rollup (#974)
+- chore: re-enable bundle checker now master and branches both use pnpm (#972)
+
+## 1.103.0 - 2024-01-26
+
+- feat: pnpm patch rrweb (#971)
+- chore: convert to pnpm (#970)
+
+## 1.102.1 - 2024-01-25
+
+- chore: add debug logging for session id/recording (#969)
+
+## 1.102.0 - 2024-01-24
+
+- feat: send custom event when network status changes (#965)
+- fix: integration test opting out (#959)
+
 ## 1.101.0 - 2024-01-22
 
 - feat: canvas recording support (#946)
