@@ -509,7 +509,6 @@ describe('Surveys', () => {
                 .type('Because I want to learn more about PostHog')
             cy.get('.PostHogWidget12345').shadow().find('.form-submit').click()
             cy.get('.PostHogWidget12345').shadow().find('.form-submit').click()
-            cy.get('.PostHogWidget12345').shadow().find('.form-submit').click()
             cy.get('.PostHogWidget12345').shadow().find('.thank-you-message').should('be.visible')
             cy.phCaptures().should('include', 'survey shown')
             cy.phCaptures().should('include', 'survey sent')
@@ -535,7 +534,7 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey1234').shadow().find('.ratings-emoji').should('be.visible')
             cy.get('.PostHogSurvey1234').shadow().find('.ratings-emoji').first().click()
             cy.get('.PostHogSurvey1234').shadow().find('.form-submit').click()
-            expect(cy.get('.PostHogSurvey1234').shadow().find('.thank-you-message').should('be.visible'))
+            cy.get('.PostHogSurvey1234').shadow().find('.thank-you-message').should('be.visible')
         })
 
         it('counts down with auto disappear after 5 seconds', () => {
@@ -557,6 +556,7 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey1234').shadow().find('.ratings-emoji').first().click()
             cy.get('.PostHogSurvey1234').shadow().find('.form-submit').click()
             expect(cy.get('.PostHogSurvey1234').shadow().find('.thank-you-message').should('be.visible'))
+            cy.wait(5000) // mimic the 5 second timeout
             expect(cy.get('.PostHogSurvey1234').shadow().find('.thank-you-message').should('not.exist'))
         })
     })
