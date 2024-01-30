@@ -230,7 +230,6 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
         localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
 
         window.addEventListener('PHSurveyClosed', () => {
-            localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
             posthog.capture('survey dismissed', {
                 $survey_name: survey.name,
                 $survey_id: survey.id,
@@ -240,6 +239,7 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
                 },
             })
             setShowSurveyQuestion(false)
+            localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
         })
 
         window.addEventListener('PHSurveySent', () => {

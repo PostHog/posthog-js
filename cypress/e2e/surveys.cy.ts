@@ -581,11 +581,12 @@ describe('Surveys', () => {
             // first capture is $pageview
             cy.wait('@capture-assertion')
             cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
+            cy.wait(500)
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getBase64EncodedPayload(request)
                 expect(captures.map(({ event }) => event)).to.deep.equal([
-                    // 'survey shown',
-                    // 'survey dismissed',
+                    'survey shown',
+                    'survey dismissed',
                     '$pageleave',
                 ])
             })
