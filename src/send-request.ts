@@ -90,32 +90,40 @@ export const request = (params: RequestData) => {
                 body,
             })
             .then((response) => {
+                const statusCode = response.status
                 // Report to the callback handlers
-                response.text().then((text) => {
-                    const minimalResponseSummary: MinimalHTTPResponse = {
-                        statusCode: response.status,
-                        responseText: text,
+                return response.text().then((responseText) => {
+                    params.onResponse?.({
+                        statusCode,
+                        responseText,
+                    })
+
+                    if (statusCode === 200) {
+                        try {
+                            params.callback?.(JSON.parse(responseText))
+                        } catch (e) {
+                            logger.error(e)
+                        }
+                        return
                     }
-                    params.onResponse?.(minimalResponseSummary)
+
                     if (_isFunction(params.onError)) {
-                        params.onError(minimalResponseSummary)
+                        params.onError({
+                            statusCode,
+                            responseText,
+                        })
                     }
+
+                    // don't retry errors between 400 and 500 inclusive
+                    if (statusCode < 400 || statusCode > 500) {
+                        params.retryQueue.enqueue({
+                            ...params,
+                            headers,
+                            retriesPerformedSoFar: (params.retriesPerformedSoFar || 0) + 1,
+                        })
+                    }
+                    params.callback?.({ status: 0 })
                 })
-                if (response.status === 200) {
-                    response.json().then((json) => {
-                        params.callback?.(json)
-                    })
-                    return
-                }
-                // don't retry errors between 400 and 500 inclusive
-                if (response.status < 400 || response.status > 500) {
-                    params.retryQueue.enqueue({
-                        ...params,
-                        headers,
-                        retriesPerformedSoFar: (params.retriesPerformedSoFar || 0) + 1,
-                    })
-                }
-                params.callback?.({ status: 0 })
             })
             .catch((error) => {
                 logger.error(error)
