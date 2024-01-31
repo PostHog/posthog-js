@@ -34,7 +34,7 @@ export class RateLimiter {
                 this.limits[batchKey] = new Date().getTime() + oneMinuteInMilliseconds
             })
         } catch (e: any) {
-            logger.error(`[RateLimiter] could not rate limit - continuing. Error: "${e?.message}"`, { text })
+            logger.warn(`[RateLimiter] could not rate limit - continuing. Error: "${e?.message}"`, { text })
             return
         }
     }
