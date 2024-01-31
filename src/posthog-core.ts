@@ -24,6 +24,7 @@ import { compressData, decideCompression } from './compression'
 import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
+import { RequestRouter } from './utils/request-router'
 import {
     AutocaptureConfig,
     CaptureOptions,
@@ -284,6 +285,7 @@ export class PostHog {
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
+    requestRouter: RequestRouter
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -329,6 +331,7 @@ export class PostHog {
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
+        this.requestRouter = new RequestRouter(this)
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
