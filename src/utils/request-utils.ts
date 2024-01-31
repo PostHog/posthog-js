@@ -1,6 +1,6 @@
 import { _each, _isValidRegex } from './'
 
-import { _isArray, _isFunction, _isUndefined } from './type-utils'
+import { _isArray, _isUndefined } from './type-utils'
 import { logger } from './logger'
 import { document, fetch, XMLHttpRequest } from './globals'
 
