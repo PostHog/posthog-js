@@ -20,20 +20,21 @@ export class RateLimiter {
     }
 
     public checkForLimiting = (httpResponse: MinimalHTTPResponse): void => {
-        try {
-            const text = httpResponse.responseText
-            if (!text || !text.length) {
-                return
-            }
+        const text: string | undefined = httpResponse.responseText
 
+        if (!text || !text.length) {
+            return
+        }
+
+        try {
             const response: CaptureResponse = JSON.parse(text)
             const quotaLimitedProducts = response.quota_limited || []
             quotaLimitedProducts.forEach((batchKey) => {
                 logger.info(`[RateLimiter] ${batchKey || 'events'} is quota limited.`)
                 this.limits[batchKey] = new Date().getTime() + oneMinuteInMilliseconds
             })
-        } catch (e) {
-            logger.error(e)
+        } catch (e: any) {
+            logger.warn(`[RateLimiter] could not rate limit - continuing. Error: "${e?.message}"`, { text })
             return
         }
     }
