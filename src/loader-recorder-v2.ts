@@ -163,6 +163,7 @@ function shouldRecordBody(
         const contentType = contentTypeHeader && headers[contentTypeHeader]
         return contentTypes.some((ct) => contentType?.includes(ct))
     }
+
     if (!recordBody) return false
     if (_isBoolean(recordBody)) return true
     if (_isArray(recordBody)) return matchesContentType(recordBody)
@@ -365,6 +366,51 @@ function prepareRequest(
     return requests
 }
 
+const contentTypePrefixDenyList = ['video/', 'audio/']
+
+function _checkForCannotReadBody(res: Response): string | null {
+    if (res.headers.get('Transfer-Encoding') === 'chunked') {
+        return 'Chunked Transfer-Encoding is not supported'
+    }
+
+    // `get` and `has` are case-insensitive
+    // but return the header value with the casing that was supplied
+    const contentType = res.headers.get('Content-Type')?.toLowerCase()
+    const contentTypeIsDenied = contentTypePrefixDenyList.some((prefix) => contentType?.startsWith(prefix))
+    if (contentType && contentTypeIsDenied) {
+        return `Content-Type ${contentType} is not supported`
+    }
+
+    if (!res.headers.has('Content-Length')) {
+        return 'Content-Length is not set, not reading body'
+    }
+
+    return null
+}
+
+async function _tryReadBody(res: Response): Promise<string> {
+    const cannotReadBodyReason: string | null = _checkForCannotReadBody(res)
+    if (!_isNull(cannotReadBodyReason)) {
+        return Promise.resolve(cannotReadBodyReason)
+    }
+
+    // there are now already multiple places where we're using Promise...
+    // eslint-disable-next-line compat/compat
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(
+            () => reject(new Error('[rrweb/network@1] Timeout while trying to read response body')),
+            250
+        )
+        res.clone()
+            .text()
+            .then(
+                (txt) => resolve(txt),
+                (reason) => reject(reason)
+            )
+            .finally(() => clearTimeout(timeout))
+    })
+}
+
 function initFetchObserver(
     cb: networkCallback,
     win: IWindow,
@@ -415,12 +461,7 @@ function initFetchObserver(
                     networkRequest.responseHeaders = responseHeaders
                 }
                 if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                    let body: string | undefined
-                    try {
-                        body = await res.clone().text()
-                    } catch {
-                        //
-                    }
+                    const body: string | undefined = await _tryReadBody(res)
                     if (_isUndefined(res.body) || _isNull(res.body)) {
                         networkRequest.responseBody = null
                     } else {
