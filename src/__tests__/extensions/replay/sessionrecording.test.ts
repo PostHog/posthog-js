@@ -536,7 +536,6 @@ describe('SessionRecording', () => {
                     $window_id: 'windowId',
                 },
                 {
-                    transport: 'XHR',
                     method: 'POST',
                     endpoint: '/s/',
                     _noTruncate: true,
@@ -575,7 +574,6 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    transport: 'XHR',
                     endpoint: '/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
@@ -660,7 +658,6 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    transport: 'XHR',
                     endpoint: '/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
@@ -1288,7 +1285,6 @@ describe('SessionRecording', () => {
                     _noTruncate: true,
                     endpoint: '/s/',
                     method: 'POST',
-                    transport: 'XHR',
                 }
             )
             expect(sessionRecording['buffer']).toEqual({

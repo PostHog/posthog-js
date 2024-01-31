@@ -58,7 +58,7 @@ import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
-import { SUPPORTS_REQUEST } from 'utils/request-utils'
+import { SUPPORTS_REQUEST } from './utils/request-utils'
 
 /*
 SIMPLE STYLE GUIDE:
