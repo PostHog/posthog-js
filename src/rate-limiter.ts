@@ -20,8 +20,9 @@ export class RateLimiter {
     }
 
     public checkForLimiting = (httpResponse: MinimalHTTPResponse): void => {
+        let text: string | undefined
         try {
-            const text = httpResponse.responseText
+            text = httpResponse.responseText
             if (!text || !text.length) {
                 return
             }
@@ -32,8 +33,8 @@ export class RateLimiter {
                 logger.info(`[RateLimiter] ${batchKey || 'events'} is quota limited.`)
                 this.limits[batchKey] = new Date().getTime() + oneMinuteInMilliseconds
             })
-        } catch (e) {
-            logger.error(e)
+        } catch (e: any) {
+            logger.error(`[RateLimiter] could not rate limit - continuing. Error: "${e?.message}"`, { text })
             return
         }
     }
