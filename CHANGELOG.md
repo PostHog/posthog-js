@@ -1,3 +1,7 @@
+## 1.104.1 - 2024-01-31
+
+- chore: make rate limiter error less scary (#983)
+
 ## 1.104.0 - 2024-01-31
 
 - feat: Fetch support (#898)
