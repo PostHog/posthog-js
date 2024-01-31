@@ -1,3 +1,8 @@
+## 1.104.0 - 2024-01-31
+
+- feat: Fetch support (#898)
+- chore: Swap to main (#979)
+
 ## 1.103.2 - 2024-01-31
 
 - fix: safer body processing (#980)
