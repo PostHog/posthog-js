@@ -1,3 +1,4 @@
+/* eslint-disable compat/compat */
 /// <reference lib="dom" />
 
 import { addParamsToURL, encodePostData, request } from '../send-request'
@@ -5,15 +6,24 @@ import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-chec
 import { Compression, PostData, XHROptions, RequestData, MinimalHTTPResponse } from '../types'
 
 import { _isUndefined } from '../utils/type-utils'
+import { assignableWindow } from '../utils/globals'
+
+jest.mock('../utils/request-utils', () => ({
+    ...jest.requireActual('../utils/request-utils'),
+    SUPPORTS_XHR: true,
+    SUPPORTS_FETCH: true,
+    SUPPORTS_REQUEST: true,
+}))
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
+
+const flushPromises = () => new Promise((r) => setTimeout(r, 0))
 
 describe('send-request', () => {
     describe('xhr', () => {
         let mockXHR: XMLHttpRequest
         let createRequestData: (overrides?: Partial<RequestData>) => RequestData
         let checkForLimiting: RequestData['onResponse']
-        let xhrOptions: RequestData['options']
 
         beforeEach(() => {
             mockXHR = {
@@ -27,14 +37,16 @@ describe('send-request', () => {
             } as Partial<XMLHttpRequest> as XMLHttpRequest
 
             checkForLimiting = jest.fn()
-            xhrOptions = {}
             createRequestData = (overrides?: Partial<RequestData>) => {
                 return {
                     url: 'https://any.posthog-instance.com?ver=1.23.45',
                     data: {},
                     headers: {},
-                    options: xhrOptions,
                     callback: () => {},
+                    options: {
+                        transport: 'XHR',
+                        ...(overrides?.options || {}),
+                    },
                     retriesPerformedSoFar: undefined,
                     retryQueue: {
                         enqueue: () => {},
@@ -47,7 +59,21 @@ describe('send-request', () => {
             // ignore TS complaining about us cramming a fake in here
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
-            window.XMLHttpRequest = jest.fn(() => mockXHR) as unknown as XMLHttpRequest
+            assignableWindow.XMLHttpRequest = jest.fn(() => mockXHR) as unknown as XMLHttpRequest
+        })
+
+        test('performs the request with default params', () => {
+            request(
+                createRequestData({
+                    retriesPerformedSoFar: 0,
+                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
+                })
+            )
+            expect(mockXHR.open).toHaveBeenCalledWith(
+                'GET',
+                'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
+                true
+            )
         })
 
         test('it adds the retry count to the URL', () => {
@@ -65,21 +91,20 @@ describe('send-request', () => {
             )
         })
 
-        test('does not add retry count when it is 0', () => {
-            request(
-                createRequestData({
-                    retriesPerformedSoFar: 0,
-                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
-                })
-            )
-            expect(mockXHR.open).toHaveBeenCalledWith(
-                'GET',
-                'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
-                true
-            )
+        it('calls the on response handler', async () => {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            // noinspection JSConstantReassignment
+            mockXHR.status = 200
+            request(createRequestData())
+            mockXHR.onreadystatechange?.({} as Event)
+            expect(checkForLimiting).toHaveBeenCalledWith({
+                statusCode: mockXHR.status,
+                responseText: mockXHR.responseText,
+            })
         })
 
-        describe('when xhr requests fail', () => {
+        describe('when the requests fail', () => {
             it('does not error if the configured onError is not a function', () => {
                 expect(() => {
                     request(
@@ -117,6 +142,135 @@ describe('send-request', () => {
                 expect(checkForLimiting).toHaveBeenCalledWith({
                     statusCode: mockXHR.status,
                     responseText: mockXHR.responseText,
+                })
+            })
+        })
+    })
+
+    describe('fetch', () => {
+        let createRequestData: (overrides?: Partial<RequestData>) => RequestData
+        let checkForLimiting: RequestData['onResponse']
+
+        beforeEach(() => {
+            checkForLimiting = jest.fn()
+            createRequestData = (overrides?: Partial<RequestData>) => {
+                return {
+                    url: 'https://any.posthog-instance.com?ver=1.23.45',
+                    data: {},
+                    headers: {},
+                    callback: () => {},
+                    retriesPerformedSoFar: undefined,
+                    options: {
+                        transport: 'fetch',
+                        ...(overrides?.options || {}),
+                    },
+
+                    retryQueue: {
+                        enqueue: () => {},
+                    } as Partial<RequestData['retryQueue']> as RequestData['retryQueue'],
+                    onResponse: checkForLimiting,
+                    ...overrides,
+                }
+            }
+
+            assignableWindow.fetch = jest.fn(() => {
+                return Promise.resolve({
+                    status: 200,
+                    json: () => Promise.resolve({}),
+                    text: () => Promise.resolve(''),
+                }) as any
+            })
+        })
+
+        test('it performs the request with default params', () => {
+            request(
+                createRequestData({
+                    retriesPerformedSoFar: 0,
+                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
+                })
+            )
+
+            expect(assignableWindow.fetch).toHaveBeenCalledWith(
+                `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278`,
+                {
+                    body: null,
+                    headers: new Headers(),
+                    keepalive: false,
+                    method: 'GET',
+                }
+            )
+        })
+
+        test('it adds the retry count to the URL', () => {
+            const retryCount = Math.floor(Math.random() * 100) + 1 // make sure it is never 0
+            request(
+                createRequestData({
+                    retriesPerformedSoFar: retryCount,
+                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
+                })
+            )
+            expect(assignableWindow.fetch).toHaveBeenCalledWith(
+                `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278&retry_count=${retryCount}`,
+                {
+                    body: null,
+                    headers: new Headers(),
+                    keepalive: false,
+                    method: 'GET',
+                }
+            )
+        })
+
+        it('calls the on response handler', async () => {
+            request(createRequestData())
+            await flushPromises()
+            expect(checkForLimiting).toHaveBeenCalledWith({
+                statusCode: 200,
+                responseText: '',
+            })
+        })
+
+        describe('when the requests fail', () => {
+            beforeEach(() => {
+                assignableWindow.fetch = jest.fn(
+                    () =>
+                        Promise.resolve({
+                            status: 502,
+                            text: () => Promise.resolve('oh no!'),
+                        }) as any
+                )
+            })
+
+            it('does not error if the configured onError is not a function', () => {
+                expect(() => {
+                    request(
+                        createRequestData({
+                            onError: 'not a function' as unknown as RequestData['onError'],
+                        })
+                    )
+                }).not.toThrow()
+            })
+
+            it('calls the injected XHR error handler', async () => {
+                //cannot use an auto-mock from jest as the code checks if onError is a Function
+                let requestFromError: MinimalHTTPResponse | undefined
+                request(
+                    createRequestData({
+                        onError: (req) => {
+                            requestFromError = req
+                        },
+                    })
+                )
+                await flushPromises()
+
+                expect(requestFromError).toHaveProperty('statusCode', 502)
+            })
+
+            it('calls the on response handler - regardless of status', async () => {
+                request(createRequestData())
+                await flushPromises()
+                expect(checkForLimiting).toHaveBeenCalledWith({
+                    statusCode: 502,
+                    responseText: 'oh no!',
                 })
             })
         })
