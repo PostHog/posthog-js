@@ -392,7 +392,10 @@ async function _tryReadBody(res: Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
     return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Timeout while trying to read response body')), 250)
+        const timeout = setTimeout(
+            () => reject(new Error('[rrweb/network@1] Timeout while trying to read response body')),
+            250
+        )
         res.clone()
             .text()
             .then(
