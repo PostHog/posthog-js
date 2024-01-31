@@ -1,7 +1,7 @@
 import { _each } from './utils'
 import Config from './config'
 import { PostData, XHROptions, RequestData, MinimalHTTPResponse } from './types'
-import { _HTTPBuildQuery } from './utils/request-utils'
+import { SUPPORTS_FETCH, _HTTPBuildQuery } from './utils/request-utils'
 
 import { _isArray, _isFunction, _isNumber, _isUint8Array, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
@@ -63,7 +63,8 @@ export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHR
 }
 
 export const request = (params: RequestData) => {
-    if (window?.fetch) {
+    // NOTE: Until we are confident with it, we only use fetch if explicitly told so
+    if (window && SUPPORTS_FETCH && params.options.transport === 'fetch') {
         const body = encodePostData(params.data, params.options)
 
         const headers = new Headers()

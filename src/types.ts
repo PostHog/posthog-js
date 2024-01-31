@@ -58,7 +58,7 @@ export type UUIDVersion = 'og' | 'v7'
 export interface PostHogConfig {
     api_host: string
     api_method: string
-    api_transport: string
+    api_transport?: 'XHR' | 'fetch'
     ui_host: string | null
     token: string
     autocapture: boolean | AutocaptureConfig
@@ -185,7 +185,7 @@ export enum Compression {
 }
 
 export interface XHROptions {
-    transport?: 'XHR' | 'sendBeacon'
+    transport?: 'XHR' | 'fetch' | 'sendBeacon'
     method?: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
     verbose?: boolean

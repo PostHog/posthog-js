@@ -58,6 +58,7 @@ import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
+import { SUPPORTS_REQUEST } from 'utils/request-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -92,12 +93,11 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
  */
 // http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
 // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-const USE_REQUEST = window?.fetch || (window?.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest())
 
 // IE<10 does not support cross-origin XHR's but script tags
 // with defer won't block window.onload; ENQUEUE_REQUESTS
 // should only be true for Opera<12
-let ENQUEUE_REQUESTS = !USE_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
+let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
@@ -628,23 +628,23 @@ export class PostHog {
             return null
         }
 
-        if (USE_REQUEST) {
+        if (SUPPORTS_REQUEST) {
             return function (response) {
                 callback(response, data)
             }
-        } else {
-            // if the user gives us a callback, we store as a random
-            // property on this instances jsc function and update our
-            // callback string to reflect that.
-            const jsc = this._jsc
-            const randomized_cb = '' + Math.floor(Math.random() * 100000000)
-            const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
-            jsc[randomized_cb] = function (response: any) {
-                delete jsc[randomized_cb]
-                callback(response, data)
-            }
-            return callback_string
         }
+
+        // if the user gives us a callback, we store as a random
+        // property on this instances jsc function and update our
+        // callback string to reflect that.
+        const jsc = this._jsc
+        const randomized_cb = '' + Math.floor(Math.random() * 100000000)
+        const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
+        jsc[randomized_cb] = function (response: any) {
+            delete jsc[randomized_cb]
+            callback(response, data)
+        }
+        return callback_string
     }
 
     _handle_unload(): void {
@@ -698,7 +698,7 @@ export class PostHog {
         }
 
         options = _extend(DEFAULT_OPTIONS, options || {})
-        if (!USE_REQUEST) {
+        if (!SUPPORTS_REQUEST) {
             options.method = 'GET'
         }
 
@@ -716,13 +716,13 @@ export class PostHog {
                 // send beacon is a best-effort, fire-and-forget mechanism on page unload,
                 // we don't want to throw errors here
             }
-        } else if (USE_REQUEST || !document) {
+        } else if (SUPPORTS_REQUEST || !document) {
             try {
                 request({
-                    url: url,
-                    data: data,
+                    url,
+                    data,
                     headers: this.config.request_headers,
-                    options: options,
+                    options,
                     callback,
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,

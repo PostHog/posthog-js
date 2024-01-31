@@ -1,10 +1,14 @@
 import { _each, _isValidRegex } from './'
 
-import { _isArray, _isUndefined } from './type-utils'
+import { _isArray, _isFunction, _isUndefined } from './type-utils'
 import { logger } from './logger'
-import { document } from './globals'
+import { document, window } from './globals'
 
 const localDomains = ['localhost', '127.0.0.1']
+
+export const SUPPORTS_XHR = window?.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
+export const SUPPORTS_FETCH = window?.fetch && _isFunction(window?.fetch)
+export const SUPPORTS_REQUEST = SUPPORTS_XHR || SUPPORTS_FETCH
 
 /**
  * IE11 doesn't support `new URL`
