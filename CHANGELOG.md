@@ -1,3 +1,7 @@
+## 1.104.2 - 2024-01-31
+
+- fix: no throwing when reading the body (#984)
+
 ## 1.104.1 - 2024-01-31
 
 - chore: make rate limiter error less scary (#983)
