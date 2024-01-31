@@ -20,13 +20,13 @@ export class RateLimiter {
     }
 
     public checkForLimiting = (httpResponse: MinimalHTTPResponse): void => {
-        let text: string | undefined
-        try {
-            text = httpResponse.responseText
-            if (!text || !text.length) {
-                return
-            }
+        const text: string | undefined = httpResponse.responseText
 
+        if (!text || !text.length) {
+            return
+        }
+
+        try {
             const response: CaptureResponse = JSON.parse(text)
             const quotaLimitedProducts = response.quota_limited || []
             quotaLimitedProducts.forEach((batchKey) => {
