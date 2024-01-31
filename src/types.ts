@@ -226,7 +226,7 @@ export interface MinimalHTTPResponse {
 export interface RequestData extends QueuedRequestData {
     retryQueue: RetryQueue
     timeout?: number
-    onError: (req: MinimalHTTPResponse) => void
+    onError?: (req: MinimalHTTPResponse) => void
     onResponse?: (req: MinimalHTTPResponse) => void
 }
 

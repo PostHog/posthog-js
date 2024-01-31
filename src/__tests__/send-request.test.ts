@@ -2,7 +2,7 @@
 
 import { addParamsToURL, encodePostData, request } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
-import { Compression, PostData, XHROptions, RequestData } from '../types'
+import { Compression, PostData, XHROptions, RequestData, MinimalHTTPResponse } from '../types'
 
 import { _isUndefined } from '../utils/type-utils'
 
@@ -12,7 +12,6 @@ describe('send-request', () => {
     describe('xhr', () => {
         let mockXHR: XMLHttpRequest
         let createRequestData: (overrides?: Partial<RequestData>) => RequestData
-        let onXHRError: RequestData['onError']
         let checkForLimiting: RequestData['onResponse']
         let xhrOptions: RequestData['options']
 
@@ -27,7 +26,6 @@ describe('send-request', () => {
                 status: 502,
             } as Partial<XMLHttpRequest> as XMLHttpRequest
 
-            onXHRError = jest.fn()
             checkForLimiting = jest.fn()
             xhrOptions = {}
             createRequestData = (overrides?: Partial<RequestData>) => {
@@ -41,7 +39,6 @@ describe('send-request', () => {
                     retryQueue: {
                         enqueue: () => {},
                     } as Partial<RequestData['retryQueue']> as RequestData['retryQueue'],
-                    onError: onXHRError,
                     onResponse: checkForLimiting,
                     ...overrides,
                 }
@@ -83,23 +80,29 @@ describe('send-request', () => {
         })
 
         describe('when xhr requests fail', () => {
-            it('does not error if the configured onXHRError is not a function', () => {
-                onXHRError = 'not a function' as unknown as RequestData['onError']
+            it('does not error if the configured onError is not a function', () => {
                 expect(() => {
-                    request(createRequestData())
+                    request(
+                        createRequestData({
+                            onError: 'not a function' as unknown as RequestData['onError'],
+                        })
+                    )
                     mockXHR.onreadystatechange?.({} as Event)
                 }).not.toThrow()
             })
 
             it('calls the injected XHR error handler', () => {
-                //cannot use an auto-mock from jest as the code checks if onXHRError is a Function
-                let requestFromError
-                onXHRError = (req) => {
-                    requestFromError = req
-                }
-                request(createRequestData())
+                //cannot use an auto-mock from jest as the code checks if onError is a Function
+                let requestFromError: MinimalHTTPResponse | undefined
+                request(
+                    createRequestData({
+                        onError: (req) => {
+                            requestFromError = req
+                        },
+                    })
+                )
                 mockXHR.onreadystatechange?.({} as Event)
-                expect(requestFromError).toHaveProperty('status', 502)
+                expect(requestFromError).toHaveProperty('statusCode', 502)
             })
 
             it('calls the on response handler - regardless of status', () => {
@@ -111,7 +114,10 @@ describe('send-request', () => {
                 mockXHR.status = Math.floor(Math.random() * 100)
                 request(createRequestData())
                 mockXHR.onreadystatechange?.({} as Event)
-                expect(checkForLimiting).toHaveBeenCalledWith(mockXHR)
+                expect(checkForLimiting).toHaveBeenCalledWith({
+                    statusCode: mockXHR.status,
+                    responseText: mockXHR.responseText,
+                })
             })
         })
     })
