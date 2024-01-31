@@ -6,7 +6,7 @@
 
 - feat: safer rrweb events and regular full snapshots (#973)
 - chore: update rollup (#974)
-- chore: re-enable bundle checker now master and branches both use pnpm (#972)
+- chore: re-enable bundle checker now main and branches both use pnpm (#972)
 
 ## 1.103.0 - 2024-01-26
 

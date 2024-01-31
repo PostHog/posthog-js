@@ -77,7 +77,7 @@ enum InitType {
 let init_type: InitType
 
 // TODO: the type of this is very loose. Sometimes it's also PostHogLib itself
-let posthog_master: Record<string, PostHog> & {
+let posthog_main: Record<string, PostHog> & {
     init: (token: string, config: Partial<PostHogConfig>, name: string) => void
 }
 
@@ -180,7 +180,7 @@ const create_phlib = function (
 ): PostHog {
     let instance: PostHog
     const target =
-        name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : name ? posthog_master[name] : undefined
+        name === PRIMARY_INSTANCE_NAME || !posthog_main ? posthog_main : name ? posthog_main[name] : undefined
     const callbacksHandled = {
         initComplete: false,
         syncCode: false,
@@ -376,10 +376,10 @@ export class PostHog {
         }
 
         const instance: PostHog = create_phlib(token, config, name, (instance: PostHog) => {
-            posthog_master[name] = instance
+            posthog_main[name] = instance
             instance._loaded()
         })
-        posthog_master[name] = instance
+        posthog_main[name] = instance
 
         return instance
     }
@@ -2116,7 +2116,7 @@ const extend_mp = function () {
     // add all the sub posthog instances
     _each(instances, function (instance, name) {
         if (name !== PRIMARY_INSTANCE_NAME) {
-            posthog_master[name] = instance
+            posthog_main[name] = instance
         }
     })
 }
@@ -2124,23 +2124,23 @@ const extend_mp = function () {
 const override_ph_init_func = function () {
     // we override the snippets init function to handle the case where a
     // user initializes the posthog library after the script loads & runs
-    posthog_master['init'] = function (token?: string, config?: Partial<PostHogConfig>, name?: string) {
+    posthog_main['init'] = function (token?: string, config?: Partial<PostHogConfig>, name?: string) {
         if (name) {
             // initialize a sub library
-            if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_phlib(
+            if (!posthog_main[name]) {
+                posthog_main[name] = instances[name] = create_phlib(
                     token || '',
                     config || {},
                     name,
                     (instance: PostHog) => {
-                        posthog_master[name] = instances[name] = instance
+                        posthog_main[name] = instances[name] = instance
                         instance._loaded()
                     }
                 )
             }
-            return posthog_master[name]
+            return posthog_main[name]
         } else {
-            let instance: PostHog = posthog_master as any as PostHog
+            let instance: PostHog = posthog_main as any as PostHog
 
             if (instances[PRIMARY_INSTANCE_NAME]) {
                 // main posthog lib already initialized
@@ -2154,9 +2154,9 @@ const override_ph_init_func = function () {
                 instances[PRIMARY_INSTANCE_NAME] = instance
             }
 
-            ;(posthog_master as any) = instance
+            ;(posthog_main as any) = instance
             if (init_type === InitType.INIT_SNIPPET) {
-                assignableWindow[PRIMARY_INSTANCE_NAME] = posthog_master
+                assignableWindow[PRIMARY_INSTANCE_NAME] = posthog_main
             }
             extend_mp()
             return instance
@@ -2203,23 +2203,23 @@ export function init_from_snippet(): void {
     if (_isUndefined(assignableWindow.posthog)) {
         assignableWindow.posthog = []
     }
-    posthog_master = assignableWindow.posthog
+    posthog_main = assignableWindow.posthog
 
-    if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
+    if (posthog_main['__loaded'] || (posthog_main['config'] && posthog_main['persistence'])) {
         // lib has already been loaded at least once; we don't want to override the global object this time so bomb early
         logger.critical('PostHog library has already been downloaded at least once.')
         return
     }
 
     // Load instances of the PostHog Library
-    _each(posthog_master['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
+    _each(posthog_main['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
         if (item && _isArray(item)) {
             instances[item[2]] = create_phlib(...item)
         }
     })
 
     override_ph_init_func()
-    ;(posthog_master['init'] as any)()
+    ;(posthog_main['init'] as any)()
 
     // Fire loaded events after updating the window's posthog object
     _each(instances, function (instance) {
@@ -2231,11 +2231,11 @@ export function init_from_snippet(): void {
 
 export function init_as_module(): PostHog {
     init_type = InitType.INIT_MODULE
-    ;(posthog_master as any) = new PostHog()
+    ;(posthog_main as any) = new PostHog()
 
     override_ph_init_func()
-    ;(posthog_master['init'] as any)()
+    ;(posthog_main['init'] as any)()
     add_dom_loaded_handler()
 
-    return posthog_master as any
+    return posthog_main as any
 }

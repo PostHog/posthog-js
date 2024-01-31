@@ -71,7 +71,7 @@ Install Yalc to link a local version of `posthog-js` in another JS project: `npm
 
 Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) – automatically.
   
-If you want to release a new version without a PR (e.g. because you forgot to use the label), check out the `master` branch and run `npm version [major | minor | patch] && git push --tags` - this will trigger the automated release process just like the label.
+If you want to release a new version without a PR (e.g. because you forgot to use the label), check out the `main` branch and run `npm version [major | minor | patch] && git push --tags` - this will trigger the automated release process just like the label.
 
 ### Prereleases
 
@@ -79,7 +79,7 @@ To release an alpha or beta version, you'll need to use the CLI locally:
 
 1. Make sure you're a collaborator on `posthog-js` in npm ([check here](https://www.npmjs.com/package/posthog-js)).
 2. Make sure you're logged into the npm CLI (`npm login`).
-3. Check out your work-in-progress branch (do not release an alpha/beta from `master`).
+3. Check out your work-in-progress branch (do not release an alpha/beta from `main`).
 4. Run the following commands, using the same bump level (major/minor/patch) as your PR:
     ```bash
     npm version [premajor | preminor | prepatch] --preid=beta
