@@ -23,6 +23,6 @@ export const location = global?.location
 export const fetch = global?.fetch
 export const XMLHttpRequest = global?.XMLHttpRequest
 export const userAgent = navigator?.userAgent
-export const assignableWindow: Window & typeof globalThis & Record<string, any> = global ?? ({} as any)
+export const assignableWindow: Window & typeof globalThis & Record<string, any> = win ?? ({} as any)
 
 export { win as window }
