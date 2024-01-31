@@ -366,13 +366,18 @@ function prepareRequest(
     return requests
 }
 
+const contentTypePrefixDenyList = ['video/', 'audio/']
+
 function _checkForCannotReadBody(res: Response): string | null {
     if (res.headers.get('Transfer-Encoding') === 'chunked') {
         return 'Chunked Transfer-Encoding is not supported'
     }
 
-    const contentType = res.headers.get('Content-Type')
-    if (contentType && (contentType.startsWith('video/') || contentType.startsWith('audio/'))) {
+    // `get` and `has` are case-insensitive
+    // but return the header value with the casing that was supplied
+    const contentType = res.headers.get('Content-Type')?.toLowerCase()
+    const contentTypeIsDenied = contentTypePrefixDenyList.some((prefix) => contentType?.startsWith(prefix))
+    if (contentType && contentTypeIsDenied) {
         return `Content-Type ${contentType} is not supported`
     }
 
