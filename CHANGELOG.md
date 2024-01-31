@@ -1,3 +1,7 @@
+## 1.103.2 - 2024-01-31
+
+- fix: safer body processing (#980)
+
 ## 1.103.1 - 2024-01-28
 
 - feat: safer rrweb events and regular full snapshots (#973)
