@@ -7,6 +7,7 @@ import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './con
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window, document, assignableWindow } from './utils/globals'
+import { RequestRouterTarget } from './utils/request-router'
 
 export class Decide {
     instance: PostHog
@@ -35,7 +36,7 @@ export class Decide {
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            `${this.instance.config.api_host}/decide/?v=3`,
+            this.instance.requestRouter.endpointFor(RequestRouterTarget.DECIDE, '/decide/?v=3'),
             { data: encoded_data, verbose: true },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response as DecideResponse)
@@ -76,15 +77,18 @@ export class Decide {
         const surveysGenerator = window?.extendPostHogWithSurveys
 
         if (response['surveys'] && !surveysGenerator) {
-            loadScript(this.instance.config.api_host + `/static/surveys.js`, (err) => {
-                if (err) {
-                    return logger.error(`Could not load surveys script`, err)
-                }
+            loadScript(
+                this.instance.requestRouter.endpointFor(RequestRouterTarget.ASSETS, '/static/surveys.js'),
+                (err) => {
+                    if (err) {
+                        return logger.error(`Could not load surveys script`, err)
+                    }
 
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                window.extendPostHogWithSurveys(this.instance)
-            })
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    window.extendPostHogWithSurveys(this.instance)
+                }
+            )
         }
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -95,25 +99,24 @@ export class Decide {
             !!response['autocaptureExceptions'] &&
             _isUndefined(exceptionAutoCaptureAddedToWindow)
         ) {
-            loadScript(this.instance.config.api_host + `/static/exception-autocapture.js`, (err) => {
-                if (err) {
-                    return logger.error(`Could not load exception autocapture script`, err)
-                }
+            loadScript(
+                this.instance.requestRouter.endpointFor(RequestRouterTarget.ASSETS, '/static/exception-autocapture.js'),
+                (err) => {
+                    if (err) {
+                        return logger.error(`Could not load exception autocapture script`, err)
+                    }
 
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                window.extendPostHogWithExceptionAutocapture(this.instance, response)
-            })
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    window.extendPostHogWithExceptionAutocapture(this.instance, response)
+                }
+            )
         }
 
         if (response['siteApps']) {
             if (this.instance.config.opt_in_site_apps) {
-                const apiHost = this.instance.config.api_host
                 for (const { id, url } of response['siteApps']) {
-                    const scriptUrl = [
-                        apiHost,
-                        apiHost[apiHost.length - 1] === '/' && url[0] === '/' ? url.substring(1) : url,
-                    ].join('')
+                    const scriptUrl = this.instance.requestRouter.endpointFor(RequestRouterTarget.ASSETS, url)
 
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
 

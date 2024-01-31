@@ -16,6 +16,7 @@
  * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  */
 
+import { RequestRouterTarget } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
 
 // NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
@@ -64,8 +65,11 @@ export class SentryIntegration implements _SentryIntegration {
                 if (event.level !== 'error' || !_posthog.__loaded) return event
                 if (!event.tags) event.tags = {}
 
-                const host = _posthog.config.ui_host || _posthog.config.api_host
-                event.tags['PostHog Person URL'] = host + '/person/' + _posthog.get_distinct_id()
+                const personUrl = _posthog.requestRouter.endpointFor(
+                    RequestRouterTarget.UI,
+                    '/person/' + _posthog.get_distinct_id()
+                )
+                event.tags['PostHog Person URL'] = personUrl
                 if (_posthog.sessionRecordingStarted()) {
                     event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
                 }
@@ -82,7 +86,7 @@ export class SentryIntegration implements _SentryIntegration {
                     // PostHog Exception Properties,
                     $exception_message: exceptions[0]?.value,
                     $exception_type: exceptions[0]?.type,
-                    $exception_personURL: host + '/person/' + _posthog.get_distinct_id(),
+                    $exception_personURL: personUrl,
                     // Sentry Exception Properties
                     $sentry_event_id: event.event_id,
                     $sentry_exception: event.exception,

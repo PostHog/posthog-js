@@ -21,6 +21,7 @@ import {
 
 import { _isArray } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { RequestRouterTarget } from './utils/request-router'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -190,7 +191,7 @@ export class PostHogFeatureFlags {
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            this.instance.config.api_host + '/decide/?v=3',
+            this.instance.requestRouter.endpointFor(RequestRouterTarget.DECIDE, '/decide/?v=3'),
             { data: encoded_data },
             { method: 'POST' },
             this.instance._prepare_callback((response) => {
@@ -357,7 +358,10 @@ export class PostHogFeatureFlags {
 
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request(
-                `${this.instance.config.api_host}/api/early_access_features/?token=${this.instance.config.token}`,
+                this.instance.requestRouter.endpointFor(
+                    RequestRouterTarget.ASSETS,
+                    `/api/early_access_features/?token=${this.instance.config.token}`
+                ),
                 {},
                 { method: 'GET' },
                 (response) => {

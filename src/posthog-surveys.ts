@@ -3,6 +3,7 @@ import { SURVEYS } from './constants'
 import { SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
 import { _isUrlMatchingRegex } from './utils/request-utils'
 import { window, document } from './utils/globals'
+import { RequestRouterTarget } from 'utils/request-router'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -22,7 +23,10 @@ export class PostHogSurveys {
         const existingSurveys = this.instance.get_property(SURVEYS)
         if (!existingSurveys || forceReload) {
             this.instance._send_request(
-                `${this.instance.config.api_host}/api/surveys/?token=${this.instance.config.token}`,
+                this.instance.requestRouter.endpointFor(
+                    RequestRouterTarget.ASSETS,
+                    `/api/surveys/?token=${this.instance.config.token}`
+                ),
                 {},
                 { method: 'GET' },
                 (response) => {

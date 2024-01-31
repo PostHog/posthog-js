@@ -7,17 +7,17 @@ import { PostHog } from '../posthog-core'
  */
 
 export enum RequestRouterRegion {
-    US,
-    EU,
-    CUSTOM,
+    US = 'us',
+    EU = 'eu',
+    CUSTOM = 'custom',
 }
 
 export enum RequestRouterTarget {
-    UI,
-    CAPTURE_EVENTS,
-    CAPTURE_REPLAY,
-    DECIDE,
-    API,
+    UI = 'ui',
+    CAPTURE_EVENTS = 'capture_events',
+    CAPTURE_REPLAY = 'capture_replay',
+    DECIDE = 'decide',
+    ASSETS = 'assets',
 }
 
 // DEV NOTES:
@@ -45,32 +45,29 @@ export class RequestRouter {
         }
     }
 
-    endpointFor(target: RequestRouterTarget) {
-        let domainSuffix: string | undefined
-        let path: string | undefined
+    endpointFor(target: RequestRouterTarget, path: string = '') {
+        const uiHost = this.instance.config.ui_host || this.instance.config.api_host
 
-        switch (target) {
-            case RequestRouterTarget.UI:
-                domainSuffix = 'app'
-                break
-            case RequestRouterTarget.CAPTURE_EVENTS:
-                domainSuffix = 'e'
-                path = 'e/'
-                break
-            case RequestRouterTarget.CAPTURE_REPLAY:
-                domainSuffix = 'r'
-                path = 'r/'
-                break
-            case RequestRouterTarget.DECIDE:
-                domainSuffix = 'decide'
-                path = 'decide/'
-                break
-            case RequestRouterTarget.API:
-                domainSuffix = 'api'
-                path = 'api/'
-                break
+        if (target === RequestRouterTarget.UI) {
+            return uiHost
         }
 
-        return this.config.api_host + (options.endpoint || this.analyticsDefaultEndpoint)
+        if (this.region === RequestRouterRegion.CUSTOM) {
+            return this.instance.config.api_host
+        }
+
+        const suffix = 'i.posthog.com' + path
+
+        switch (target) {
+            case RequestRouterTarget.CAPTURE_EVENTS:
+                return `https://${this.region}-c.${suffix}`
+            case RequestRouterTarget.CAPTURE_REPLAY:
+                return `https://${this.region}-s.${suffix}`
+            case RequestRouterTarget.DECIDE:
+                return `https://${this.region}-d.${suffix}`
+            case RequestRouterTarget.ASSETS:
+                // TODO: Is this right? This would be all things like surveys / early access requests
+                return `https://${this.region}.${suffix}`
+        }
     }
 }
