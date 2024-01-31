@@ -11,6 +11,7 @@
         "build-rollup": "rm -rf lib && tsc -b && rollup -c --bundleConfigAsCjs",
         "build-react": "cd react; pnpm i; pnpm build;",
         "lint": "eslint src",
+        "tsc": "tsc -b",
         "prettier": "prettier --write src/ functional_tests/",
         "prepublishOnly": "pnpm lint && pnpm test && pnpm build && pnpm test:react",
         "test": "pnpm test:unit && pnpm test:custom-eslint-rules",
