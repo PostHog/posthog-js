@@ -38,7 +38,6 @@ export class PostHogPersistence {
     expire_days: number | undefined
     default_expiry: number | undefined
     cross_subdomain: boolean | undefined
-    user_state: 'anonymous' | 'identified'
 
     constructor(config: PostHogConfig) {
         // clean chars that aren't accepted by the http spec for cookie values
@@ -64,8 +63,10 @@ export class PostHogPersistence {
                 config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
             ) === -1
         ) {
-            logger.critical('Unknown persistence type ' + config['persistence'] + '; falling back to cookie')
-            config['persistence'] = 'cookie'
+            logger.critical(
+                'Unknown persistence type ' + config['persistence'] + '; falling back to localStorage+cookie'
+            )
+            config['persistence'] = 'localStorage+cookie'
         }
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
@@ -77,11 +78,14 @@ export class PostHogPersistence {
             this.storage = sessionStore
         } else if (storage_type === 'memory') {
             this.storage = memoryStore
+        } else if (storage_type === 'cookie') {
+            this.storage = cookieStore
+        } else if (localPlusCookieStore.is_supported()) {
+            // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
+            this.storage = localPlusCookieStore
         } else {
             this.storage = cookieStore
         }
-
-        this.user_state = 'anonymous'
 
         this.load()
         this.update_config(config)

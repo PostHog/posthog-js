@@ -15,8 +15,6 @@ const rules = {
 const extend = [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:react/recommended',
-    'plugin:react-hooks/recommended',
     'prettier',
     'plugin:compat/recommended',
     'plugin:posthog-js/all',
@@ -73,6 +71,10 @@ module.exports = {
             },
         },
         {
+            files: 'react/src/**/',
+            extends: [...extend, 'plugin:react/recommended', 'plugin:react-hooks/recommended'],
+        },
+        {
             files: 'eslint-rules/**/*',
             extends: ['eslint:recommended', 'prettier'],
             rules: {
@@ -88,6 +90,7 @@ module.exports = {
             files: 'cypress/**/*',
             globals: {
                 cy: true,
+                Cypress: true,
             },
         },
     ],

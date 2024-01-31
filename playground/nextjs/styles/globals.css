@@ -5,6 +5,10 @@ main {
     font-family: helvetica, arial, sans-serif;
 }
 
+html, body {
+    margin: 0
+}
+
 .buttons {
     display: flex;
     gap: 0.5rem;

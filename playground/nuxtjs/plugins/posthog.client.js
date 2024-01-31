@@ -1,5 +1,5 @@
 // plugins/posthog.client.js
-import { defineNuxtPlugin } from '#app'
+import { defineNuxtPlugin } from '#imports'
 import posthog from 'posthog-js'
 export default defineNuxtPlugin((nuxtApp) => {
     const runtimeConfig = useRuntimeConfig()

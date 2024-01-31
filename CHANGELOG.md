@@ -1,3 +1,149 @@
+## 1.103.1 - 2024-01-28
+
+- feat: safer rrweb events and regular full snapshots (#973)
+- chore: update rollup (#974)
+- chore: re-enable bundle checker now master and branches both use pnpm (#972)
+
+## 1.103.0 - 2024-01-26
+
+- feat: pnpm patch rrweb (#971)
+- chore: convert to pnpm (#970)
+
+## 1.102.1 - 2024-01-25
+
+- chore: add debug logging for session id/recording (#969)
+
+## 1.102.0 - 2024-01-24
+
+- feat: send custom event when network status changes (#965)
+- fix: integration test opting out (#959)
+
+## 1.101.0 - 2024-01-22
+
+- feat: canvas recording support (#946)
+- refactor(surveys): Use Preact instead of vanilla JS (#963)
+
+## 1.100.0 - 2024-01-15
+
+- Enable scroll stats by default (#962)
+
+## 1.99.0 - 2024-01-15
+
+- feat: Support custom scroll selector (#961)
+
+## 1.98.2 - 2024-01-11
+
+- fix: Don't allow us.posthog.com to be used (#957)
+
+## 1.98.1 - 2024-01-11
+
+- fix: set the session id as soon as it changes (#956)
+- fix: simplify test setup (#955)
+
+## 1.98.0 - 2024-01-10
+
+- feat: capture session options in a custom event (#954)
+
+## 1.97.1 - 2024-01-09
+
+- fix(surveys): fix feedback widget bugs (#953)
+
+## 1.97.0 - 2024-01-09
+
+- fix: add a comment explaining browser type prop (#952)
+- feat: add opt_out_useragent_filter and $browser_type (#949)
+- chore(surveys): add basic survey e2e tests (#948)
+- Tidying and removing of old value (#941)
+
+## 1.96.1 - 2023-12-15
+
+- Add gas_source to campaign params (#934)
+- feat: simplify payload config compared to rrweb proposal (#939)
+- feat: remove given from another test file (#940)
+
+## 1.96.0 - 2023-12-14
+
+- make link survey link optional (#938)
+- fix: import nuxt composables from #imports (#879)
+
+## 1.95.1 - 2023-12-13
+
+- Remove debug code from survey-utils (#937)
+
+## 1.95.0 - 2023-12-12
+
+- feat(surveys): custom and tab widget (#933)
+
+## 1.94.4 - 2023-12-12
+
+- Add a few more blocked uas (#936)
+
+## 1.94.3 - 2023-12-12
+
+- fix: class string separator (#935)
+
+## 1.94.2 - 2023-12-11
+
+- fix: cache subdomain discovery (#928)
+- chore: corrects the changelog (#931)
+
+## 1.94.1 - 2023-12-09
+
+- fix: incorrect localhost handling (#930) 
+
+## 1.94.0 - 2023-12-08
+
+- feat: Swap to localstorage+cookie as default (#927)
+- fix: sanitize class string more (#925) 
+- chore: redirect users to the supportModal when implementation errors occur (#921)
+- chore: Add comment to remind about updating the plugin-server (#924)
+- add wbraid and gbraid to campaignParams (#923)
+
+## 1.93.6 - 2023-12-05
+
+- fix: Sanitize given api_host urls to not have a trailing slash (#920)
+
+## 1.93.5 - 2023-12-05
+
+- fix: handle newlines in classnames (#919)
+
+## 1.93.4 - 2023-12-05
+
+- feat: Show warning if identifying with "distinct_id" (#918)
+
+## 1.93.3 - 2023-11-28
+
+- fix: safer custom event on return from idle (#913)
+- Add deprecation notice for disable_cookie (#912)
+
+## 1.93.2 - 2023-11-23
+
+- fix(flags): Make sure we don't override flags when decide is disabled (#911)
+
+## 1.93.1 - 2023-11-23
+
+- feat: send idle markers in session (#909)
+
+## 1.93.0 - 2023-11-22
+
+- feat(surveys): Add open-ended choices for multiple and single choice surveys (#910)
+
+## 1.92.1 - 2023-11-21
+
+- feat: payload capture - move timing into copied plugin (#902)
+
+## 1.92.0 - 2023-11-20
+
+- feat: Create elements chain string as we store it (#823)
+- Move blocked UAs to own file (#905)
+- chore: deflake a test (#904)
+- chore: convert more tests to TS (#903)
+- latest cypress action version (#900)
+
+## 1.91.1 - 2023-11-15
+
+- fix(surveys): button text field fix (#899)
+
 ## 1.91.0 - 2023-11-15
 
 - fix: Window or document access across the code (#894)

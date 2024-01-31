@@ -16,12 +16,8 @@ export const _isUint8Array = function (x: unknown): x is Uint8Array {
 // fails on only one very rare and deliberate custom object:
 // let bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
 export const _isFunction = function (f: any): f is (...args: any[]) => any {
-    try {
-        // eslint-disable-next-line posthog-js/no-direct-function-check
-        return /^\s*\bfunction\b/.test(f)
-    } catch (x) {
-        return false
-    }
+    // eslint-disable-next-line posthog-js/no-direct-function-check
+    return typeof f === 'function'
 }
 // Underscore Addons
 export const _isObject = function (x: unknown): x is Record<string, any> {
@@ -46,6 +42,7 @@ export const _isString = function (x: unknown): x is string {
     // eslint-disable-next-line posthog-js/no-direct-string-check
     return toString.call(x) == '[object String]'
 }
+
 export const _isNull = function (x: unknown): x is null {
     // eslint-disable-next-line posthog-js/no-direct-null-check
     return x === null

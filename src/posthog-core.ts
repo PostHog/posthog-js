@@ -4,10 +4,10 @@ import {
     _each,
     _eachArray,
     _extend,
-    _isBlockedUA,
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
+    isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, window } from './utils/globals'
 import { autocapture } from './autocapture'
@@ -15,7 +15,6 @@ import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { WebPerformanceObserver } from './extensions/replay/web-performance'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
@@ -58,6 +57,7 @@ import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
+import { _isBlockedUA } from './utils/blocked-uas'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -108,7 +108,7 @@ export const defaultConfig = (): PostHogConfig => ({
     autocapture: true,
     rageclick: true,
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
-    persistence: 'cookie',
+    persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
     cookie_name: '',
     loaded: __NOOP,
@@ -130,6 +130,7 @@ export const defaultConfig = (): PostHogConfig => ({
     ip: true,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
+    opt_out_useragent_filter: false,
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
@@ -212,10 +213,7 @@ const create_phlib = function (
     instance.sessionRecording = new SessionRecording(instance)
     instance.sessionRecording.startRecordingIfEnabled()
 
-    instance.webPerformance = new WebPerformanceObserver(instance)
-    instance.webPerformance.startObservingIfEnabled()
-
-    if (instance.config.__preview_measure_pageview_stats) {
+    if (!instance.config.disable_scroll_properties) {
         instance.pageViewManager.startMeasuringScrollPosition()
     }
 
@@ -253,6 +251,19 @@ const create_phlib = function (
     return instance
 }
 
+class DeprecatedWebPerformanceObserver {
+    get _forceAllowLocalhost(): boolean {
+        return this.__forceAllowLocalhost
+    }
+    set _forceAllowLocalhost(value: boolean) {
+        logger.error(
+            'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
+        )
+        this.__forceAllowLocalhost = value
+    }
+    private __forceAllowLocalhost: boolean = false
+}
+
 /**
  * PostHog Library Object
  * @constructor
@@ -277,7 +288,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
-    webPerformance?: WebPerformanceObserver
+    webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
@@ -287,6 +298,7 @@ export class PostHog {
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
+    elementsChainAsString: boolean
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
@@ -310,10 +322,11 @@ export class PostHog {
         this.__autocapture = undefined
         this._jsc = function () {} as JSC
         this.analyticsDefaultEndpoint = '/e/'
+        this.elementsChainAsString = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewManager = new PageViewManager()
+        this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
 
@@ -535,6 +548,10 @@ export class PostHog {
 
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
+        }
+
+        if (response.elementsChainAsString) {
+            this.elementsChainAsString = response.elementsChainAsString
         }
     }
 
@@ -850,7 +867,11 @@ export class PostHog {
             return
         }
 
-        if (userAgent && _isBlockedUA(userAgent, this.config.custom_blocked_useragents)) {
+        if (
+            userAgent &&
+            !this.config.opt_out_useragent_filter &&
+            _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+        ) {
             return
         }
 
@@ -945,7 +966,7 @@ export class PostHog {
             properties = _extend(properties, sessionProps)
         }
 
-        if (this.config.__preview_measure_pageview_stats) {
+        if (!this.config.disable_scroll_properties) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
                 performanceProperties = this.pageViewManager.doPageView()
@@ -971,6 +992,14 @@ export class PostHog {
         if (!_isUndefined(start_timestamp)) {
             const duration_in_ms = new Date().getTime() - start_timestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+        }
+
+        // this is only added when this.config.opt_out_useragent_filter is true,
+        // or it would always add "browser"
+        if (userAgent && this.config.opt_out_useragent_filter) {
+            properties['$browser_type'] = _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+                ? 'bot'
+                : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -1264,6 +1293,13 @@ export class PostHog {
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
             logger.error('Unique user id has not been set in posthog.identify')
+            return
+        }
+
+        if (isDistinctIdStringLike(new_distinct_id)) {
+            logger.critical(
+                `The string "${new_distinct_id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
+            )
             return
         }
 
@@ -1608,6 +1644,9 @@ export class PostHog {
      *       // opt users out of browser data storage by this PostHog instance by default
      *       opt_out_persistence_by_default: false
      *
+     *       // opt out of user agent filtering such as googlebot or other bots
+     *       opt_out_useragent_filter: false
+     *
      *       // persistence mechanism used by opt-in/opt-out methods - cookie
      *       // or localStorage - falls back to cookie if localStorage is unavailable
      *       opt_out_capturing_persistence_type: 'localStorage'
@@ -1697,6 +1736,13 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
+            // We assume the api_host is without a trailing slash in most places throughout the codebase
+            this.config.api_host = this.config.api_host.replace(/\/$/, '')
+
+            // us.posthog.com is only for the web app, so we don't allow that to be used as a capture endpoint
+            if (this.config.api_host === 'https://us.posthog.com') {
+                this.config.api_host = 'https://app.posthog.com'
+            }
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 
@@ -1708,7 +1754,13 @@ export class PostHog {
             }
 
             if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
-                if (oldConfig.disable_session_recording !== config.disable_session_recording) {
+                const disable_session_recording_has_changed =
+                    oldConfig.disable_session_recording !== config.disable_session_recording
+                // if opting back in, this config might not have changed
+                const try_enable_after_opt_in =
+                    !userOptedOut(this) && !config.disable_session_recording && !this.sessionRecording.started
+
+                if (disable_session_recording_has_changed || try_enable_after_opt_in) {
                     if (config.disable_session_recording) {
                         this.sessionRecording.stopRecording()
                     } else {

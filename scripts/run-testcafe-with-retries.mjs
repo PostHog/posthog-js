@@ -14,7 +14,7 @@ const main = async () => {
 
   for (let i = 0; i < attempts; i++) {
     console.log(`Attempt ${i + 1} of a maximum of ${attempts} attempts`)
-    const result = spawnSync("yarn", ["testcafe", browser], {stdio: "inherit"})
+    const result = spawnSync("pnpm", ["testcafe", browser], {stdio: "inherit"})
     if (result.status === 0) {
       console.log("Test succeeded")
       return

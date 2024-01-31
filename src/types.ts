@@ -83,12 +83,15 @@ export interface PostHogConfig {
     upgrade: boolean
     disable_session_recording: boolean
     disable_persistence: boolean
+    /** @deprecated - use `disable_persistence` instead  */
     disable_cookie: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean
     opt_out_capturing_by_default: boolean
     opt_out_persistence_by_default: boolean
+    /** Opt out of user agent filtering such as googlebot or other bots. Defaults to `false` */
+    opt_out_useragent_filter: boolean
     opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean
@@ -123,8 +126,10 @@ export interface PostHogConfig {
         featureFlagPayloads?: Record<string, JsonType>
     }
     segment?: any
-    __preview_measure_pageview_stats?: boolean
     __preview_send_client_session_params?: boolean
+    disable_scroll_properties?: boolean
+    // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
+    scroll_root_selector?: string | string[]
 }
 
 export interface OptInOutCapturingOptions {
@@ -159,22 +164,13 @@ export interface SessionRecordingOptions {
     inlineStylesheet?: boolean
     recorderVersion?: 'v1' | 'v2'
     recordCrossOriginIframes?: boolean
-    /** Modify the network request before it is captured. Returning null stops it being captured */
-    // TODO this has to work for both capture mechanisms? 😱
+    /** @deprecated - use maskCapturedNetworkRequestFn instead  */
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
-    // properties below here are ALPHA, don't rely on them, they may change without notice
-    // TODO which of these do we actually expose?
-    // if this isn't provided a default will be used
-    // this only applies to the payload recorder
-    // TODO I guess it should apply to the other recorder to
-    initiatorTypes?: InitiatorType[]
-    recordHeaders?: boolean | { request: boolean; response: boolean }
-    // true means record all bodies
-    // false means record no bodies
-    // string[] means record bodies matching the provided content-type headers
-    recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
-    // I can't think why you wouldn't want this... so
-    // recordInitialRequests?: boolean
+    /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
+    maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
+    // our settings here only support a subset of those proposed for rrweb's network capture plugin
+    recordHeaders?: boolean
+    recordBody?: boolean
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
@@ -239,6 +235,7 @@ export interface DecideResponse {
     analytics?: {
         endpoint?: string
     }
+    elementsChainAsString?: boolean
     // this is currently in development and may have breaking changes without a major version bump
     autocaptureExceptions?:
         | boolean
@@ -253,6 +250,10 @@ export interface DecideResponse {
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
+        recordCanvas?: boolean | null
+        canvasFps?: number | null
+        // the API returns a decimal between 0 and 1 as a string
+        canvasQuality?: string | null
         linkedFlag?: string | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     }
@@ -370,6 +371,11 @@ export type Body =
     | ArrayBufferView
     | ArrayBuffer
     | FormData
+    // rrweb uses URLSearchParams and ReadableStream<Uint8Array>
+    // as part of the union for this type
+    // because they don't support IE11
+    // but, we do 🫠
+    // what's going to happen here in IE11?
     | URLSearchParams
     | ReadableStream<Uint8Array>
     | null
@@ -403,26 +409,46 @@ export type InitiatorType =
 
 export type NetworkRecordOptions = {
     initiatorTypes?: InitiatorType[]
-    maskRequestFn?: (data: NetworkRequest) => NetworkRequest | undefined
+    maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined
     recordHeaders?: boolean | { request: boolean; response: boolean }
     recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
     recordInitialRequests?: boolean
+    // whether to record PerformanceEntry events for network requests
+    recordPerformance?: boolean
+    // the PerformanceObserver will only observe these entry types
+    performanceEntryTypeToObserve: string[]
+    // the maximum size of the request/response body to record
+    // NB this will be at most 1MB even if set larger
+    payloadSizeLimitBytes: number
 }
 
-// extending this to match the rrweb NetworkRequest type
-// it is different in that the rrweb type will have initator type, starttime, and endtime
-// as required properties. but we don't want to require them here
-// because we've previously exposed this type as only having `url`
+/** @deprecated - use CapturedNetworkRequest instead  */
 export type NetworkRequest = {
     url: string
+}
+
+// In rrweb this is called NetworkRequest, but we already exposed that as having only URL
+// we also want to vary from the rrweb NetworkRequest because we want to include
+// all PerformanceEntry properties too.
+// that has 4 required properties
+//     readonly duration: DOMHighResTimeStamp;
+//     readonly entryType: string;
+//     readonly name: string;
+//     readonly startTime: DOMHighResTimeStamp;
+// NB: properties below here are ALPHA, don't rely on them, they may change without notice
+export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     // properties below here are ALPHA, don't rely on them, they may change without notice
     method?: string
     initiatorType?: InitiatorType
     status?: number
+    timeOrigin?: number
+    timestamp?: number
     startTime?: number
     endTime?: number
     requestHeaders?: Headers
     requestBody?: Body
     responseHeaders?: Headers
     responseBody?: Body
+    // was this captured before fetch/xhr could have been wrapped
+    isInitial?: boolean
 }

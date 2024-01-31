@@ -17,11 +17,15 @@ jobs:
             )
         steps:
             - name: Check out repository
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
               with:
                   ref: ${{ github.event.pull_request.base.ref }}
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
                   fetch-depth: 0
+
+            - uses: pnpm/action-setup@v2
+              with:
+                version: 8.x.x
 
             - name: Detect version bump type
               id: bump-type
@@ -66,8 +70,8 @@ jobs:
                   echo -e "$CHANGELOG_HEADING\n\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
                   rm CHANGELOG.old.md
 
-            - name: Update yarn.lock
-              run: yarn
+            - name: Update lockfile
+              run: pnpm i
 
             - name: Commit bump
               if: steps.bump-type.outputs.bump-type != 'null'

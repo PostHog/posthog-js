@@ -181,7 +181,9 @@ export const _safewrap = function <F extends (...args: any[]) => any = (...args:
             // @ts-ignore
             return f.apply(this, args)
         } catch (e) {
-            logger.critical('Implementation error. Please turn on debug and contact support@posthog.com.')
+            logger.critical(
+                'Implementation error. Please turn on debug mode and open a ticket on https://app.posthog.com/home#panel=support%3Asupport%3A.'
+            )
             logger.critical(e)
         }
     } as F
@@ -363,67 +365,6 @@ export const _utf8Encode = function (string: string): string {
     return utftext
 }
 
-export const DEFAULT_BLOCKED_UA_STRS = [
-    'ahrefsbot',
-    'applebot',
-    'baiduspider',
-    'bingbot',
-    'bingpreview',
-    'bot.htm',
-    'bot.php',
-    'crawler',
-    'duckduckbot',
-    'facebookexternal',
-    'facebookcatalog',
-    'gptbot',
-    'hubspot',
-    'linkedinbot',
-    'mj12bot',
-    'petalbot',
-    'pinterest',
-    'prerender',
-    'rogerbot',
-    'screaming frog',
-    'semrushbot',
-    'sitebulb',
-    'twitterbot',
-    'yahoo! slurp',
-    'yandexbot',
-
-    // a whole bunch of goog-specific crawlers
-    // https://developers.google.com/search/docs/advanced/crawling/overview-google-crawlers
-    'adsbot-google',
-    'apis-google',
-    'duplexweb-google',
-    'feedfetcher-google',
-    'google favicon',
-    'google web preview',
-    'google-read-aloud',
-    'googlebot',
-    'googleweblight',
-    'mediapartners-google',
-    'storebot-google',
-]
-
-// _.isBlockedUA()
-// This is to block various web spiders from executing our JS and
-// sending false capturing data
-export const _isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
-    if (!ua) {
-        return false
-    }
-    const uaLower = ua.toLowerCase()
-    return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents || []).some((blockedUA) => {
-        const blockedUaLower = blockedUA.toLowerCase()
-        if (uaLower.includes) {
-            return uaLower.includes(blockedUaLower)
-        } else {
-            // IE 11 :/
-            return uaLower.indexOf(blockedUaLower) !== -1
-        }
-    })
-}
-
 export const _register_event = (function () {
     // written by Dean Edwards, 2005
     // with input from Tino Zijdel - crisp@xs4all.nl
@@ -547,4 +488,8 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     // but it's good enough for ensuring we only match herokuapp.com when it is the TLD
     // for the hostname
     return hostname.split('.').slice(-2).join('.') !== 'herokuapp.com'
+}
+
+export function isDistinctIdStringLike(value: string): boolean {
+    return ['distinct_id', 'distinctid'].includes(value.toLowerCase())
 }

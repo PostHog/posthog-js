@@ -11,71 +11,81 @@ jobs:
         name: Unit tests
         runs-on: ubuntu-latest
         steps:
-            # Check out the repository
-            - uses: actions/checkout@v3
-
-            # Install Node.js
-            - uses: actions/setup-node@v3
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v2
               with:
-                  node-version: 18
-                  cache: 'yarn'
-
-            # Install your dependencies
-            - run: yarn install
-
-            - run: yarn test
+                version: 8.x.x
+            - uses: actions/setup-node@v4
+              with:
+                node-version: '18'
+                cache: 'pnpm'
+            - run: pnpm install
+            - run: pnpm test
 
     integration:
         name: Cypress
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v3
-
-            - uses: actions/setup-node@v3
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v2
               with:
-                  node-version: 18
-                  cache: 'yarn'
+                version: 8.x.x
+            - uses: actions/setup-node@v4
+              with:
+                node-version: '18'
+            - name: Get pnpm cache directory path
+              id: pnpm-cache-dir
+              run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
-            - run: yarn install && yarn build
+            - name: Get cypress cache directory path
+              id: cypress-cache-dir
+              run: echo "CYPRESS_BIN_PATH=$(npx cypress cache path)" >> $GITHUB_OUTPUT
 
+            - uses: actions/cache@v3
+              id: pnpm-cache
+              with:
+                  path: |
+                      ${{ steps.pnpm-cache-dir.outputs.PNPM_STORE_PATH }}
+                      ${{ steps.cypress-cache-dir.outputs.CYPRESS_BIN_PATH }}
+                  key: ${{ runner.os }}-pnpm-cypress-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pnpm-cypress-
+            - name: Install package.json dependencies with pnpm
+              run: pnpm install --frozen-lockfile
+            - run: pnpm build
             - name: Cypress run
-              uses: cypress-io/github-action@v4
+              uses: cypress-io/github-action@v6
 
     functional:
         name: Functional tests
         runs-on: ubuntu-latest
         steps:
-            # Check out the repository
-            - uses: actions/checkout@v3
-
-            # Install Node.js
-            - uses: actions/setup-node@v3
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v2
               with:
-                  node-version: 18
-                  cache: 'yarn'
-
-            # Install your dependencies
-            - run: yarn install
-
-            - run: yarn jest functional_tests/
+                version: 8.x.x
+            - uses: actions/setup-node@v4
+              with:
+                node-version: '18'
+                cache: 'pnpm'
+            - run: pnpm install
+            - run: pnpm jest functional_tests/
 
     lint:
         name: Lint
         runs-on: ubuntu-latest
         steps:
-            # Check out the repository
-            - uses: actions/checkout@v3
-
-            # Install Node.js
-            - uses: actions/setup-node@v3
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v2
               with:
-                  node-version: 18
-                  cache: 'yarn'
-
-            # Install your dependencies
-            - run: yarn install
+                  version: 8.x.x
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '18'
+                  cache: 'pnpm'
+            - run: pnpm install
 
             - run: |
-                  yarn prettier --check
-                  yarn lint
-                  yarn tsc -b
+                  pnpm prettier --check
+                  pnpm lint
+                  pnpm tsc -b

@@ -1,26 +1,36 @@
-/*
- * Get the className of an element, accounting for edge cases where element.className is an object
- * @param {Element} el - element to get the className of
- * @returns {string} the element's class
- */
-import { AutocaptureConfig } from 'types'
-import { _each, _includes, _trim } from './utils'
+import { AutocaptureConfig, Properties } from 'types'
+import { _each, _entries, _includes, _trim } from './utils'
 
-import { _isNull, _isString, _isUndefined } from './utils/type-utils'
+import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 
-export function getClassName(el: Element): string {
+export function splitClassString(s: string): string[] {
+    return s ? _trim(s).split(/\s+/) : []
+}
+
+/*
+ * Get the className of an element, accounting for edge cases where element.className is an object
+ *
+ * Because this is a string it can contain unexpected characters
+ * So, this method safely splits the className and returns that array.
+ */
+export function getClassNames(el: Element): string[] {
+    let className = ''
     switch (typeof el.className) {
         case 'string':
-            return el.className
+            className = el.className
+            break
         // TODO: when is this ever used?
         case 'object': // handle cases where className might be SVGAnimatedString or some other type
-            return ('baseVal' in el.className ? (el.className as any).baseVal : null) || el.getAttribute('class') || ''
+            className =
+                ('baseVal' in el.className ? (el.className as any).baseVal : null) || el.getAttribute('class') || ''
+            break
         default:
-            // future proof
-            return ''
+            className = ''
     }
+
+    return splitClassString(className)
 }
 
 /*
@@ -202,13 +212,13 @@ export function shouldCaptureDomEvent(
  */
 export function shouldCaptureElement(el: Element): boolean {
     for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
-        const classes = getClassName(curEl).split(' ')
+        const classes = getClassNames(curEl)
         if (_includes(classes, 'ph-sensitive') || _includes(classes, 'ph-no-capture')) {
             return false
         }
     }
 
-    if (_includes(getClassName(el).split(' '), 'ph-include')) {
+    if (_includes(getClassNames(el), 'ph-include')) {
         return true
     }
 
@@ -345,4 +355,99 @@ export function getNestedSpanText(target: Element): string {
         })
     }
     return text
+}
+
+/*
+Back in the day storing events in Postgres we use Elements for autocapture events.
+Now we're using elements_chain. We used to do this parsing/processing during ingestion.
+This code is just copied over from ingestion, but we should optimize it
+to create elements_chain string directly.
+*/
+export function getElementsChainString(elements: Properties[]): string {
+    return elementsToString(extractElements(elements))
+}
+
+// This interface is called 'Element' in plugin-scaffold https://github.com/PostHog/plugin-scaffold/blob/b07d3b879796ecc7e22deb71bf627694ba05386b/src/types.ts#L200
+// However 'Element' is a DOM Element when run in the browser, so we have to rename it
+interface PHElement {
+    text?: string
+    tag_name?: string
+    href?: string
+    attr_id?: string
+    attr_class?: string[]
+    nth_child?: number
+    nth_of_type?: number
+    attributes?: Record<string, any>
+    event_id?: number
+    order?: number
+    group_id?: number
+}
+
+function escapeQuotes(input: string): string {
+    return input.replace(/"|\\"/g, '\\"')
+}
+
+function elementsToString(elements: PHElement[]): string {
+    const ret = elements.map((element) => {
+        let el_string = ''
+        if (element.tag_name) {
+            el_string += element.tag_name
+        }
+        if (element.attr_class) {
+            element.attr_class.sort()
+            for (const single_class of element.attr_class) {
+                el_string += `.${single_class.replace(/"/g, '')}`
+            }
+        }
+        const attributes: Record<string, any> = {
+            ...(element.text ? { text: element.text } : {}),
+            'nth-child': element.nth_child ?? 0,
+            'nth-of-type': element.nth_of_type ?? 0,
+            ...(element.href ? { href: element.href } : {}),
+            ...(element.attr_id ? { attr_id: element.attr_id } : {}),
+            ...element.attributes,
+        }
+        const sortedAttributes: Record<string, any> = {}
+        _entries(attributes)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .forEach(
+                ([key, value]) => (sortedAttributes[escapeQuotes(key.toString())] = escapeQuotes(value.toString()))
+            )
+        el_string += ':'
+        el_string += _entries(attributes)
+            .map(([key, value]) => `${key}="${value}"`)
+            .join('')
+        return el_string
+    })
+    return ret.join(';')
+}
+
+function extractElements(elements: Properties[]): PHElement[] {
+    return elements.map((el) => {
+        const response = {
+            text: el['$el_text']?.slice(0, 400),
+            tag_name: el['tag_name'],
+            href: el['attr__href']?.slice(0, 2048),
+            attr_class: extractAttrClass(el),
+            attr_id: el['attr__id'],
+            nth_child: el['nth_child'],
+            nth_of_type: el['nth_of_type'],
+            attributes: {} as { [id: string]: any },
+        }
+        _entries(el)
+            .filter(([key]) => key.indexOf('attr__') === 0)
+            .forEach(([key, value]) => (response.attributes[key] = value))
+        return response
+    })
+}
+
+function extractAttrClass(el: Properties): PHElement['attr_class'] {
+    const attr_class = el['attr__class']
+    if (!attr_class) {
+        return undefined
+    } else if (_isArray(attr_class)) {
+        return attr_class
+    } else {
+        return splitClassString(attr_class)
+    }
 }

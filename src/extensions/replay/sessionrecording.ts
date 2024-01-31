@@ -16,7 +16,7 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
-import { EventType, type eventWithTime, type listenerHandler } from '@rrweb/types'
+import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
 import { _timestamp, loadScript } from '../../utils'
 
@@ -24,10 +24,14 @@ import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isU
 import { logger } from '../../utils/logger'
 import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
+import { isLocalhost } from '../../utils/request-utils'
+import { userOptedOut } from '../../gdpr-utils'
 
 const BASE_ENDPOINT = '/s/'
 
-export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+const FIVE_MINUTES = 1000 * 60 * 5
+const TWO_SECONDS = 2000
+export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -82,11 +86,29 @@ interface SnapshotBuffer {
     windowId: string | null
 }
 
+interface QueuedRRWebEvent {
+    rrwebMethod: () => void
+    attempt: number
+    // the timestamp this was first put into this queue
+    enqueuedAt: number
+}
+
+const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
+    rrwebMethod,
+    enqueuedAt: Date.now(),
+    attempt: 1,
+})
+
 export class SessionRecording {
     private instance: PostHog
     private _endpoint: string
     private flushBufferTimer?: any
+
+    // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private buffer?: SnapshotBuffer
+    // and a queue - that contains rrweb events that we want to send to rrweb, but rrweb wasn't able to accept them yet
+    private queuedRRWebEvents: QueuedRRWebEvent[] = []
+
     private mutationRateLimiter?: MutationRateLimiter
     private _captureStarted: boolean
     private stopRrweb: listenerHandler | undefined
@@ -101,6 +123,14 @@ export class SessionRecording {
     private _linkedFlag: string | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
+    private _recordCanvas: boolean = false
+    private _canvasFps: number | null = null
+    private _canvasQuality: number | null = null
+
+    private _fullSnapshotTimer?: number
+
+    // Util to help developers working on this feature manually override
+    _forceAllowLocalhostNetworkCapture = false
 
     public get started(): boolean {
         // TODO could we use status instead of _captureStarted?
@@ -148,7 +178,11 @@ export class SessionRecording {
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
-    private get networkPayloadCapture(): Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody'> | undefined {
+    // network payload capture config has three parts
+    // each can be configured server side or client side
+    private get networkPayloadCapture():
+        | Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
+        | undefined {
         const networkPayloadCapture_server_side = this.instance.get_property(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
         const networkPayloadCapture_client_side = {
             recordHeaders: this.instance.config.session_recording?.recordHeaders,
@@ -158,7 +192,12 @@ export class SessionRecording {
             networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
         const bodyEnabled =
             networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
-        return headersEnabled || bodyEnabled ? { recordHeaders: headersEnabled, recordBody: bodyEnabled } : undefined
+        const performanceEnabled =
+            this.instance.config.capture_performance || networkPayloadCapture_server_side?.capturePerformance
+
+        return headersEnabled || bodyEnabled || performanceEnabled
+            ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: performanceEnabled }
+            : undefined
     }
 
     /**
@@ -196,6 +235,14 @@ export class SessionRecording {
             this._flushBuffer()
         })
 
+        window?.addEventListener('offline', () => {
+            this._tryAddCustomEvent('browser offline', {})
+        })
+
+        window?.addEventListener('online', () => {
+            this._tryAddCustomEvent('browser online', {})
+        })
+
         if (!this.instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
@@ -207,6 +254,7 @@ export class SessionRecording {
     startRecordingIfEnabled() {
         if (this.isRecordingEnabled) {
             this.startCaptureAndTrySendingQueuedSnapshots()
+            logger.info('[SessionRecording] started')
         } else {
             this.stopRecording()
             this.clearBuffer()
@@ -218,6 +266,7 @@ export class SessionRecording {
             this.stopRrweb()
             this.stopRrweb = undefined
             this._captureStarted = false
+            logger.info('[SessionRecording] stopped')
         }
     }
 
@@ -265,7 +314,10 @@ export class SessionRecording {
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
-                [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: response.sessionRecording?.networkPayloadCapture,
+                [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: {
+                    capturePerformance: response.capturePerformance,
+                    ...response.sessionRecording?.networkPayloadCapture,
+                },
             })
         }
 
@@ -275,6 +327,19 @@ export class SessionRecording {
 
         const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
         this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
+
+        const receivedRecordCanvas = response.sessionRecording?.recordCanvas
+        this._recordCanvas =
+            _isUndefined(receivedRecordCanvas) || _isNull(receivedRecordCanvas) ? false : receivedRecordCanvas
+
+        const receivedCanvasFps = response.sessionRecording?.canvasFps
+        this._canvasFps = _isUndefined(receivedCanvasFps) ? null : receivedCanvasFps
+
+        const receivedCanvasQuality = response.sessionRecording?.canvasQuality
+        this._canvasQuality =
+            _isUndefined(receivedCanvasQuality) || _isNull(receivedCanvasQuality)
+                ? null
+                : parseFloat(receivedCanvasQuality)
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
@@ -332,7 +397,8 @@ export class SessionRecording {
         }
 
         // We do not switch recorder versions midway through a recording.
-        if (this._captureStarted || this.instance.config.disable_session_recording) {
+        // do not start if explicitly disabled or if the user has opted out
+        if (this._captureStarted || this.instance.config.disable_session_recording || userOptedOut(this.instance)) {
             return
         }
 
@@ -373,15 +439,25 @@ export class SessionRecording {
             // We check if the lastActivityTimestamp is old enough to go idle
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
+                this._tryAddCustomEvent('sessionIdle', {
+                    reason: 'user inactivity',
+                    timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
+                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+                })
             }
         }
 
+        let returningFromIdle = false
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
                 // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
                 this.isIdle = false
-                this._tryTakeFullSnapshot()
+                this._tryAddCustomEvent('sessionNoLongerIdle', {
+                    reason: 'user activity',
+                    type: event.type,
+                })
+                returningFromIdle = true
             }
         }
 
@@ -398,30 +474,41 @@ export class SessionRecording {
         const sessionIdChanged = this.sessionId !== sessionId
         const windowIdChanged = this.windowId !== windowId
 
+        this.windowId = windowId
+        this.sessionId = sessionId
+
         if (
-            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-            (windowIdChanged || sessionIdChanged)
+            returningFromIdle ||
+            ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
+                (windowIdChanged || sessionIdChanged))
         ) {
             this._tryTakeFullSnapshot()
         }
+    }
 
-        this.windowId = windowId
-        this.sessionId = sessionId
+    private _tryRRWebMethod(queuedRRWebEvent: QueuedRRWebEvent): boolean {
+        try {
+            queuedRRWebEvent.rrwebMethod()
+            return true
+        } catch (e) {
+            // Sometimes a race can occur where the recorder is not fully started yet
+            logger.warn('[Session-Recording] could not emit queued rrweb event.', e)
+            this.queuedRRWebEvents.length < 10 &&
+                this.queuedRRWebEvents.push({
+                    enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
+                    attempt: queuedRRWebEvent.attempt++,
+                    rrwebMethod: queuedRRWebEvent.rrwebMethod,
+                })
+            return false
+        }
+    }
+
+    private _tryAddCustomEvent(tag: string, payload: any): boolean {
+        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.addCustomEvent(tag, payload)))
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        // TODO this should ignore based on emit?
-        if (!this._captureStarted) {
-            return false
-        }
-        try {
-            this.rrwebRecord?.takeFullSnapshot()
-            return true
-        } catch (e) {
-            // Sometimes a race can occur where the recorder is not fully started yet, so we can't take a full snapshot.
-            logger.error('Error taking full snapshot.', e)
-            return false
-        }
+        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
     }
 
     private _onScriptLoaded() {
@@ -459,6 +546,12 @@ export class SessionRecording {
             }
         }
 
+        if (this._recordCanvas && !_isNull(this._canvasFps) && !_isNull(this._canvasQuality)) {
+            sessionRecordingOptions.recordCanvas = true
+            sessionRecordingOptions.sampling = { canvas: this._canvasFps }
+            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasQuality }
+        }
+
         if (!this.rrwebRecord) {
             logger.error(
                 'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
@@ -479,24 +572,17 @@ export class SessionRecording {
                 },
             })
 
-        const plugins = []
+        // rrweb takes a snapshot on initialization,
+        // we want to take one in five minutes
+        // if nothing else happens to reset the timer
+        this._scheduleFullSnapshot()
 
-        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
-            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
-        }
-        if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
-            plugins.push(
-                assignableWindow.getRecordNetworkPlugin(
-                    buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
-                )
-            )
-        }
-
+        const activePlugins = this._gatherRRWebPlugins()
         this.stopRrweb = this.rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
-            plugins,
+            plugins: activePlugins,
             ...sessionRecordingOptions,
         })
 
@@ -511,7 +597,7 @@ export class SessionRecording {
                     if (!href) {
                         return
                     }
-                    this.rrwebRecord?.addCustomEvent('$pageview', { href })
+                    this._tryAddCustomEvent('$pageview', { href })
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)
@@ -521,9 +607,50 @@ export class SessionRecording {
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
         this.isIdle = false
+
+        this._tryAddCustomEvent('$session_options', {
+            sessionRecordingOptions,
+            activePlugins: activePlugins.map((p) => p?.name),
+        })
+    }
+
+    private _scheduleFullSnapshot(): void {
+        if (this._fullSnapshotTimer) {
+            clearInterval(this._fullSnapshotTimer)
+        }
+
+        this._fullSnapshotTimer = setInterval(() => {
+            this._tryTakeFullSnapshot()
+        }, FIVE_MINUTES) // 5 minutes
+    }
+
+    private _gatherRRWebPlugins() {
+        const plugins: RecordPlugin<unknown>[] = []
+
+        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
+        }
+
+        if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
+            const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
+
+            if (canRecordNetwork) {
+                plugins.push(
+                    assignableWindow.getRecordNetworkPlugin(
+                        buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
+                    )
+                )
+            } else {
+                logger.info('[SessionReplay-NetworkCapture] not started because we are on localhost.')
+            }
+        }
+
+        return plugins
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {
+        this._processQueuedEvents()
+
         if (!rawEvent || !_isObject(rawEvent)) {
             return
         }
@@ -534,6 +661,11 @@ export class SessionRecording {
                 return
             }
             rawEvent.data.href = href
+        }
+
+        if (rawEvent.type === EventType.FullSnapshot) {
+            // we're processing a full snapshot, so we should reset the timer
+            this._scheduleFullSnapshot()
         }
 
         const throttledEvent = this.mutationRateLimiter
@@ -566,6 +698,40 @@ export class SessionRecording {
             this._captureSnapshotBuffered(properties)
         } else {
             this.clearBuffer()
+        }
+    }
+
+    private _processQueuedEvents() {
+        if (this.queuedRRWebEvents.length) {
+            // if rrweb isn't ready to accept events earlier then we queued them up
+            // now that emit has been called rrweb should be ready to accept them
+            // so, before we process this event, we try our queued events _once_ each
+            // we don't want to risk queuing more things and never exiting this loop!
+            // if they fail here, they'll be pushed into a new queue,
+            // and tried on the next loop.
+            // there is a risk of this queue growing in an uncontrolled manner,
+            // so its length is limited elsewhere
+            // for now this is to help us ensure we can capture events that happen
+            // and try to identify more about when it is failing
+            const itemsToProcess = [...this.queuedRRWebEvents]
+            this.queuedRRWebEvents = []
+            itemsToProcess.forEach((queuedRRWebEvent) => {
+                if (Date.now() - queuedRRWebEvent.enqueuedAt > TWO_SECONDS) {
+                    this._tryAddCustomEvent('rrwebQueueTimeout', {
+                        enqueuedAt: queuedRRWebEvent.enqueuedAt,
+                        attempt: queuedRRWebEvent.attempt,
+                        queueLength: itemsToProcess.length,
+                    })
+                } else {
+                    if (this._tryRRWebMethod(queuedRRWebEvent)) {
+                        this._tryAddCustomEvent('rrwebQueueSuccess', {
+                            enqueuedAt: queuedRRWebEvent.enqueuedAt,
+                            attempt: queuedRRWebEvent.attempt,
+                            queueLength: itemsToProcess.length,
+                        })
+                    }
+                }
+            })
         }
     }
 

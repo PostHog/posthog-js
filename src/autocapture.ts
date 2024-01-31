@@ -1,6 +1,6 @@
 import { _bind_instance_methods, _each, _extend, _includes, _register_event, _safewrap_instance_methods } from './utils'
 import {
-    getClassName,
+    getClassNames,
     getSafeText,
     isElementNode,
     isSensitiveElement,
@@ -13,6 +13,8 @@ import {
     isAngularStyleAttr,
     isDocumentFragment,
     getDirectAndNestedSpanText,
+    getElementsChainString,
+    splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
@@ -88,9 +90,9 @@ const autocapture = {
             }
         }
 
-        const classes = getClassName(elem)
+        const classes = getClassNames(elem)
         if (classes.length > 0)
-            props['classes'] = classes.split(' ').filter(function (c) {
+            props['classes'] = classes.filter(function (c) {
                 return c !== ''
             })
 
@@ -103,7 +105,14 @@ const autocapture = {
             if (elementAttributeIgnorelist?.includes(attr.name)) return
 
             if (!maskInputs && shouldCaptureValue(attr.value) && !isAngularStyleAttr(attr.name)) {
-                props['attr__' + attr.name] = limitText(1024, attr.value)
+                let value = attr.value
+                if (attr.name === 'class') {
+                    // html attributes can _technically_ contain linebreaks,
+                    // but we're very intolerant of them in the class string,
+                    // so we strip them.
+                    value = splitClassString(value).join(' ')
+                }
+                props['attr__' + attr.name] = limitText(1024, value)
             }
         })
 
@@ -218,7 +227,7 @@ const autocapture = {
                 }
 
                 // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
-                const classes = getClassName(el).split(' ')
+                const classes = getClassNames(el)
                 if (_includes(classes, 'ph-no-capture')) {
                     explicitNoCapture = true
                 }
@@ -255,9 +264,13 @@ const autocapture = {
 
             const props = _extend(
                 this._getDefaultProperties(e.type),
-                {
-                    $elements: elementsJson,
-                },
+                instance.elementsChainAsString
+                    ? {
+                          $elements_chain: getElementsChainString(elementsJson),
+                      }
+                    : {
+                          $elements: elementsJson,
+                      },
                 elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
                 this._getCustomProperties(targetElementList),
                 autocaptureAugmentProperties

@@ -6,6 +6,7 @@ import { autocapture } from '../autocapture'
 import { truth } from './helpers/truth'
 import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
+import * as globals from '../utils/globals'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
@@ -125,6 +126,44 @@ describe('posthog core', () => {
             expect(() => given.subject()).not.toThrow()
             expect(hook).not.toHaveBeenCalled()
             expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'No event name provided to posthog.capture')
+        })
+
+        it('respects opt_out_useragent_filter (default: false)', () => {
+            const originalUseragent = globals.userAgent
+            // eslint-disable-next-line no-import-assign
+            globals['userAgent'] =
+                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
+
+            const hook = jest.fn()
+            given.lib._addCaptureHook(hook)
+            given.subject()
+            expect(hook).not.toHaveBeenCalledWith('$event')
+
+            // eslint-disable-next-line no-import-assign
+            globals['userAgent'] = originalUseragent
+        })
+
+        it('respects opt_out_useragent_filter', () => {
+            const originalUseragent = globals.userAgent
+
+            given('config', () => ({
+                opt_out_useragent_filter: true,
+                property_blacklist: [],
+                _onCapture: jest.fn(),
+            }))
+
+            // eslint-disable-next-line no-import-assign
+            globals['userAgent'] =
+                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
+
+            const hook = jest.fn()
+            given.lib._addCaptureHook(hook)
+            const event = given.subject()
+            expect(hook).toHaveBeenCalledWith('$event')
+            expect(event.properties['$browser_type']).toEqual('bot')
+
+            // eslint-disable-next-line no-import-assign
+            globals['userAgent'] = originalUseragent
         })
 
         it('truncates long properties', () => {
@@ -275,6 +314,13 @@ describe('posthog core', () => {
             given.subject()
 
             expect(given.lib.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
+        })
+
+        it('enables elementsChainAsString if given', () => {
+            given('decideResponse', () => ({ elementsChainAsString: true }))
+            given.subject()
+
+            expect(given.lib.elementsChainAsString).toBe(true)
         })
     })
 
@@ -693,6 +739,15 @@ describe('posthog core', () => {
             given.subject()
             expect(given.decide).toBe(undefined)
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
+        })
+
+        it('sanitizes api_host urls', () => {
+            given('config', () => ({
+                api_host: 'https://example.com/custom/',
+            }))
+            given.subject()
+
+            expect(given.lib.config.api_host).toBe('https://example.com/custom')
         })
 
         it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
@@ -1116,5 +1171,10 @@ describe('posthog core', () => {
                 'https://app.posthog.com/replay/sessionId?t=30'
             )
         })
+    })
+
+    test('deprecated web performance observer still exposes _forceAllowLocalhost', () => {
+        expect(given.lib.webPerformance._forceAllowLocalhost).toBe(false)
+        expect(() => given.lib.webPerformance._forceAllowLocalhost).not.toThrow()
     })
 })

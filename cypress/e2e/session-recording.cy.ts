@@ -1,39 +1,22 @@
 /// <reference types="cypress" />
 
 import { _isNull } from '../../src/utils/type-utils'
-
-function onPageLoad() {
-    cy.posthogInit(given.options)
-    cy.wait('@decide')
-    cy.wait('@recorder')
-}
+import { start } from '../support/setup'
 
 describe('Session recording', () => {
-    given('options', () => ({}))
-
     describe('array.full.js', () => {
-        beforeEach(() => {
-            cy.route({
-                method: 'POST',
-                url: '**/decide/*',
-                response: {
+        it('captures session events', () => {
+            start({
+                decideResponseOverrides: {
                     config: { enable_collect_everything: false },
-                    editorParams: {},
-                    featureFlags: ['session-recording-player'],
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
-                    capture_performance: true,
+                    capturePerformance: true,
                 },
-            }).as('decide')
+            })
 
-            cy.visit('./playground/cypress-full')
-            cy.posthogInit(given.options)
-            cy.wait('@decide')
-        })
-
-        it('captures session events', () => {
             cy.get('[data-cy-input]').type('hello world! ')
             cy.wait(500)
             cy.get('[data-cy-input]')
@@ -48,8 +31,9 @@ describe('Session recording', () => {
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
                         // Making a set from the rest should all be 3 - incremental snapshots
-                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(2)
+                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(3)
                         expect(new Set(incrementalSnapshots.map((s) => s.type))).to.deep.equal(new Set([3]))
                     })
                 })
@@ -58,24 +42,18 @@ describe('Session recording', () => {
 
     describe('array.js', () => {
         beforeEach(() => {
-            cy.route({
-                method: 'POST',
-                url: '**/decide/*',
-                response: {
+            start({
+                decideResponseOverrides: {
                     config: { enable_collect_everything: false },
-                    editorParams: {},
-                    featureFlags: ['session-recording-player'],
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
-                    supportedCompression: ['gzip', 'lz64'],
-                    capture_performance: true,
+                    capturePerformance: true,
                 },
-            }).as('decide')
-
-            cy.visit('./playground/cypress')
-            onPageLoad()
+                url: './playground/cypress',
+            })
+            cy.wait('@recorder')
         })
 
         it('captures session events', () => {
@@ -92,16 +70,17 @@ describe('Session recording', () => {
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
                         // Making a set from the rest should all be 3 - incremental snapshots
                         expect(
-                            new Set(captures[1]['properties']['$snapshot_data'].slice(2).map((s) => s.type))
+                            new Set(captures[1]['properties']['$snapshot_data'].slice(3).map((s) => s.type))
                         ).to.deep.equal(new Set([3]))
                     })
                 })
         })
 
         it('captures snapshots when the mouse moves', () => {
-            let sessionId = null
+            let sessionId: string | null = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
@@ -164,7 +143,7 @@ describe('Session recording', () => {
         })
 
         it('continues capturing to the same session when the page reloads', () => {
-            let sessionId = null
+            let sessionId: string | null = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
@@ -184,7 +163,9 @@ describe('Session recording', () => {
             cy.resetPhCaptures()
             // and refresh the page
             cy.reload()
-            onPageLoad()
+            cy.posthogInit({})
+            cy.wait('@decide')
+            cy.wait('@recorder')
 
             cy.get('body')
                 .trigger('mousemove', { clientX: 200, clientY: 300 })
@@ -213,9 +194,10 @@ describe('Session recording', () => {
                     // a meta and then a full snapshot
                     expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                     expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                    expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
 
                     const xPositions = []
-                    for (let i = 2; i < captures[1]['properties']['$snapshot_data'].length; i++) {
+                    for (let i = 3; i < captures[1]['properties']['$snapshot_data'].length; i++) {
                         expect(captures[1]['properties']['$snapshot_data'][i].type).to.equal(3)
                         expect(captures[1]['properties']['$snapshot_data'][i].data.source).to.equal(
                             6,
@@ -236,7 +218,7 @@ describe('Session recording', () => {
         })
 
         it('rotates sessions after 24 hours', () => {
-            let firstSessionId = null
+            let firstSessionId: string | null = null
 
             // first we start a session and give it some activity
             cy.get('[data-cy-input]').type('hello world! ')
