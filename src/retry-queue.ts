@@ -1,6 +1,6 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { encodePostData, request } from './send-request'
-import { QueuedRequestData, RetryQueueElement } from './types'
+import { PostHogConfig, QueuedRequestData, RetryQueueElement } from './types'
 import { RateLimiter } from './rate-limiter'
 
 import { _isUndefined } from './utils/type-utils'
@@ -32,15 +32,15 @@ export class RetryQueue extends RequestQueueScaffold {
     queue: RetryQueueElement[]
     isPolling: boolean
     areWeOnline: boolean
-    onXHRError: (failedRequest: XMLHttpRequest) => void
+    onRequestError: PostHogConfig['on_request_error']
     rateLimiter: RateLimiter
 
-    constructor(onXHRError: (failedRequest: XMLHttpRequest) => void, rateLimiter: RateLimiter) {
+    constructor(onRequestError: PostHogConfig['on_request_error'], rateLimiter: RateLimiter) {
         super()
         this.isPolling = false
         this.queue = []
         this.areWeOnline = true
-        this.onXHRError = onXHRError
+        this.onRequestError = onRequestError
         this.rateLimiter = rateLimiter
 
         if (!_isUndefined(window) && 'onLine' in window.navigator) {
@@ -138,7 +138,7 @@ export class RetryQueue extends RequestQueueScaffold {
             retriesPerformedSoFar: retriesPerformedSoFar || 0,
             callback,
             retryQueue: this,
-            onXHRError: this.onXHRError,
+            onError: this.onRequestError,
             onResponse: this.rateLimiter.checkForLimiting,
         })
     }

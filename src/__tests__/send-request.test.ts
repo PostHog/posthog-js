@@ -2,7 +2,7 @@
 
 import { addParamsToURL, encodePostData, request } from '../send-request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
-import { Compression, PostData, XHROptions, XHRParams } from '../types'
+import { Compression, PostData, XHROptions, RequestData } from '../types'
 
 import { _isUndefined } from '../utils/type-utils'
 
@@ -11,10 +11,10 @@ jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 describe('send-request', () => {
     describe('xhr', () => {
         let mockXHR: XMLHttpRequest
-        let xhrParams: (overrides?: Partial<XHRParams>) => XHRParams
-        let onXHRError: XHRParams['onXHRError']
-        let checkForLimiting: XHRParams['onResponse']
-        let xhrOptions: XHRParams['options']
+        let createRequestData: (overrides?: Partial<RequestData>) => RequestData
+        let onXHRError: RequestData['onError']
+        let checkForLimiting: RequestData['onResponse']
+        let xhrOptions: RequestData['options']
 
         beforeEach(() => {
             mockXHR = {
@@ -30,7 +30,7 @@ describe('send-request', () => {
             onXHRError = jest.fn()
             checkForLimiting = jest.fn()
             xhrOptions = {}
-            xhrParams = (overrides?: Partial<XHRParams>) => {
+            createRequestData = (overrides?: Partial<RequestData>) => {
                 return {
                     url: 'https://any.posthog-instance.com?ver=1.23.45',
                     data: {},
@@ -40,8 +40,8 @@ describe('send-request', () => {
                     retriesPerformedSoFar: undefined,
                     retryQueue: {
                         enqueue: () => {},
-                    } as Partial<XHRParams['retryQueue']> as XHRParams['retryQueue'],
-                    onXHRError,
+                    } as Partial<RequestData['retryQueue']> as RequestData['retryQueue'],
+                    onError: onXHRError,
                     onResponse: checkForLimiting,
                     ...overrides,
                 }
@@ -56,7 +56,7 @@ describe('send-request', () => {
         test('it adds the retry count to the URL', () => {
             const retryCount = Math.floor(Math.random() * 100) + 1 // make sure it is never 0
             request(
-                xhrParams({
+                createRequestData({
                     retriesPerformedSoFar: retryCount,
                     url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
                 })
@@ -70,7 +70,7 @@ describe('send-request', () => {
 
         test('does not add retry count when it is 0', () => {
             request(
-                xhrParams({
+                createRequestData({
                     retriesPerformedSoFar: 0,
                     url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
                 })
@@ -84,9 +84,9 @@ describe('send-request', () => {
 
         describe('when xhr requests fail', () => {
             it('does not error if the configured onXHRError is not a function', () => {
-                onXHRError = 'not a function' as unknown as XHRParams['onXHRError']
+                onXHRError = 'not a function' as unknown as RequestData['onError']
                 expect(() => {
-                    request(xhrParams())
+                    request(createRequestData())
                     mockXHR.onreadystatechange?.({} as Event)
                 }).not.toThrow()
             })
@@ -97,7 +97,7 @@ describe('send-request', () => {
                 onXHRError = (req) => {
                     requestFromError = req
                 }
-                request(xhrParams())
+                request(createRequestData())
                 mockXHR.onreadystatechange?.({} as Event)
                 expect(requestFromError).toHaveProperty('status', 502)
             })
@@ -109,7 +109,7 @@ describe('send-request', () => {
                 // @ts-ignore
                 // noinspection JSConstantReassignment
                 mockXHR.status = Math.floor(Math.random() * 100)
-                request(xhrParams())
+                request(createRequestData())
                 mockXHR.onreadystatechange?.({} as Event)
                 expect(checkForLimiting).toHaveBeenCalledWith(mockXHR)
             })

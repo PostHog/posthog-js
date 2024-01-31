@@ -137,7 +137,7 @@ export const defaultConfig = (): PostHogConfig => ({
     property_blacklist: [],
     respect_dnt: false,
     sanitize_properties: null,
-    xhr_headers: {}, // { header: value, header2: value }
+    request_headers: {}, // { header: value, header2: value }
     inapp_protocol: '//',
     inapp_link_new_window: false,
     request_batching: true,
@@ -149,8 +149,8 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
-    on_xhr_error: (req) => {
-        const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
+    on_request_error: (req) => {
+        const error = 'Bad HTTP status: ' + req.statusCode + ' ' + req.responseText
         logger.error(error)
     },
     get_device_id: (uuid) => uuid,
@@ -425,6 +425,9 @@ export class PostHog {
             }
         }
 
+        // Check for deprecated params that might still be in use
+        config.request_headers = config.request_headers || config.xhr_headers
+
         this.set_config(
             _extend({}, defaultConfig(), config, {
                 name: name,
@@ -447,7 +450,7 @@ export class PostHog {
         this.persistence = new PostHogPersistence(this.config)
 
         this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
-        this._retryQueue = new RetryQueue(this.config.on_xhr_error, this.rateLimiter)
+        this._retryQueue = new RetryQueue(this.config.on_request_error, this.rateLimiter)
         this.__captureHooks = []
         this.__request_queue = []
 
@@ -718,12 +721,12 @@ export class PostHog {
                 request({
                     url: url,
                     data: data,
-                    headers: this.config.xhr_headers,
+                    headers: this.config.request_headers,
                     options: options,
                     callback,
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,
-                    onXHRError: this.config.on_xhr_error,
+                    onError: this.config.on_request_error,
                     onResponse: this.rateLimiter.checkForLimiting,
                 })
             } catch (e) {
@@ -1686,7 +1689,7 @@ export class PostHog {
      *
      *       // extra HTTP request headers to set for each API request, in
      *       // the format {'Header-Name': value}
-     *       xhr_headers: {}
+     *       response_headers: {}
      *
      *       // protocol for fetching in-app message resources, e.g.
      *       // 'https://' or 'http://'; defaults to '//' (which defers to the

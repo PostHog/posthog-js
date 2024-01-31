@@ -1,6 +1,6 @@
 import { _each } from './utils'
 import Config from './config'
-import { PostData, XHROptions, XHRParams } from './types'
+import { PostData, XHROptions, RequestData, MinimalHTTPResponse } from './types'
 import { _HTTPBuildQuery } from './utils/request-utils'
 
 import { _isArray, _isFunction, _isNumber, _isUint8Array, _isUndefined } from './utils/type-utils'
@@ -62,7 +62,7 @@ export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHR
     return body_data
 }
 
-export const request = (params: XHRParams) => {
+export const request = (params: RequestData) => {
     if (window?.fetch) {
         const body = encodePostData(params.data, params.options)
 
@@ -119,10 +119,10 @@ const xhr = ({
     callback,
     retriesPerformedSoFar,
     retryQueue,
-    onXHRError,
+    onError,
     timeout = 60000,
     onResponse,
-}: XHRParams) => {
+}: RequestData) => {
     if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
         url = addParamsToURL(url, { retry_count: retriesPerformedSoFar }, {})
     }
@@ -147,7 +147,11 @@ const xhr = ({
     req.onreadystatechange = () => {
         // XMLHttpRequest.DONE == 4, except in safari 4
         if (req.readyState === 4) {
-            onResponse?.(req)
+            const minimalResponseSummary: MinimalHTTPResponse = {
+                statusCode: req.status,
+                responseText: req.responseText,
+            }
+            onResponse?.(minimalResponseSummary)
             if (req.status === 200) {
                 if (callback) {
                     let response
@@ -160,8 +164,8 @@ const xhr = ({
                     callback(response)
                 }
             } else {
-                if (_isFunction(onXHRError)) {
-                    onXHRError(req)
+                if (_isFunction(onError)) {
+                    onError(minimalResponseSummary)
                 }
 
                 // don't retry errors between 400 and 500 inclusive

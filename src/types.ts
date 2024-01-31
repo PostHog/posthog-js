@@ -97,8 +97,12 @@ export interface PostHogConfig {
     opt_in_site_apps: boolean
     respect_dnt: boolean
     property_blacklist: string[]
-    xhr_headers: { [header_name: string]: string }
-    on_xhr_error: (failedRequest: XMLHttpRequest) => void
+    request_headers: { [header_name: string]: string }
+    on_request_error: (error: MinimalHTTPResponse) => void
+    /** @deprecated - use `request_headers` instead  */
+    xhr_headers?: { [header_name: string]: string }
+    /** @deprecated - use `on_request_error` instead  */
+    on_xhr_error?: (failedRequest: XMLHttpRequest) => void
     inapp_protocol: string
     inapp_link_new_window: boolean
     request_batching: boolean
@@ -213,11 +217,17 @@ export interface QueuedRequestData {
     retriesPerformedSoFar?: number
 }
 
-export interface XHRParams extends QueuedRequestData {
+// Minimal class to allow interop between different request methods (xhr / fetch)
+export interface MinimalHTTPResponse {
+    statusCode: number
+    responseText: string
+}
+
+export interface RequestData extends QueuedRequestData {
     retryQueue: RetryQueue
-    onXHRError: (req: XMLHttpRequest) => void
     timeout?: number
-    onResponse?: (req: XMLHttpRequest) => void
+    onError: (req: MinimalHTTPResponse) => void
+    onResponse?: (req: MinimalHTTPResponse) => void
 }
 
 export interface DecideResponse {

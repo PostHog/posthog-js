@@ -1,3 +1,4 @@
+import { MinimalHTTPResponse } from 'types'
 import { logger } from './utils/logger'
 
 const oneMinuteInMilliseconds = 60 * 1000
@@ -18,9 +19,9 @@ export class RateLimiter {
         return new Date().getTime() < retryAfter
     }
 
-    public checkForLimiting = (xmlHttpRequest: XMLHttpRequest): void => {
+    public checkForLimiting = (httpResponse: MinimalHTTPResponse): void => {
         try {
-            const text = xmlHttpRequest.responseText
+            const text = httpResponse.responseText
             if (!text || !text.length) {
                 return
             }
