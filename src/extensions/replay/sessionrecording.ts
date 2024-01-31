@@ -619,7 +619,7 @@ export class SessionRecording {
             clearInterval(this._fullSnapshotTimer)
         }
 
-        this._fullSnapshotTimer = setInterval(() => {
+        this._fullSnapshotTimer = window?.setInterval(() => {
             this._tryTakeFullSnapshot()
         }, FIVE_MINUTES) // 5 minutes
     }
