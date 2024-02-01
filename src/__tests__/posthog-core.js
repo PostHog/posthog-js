@@ -741,15 +741,6 @@ describe('posthog core', () => {
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
         })
 
-        it('sanitizes api_host urls', () => {
-            given('config', () => ({
-                api_host: 'https://example.com/custom/',
-            }))
-            given.subject()
-
-            expect(given.lib.config.api_host).toBe('https://example.com/custom')
-        })
-
         it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
             given('overrides', () => ({
                 __loaded_recorder_version: undefined,

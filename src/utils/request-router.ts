@@ -25,10 +25,15 @@ export class RequestRouter {
         this.instance = instance
     }
 
-    get region(): RequestRouterRegion {
-        const apiHost = this.instance.config.api_host.replace(/\/$/, '')
+    get apiHost(): string {
+        return this.instance.config.api_host.replace(/\/$/, '')
+    }
+    get uiHost(): string | undefined {
+        return this.instance.config.ui_host?.replace(/\/$/, '')
+    }
 
-        switch (apiHost) {
+    get region(): RequestRouterRegion {
+        switch (this.apiHost) {
             case 'https://app.posthog.com':
             case 'https://us.posthog.com':
                 return RequestRouterRegion.US
@@ -40,14 +45,14 @@ export class RequestRouter {
     }
 
     endpointFor(target: RequestRouterTarget, path: string = ''): string {
-        const uiHost = this.instance.config.ui_host || this.instance.config.api_host
+        const uiHost = this.uiHost || this.apiHost
 
         if (target === 'ui') {
-            return uiHost
+            return uiHost + path
         }
 
         if (this.region === RequestRouterRegion.CUSTOM) {
-            return this.instance.config.api_host
+            return this.apiHost + path
         }
 
         const suffix = 'i.posthog.com' + path
