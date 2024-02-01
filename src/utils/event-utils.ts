@@ -3,7 +3,7 @@ import { _isNull, _isUndefined } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
 import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
-import { document, window, userAgent, assignableWindow } from './globals'
+import { document, window, location, userAgent, assignableWindow } from './globals'
 
 /**
  * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
@@ -277,9 +277,9 @@ export const _info = {
                 $device_type: _info.deviceType(userAgent),
             }),
             {
-                $current_url: window?.location.href,
-                $host: window?.location.host,
-                $pathname: window?.location.pathname,
+                $current_url: location?.href,
+                $host: location?.host,
+                $pathname: location?.pathname,
                 $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
                 $browser_version: _info.browserVersion(userAgent, navigator.vendor, assignableWindow.opera),
                 $browser_language: _info.browserLanguage(),
