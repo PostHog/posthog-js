@@ -1,11 +1,11 @@
 import { _each } from './utils'
 import Config from './config'
 import { PostData, XHROptions, RequestData, MinimalHTTPResponse } from './types'
-import { SUPPORTS_FETCH, _HTTPBuildQuery } from './utils/request-utils'
+import { _HTTPBuildQuery } from './utils/request-utils'
 
 import { _isArray, _isFunction, _isNumber, _isUint8Array, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { window } from './utils/globals'
+import { fetch } from './utils/globals'
 
 export const addParamsToURL = (
     url: string,
@@ -64,7 +64,7 @@ export const encodePostData = (data: PostData | Uint8Array, options: Partial<XHR
 
 export const request = (params: RequestData) => {
     // NOTE: Until we are confident with it, we only use fetch if explicitly told so
-    if (window && SUPPORTS_FETCH && params.options.transport === 'fetch') {
+    if (fetch && params.options.transport === 'fetch') {
         const body = encodePostData(params.data, params.options)
 
         const headers = new Headers()
@@ -82,13 +82,12 @@ export const request = (params: RequestData) => {
             url = addParamsToURL(url, { retry_count: params.retriesPerformedSoFar }, {})
         }
 
-        window
-            .fetch(url, {
-                method: params.options?.method || 'GET',
-                headers,
-                keepalive: params.options.method === 'POST',
-                body,
-            })
+        fetch(url, {
+            method: params.options?.method || 'GET',
+            headers,
+            keepalive: params.options.method === 'POST',
+            body,
+        })
             .then((response) => {
                 const statusCode = response.status
                 // Report to the callback handlers

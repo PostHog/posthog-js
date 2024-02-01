@@ -6,7 +6,6 @@ import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-chec
 import { Compression, PostData, XHROptions, RequestData, MinimalHTTPResponse } from '../types'
 
 import { _isUndefined } from '../utils/type-utils'
-import { assignableWindow } from '../utils/globals'
 
 jest.mock('../utils/request-utils', () => ({
     ...jest.requireActual('../utils/request-utils'),
@@ -14,6 +13,15 @@ jest.mock('../utils/request-utils', () => ({
     SUPPORTS_FETCH: true,
     SUPPORTS_REQUEST: true,
 }))
+
+jest.mock('../utils/globals', () => ({
+    ...jest.requireActual('../utils/globals'),
+    fetch: jest.fn(),
+}))
+
+import { assignableWindow, fetch } from '../utils/globals'
+
+const mockedFetch = fetch as jest.MockedFunction<any>
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
@@ -173,7 +181,7 @@ describe('send-request', () => {
                 }
             }
 
-            assignableWindow.fetch = jest.fn(() => {
+            mockedFetch.mockImplementation(() => {
                 return Promise.resolve({
                     status: 200,
                     json: () => Promise.resolve({}),
@@ -190,7 +198,7 @@ describe('send-request', () => {
                 })
             )
 
-            expect(assignableWindow.fetch).toHaveBeenCalledWith(
+            expect(mockedFetch).toHaveBeenCalledWith(
                 `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278`,
                 {
                     body: null,
@@ -209,7 +217,7 @@ describe('send-request', () => {
                     url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
                 })
             )
-            expect(assignableWindow.fetch).toHaveBeenCalledWith(
+            expect(mockedFetch).toHaveBeenCalledWith(
                 `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278&retry_count=${retryCount}`,
                 {
                     body: null,
@@ -231,7 +239,7 @@ describe('send-request', () => {
 
         describe('when the requests fail', () => {
             beforeEach(() => {
-                assignableWindow.fetch = jest.fn(
+                mockedFetch.mockImplementation(
                     () =>
                         Promise.resolve({
                             status: 502,
