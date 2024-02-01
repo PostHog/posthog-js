@@ -1,3 +1,7 @@
+## 1.104.3 - 2024-02-01
+
+- feat: Fetch without window (#985)
+
 ## 1.104.2 - 2024-01-31
 
 - fix: no throwing when reading the body (#984)
