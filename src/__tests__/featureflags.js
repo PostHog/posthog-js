@@ -2,6 +2,7 @@
 
 import { PostHogFeatureFlags, parseFeatureFlagDecideResponse, filterActiveFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
+import { RequestRouter } from '../utils/request-router'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -12,6 +13,7 @@ describe('featureflags', () => {
     const config = {
         token: 'random fake token',
         persistence: 'memory',
+        api_host: 'https://app.posthog.com',
     }
     given('instance', () => ({
         config,
@@ -19,6 +21,7 @@ describe('featureflags', () => {
         getGroups: () => {},
         _prepare_callback: (callback) => callback,
         persistence: new PostHogPersistence(config),
+        requestRouter: new RequestRouter({ config }),
         register: (props) => given.instance.persistence.register(props),
         unregister: (key) => given.instance.persistence.unregister(key),
         get_property: (key) => given.instance.persistence.props[key],
@@ -321,8 +324,8 @@ describe('featureflags', () => {
         }))
 
         beforeEach(() => {
-            given.instance.config = {
-                ...given.instance.config,
+            given.config = {
+                ...given.config,
                 api_host: 'https://decide.com',
             }
         })

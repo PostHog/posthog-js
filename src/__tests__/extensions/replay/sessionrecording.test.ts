@@ -24,6 +24,7 @@ import {
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow } from '../../../utils/globals'
+import { RequestRouter } from '../../../utils/request-router'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -117,6 +118,7 @@ describe('SessionRecording', () => {
                 onFeatureFlagsCallback = cb
             },
             sessionManager: sessionManager,
+            requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: jest.fn(),
         } as unknown as PostHog
 

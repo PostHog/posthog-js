@@ -1,5 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
+import { RequestRouter } from '../utils/request-router'
 
 jest.useFakeTimers()
 
@@ -21,11 +22,12 @@ describe('loaded() with flags', () => {
             _startReloadTimer: jest.fn(),
             receivedFeatureFlags: jest.fn(),
         },
+        requestRouter: new RequestRouter({ config: given.config }),
         _start_queue_if_opted_in: jest.fn(),
         persistence: new PostHogPersistence(given.config),
         _send_request: jest.fn((host, data, header, callback) => callback({ status: 200 })),
     }))
-    given('config', () => ({ loaded: jest.fn(), persistence: 'memory' }))
+    given('config', () => ({ loaded: jest.fn(), persistence: 'memory', api_host: 'https://app.posthog.com' }))
 
     describe('toggling flag reloading', () => {
         given('config', () => ({
@@ -44,6 +46,7 @@ describe('loaded() with flags', () => {
             _send_request: jest.fn((host, data, header, callback) => setTimeout(() => callback({ status: 200 }), 1000)),
             _start_queue_if_opted_in: jest.fn(),
             persistence: new PostHogPersistence(given.config),
+            requestRouter: new RequestRouter({ config: given.config }),
         }))
 
         beforeEach(() => {

@@ -39,7 +39,10 @@ describe('posthog core', () => {
 
         given('overrides', () => ({
             __loaded: true,
-            config: given.config,
+            config: {
+                api_host: 'https://app.posthog.com',
+                ...given.config,
+            },
             persistence: {
                 remove_event_timer: jest.fn(),
                 properties: jest.fn(),
@@ -234,7 +237,7 @@ describe('posthog core', () => {
         it('sends payloads to /e/ by default', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/e/',
+                'https://us-c.i.posthog.com/e/',
                 expect.any(Object),
                 expect.any(Object),
                 undefined
@@ -246,7 +249,7 @@ describe('posthog core', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
 
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/i/v0/e/',
+                'https://us-c.i.posthog.com/i/v0/e/',
                 expect.any(Object),
                 expect.any(Object),
                 undefined
@@ -256,7 +259,7 @@ describe('posthog core', () => {
         it('sends payloads to overriden endpoint if given', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/s/',
+                'https://us-c.i.posthog.com/s/',
                 expect.any(Object),
                 expect.any(Object),
                 undefined
@@ -267,7 +270,7 @@ describe('posthog core', () => {
             given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
             given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/s/',
+                'https://us-c.i.posthog.com/s/',
                 expect.any(Object),
                 expect.any(Object),
                 undefined
@@ -970,7 +973,10 @@ describe('posthog core', () => {
         describe('subsequent capture calls', () => {
             given('overrides', () => ({
                 __loaded: true,
-                config: given.config,
+                config: {
+                    api_host: 'https://app.posthog.com',
+                    ...given.config,
+                },
                 persistence: new PostHogPersistence(given.config),
                 sessionPersistence: new PostHogPersistence(given.config),
                 _requestQueue: {
