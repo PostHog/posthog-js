@@ -26,7 +26,6 @@ import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { userOptedOut } from '../../gdpr-utils'
-import { RequestRouterTarget } from 'utils/request-router'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -414,10 +413,7 @@ export class SessionRecording {
         // recorder.js from cdn since it hasn't been loaded.
         if (this.instance.__loaded_recorder_version !== this.recordingVersion) {
             loadScript(
-                this.instance.requestRouter.endpointFor(
-                    RequestRouterTarget.ASSETS,
-                    `/static/${recorderJS}?v=${Config.LIB_VERSION}`
-                ),
+                this.instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
                 (err) => {
                     if (err) {
                         return logger.error(`Could not load ${recorderJS}`, err)

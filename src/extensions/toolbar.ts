@@ -4,7 +4,6 @@ import { DecideResponse, ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { logger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
-import { RequestRouterTarget } from 'utils/request-router'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
@@ -126,7 +125,7 @@ export class Toolbar {
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         assignableWindow['_postHogToolbarLoaded'] = true
 
-        const host = this.instance.requestRouter.endpointFor(RequestRouterTarget.ASSETS)
+        const host = this.instance.requestRouter.endpointFor('assets')
         // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
         // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
         const fiveMinutesInMillis = 5 * 60 * 1000

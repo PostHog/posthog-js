@@ -6,7 +6,6 @@ import { isPrimitive } from './type-checking'
 
 import { _isArray, _isObject, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { RequestRouterTarget } from 'utils/request-router'
 
 const EXCEPTION_INGESTION_ENDPOINT = '/e/'
 
@@ -130,7 +129,7 @@ export class ExceptionObserver {
 
         const propertiesToSend = { ...properties, ...errorProperties }
 
-        const posthogHost = this.instance.requestRouter.endpointFor(RequestRouterTarget.UI)
+        const posthogHost = this.instance.requestRouter.endpointFor('ui')
         errorProperties.$exception_personURL = posthogHost + '/person/' + this.instance.get_distinct_id()
 
         this.sendExceptionEvent(propertiesToSend)

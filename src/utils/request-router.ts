@@ -12,13 +12,7 @@ export enum RequestRouterRegion {
     CUSTOM = 'custom',
 }
 
-export enum RequestRouterTarget {
-    UI = 'ui',
-    CAPTURE_EVENTS = 'capture_events',
-    CAPTURE_REPLAY = 'capture_replay',
-    DECIDE = 'decide',
-    ASSETS = 'assets',
-}
+export type RequestRouterTarget = 'ui' | 'capture_events' | 'capture_replay' | 'decide' | 'assets'
 
 // DEV NOTES:
 // app.posthog.com should become us.i.posthog.com as the base host
@@ -45,10 +39,10 @@ export class RequestRouter {
         }
     }
 
-    endpointFor(target: RequestRouterTarget, path: string = '') {
+    endpointFor(target: RequestRouterTarget, path: string = ''): string {
         const uiHost = this.instance.config.ui_host || this.instance.config.api_host
 
-        if (target === RequestRouterTarget.UI) {
+        if (target === 'ui') {
             return uiHost
         }
 
@@ -59,13 +53,14 @@ export class RequestRouter {
         const suffix = 'i.posthog.com' + path
 
         switch (target) {
-            case RequestRouterTarget.CAPTURE_EVENTS:
+            case 'capture_events':
                 return `https://${this.region}-c.${suffix}`
-            case RequestRouterTarget.CAPTURE_REPLAY:
+            case 'capture_replay':
                 return `https://${this.region}-s.${suffix}`
-            case RequestRouterTarget.DECIDE:
+            case 'decide':
                 return `https://${this.region}-d.${suffix}`
-            case RequestRouterTarget.ASSETS:
+            case 'assets':
+            default:
                 // TODO: Is this right? This would be all things like surveys / early access requests
                 return `https://${this.region}.${suffix}`
         }

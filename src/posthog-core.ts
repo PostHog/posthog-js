@@ -24,7 +24,7 @@ import { compressData, decideCompression } from './compression'
 import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
-import { RequestRouter, RequestRouterTarget } from './utils/request-router'
+import { RequestRouter } from './utils/request-router'
 import {
     AutocaptureConfig,
     CaptureOptions,
@@ -914,10 +914,7 @@ export class PostHog {
 
         // TODO: This doesn't really work 🤔 as the other endpoints call this with "options.endpoint"
         // which now needs to be a complete override
-        const url = this.requestRouter.endpointFor(
-            RequestRouterTarget.CAPTURE_EVENTS,
-            options.endpoint || this.analyticsDefaultEndpoint
-        )
+        const url = this.requestRouter.endpointFor('capture_events', options.endpoint || this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 
@@ -1536,7 +1533,7 @@ export class PostHog {
             return ''
         }
         const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        let url = this.requestRouter.endpointFor(RequestRouterTarget.UI, '/replay/' + sessionId)
+        let url = this.requestRouter.endpointFor('ui', '/replay/' + sessionId)
         if (options?.withTimestamp && sessionStartTimestamp) {
             const LOOK_BACK = options.timestampLookBack ?? 10
             if (!sessionStartTimestamp) {
