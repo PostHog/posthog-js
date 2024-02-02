@@ -1,5 +1,5 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig, Body } from '../../types'
-import { _isFunction } from '../../utils/type-utils'
+import { _isFunction, _isUndefined } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 
@@ -86,12 +86,11 @@ function redactPayload(
     description: string
 ): Body {
     const requestContentLength = headers?.['content-length']
-    // in the interests of bundle size and the complexity of estimating payload size
-    // we only check the content-length header if it's present
-    // this might mean we can't always limit the payload, but that's better than
-    // having lots of code shipped to every browser that will rarely run
+    if (_isUndefined(requestContentLength)) {
+        return `[SessionReplay] no content-length header for ${description}, cannot determine payload size`
+    }
     if (requestContentLength && parseInt(requestContentLength) > limit) {
-        return `${description} body too large to record`
+        return `[SessionReplay] ${description} body too large to record`
     }
     return payload
 }
