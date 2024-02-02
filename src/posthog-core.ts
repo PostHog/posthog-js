@@ -52,7 +52,15 @@ import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
-import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
+import {
+    _isArray,
+    _isEmptyObject,
+    _isFunction,
+    _isNumber,
+    _isObject,
+    _isString,
+    _isUndefined,
+} from './utils/type-utils'
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
@@ -1293,6 +1301,11 @@ export class PostHog {
         if (!this.__loaded || !this.persistence) {
             return logger.uninitializedWarning('posthog.identify')
         }
+        if (_isNumber(new_distinct_id)) {
+            logger.error('The first argument to posthog.identify was a number, but it should be a string.')
+            new_distinct_id = (new_distinct_id as number).toString()
+        }
+
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
             logger.error('Unique user id has not been set in posthog.identify')
