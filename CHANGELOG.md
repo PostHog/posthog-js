@@ -1,3 +1,8 @@
+## 1.104.4 - 2024-02-02
+
+- fix: very defensive body redaction (#988)
+- fix: less eager timeout (#989)
+
 ## 1.104.3 - 2024-02-01
 
 - feat: Fetch without window (#985)
