@@ -5,14 +5,14 @@ import { SurveyType, SurveyQuestionType, Survey } from '../posthog-surveys-types
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
-import { window } from '../utils/globals'
+import { assignableWindow } from '../utils/globals'
 
 describe('surveys', () => {
     let config: PostHogConfig
     let instance: PostHog
     let surveys: PostHogSurveys
     let surveysResponse: { status?: number; surveys?: Survey[] }
-    const originalWindowLocation = window!.location
+    const originalWindowLocation = assignableWindow.location
 
     const decideResponse = {
         featureFlags: {
@@ -286,11 +286,11 @@ describe('surveys', () => {
                 surveys: [surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector],
             }
             // eslint-disable-next-line compat/compat
-            window!.location = new URL('https://posthog.com') as unknown as Location
+            assignableWindow.location = new URL('https://posthog.com') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithUrl])
             })
-            window!.location = originalWindowLocation
+            assignableWindow.location = originalWindowLocation
 
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             surveys.getActiveMatchingSurveys((data) => {
@@ -302,7 +302,7 @@ describe('surveys', () => {
             }
 
             // eslint-disable-next-line compat/compat
-            window!.location = new URL('https://posthogapp.com') as unknown as Location
+            assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
             document.body.appendChild(document.createElement('div')).id = 'foo'
 
             surveys.getActiveMatchingSurveys((data) => {
@@ -325,41 +325,41 @@ describe('surveys', () => {
                 ],
             }
 
-            const originalWindowLocation = window!.location
+            const originalWindowLocation = assignableWindow.location
             // eslint-disable-next-line compat/compat
-            window!.location = new URL('https://regex-url.com/test') as unknown as Location
+            assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithRegexUrl])
             })
-            window!.location = originalWindowLocation
+            assignableWindow.location = originalWindowLocation
 
             // eslint-disable-next-line compat/compat
-            window!.location = new URL('https://example.com?name=something') as unknown as Location
+            assignableWindow.location = new URL('https://example.com?name=something') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithParamRegexUrl])
             })
-            window!.location = originalWindowLocation
+            assignableWindow.location = originalWindowLocation
 
             // eslint-disable-next-line compat/compat
-            window!.location = new URL('https://app.subdomain.com') as unknown as Location
+            assignableWindow.location = new URL('https://app.subdomain.com') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithWildcardSubdomainUrl])
             })
-            window!.location = originalWindowLocation
+            assignableWindow.location = originalWindowLocation
 
             // eslint-disable-next-line compat/compat
-            window!.location = new URL('https://wildcard.com/something/other') as unknown as Location
+            assignableWindow.location = new URL('https://wildcard.com/something/other') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithWildcardRouteUrl])
             })
-            window!.location = originalWindowLocation
+            assignableWindow.location = originalWindowLocation
 
             // eslint-disable-next-line compat/compat
-            window!.location = new URL('https://example.com/exact') as unknown as Location
+            assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithExactUrlMatch])
             })
-            window!.location = originalWindowLocation
+            assignableWindow.location = originalWindowLocation
         })
 
         it('returns surveys that match linked and targeting feature flags', () => {
@@ -379,7 +379,7 @@ describe('surveys', () => {
 
         it('returns surveys that inclusively matches any of the above', () => {
             // eslint-disable-next-line compat/compat
-            window!.location = new URL('https://posthogapp.com') as unknown as Location
+            assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             surveysResponse = { surveys: [activeSurvey, surveyWithSelector, surveyWithEverything] }
             // activeSurvey returns because there are no restrictions on conditions or flags on it

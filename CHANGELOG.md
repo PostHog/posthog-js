@@ -1,3 +1,62 @@
+## 1.104.4 - 2024-02-02
+
+- fix: very defensive body redaction (#988)
+- fix: less eager timeout (#989)
+
+## 1.104.3 - 2024-02-01
+
+- feat: Fetch without window (#985)
+
+## 1.104.2 - 2024-01-31
+
+- fix: no throwing when reading the body (#984)
+
+## 1.104.1 - 2024-01-31
+
+- chore: make rate limiter error less scary (#983)
+
+## 1.104.0 - 2024-01-31
+
+- feat: Fetch support (#898)
+- chore: Swap to main (#979)
+
+## 1.103.2 - 2024-01-31
+
+- fix: safer body processing (#980)
+
+## 1.103.1 - 2024-01-28
+
+- feat: safer rrweb events and regular full snapshots (#973)
+- chore: update rollup (#974)
+- chore: re-enable bundle checker now main and branches both use pnpm (#972)
+
+## 1.103.0 - 2024-01-26
+
+- feat: pnpm patch rrweb (#971)
+- chore: convert to pnpm (#970)
+
+## 1.102.1 - 2024-01-25
+
+- chore: add debug logging for session id/recording (#969)
+
+## 1.102.0 - 2024-01-24
+
+- feat: send custom event when network status changes (#965)
+- fix: integration test opting out (#959)
+
+## 1.101.0 - 2024-01-22
+
+- feat: canvas recording support (#946)
+- refactor(surveys): Use Preact instead of vanilla JS (#963)
+
+## 1.100.0 - 2024-01-15
+
+- Enable scroll stats by default (#962)
+
+## 1.99.0 - 2024-01-15
+
+- feat: Support custom scroll selector (#961)
+
 ## 1.98.2 - 2024-01-11
 
 - fix: Don't allow us.posthog.com to be used (#957)

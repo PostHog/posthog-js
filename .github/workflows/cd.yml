@@ -4,7 +4,6 @@ on:
     push:
         branches:
             - main
-            - master
 
 jobs:
     check-package-version:
@@ -32,19 +31,35 @@ jobs:
             PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
         steps:
             - name: Checkout the repository
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
               with:
                   fetch-depth: 0
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
+            - uses: pnpm/action-setup@v2
+              with:
+                version: 8.x.x
+
             - name: Set up Node 18
-              uses: actions/setup-node@v3
+              uses: actions/setup-node@v4
               with:
                   node-version: 18
                   registry-url: https://registry.npmjs.org
 
-            - name: Install dependencies
-              run: yarn --frozen-lockfile
+            - name: Get pnpm cache directory path
+              id: pnpm-cache-dir
+              run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+            - uses: actions/cache@v3
+              id: pnpm-cache
+              with:
+                  path: |
+                      ${{ steps.pnpm-cache-dir.outputs.PNPM_STORE_PATH }}
+                  key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pnpm-
+            - name: Install package.json dependencies with pnpm
+              run: pnpm install --frozen-lockfile
 
             - name: Publish the package in the npm registry
               run: npm publish --access public

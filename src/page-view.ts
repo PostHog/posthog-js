@@ -1,4 +1,6 @@
 import { window } from './utils/globals'
+import { PostHog } from './posthog-core'
+import { _isArray } from './utils/type-utils'
 
 interface PageViewData {
     pathname: string
@@ -32,6 +34,11 @@ interface PageViewEventProperties extends ScrollProperties {
 export class PageViewManager {
     _pageViewData: PageViewData | undefined
     _hasSeenPageView = false
+    _instance: PostHog
+
+    constructor(instance: PostHog) {
+        this._instance = instance
+    }
 
     _createPageViewData(): PageViewData {
         return {
@@ -134,8 +141,11 @@ export class PageViewManager {
     }
 
     startMeasuringScrollPosition() {
-        window?.addEventListener('scroll', this._updateScrollData)
-        window?.addEventListener('scrollend', this._updateScrollData)
+        // setting the third argument to `true` means that we will receive scroll events for other scrollable elements
+        // on the page, not just the window
+        // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
+        window?.addEventListener('scroll', this._updateScrollData, true)
+        window?.addEventListener('scrollend', this._updateScrollData, true)
         window?.addEventListener('resize', this._updateScrollData)
     }
 
@@ -145,22 +155,45 @@ export class PageViewManager {
         window?.removeEventListener('resize', this._updateScrollData)
     }
 
+    _scrollElement(): Element | null | undefined {
+        if (this._instance.config.scroll_root_selector) {
+            const selectors = _isArray(this._instance.config.scroll_root_selector)
+                ? this._instance.config.scroll_root_selector
+                : [this._instance.config.scroll_root_selector]
+            for (const selector of selectors) {
+                const element = window?.document.querySelector(selector)
+                if (element) {
+                    return element
+                }
+            }
+            return undefined
+        } else {
+            return window?.document.documentElement
+        }
+    }
+
     _scrollHeight(): number {
-        return window
-            ? Math.max(0, window.document.documentElement.scrollHeight - window.document.documentElement.clientHeight)
-            : 0
+        const element = this._scrollElement()
+        return element ? Math.max(0, element.scrollHeight - element.clientHeight) : 0
     }
 
     _scrollY(): number {
-        return window ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0 : 0
+        if (this._instance.config.scroll_root_selector) {
+            const element = this._scrollElement()
+            return (element && element.scrollTop) || 0
+        } else {
+            return window ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0 : 0
+        }
     }
 
     _contentHeight(): number {
-        return window?.document.documentElement.scrollHeight || 0
+        const element = this._scrollElement()
+        return element?.scrollHeight || 0
     }
 
     _contentY(): number {
-        const clientHeight = window?.document.documentElement.clientHeight || 0
+        const element = this._scrollElement()
+        const clientHeight = element?.clientHeight || 0
         return this._scrollY() + clientHeight
     }
 }

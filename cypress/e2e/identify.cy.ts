@@ -1,24 +1,16 @@
 /// <reference types="cypress" />
 
-function setup(initOptions) {
-    cy.visit('./playground/cypress-full')
-    cy.posthogInit({ ...initOptions })
-    // reset and clear device ID so that we can test the uuid format
-    // without worrying about the previous test's device ID
-    cy.posthog().invoke('reset', true)
-    cy.wait('@decide')
-}
+import { start } from '../support/setup'
 
 describe('identify()', () => {
     beforeEach(() => {
-        setup()
+        start({})
     })
 
     it('uses the v7 uuid format', () => {
         cy.posthog().invoke('capture', 'an-anonymous-event')
         cy.phCaptures({ full: true }).then((events) => {
-            cy.log(events)
-            let deviceIds = new Set(events.map((e) => e.properties['$device_id']))
+            const deviceIds = new Set(events.map((e) => e.properties['$device_id']))
             expect(deviceIds.size).to.eql(1)
             const [deviceId] = deviceIds
             expect(deviceId.length).to.be.eql(36)
