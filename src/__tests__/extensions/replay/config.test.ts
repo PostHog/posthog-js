@@ -176,7 +176,7 @@ describe('config', () => {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
-                    requestBody: 'Request body too large to record',
+                    requestBody: '[SessionReplay] Request body too large to record',
                 })
             })
 
@@ -196,26 +196,25 @@ describe('config', () => {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
-                    responseBody: 'Response body too large to record',
+                    responseBody: '[SessionReplay] Response body too large to record',
                 })
             })
 
             it('cannot redact when there is no content length header', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
-                const largeString = 'a'.repeat(1000001)
                 const cleaned = networkOptions.maskRequestFn!({
                     name: 'something',
                     requestHeaders: {
                         'content-type': 'application/json',
                     },
-                    requestBody: largeString,
+                    requestBody: 'some body that has no content length',
                 })
                 expect(cleaned).toEqual({
                     name: 'something',
                     requestHeaders: {
                         'content-type': 'application/json',
                     },
-                    requestBody: largeString,
+                    requestBody: '[SessionReplay] no content-length header for Request, cannot determine payload size',
                 })
             })
         })
