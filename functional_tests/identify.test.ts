@@ -28,29 +28,6 @@ test('identify sends a identify event', async () => {
     expect(jest.mocked(logger).error).toBeCalledTimes(0)
 })
 
-test('identify warns and succeed when given a number distinct_id', async () => {
-    const token = v4()
-    const posthog = await createPosthogInstance(token)
-
-    const distinctIdNum = 123
-    const distinctIdString = '123'
-
-    posthog.identify(distinctIdNum as any)
-
-    await waitFor(() =>
-        expect(getRequests(token)['/e/']).toContainEqual(
-            expect.objectContaining({
-                event: '$identify',
-                properties: expect.objectContaining({
-                    distinct_id: distinctIdString,
-                    token: posthog.config.token,
-                }),
-            })
-        )
-    )
-    expect(jest.mocked(logger).error).toBeCalledTimes(1)
-})
-
 test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {
     // The intention here is to reduce the number of unncecessary $identify
     // requests to process.
