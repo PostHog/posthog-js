@@ -224,9 +224,10 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
         })
 
         window.addEventListener('PHSurveySent', () => {
-            if (survey.appearance?.displayThankYouMessage) {
-                setDisplayState('confirmation')
+            if (!survey.appearance?.displayThankYouMessage) {
+                return setDisplayState('closed')
             }
+            setDisplayState('confirmation')
             if (survey.appearance?.autoDisappear) {
                 setTimeout(() => {
                     setDisplayState('closed')
