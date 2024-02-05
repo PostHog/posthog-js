@@ -608,7 +608,9 @@ export function MultipleChoiceQuestion({
                                     ) {
                                         if (selectedChoices.includes(val)) {
                                             // filter out values because clicking on a selected choice should deselect it
-                                            return setSelectedChoices(selectedChoices.filter((choice) => choice !== val))
+                                            return setSelectedChoices(
+                                                selectedChoices.filter((choice) => choice !== val)
+                                            )
                                         }
                                         return setSelectedChoices([...selectedChoices, val])
                                     }
@@ -625,12 +627,13 @@ export function MultipleChoiceQuestion({
                                             onInput={(e) => {
                                                 const userValue = e.currentTarget.value
                                                 if (question.type === SurveyQuestionType.SingleChoice) {
-                                                    setSelectedChoices(userValue)
-                                                } else if (
+                                                    return setSelectedChoices(userValue)
+                                                }
+                                                if (
                                                     question.type === SurveyQuestionType.MultipleChoice &&
                                                     _isArray(selectedChoices)
                                                 ) {
-                                                    setOpenEndedInput(userValue)
+                                                    return setOpenEndedInput(userValue)
                                                 }
                                             }}
                                         />
@@ -696,11 +699,7 @@ export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: 
     return (
         <>
             {survey.appearance?.widgetType === 'tab' && (
-                <div
-                    className="ph-survey-widget-tab"
-                    ref={widgetRef}
-                    onClick={() => setShowSurvey(!showSurvey)}
-                >
+                <div className="ph-survey-widget-tab" ref={widgetRef} onClick={() => setShowSurvey(!showSurvey)}>
                     <div className="ph-survey-widget-tab-icon"></div>
                     {survey.appearance?.widgetLabel || ''}
                 </div>
