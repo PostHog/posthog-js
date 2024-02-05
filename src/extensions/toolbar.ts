@@ -137,7 +137,6 @@ export class Toolbar {
         const disableToolbarMetrics =
             this.instance.requestRouter.region === 'custom' && this.instance.config.advanced_disable_toolbar_metrics
 
-        // TODO: Dos the toolbar use the ingestion APIs?
         const toolbarParams = {
             token: this.instance.config.token,
             ...params,
