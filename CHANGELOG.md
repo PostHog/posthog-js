@@ -1,8 +1,34 @@
+## 1.104.4 - 2024-02-02
+
+- fix: very defensive body redaction (#988)
+- fix: less eager timeout (#989)
+
+## 1.104.3 - 2024-02-01
+
+- feat: Fetch without window (#985)
+
+## 1.104.2 - 2024-01-31
+
+- fix: no throwing when reading the body (#984)
+
+## 1.104.1 - 2024-01-31
+
+- chore: make rate limiter error less scary (#983)
+
+## 1.104.0 - 2024-01-31
+
+- feat: Fetch support (#898)
+- chore: Swap to main (#979)
+
+## 1.103.2 - 2024-01-31
+
+- fix: safer body processing (#980)
+
 ## 1.103.1 - 2024-01-28
 
 - feat: safer rrweb events and regular full snapshots (#973)
 - chore: update rollup (#974)
-- chore: re-enable bundle checker now master and branches both use pnpm (#972)
+- chore: re-enable bundle checker now main and branches both use pnpm (#972)
 
 ## 1.103.0 - 2024-01-26
 

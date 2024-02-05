@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-core'
+import { PostHog } from '../posthog-core'
 import {
     BasicSurveyQuestion,
     LinkSurveyQuestion,
@@ -740,10 +740,20 @@ const questionTypeMap = (
 ): JSX.Element => {
     const mapping = {
         [SurveyQuestionType.Open]: (
-            <OpenTextQuestion question={question as BasicSurveyQuestion} appearance={appearance} onSubmit={onSubmit} closeSurveyPopup={closeSurveyPopup} />
+            <OpenTextQuestion
+                question={question as BasicSurveyQuestion}
+                appearance={appearance}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
         ),
         [SurveyQuestionType.Link]: (
-            <LinkQuestion question={question as LinkSurveyQuestion} appearance={appearance} onSubmit={onSubmit} closeSurveyPopup={closeSurveyPopup}/>
+            <LinkQuestion
+                question={question as LinkSurveyQuestion}
+                appearance={appearance}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
         ),
         [SurveyQuestionType.Rating]: (
             <RatingQuestion

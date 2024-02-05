@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-core'
+import { PostHog } from '../../posthog-core'
 import { Survey, SurveyAppearance } from '../../posthog-surveys-types'
 import { window as _window } from '../../utils/globals'
 
@@ -54,7 +54,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               padding-top: 10px;
               border-radius: 6px;
               border-color: ${appearance?.borderColor || '#c9c6c6'};
-              margin-top: 14px; 
+              margin-top: 14px;
           }
           .form-submit {
               box-sizing: border-box;

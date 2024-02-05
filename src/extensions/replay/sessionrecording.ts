@@ -834,7 +834,6 @@ export class SessionRecording {
     private _captureSnapshot(properties: Properties) {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
-            transport: 'XHR',
             method: 'POST',
             endpoint: this._endpoint,
             _noTruncate: true,

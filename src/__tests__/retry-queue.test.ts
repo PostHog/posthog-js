@@ -14,7 +14,7 @@ const defaultRequestOptions: CaptureOptions = {
 }
 
 describe('RetryQueue', () => {
-    const onXHRError = jest.fn().mockImplementation(console.error)
+    const onRequestError = jest.fn().mockImplementation(console.error)
     const rateLimiter = new RateLimiter()
     let retryQueue: RetryQueue
 
@@ -26,7 +26,7 @@ describe('RetryQueue', () => {
     })
 
     beforeEach(() => {
-        retryQueue = new RetryQueue(onXHRError, rateLimiter)
+        retryQueue = new RetryQueue(onRequestError, rateLimiter)
         assignableWindow.XMLHttpRequest = jest.fn().mockImplementation(xhrMockClass)
         assignableWindow.navigator.sendBeacon = jest.fn()
 
@@ -112,7 +112,7 @@ describe('RetryQueue', () => {
         expect(retryQueue.queue.length).toEqual(0)
 
         expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(4)
-        expect(onXHRError).toHaveBeenCalledTimes(0)
+        expect(onRequestError).toHaveBeenCalledTimes(0)
     })
 
     it('does not process event retry requests when events are rate limited', () => {
@@ -144,7 +144,7 @@ describe('RetryQueue', () => {
         // clears queue
         expect(retryQueue.queue.length).toEqual(0)
         expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(1)
-        expect(onXHRError).toHaveBeenCalledTimes(0)
+        expect(onRequestError).toHaveBeenCalledTimes(0)
     })
 
     it('does not process recording retry requests when they are rate limited', () => {
@@ -176,7 +176,7 @@ describe('RetryQueue', () => {
         // clears queue
         expect(retryQueue.queue.length).toEqual(0)
         expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(2)
-        expect(onXHRError).toHaveBeenCalledTimes(0)
+        expect(onRequestError).toHaveBeenCalledTimes(0)
     })
 
     it('tries to send requests via beacon on unload', () => {
@@ -201,12 +201,12 @@ describe('RetryQueue', () => {
         expect(assignableWindow.navigator.sendBeacon).toHaveBeenCalledTimes(0)
     })
 
-    it('when you flush the queue onXHRError is passed to xhr', () => {
-        const xhrSpy = jest.spyOn(SendRequest, 'xhr')
+    it('when you flush the queue onError is passed to xhr', () => {
+        const xhrSpy = jest.spyOn(SendRequest, 'request')
         enqueueRequests()
         retryQueue.flush()
         fastForwardTimeAndRunTimer()
-        expect(xhrSpy).toHaveBeenCalledWith(expect.objectContaining({ onXHRError: onXHRError }))
+        expect(xhrSpy).toHaveBeenCalledWith(expect.objectContaining({ onError: onRequestError }))
     })
 
     it('enqueues requests when offline and flushes immediately when online again', () => {
@@ -220,7 +220,7 @@ describe('RetryQueue', () => {
         // requests aren't attempted when we're offline
         expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(0)
         // doesn't log that it is offline from the retry queue
-        expect(onXHRError).toHaveBeenCalledTimes(0)
+        expect(onRequestError).toHaveBeenCalledTimes(0)
 
         // queue stays the same
         expect(retryQueue.queue.length).toEqual(4)

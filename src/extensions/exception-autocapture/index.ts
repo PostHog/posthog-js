@@ -140,7 +140,6 @@ export class ExceptionObserver {
      */
     sendExceptionEvent(properties: { [key: string]: any }) {
         this.instance.capture('$exception', properties, {
-            transport: 'XHR',
             method: 'POST',
             endpoint: EXCEPTION_INGESTION_ENDPOINT,
             _noTruncate: true,
