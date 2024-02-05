@@ -15,7 +15,7 @@ import { window as _window, document as _document } from '../utils/globals'
 import { style, getTextColor, defaultSurveyAppearance, sendSurveyEvent } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow } from './surveys-widget'
-import { useState, useEffect } from 'preact/hooks'
+import { useState, useEffect, useRef } from 'preact/hooks'
 import { _isArray, _isNull, _isNumber } from '../utils/type-utils'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -161,20 +161,14 @@ export function BottomSection({
     onSubmit: () => void
     link?: string | null
 }) {
-    const backgroundColorRef = Preact.createRef()
-    const [textColor, setTextColor] = useState('white')
-
-    useEffect(() => {
-        const color = getTextColor(backgroundColorRef.current)
-        setTextColor(color)
-    }, [appearance])
+    const { textColor, ref } = useContrastingTextColor({ appearance })
 
     return (
         <div className="bottom-section">
             <div className="buttons">
                 <button
                     className="form-submit"
-                    ref={backgroundColorRef}
+                    ref={ref as Preact.RefObject<HTMLButtonElement>}
                     disabled={submitDisabled}
                     type="button"
                     style={{ color: textColor }}
@@ -196,18 +190,14 @@ export function BottomSection({
 }
 
 export function PostHogLogo({ backgroundColor }: { backgroundColor?: string }) {
-    const backgroundColorRef = Preact.createRef()
-    const [textColor, setTextColor] = useState('white')
-    useEffect(() => {
-        setTextColor(getTextColor(backgroundColorRef.current))
-    }, [])
+    const { textColor, ref } = useContrastingTextColor({ appearance: { backgroundColor } })
 
     return (
         <a
             href="https://posthog.com"
             target="_blank"
             rel="noopener"
-            ref={backgroundColorRef}
+            ref={ref as Preact.RefObject<HTMLAnchorElement>}
             style={{ backgroundColor: backgroundColor, color: textColor }}
             className="footer-branding auto-text-color"
         >
@@ -270,13 +260,9 @@ export function Questions({
     posthog: PostHog
     styleOverrides?: React.CSSProperties
 }) {
-    const backgroundColorRef = Preact.createRef()
-    const [textColor, setTextColor] = useState('white')
+    const { textColor, ref } = useContrastingTextColor({ appearance: survey.appearance || defaultSurveyAppearance })
     const [questionsResponses, setQuestionsResponses] = useState({})
     const [currentQuestion, setCurrentQuestion] = useState(0)
-    useEffect(() => {
-        setTextColor(getTextColor(backgroundColorRef.current))
-    }, [])
 
     const onNextClick = (res: string | string[] | number | null, idx: number) => {
         const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
@@ -294,7 +280,7 @@ export function Questions({
         <form
             className="survey-form"
             style={{ color: textColor, borderColor: survey.appearance?.borderColor, ...styleOverrides }}
-            ref={backgroundColorRef}
+            ref={ref as Preact.RefObject<HTMLFormElement>}
         >
             {survey.questions.map((question, idx) => {
                 if (isMultipleQuestion) {
@@ -350,8 +336,9 @@ export function OpenTextQuestion({
     onSubmit: (text: string) => void
     closeSurveyPopup: () => void
 }) {
-    const textRef = Preact.createRef()
+    const textRef = useRef(null)
     const [text, setText] = useState('')
+
     return (
         <div
             className="survey-box"
@@ -505,19 +492,11 @@ export function RatingButton({
     appearance: any
     setActiveNumber: (num: number) => void
 }) {
-    const [textColor, setTextColor] = useState('black')
-    const ref = Preact.createRef()
-
-    useEffect(() => {
-        if (ref.current) {
-            const textColor = getTextColor(ref.current)
-            setTextColor(textColor)
-        }
-    }, [appearance.ratingButtonActiveColor, appearance.ratingButtonColor, active])
+    const { textColor, ref } = useContrastingTextColor({ appearance, defaultTextColor: 'black' })
 
     return (
         <button
-            ref={ref}
+            ref={ref as Preact.RefObject<HTMLButtonElement>}
             className={`ratings-number question-${questionIndex}-rating-${num} ${active ? 'rating-active' : null}`}
             type="button"
             onClick={() => setActiveNumber(num)}
@@ -582,7 +561,7 @@ export function MultipleChoiceQuestion({
     onSubmit: (choices: string | string[] | null) => void
     closeSurveyPopup: () => void
 }) {
-    const textRef = Preact.createRef()
+    const textRef = useRef(null)
     const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
         question.type === SurveyQuestionType.MultipleChoice ? [] : null
     )
@@ -691,19 +670,21 @@ export function MultipleChoiceQuestion({
 export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: Survey }): JSX.Element {
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyle] = useState({})
-    const widgetRef = Preact.createRef()
+    const widgetRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         if (survey.appearance?.widgetType === 'tab') {
-            const widgetPos = widgetRef.current.getBoundingClientRect()
-            const style = {
-                top: '50%',
-                left: parseInt(`${widgetPos.right - 360}`),
-                bottom: 'auto',
-                borderRadius: 10,
-                borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+            if (widgetRef.current) {
+                const widgetPos = widgetRef.current.getBoundingClientRect()
+                const style = {
+                    top: '50%',
+                    left: parseInt(`${widgetPos.right - 360}`),
+                    bottom: 'auto',
+                    borderRadius: 10,
+                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+                }
+                setStyle(style)
             }
-            setStyle(style)
         }
         if (survey.appearance?.widgetType === 'selector') {
             const widget = document.querySelector(survey.appearance.widgetSelector || '')
@@ -784,6 +765,26 @@ const questionTypeMap = (
         ),
     }
     return mapping[question.type]
+}
+
+export function useContrastingTextColor(options: { appearance: SurveyAppearance; defaultTextColor?: string }): {
+    ref: Preact.RefObject<HTMLElement>
+    textColor: string
+} {
+    const ref = useRef<HTMLElement>(null)
+    const [textColor, setTextColor] = useState(options.defaultTextColor ?? 'white')
+
+    useEffect(() => {
+        if (ref.current) {
+            const color = getTextColor(ref.current)
+            setTextColor(color)
+        }
+    }, [options.appearance])
+
+    return {
+        ref,
+        textColor,
+    }
 }
 
 export const satisfiedEmoji = (
