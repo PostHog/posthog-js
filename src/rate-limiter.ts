@@ -1,4 +1,4 @@
-import { MinimalHTTPResponse } from 'types'
+import { MinimalHTTPResponse } from './types'
 import { logger } from './utils/logger'
 
 const oneMinuteInMilliseconds = 60 * 1000
