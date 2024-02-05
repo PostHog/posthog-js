@@ -539,7 +539,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -576,7 +576,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -660,7 +660,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -1285,7 +1285,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _metrics: { rrweb_full_snapshot: false },
                     _noTruncate: true,
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     method: 'POST',
                 }
             )

@@ -7,8 +7,6 @@ import { isPrimitive } from './type-checking'
 import { _isArray, _isObject, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 
-const EXCEPTION_INGESTION_ENDPOINT = '/e/'
-
 export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
     const exceptionObserver = new ExceptionObserver(instance)
     exceptionObserver.afterDecideResponse(response)
@@ -141,7 +139,6 @@ export class ExceptionObserver {
     sendExceptionEvent(properties: { [key: string]: any }) {
         this.instance.capture('$exception', properties, {
             method: 'POST',
-            endpoint: EXCEPTION_INGESTION_ENDPOINT,
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })

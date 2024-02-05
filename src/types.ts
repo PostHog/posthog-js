@@ -197,10 +197,10 @@ export interface XHROptions {
 export interface CaptureOptions extends XHROptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
+    _url?: string /** Used to override the desired endpoint for the captured event */
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _metrics?: Properties
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
-    endpoint?: string /** defaults to '/e/' */
     send_instantly?: boolean /** if set skips the batched queue */
     timestamp?: Date
 }

@@ -921,7 +921,7 @@ export class PostHog {
 
         // TODO: This doesn't really work 🤔 as the other endpoints call this with "options.endpoint"
         // which now needs to be a complete override
-        const url = this.requestRouter.endpointFor('capture_events', options.endpoint || this.analyticsDefaultEndpoint)
+        const url = options._url ?? this.requestRouter.endpointFor('capture_events', this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 
