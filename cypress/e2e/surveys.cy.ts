@@ -614,6 +614,7 @@ describe('Surveys', () => {
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getBase64EncodedPayload(request)
                 expect(captures.map(({ event }) => event)).to.deep.equal([
+                    'survey shown',
                     'survey dismissed',
                     '$pageleave',
                 ])
