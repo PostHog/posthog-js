@@ -323,20 +323,13 @@ describe('featureflags', () => {
             earlyAccessFeatures: [EARLY_ACCESS_FEATURE_FIRST],
         }))
 
-        beforeEach(() => {
-            given.config = {
-                ...given.config,
-                api_host: 'https://decide.com',
-            }
-        })
-
         it('getEarlyAccessFeatures requests early access features if not present', () => {
             given.featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
 
             expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://decide.com/api/early_access_features/?token=random fake token',
+                'https://app.posthog.com/api/early_access_features/?token=random fake token',
                 {},
                 { method: 'GET' },
                 expect.any(Function)
@@ -362,7 +355,7 @@ describe('featureflags', () => {
             })
 
             expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://decide.com/api/early_access_features/?token=random fake token',
+                'https://app.posthog.com/api/early_access_features/?token=random fake token',
                 {},
                 { method: 'GET' },
                 expect.any(Function)

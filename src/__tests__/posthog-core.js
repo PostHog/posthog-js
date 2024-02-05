@@ -237,7 +237,7 @@ describe('posthog core', () => {
         it('sends payloads to /e/ by default', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://us-c.i.posthog.com/e/',
+                'https://app.posthog.com/e/',
                 expect.any(Object),
                 expect.any(Object),
                 undefined
@@ -249,7 +249,7 @@ describe('posthog core', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
 
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://us-c.i.posthog.com/i/v0/e/',
+                'https://app.posthog.com/i/v0/e/',
                 expect.any(Object),
                 expect.any(Object),
                 undefined
@@ -259,7 +259,7 @@ describe('posthog core', () => {
         it('sends payloads to overriden endpoint if given', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://us-c.i.posthog.com/s/',
+                'https://app.posthog.com/s/',
                 expect.any(Object),
                 expect.any(Object),
                 undefined
@@ -270,7 +270,7 @@ describe('posthog core', () => {
             given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
             given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://us-c.i.posthog.com/s/',
+                'https://app.posthog.com/s/',
                 expect.any(Object),
                 expect.any(Object),
                 undefined

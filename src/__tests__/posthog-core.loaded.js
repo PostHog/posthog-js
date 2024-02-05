@@ -38,6 +38,7 @@ describe('loaded() with flags', () => {
                 }, 100)
             },
             persistence: 'memory',
+            api_host: 'https://app.posthog.com',
         }))
 
         given('overrides', () => ({

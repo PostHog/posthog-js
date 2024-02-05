@@ -54,7 +54,7 @@ export class RequestRouter {
             return uiHost + path
         }
 
-        if (this.region === RequestRouterRegion.CUSTOM) {
+        if (!this.instance.config.__preview_ingestion_endpoints || this.region === RequestRouterRegion.CUSTOM) {
             return this.apiHost + path
         }
 

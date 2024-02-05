@@ -6,6 +6,7 @@ describe('request-router', () => {
             config: {
                 api_host,
                 ui_host,
+                __preview_ingestion_endpoints: true,
             },
         } as any)
     }
@@ -16,20 +17,23 @@ describe('request-router', () => {
         ['https://app.posthog.com', 'capture_events', 'https://us-c.i.posthog.com'],
         ['https://app.posthog.com', 'capture_recordings', 'https://us-s.i.posthog.com'],
         ['https://app.posthog.com', 'decide', 'https://us-d.i.posthog.com'],
-        ['https://app.posthog.com', 'assets', 'https://us.i.posthog.com'],
+        ['https://app.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
+        ['https://app.posthog.com', 'api', 'https://us-api.i.posthog.com'],
         // US domain via app domain
         ['https://us.posthog.com', 'ui', 'https://us.posthog.com'],
         ['https://us.posthog.com', 'capture_events', 'https://us-c.i.posthog.com'],
         ['https://us.posthog.com', 'capture_recordings', 'https://us-s.i.posthog.com'],
         ['https://us.posthog.com', 'decide', 'https://us-d.i.posthog.com'],
-        ['https://us.posthog.com', 'assets', 'https://us.i.posthog.com'],
+        ['https://us.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
+        ['https://us.posthog.com', 'api', 'https://us-api.i.posthog.com'],
 
         // EU domain
         ['https://eu.posthog.com', 'ui', 'https://eu.posthog.com'],
         ['https://eu.posthog.com', 'capture_events', 'https://eu-c.i.posthog.com'],
         ['https://eu.posthog.com', 'capture_recordings', 'https://eu-s.i.posthog.com'],
         ['https://eu.posthog.com', 'decide', 'https://eu-d.i.posthog.com'],
-        ['https://eu.posthog.com', 'assets', 'https://eu.i.posthog.com'],
+        ['https://eu.posthog.com', 'assets', 'https://eu-assets.i.posthog.com'],
+        ['https://eu.posthog.com', 'api', 'https://eu-api.i.posthog.com'],
 
         // custom domain
         ['https://my-custom-domain.com', 'ui', 'https://my-custom-domain.com'],
@@ -37,6 +41,7 @@ describe('request-router', () => {
         ['https://my-custom-domain.com', 'capture_recordings', 'https://my-custom-domain.com'],
         ['https://my-custom-domain.com', 'decide', 'https://my-custom-domain.com'],
         ['https://my-custom-domain.com', 'assets', 'https://my-custom-domain.com'],
+        ['https://my-custom-domain.com', 'api', 'https://my-custom-domain.com'],
     ]
 
     it.each(testCases)(
@@ -63,7 +68,7 @@ describe('request-router', () => {
     })
 
     it('should react to config changes', () => {
-        const mockPostHog = { config: { api_host: 'https://app.posthog.com' } }
+        const mockPostHog = { config: { api_host: 'https://app.posthog.com', __preview_ingestion_endpoints: true } }
 
         const router = new RequestRouter(mockPostHog as any)
         expect(router.endpointFor('capture_events')).toEqual('https://us-c.i.posthog.com')
