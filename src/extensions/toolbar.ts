@@ -125,13 +125,15 @@ export class Toolbar {
         // only load the toolbar once, even if there are multiple instances of PostHogLib
         assignableWindow['_postHogToolbarLoaded'] = true
 
-        const host = this.instance.requestRouter.endpointFor('assets')
         // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
         // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
         const fiveMinutesInMillis = 5 * 60 * 1000
         // this ensures that we bust the cache periodically
         const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
-        const toolbarUrl = `${host}/static/toolbar.js?t=${timestampToNearestFiveMinutes}`
+        const toolbarUrl = this.instance.requestRouter.endpointFor(
+            'assets',
+            `/static/toolbar.js?t=${timestampToNearestFiveMinutes}`
+        )
         const disableToolbarMetrics =
             this.instance.requestRouter.region === 'custom' && this.instance.config.advanced_disable_toolbar_metrics
 
@@ -139,7 +141,7 @@ export class Toolbar {
         const toolbarParams = {
             token: this.instance.config.token,
             ...params,
-            apiURL: host, // defaults to api_host from the instance config if nothing else set
+            apiURL: this.instance.requestRouter.endpointFor('api'), // defaults to api_host from the instance config if nothing else set
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
 
