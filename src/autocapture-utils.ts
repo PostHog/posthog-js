@@ -1,4 +1,4 @@
-import { AutocaptureConfig, Properties } from 'types'
+import { AutocaptureConfig, Properties } from './types'
 import { _each, _entries, _includes, _trim } from './utils'
 
 import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
