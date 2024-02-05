@@ -358,7 +358,7 @@ export class PostHogFeatureFlags {
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request(
                 this.instance.requestRouter.endpointFor(
-                    'assets',
+                    'api',
                     `/api/early_access_features/?token=${this.instance.config.token}`
                 ),
                 {},

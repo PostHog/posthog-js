@@ -12,11 +12,14 @@ export enum RequestRouterRegion {
     CUSTOM = 'custom',
 }
 
-export type RequestRouterTarget = 'ui' | 'capture_events' | 'capture_replay' | 'decide' | 'assets'
+export type RequestRouterTarget = 'ui' | 'capture_events' | 'capture_recordings' | 'decide' | 'assets' | 'api'
 
 // DEV NOTES:
 // app.posthog.com should become us.i.posthog.com as the base host
 // specific endpoints become us-c.i.posthog.com or us-s.i.posthog.com depending on the use case
+
+// TODO:
+// - Add override from the decide endpoint
 
 export class RequestRouter {
     instance: PostHog
@@ -60,14 +63,14 @@ export class RequestRouter {
         switch (target) {
             case 'capture_events':
                 return `https://${this.region}-c.${suffix}`
-            case 'capture_replay':
+            case 'capture_recordings':
                 return `https://${this.region}-s.${suffix}`
             case 'decide':
                 return `https://${this.region}-d.${suffix}`
             case 'assets':
-            default:
-                // TODO: Is this right? This would be all things like surveys / early access requests
-                return `https://${this.region}.${suffix}`
+                return `https://${this.region}-assets.${suffix}`
+            case 'api':
+                return `https://${this.region}-api.${suffix}`
         }
     }
 }
