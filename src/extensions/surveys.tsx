@@ -278,6 +278,7 @@ export function Questions({
 
     return (
         <form
+            // TODO: BEMify classes
             className="survey-form"
             style={{ color: textColor, borderColor: survey.appearance?.borderColor, ...styleOverrides }}
             ref={ref as Preact.RefObject<HTMLFormElement>}
@@ -313,6 +314,7 @@ export function Questions({
 }
 
 const closeSurveyPopup = (posthog: PostHog, survey: Survey) => {
+    // TODO: state management and unit tests for this would be nice
     posthog.capture('survey dismissed', {
         $survey_name: survey.name,
         $survey_id: survey.id,
@@ -401,10 +403,6 @@ export function RatingQuestion({
     onSubmit: (rating: number | null) => void
     closeSurveyPopup: () => void
 }) {
-    const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji]
-    const fiveScaleEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
-    const fiveScaleNumbers = [1, 2, 3, 4, 5]
-    const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     const scale = question.scale
     const starting = question.scale === 10 ? 0 : 1
     const [rating, setRating] = useState<number | null>(null)
@@ -596,23 +594,23 @@ export function MultipleChoiceQuestion({
                                 id={`surveyQuestion${questionIndex}Choice${idx}`}
                                 name={`question${questionIndex}`}
                                 value={val}
-                                // disabled={!choice}
+                                disabled={!val}
                                 onInput={() => {
                                     if (question.hasOpenChoice && idx === question.choices.length - 1) {
-                                        setOpenChoiceSelected(!openChoiceSelected)
-                                    } else {
-                                        if (question.type === SurveyQuestionType.SingleChoice) {
-                                            setSelectedChoices(val)
-                                        } else if (
-                                            question.type === SurveyQuestionType.MultipleChoice &&
-                                            _isArray(selectedChoices)
-                                        ) {
-                                            if (selectedChoices.includes(val)) {
-                                                setSelectedChoices(selectedChoices.filter((choice) => choice !== val))
-                                            } else {
-                                                setSelectedChoices([...selectedChoices, val])
-                                            }
+                                        return setOpenChoiceSelected(!openChoiceSelected)
+                                    }
+                                    if (question.type === SurveyQuestionType.SingleChoice) {
+                                        return setSelectedChoices(val)
+                                    }
+                                    if (
+                                        question.type === SurveyQuestionType.MultipleChoice &&
+                                        _isArray(selectedChoices)
+                                    ) {
+                                        if (selectedChoices.includes(val)) {
+                                            // filter out values because clicking on a selected choice should deselect it
+                                            return setSelectedChoices(selectedChoices.filter((choice) => choice !== val))
                                         }
+                                        return setSelectedChoices([...selectedChoices, val])
                                     }
                                 }}
                             />
@@ -774,6 +772,7 @@ export function useContrastingTextColor(options: { appearance: SurveyAppearance;
     const ref = useRef<HTMLElement>(null)
     const [textColor, setTextColor] = useState(options.defaultTextColor ?? 'white')
 
+    // TODO: useContext to get the background colors instead of querying the DOM
     useEffect(() => {
         if (ref.current) {
             const color = getTextColor(ref.current)
@@ -878,3 +877,8 @@ export const checkSVG = (
         />
     </svg>
 )
+
+const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji]
+const fiveScaleEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
+const fiveScaleNumbers = [1, 2, 3, 4, 5]
+const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
