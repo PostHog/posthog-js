@@ -199,7 +199,7 @@ export function PostHogLogo({ backgroundColor }: { backgroundColor?: string }) {
             rel="noopener"
             ref={ref as Preact.RefObject<HTMLAnchorElement>}
             style={{ backgroundColor: backgroundColor, color: textColor }}
-            className="footer-branding auto-text-color"
+            className="footer-branding"
         >
             Survey by {posthogLogo}
         </a>
@@ -527,7 +527,7 @@ export function ConfirmationMessage({
             <div className="thank-you-message" style={{ ...styleOverrides }}>
                 <div className="thank-you-message-container">
                     <Cancel onClick={() => onClose()} />
-                    <h3 className="thank-you-message-header auto-text-color">{confirmationHeader}</h3>
+                    <h3 className="thank-you-message-header">{confirmationHeader}</h3>
                     {confirmationDescription && (
                         <div
                             className="thank-you-message-body"
@@ -614,7 +614,7 @@ export function MultipleChoiceQuestion({
                                     }
                                 }}
                             />
-                            <label className="auto-text-color" htmlFor={`surveyQuestion${questionIndex}Choice${idx}`}>
+                            <label htmlFor={`surveyQuestion${questionIndex}Choice${idx}`}>
                                 {question.hasOpenChoice && idx === question.choices.length - 1 ? (
                                     <>
                                         <span>{option}:</span>
@@ -639,7 +639,7 @@ export function MultipleChoiceQuestion({
                                     option
                                 )}
                             </label>
-                            <span className="choice-check auto-text-color">{checkSVG}</span>
+                            <span className="choice-check">{checkSVG}</span>
                         </div>
                     )
                 })}
@@ -697,7 +697,7 @@ export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: 
         <>
             {survey.appearance?.widgetType === 'tab' && (
                 <div
-                    className="ph-survey-widget-tab auto-text-color"
+                    className="ph-survey-widget-tab"
                     ref={widgetRef}
                     onClick={() => setShowSurvey(!showSurvey)}
                 >
