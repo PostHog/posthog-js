@@ -14,10 +14,6 @@ export enum RequestRouterRegion {
 
 export type RequestRouterTarget = 'ui' | 'capture_events' | 'capture_recordings' | 'decide' | 'assets' | 'api'
 
-// DEV NOTES:
-// app.posthog.com should become us.i.posthog.com as the base host
-// specific endpoints become us-c.i.posthog.com or us-s.i.posthog.com depending on the use case
-
 export class RequestRouter {
     instance: PostHog
 
