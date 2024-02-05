@@ -207,11 +207,11 @@ export function PostHogLogo({ backgroundColor }: { backgroundColor?: string }) {
 }
 
 export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: Survey; style?: React.CSSProperties }) {
-    const [showConfirmation, setShowConfirmation] = useState(false)
-    const [showSurveyQuestion, setShowSurveyQuestion] = useState(true)
+    const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>('survey')
 
     useEffect(() => {
         window.dispatchEvent(new Event('PHSurveyShown'))
+
         posthog.capture('survey shown', {
             $survey_name: survey.name,
             $survey_id: survey.id,
@@ -220,15 +220,16 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
         localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
 
         window.addEventListener('PHSurveyClosed', () => {
-            setShowSurveyQuestion(false)
+            setDisplayState('closed')
         })
 
         window.addEventListener('PHSurveySent', () => {
-            setShowSurveyQuestion(false)
-            setShowConfirmation(true)
+            if (survey.appearance?.displayThankYouMessage) {
+                setDisplayState('confirmation')
+            }
             if (survey.appearance?.autoDisappear) {
                 setTimeout(() => {
-                    setShowConfirmation(false)
+                    setDisplayState('closed')
                 }, 5000)
             }
         })
@@ -237,14 +238,14 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
 
     return (
         <>
-            {showSurveyQuestion && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
-            {survey.appearance?.displayThankYouMessage && showConfirmation && (
+            {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
+            {displayState === 'confirmation' && (
                 <ConfirmationMessage
                     confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                     confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
                     appearance={survey.appearance || {}}
                     styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
-                    onClose={() => setShowConfirmation(false)}
+                    onClose={() => setDisplayState('closed')}
                 />
             )}
         </>
