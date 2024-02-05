@@ -18,9 +18,6 @@ export type RequestRouterTarget = 'ui' | 'capture_events' | 'capture_recordings'
 // app.posthog.com should become us.i.posthog.com as the base host
 // specific endpoints become us-c.i.posthog.com or us-s.i.posthog.com depending on the use case
 
-// TODO:
-// - Add override from the decide endpoint
-
 export class RequestRouter {
     instance: PostHog
 
