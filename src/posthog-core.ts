@@ -919,8 +919,6 @@ export class PostHog {
         logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
-        // TODO: This doesn't really work 🤔 as the other endpoints call this with "options.endpoint"
-        // which now needs to be a complete override
         const url = options._url ?? this.requestRouter.endpointFor('capture_events', this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
