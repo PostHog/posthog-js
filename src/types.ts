@@ -37,12 +37,20 @@ export interface AutocaptureConfig {
     /**
      * List of DOM elements to allow autocapture on
      * e.g. ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * if the allowlist has button then we allow the capture when the button or the svg is the click target
+     * but not if either of the divs are detected as the click target
      */
     element_allowlist?: AutocaptureCompatibleElement[]
 
     /**
      * List of CSS selectors to allow autocapture on
      * e.g. ['[ph-capture]']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * and allow list config `['[id]']`
+     * we will capture the click if any of the four elements has any id
      */
     css_selector_allowlist?: string[]
 
