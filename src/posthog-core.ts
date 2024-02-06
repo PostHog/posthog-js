@@ -1302,8 +1302,10 @@ export class PostHog {
             return logger.uninitializedWarning('posthog.identify')
         }
         if (_isNumber(new_distinct_id)) {
-            logger.error('The first argument to posthog.identify was a number, but it should be a string.')
             new_distinct_id = (new_distinct_id as number).toString()
+            logger.warn(
+                'The first argument to posthog.identify was a number, but it should be a string. It has been converted to a string.'
+            )
         }
 
         //if the new_distinct_id has not been set ignore the identify event
