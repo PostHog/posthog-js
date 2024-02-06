@@ -218,7 +218,7 @@ describe(`Autocapture utility functions`, () => {
                     false,
                 ],
                 [
-                    'when the click target (and none of its parents) does not match the allowlist',
+                    'when the click target (or its parents) does not match the allowlist',
                     makeSingleBranchOfDomTree([
                         { tag: 'div' },
                         { tag: 'button' },
