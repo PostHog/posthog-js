@@ -20,6 +20,7 @@ import { useState, useEffect, useRef } from 'preact/hooks'
 import { _isArray, _isNull, _isNumber } from '../utils/type-utils'
 import { BottomSection } from './surveys/components/BottomSection'
 import {
+    IconPosthogLogo,
     cancelSVG,
     checkSVG,
     dissatisfiedEmoji,
@@ -171,7 +172,7 @@ export function PostHogLogo({ backgroundColor }: { backgroundColor?: string }) {
             style={{ backgroundColor: backgroundColor, color: textColor }}
             className="footer-branding"
         >
-            Survey by {posthogLogo}
+            Survey by {IconPosthogLogo}
         </a>
     )
 }
