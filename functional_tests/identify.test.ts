@@ -2,7 +2,7 @@ import 'regenerator-runtime/runtime'
 import { waitFor } from '@testing-library/dom'
 import { v4 } from 'uuid'
 import { getRequests } from './mock-server'
-import { createPosthogInstance } from './posthog-instance'
+import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { logger } from '../src/utils/logger'
 jest.mock('../src/utils/logger')
 test('identify sends a identify event', async () => {
