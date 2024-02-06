@@ -1,11 +1,10 @@
+import 'regenerator-runtime/runtime'
 import { waitFor } from '@testing-library/dom'
 import { v4 } from 'uuid'
 import { getRequests } from './mock-server'
 import { createPosthogInstance } from './posthog-instance'
 import { logger } from '../src/utils/logger'
-
 jest.mock('../src/utils/logger')
-
 test('identify sends a identify event', async () => {
     const token = v4()
     const posthog = await createPosthogInstance(token)
@@ -30,7 +29,7 @@ test('identify sends a identify event', async () => {
 })
 
 test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {
-    // The intention here is to reduce the number of unnecessary $identify
+    // The intention here is to reduce the number of unncecessary $identify
     // requests to process.
     const token = v4()
     const posthog = await createPosthogInstance(token)
