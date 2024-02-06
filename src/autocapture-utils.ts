@@ -141,7 +141,7 @@ function checkIfElementTreePassesElementAllowList(
  only elements that match the css selector in the allow list are allowed
  assumes that some other code is checking this element's parents
  */
-function checkIfElementIsInCSSAllowList(
+function checkIfElementTreePassesCSSSelectorAllowList(
     elements: Element[],
     autocaptureConfig: AutocaptureConfig | undefined
 ): boolean {
@@ -225,7 +225,7 @@ export function shouldCaptureDomEvent(
         return false
     }
 
-    if (!checkIfElementIsInCSSAllowList(targetElementList, autocaptureConfig)) {
+    if (!checkIfElementTreePassesCSSSelectorAllowList(targetElementList, autocaptureConfig)) {
         return false
     }
 
