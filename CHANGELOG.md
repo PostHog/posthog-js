@@ -1,3 +1,8 @@
+## 1.105.0 - 2024-02-06
+
+- fix: Add warning and conversion for number distinct_id (#993)
+- fix: Remove `baseUrl` from TypeScript compiler options (#996)
+
 ## 1.104.4 - 2024-02-02
 
 - fix: very defensive body redaction (#988)
