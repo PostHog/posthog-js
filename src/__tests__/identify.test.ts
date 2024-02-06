@@ -20,6 +20,7 @@ describe('identify', () => {
         // assert
         expect(posthog.persistence!.properties()['$user_id']).toEqual(distinctId)
         expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        expect(jest.mocked(logger).warn).toBeCalledTimes(0)
     })
 
     it('should convert a numeric distinct_id to a string', async () => {
@@ -34,6 +35,7 @@ describe('identify', () => {
 
         // assert
         expect(posthog.persistence!.properties()['$user_id']).toEqual(distinctIdString)
-        expect(jest.mocked(logger).error).toBeCalledTimes(1)
+        expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        expect(jest.mocked(logger).warn).toBeCalledTimes(1)
     })
 })
