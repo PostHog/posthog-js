@@ -3,7 +3,8 @@ import { waitFor } from '@testing-library/dom'
 import { v4 } from 'uuid'
 import { getRequests } from './mock-server'
 import { createPosthogInstance } from './posthog-instance'
-
+import { logger } from '../src/utils/logger'
+jest.mock('../src/utils/logger')
 test('identify sends a identify event', async () => {
     const token = v4()
     const posthog = await createPosthogInstance(token)
@@ -24,6 +25,7 @@ test('identify sends a identify event', async () => {
             })
         )
     )
+    expect(jest.mocked(logger).error).toBeCalledTimes(0)
 })
 
 test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {
