@@ -13,10 +13,11 @@
         "lint": "eslint src",
         "prettier": "prettier --write src/ functional_tests/",
         "prepublishOnly": "pnpm lint && pnpm test && pnpm build && pnpm test:react",
-        "test": "pnpm test:unit && pnpm test:custom-eslint-rules",
+        "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
         "test:unit": "jest src",
         "test:custom-eslint-rules": "jest eslint-rules",
         "test:react": "cd react; pnpm test",
+        "test:functional": "jest functional_tests/",
         "test-watch": "jest --watch src",
         "cypress": "cypress open",
         "prepare": "husky install"
