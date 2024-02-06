@@ -180,100 +180,84 @@ describe(`Autocapture utility functions`, () => {
                 return finalElement
             }
 
-            it('will capture when there is no allowlist', () => {
-                const clickTarget = makeSingleBranchOfDomTree([
-                    { tag: 'div' },
-                    { tag: 'button', id: 'in-allowlist' },
-                    { tag: 'svg' },
-                ])
-                expect(shouldCaptureDomEvent(clickTarget, makeMouseEvent({}))).toBe(true)
-            })
-
-            it('will capture when there is a parent matching the allow list', () => {
-                const clickTarget = makeSingleBranchOfDomTree([
-                    { tag: 'div' },
-                    { tag: 'button', id: 'in-allowlist' },
-                    { tag: 'svg' },
-                ])
-                expect(
-                    shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), {
+            it.each([
+                [
+                    'when there is no allowlist',
+                    makeSingleBranchOfDomTree([{ tag: 'div' }, { tag: 'button', id: 'in-allowlist' }, { tag: 'svg' }]),
+                    undefined,
+                    true,
+                ],
+                [
+                    'when there is a parent matching the allow list',
+                    makeSingleBranchOfDomTree([{ tag: 'div' }, { tag: 'button', id: 'in-allowlist' }, { tag: 'svg' }]),
+                    {
                         css_selector_allowlist: ['[id]'],
-                    })
-                ).toBe(true)
-            })
-
-            it('will capture when the click target is matching in the allow list', () => {
-                const clickTarget = makeSingleBranchOfDomTree([
-                    { tag: 'div' },
-                    { tag: 'button' },
-                    { tag: 'svg', id: 'in-allowlist' },
-                ])
-                expect(
-                    shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), {
+                    },
+                    true,
+                ],
+                [
+                    'when the click target is matching in the allow list',
+                    makeSingleBranchOfDomTree([{ tag: 'div' }, { tag: 'button' }, { tag: 'svg', id: 'in-allowlist' }]),
+                    {
                         css_selector_allowlist: ['[id]'],
-                    })
-                ).toBe(true)
-            })
-
-            it('does not capture when the parent does not match the allowlist', () => {
-                const clickTarget = makeSingleBranchOfDomTree([
-                    { tag: 'div' },
-                    { tag: 'button', id: '[id=not-the-configured-value]' },
-                    { tag: 'svg' },
-                ])
-                expect(
-                    shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), {
+                    },
+                    true,
+                ],
+                [
+                    'when the parent does not match the allowlist',
+                    makeSingleBranchOfDomTree([
+                        { tag: 'div' },
+                        { tag: 'button', id: '[id=not-the-configured-value]' },
+                        { tag: 'svg' },
+                    ]),
+                    {
                         // the click was detected on the SVG, but the button is not in the allow list,
                         // so we should detect the click
                         css_selector_allowlist: ['in-allowlist'],
-                    })
-                ).toBe(false)
-            })
-
-            it('does not capture when the click target (and none of its parents) does not match the allowlist', () => {
-                const clickTarget = makeSingleBranchOfDomTree([
-                    { tag: 'div' },
-                    { tag: 'button' },
-                    { tag: 'svg', id: '[id=not-the-configured-value]' },
-                ])
-                expect(
-                    shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), {
+                    },
+                    false,
+                ],
+                [
+                    'when the click target (and none of its parents) does not match the allowlist',
+                    makeSingleBranchOfDomTree([
+                        { tag: 'div' },
+                        { tag: 'button' },
+                        { tag: 'svg', id: '[id=not-the-configured-value]' },
+                    ]),
+                    {
                         css_selector_allowlist: ['in-allowlist'],
-                    })
-                ).toBe(false)
-            })
-
-            it('can combin allow lists', () => {
-                const clickTarget = makeSingleBranchOfDomTree([
-                    { tag: 'div' },
-                    { tag: 'button', id: 'in-allowlist' },
-                    { tag: 'svg' },
-                ])
-                expect(
-                    shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), {
+                    },
+                    false,
+                ],
+                [
+                    'when combining allow lists',
+                    makeSingleBranchOfDomTree([{ tag: 'div' }, { tag: 'button', id: 'in-allowlist' }, { tag: 'svg' }]),
+                    {
                         // the tree for the click does have an id
                         css_selector_allowlist: ['[id]'],
                         // but we only detect if there is an img in the tree
                         element_allowlist: ['img'],
-                    })
-                ).toBe(false)
-            })
-
-            it('can combine allow lists - but it considers them separately', () => {
-                const clickTarget = makeSingleBranchOfDomTree([
-                    { tag: 'div' },
-                    { tag: 'button', id: 'in-allowlist' },
-                    { tag: 'img' },
-                    { tag: 'svg' },
-                ])
-                expect(
-                    shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), {
+                    },
+                    false,
+                ],
+                [
+                    'combine allow lists - but showing it considers them separately',
+                    makeSingleBranchOfDomTree([
+                        { tag: 'div' },
+                        { tag: 'button', id: 'in-allowlist' },
+                        { tag: 'img' },
+                        { tag: 'svg' },
+                    ]),
+                    {
                         // the tree for the click does have an id
                         css_selector_allowlist: ['[id]'],
                         // and the tree for the click does have an img
                         element_allowlist: ['img'],
-                    })
-                ).toBe(true)
+                    },
+                    true,
+                ],
+            ])('correctly respects the allow list: %s', (_, clickTarget, autoCaptureConfig, shouldCapture) => {
+                expect(shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), autoCaptureConfig)).toBe(shouldCapture)
             })
         })
     })
