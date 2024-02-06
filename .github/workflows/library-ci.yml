@@ -69,7 +69,7 @@ jobs:
                 node-version: '18'
                 cache: 'pnpm'
             - run: pnpm install
-            - run: pnpm jest functional_tests/
+            - run: pnpm run test:functional
 
     lint:
         name: Lint

@@ -1,5 +1,5 @@
 import { v4 } from 'uuid'
-import { createPosthogInstance } from '../../functional_tests/posthog-instance'
+import { createPosthogInstance } from './helpers/posthog-instance'
 import { logger } from '../utils/logger'
 jest.mock('../utils/logger')
 
