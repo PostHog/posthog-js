@@ -1,5 +1,3 @@
-/** @jsx Preact.h */
-
 import { PostHog } from '../posthog-core'
 import {
     BasicSurveyQuestion,

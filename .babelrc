@@ -4,8 +4,8 @@
         [
             "@babel/transform-react-jsx",
             {
-                "pragma": "Preact.h",
-                "pragmaFrag": "Preact.Fragment"
+                "runtime": "automatic",
+                "importSource": "preact"
             }
         ]
     ]

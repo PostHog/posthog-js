@@ -1,5 +1,3 @@
-/** @jsx Preact.h */
-
 import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import * as Preact from 'preact'
 import { IconPosthogLogo } from '../icons'
