@@ -412,13 +412,16 @@ export class SessionRecording {
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
         if (this.instance.__loaded_recorder_version !== this.recordingVersion) {
-            loadScript(this.instance.config.api_host + `/static/${recorderJS}?v=${Config.LIB_VERSION}`, (err) => {
-                if (err) {
-                    return logger.error(`Could not load ${recorderJS}`, err)
-                }
+            loadScript(
+                this.instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
+                (err) => {
+                    if (err) {
+                        return logger.error(`Could not load ${recorderJS}`, err)
+                    }
 
-                this._onScriptLoaded()
-            })
+                    this._onScriptLoaded()
+                }
+            )
         } else {
             this._onScriptLoaded()
         }
@@ -835,7 +838,7 @@ export class SessionRecording {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
             method: 'POST',
-            endpoint: this._endpoint,
+            _url: this.instance.requestRouter.endpointFor('capture_recordings', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
             _metrics: {

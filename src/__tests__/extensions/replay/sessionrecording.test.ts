@@ -24,6 +24,7 @@ import {
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow } from '../../../utils/globals'
+import { RequestRouter } from '../../../utils/request-router'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -117,6 +118,7 @@ describe('SessionRecording', () => {
                 onFeatureFlagsCallback = cb
             },
             sessionManager: sessionManager,
+            requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: jest.fn(),
         } as unknown as PostHog
 
@@ -537,7 +539,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -574,7 +576,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -658,7 +660,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -1283,7 +1285,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _metrics: { rrweb_full_snapshot: false },
                     _noTruncate: true,
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     method: 'POST',
                 }
             )

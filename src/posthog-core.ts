@@ -24,6 +24,7 @@ import { compressData, decideCompression } from './compression'
 import { addParamsToURL, encodePostData, request } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
+import { RequestRouter } from './utils/request-router'
 import {
     AutocaptureConfig,
     CaptureOptions,
@@ -292,6 +293,7 @@ export class PostHog {
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
+    requestRouter: RequestRouter
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -337,6 +339,7 @@ export class PostHog {
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
+        this.requestRouter = new RequestRouter(this)
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -563,6 +566,10 @@ export class PostHog {
 
         if (response.elementsChainAsString) {
             this.elementsChainAsString = response.elementsChainAsString
+        }
+
+        if (response.__preview_ingestion_endpoints) {
+            this.config.__preview_ingestion_endpoints = response.__preview_ingestion_endpoints
         }
     }
 
@@ -920,7 +927,7 @@ export class PostHog {
         logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
-        const url = this.config.api_host + (options.endpoint || this.analyticsDefaultEndpoint)
+        const url = options._url ?? this.requestRouter.endpointFor('capture_events', this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 
@@ -1545,9 +1552,8 @@ export class PostHog {
         if (!this.sessionManager) {
             return ''
         }
-        const host = this.config.ui_host || this.config.api_host
         const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        let url = host + '/replay/' + sessionId
+        let url = this.requestRouter.endpointFor('ui', '/replay/' + sessionId)
         if (options?.withTimestamp && sessionStartTimestamp) {
             const LOOK_BACK = options.timestampLookBack ?? 10
             if (!sessionStartTimestamp) {
@@ -1754,13 +1760,6 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
-            // We assume the api_host is without a trailing slash in most places throughout the codebase
-            this.config.api_host = this.config.api_host.replace(/\/$/, '')
-
-            // us.posthog.com is only for the web app, so we don't allow that to be used as a capture endpoint
-            if (this.config.api_host === 'https://us.posthog.com') {
-                this.config.api_host = 'https://app.posthog.com'
-            }
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 
