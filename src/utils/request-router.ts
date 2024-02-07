@@ -41,10 +41,12 @@ export class RequestRouter {
     }
 
     endpointFor(target: RequestRouterTarget, path: string = ''): string {
-        const uiHost = this.uiHost || this.apiHost
+        if (path) {
+            path = path[0] === '/' ? path : `/${path}`
+        }
 
         if (target === 'ui') {
-            return uiHost + path
+            return (this.uiHost || this.apiHost) + path
         }
 
         if (!this.instance.config.__preview_ingestion_endpoints || this.region === RequestRouterRegion.CUSTOM) {
