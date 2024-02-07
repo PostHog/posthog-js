@@ -50,7 +50,7 @@ export interface AutocaptureConfig {
      * we consider the tree of elements from the root to the target element of the click event
      * so for the tree div > div > button > svg
      * and allow list config `['[id]']`
-     * we will capture the click if any of the four elements has any id
+     * we will capture the click if the click-target or its parents has any id
      */
     css_selector_allowlist?: string[]
 
