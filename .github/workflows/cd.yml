@@ -69,12 +69,13 @@ jobs:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
             - name: Set LAST_CHANGELOG_ENTRY
+              id: set-last-changelog-entry
               run: |
                 # read from the first until the second header in the changelog file
                 # this assumes the formatting of the file
                 # and that this workflow is always running for the most recent entry in the file 
-                LAST_CHANGELOG_ENTRY=$(awk '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag' CHANGELOG.md)
-                echo "LAST_CHANGELOG_ENTRY=$LAST_CHANGELOG_ENTRY" >> $GITHUB_ENV
+                LAST_CHANGELOG_ENTRY=$(awk -v default='see CHANGELOG.md' '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print default}' CHANGELOG.md)
+                echo "LAST_CHANGELOG_ENTRY=$LAST_CHANGELOG_ENTRY" >> "$GITHUB_OUTPUT"
 
             - name: Create GitHub release
               uses: actions/create-release@v1
@@ -83,7 +84,7 @@ jobs:
               with:
                   tag_name: v${{ env.COMMITTED_VERSION }}
                   release_name: ${{ env.COMMITTED_VERSION }}
-                  body: ${{ env.LAST_CHANGELOG_ENTRY || 'see CHANGELOG.md' }}
+                  body: ${{ steps.set-last-changelog-entry.outputs.LAST_CHANGELOG_ENTRY }}
 
     create-pull-request:
         name: Create main repo PR with new posthog-js version
