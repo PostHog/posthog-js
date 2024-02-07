@@ -119,7 +119,7 @@ export default [
         output: [{ file: pkg.types, format: 'es' }],
         plugins: [
             dts({
-                respectExternal: true,
+                respectExternal: false,
             }),
         ],
     },

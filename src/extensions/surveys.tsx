@@ -15,6 +15,7 @@ import { window as _window, document as _document } from '../utils/globals'
 import { style, defaultSurveyAppearance, sendSurveyEvent, createShadow } from './surveys/surveys-utils'
 import { useContrastingTextColor } from './surveys/hooks/useContrastingTextColor'
 import * as Preact from 'preact'
+import { render } from 'preact-render-to-string'
 import { createWidgetShadow } from './surveys-widget'
 import { useState, useEffect, useRef } from 'preact/hooks'
 import { _isNumber } from '../utils/type-utils'
@@ -97,6 +98,20 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
             }
         })
     }, forceReload)
+}
+
+export const renderSurveysPreview = (posthog: PostHog, survey: Survey, root: HTMLElement) => {
+    const surveyStyleSheet = style(survey.appearance)
+    // remove fixed position from the style and bottom 0
+    const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
+    // remove fixed position from the style and bottom 0
+    // styleElement.innerText = styleElement.innerText.replace(/position: fixed;/g, '')
+    // styleElement.innerText = styleElement.innerText.replace(/bottom: 0;/g, '')
+    root.appendChild(styleElement)
+    const surveyHtml = render(<Surveys posthog={posthog} survey={survey} />)
+    const surveyDiv = document.createElement('div')
+    surveyDiv.innerHTML = surveyHtml
+    root.appendChild(surveyDiv)
 }
 
 // This is the main exported function
