@@ -1,9 +1,10 @@
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveyAppearance } from '../../posthog-surveys-types'
-import { window as _window } from '../../utils/globals'
+import { window as _window, document as _document } from '../../utils/globals'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
+const document = _document as Document
 
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
@@ -121,6 +122,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               padding: 20px 25px 10px;
               display: flex;
               flex-direction: column;
+              border-radius: 10px;
           }
           .survey-question {
               font-weight: 500;
@@ -329,6 +331,20 @@ export const defaultSurveyAppearance: SurveyAppearance = {
     displayThankYouMessage: true,
     thankYouMessageHeader: 'Thank you for your feedback!',
     position: 'right',
+}
+
+export const createShadow = (styleSheet: string, surveyId: string) => {
+    const div = document.createElement('div')
+    div.className = `PostHogSurvey${surveyId}`
+    const shadow = div.attachShadow({ mode: 'open' })
+    if (styleSheet) {
+        const styleElement = Object.assign(document.createElement('style'), {
+            innerText: styleSheet,
+        })
+        shadow.appendChild(styleElement)
+    }
+    document.body.appendChild(div)
+    return shadow
 }
 
 export const sendSurveyEvent = (

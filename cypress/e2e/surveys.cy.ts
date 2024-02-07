@@ -525,7 +525,7 @@ describe('Surveys', () => {
                         type: 'popover',
                         start_date: '2021-01-01T00:00:00Z',
                         questions: [emojiRatingQuestion],
-                        appearance: appearanceWithThanks,
+                        appearance: { ...appearanceWithThanks, backgroundColor: 'black' },
                     },
                 ],
             }).as('surveys')

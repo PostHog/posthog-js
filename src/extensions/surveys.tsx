@@ -12,41 +12,23 @@ import {
 } from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
-import { style, defaultSurveyAppearance, sendSurveyEvent } from './surveys/surveys-utils'
+import { style, defaultSurveyAppearance, sendSurveyEvent, createShadow } from './surveys/surveys-utils'
 import { useContrastingTextColor } from './surveys/hooks/useContrastingTextColor'
 import * as Preact from 'preact'
 import { createWidgetShadow } from './surveys-widget'
 import { useState, useEffect, useRef } from 'preact/hooks'
-import { _isArray, _isNull, _isNumber } from '../utils/type-utils'
-import { BottomSection } from './surveys/components/BottomSection'
+import { _isNumber } from '../utils/type-utils'
+import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import {
-    IconPosthogLogo,
-    cancelSVG,
-    checkSVG,
-    dissatisfiedEmoji,
-    neutralEmoji,
-    satisfiedEmoji,
-    veryDissatisfiedEmoji,
-    verySatisfiedEmoji,
-} from './surveys/icons'
+    OpenTextQuestion,
+    LinkQuestion,
+    RatingQuestion,
+    MultipleChoiceQuestion,
+} from './surveys/components/QuestionTypes'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-
-export const createShadow = (styleSheet: string, surveyId: string) => {
-    const div = document.createElement('div')
-    div.className = `PostHogSurvey${surveyId}`
-    const shadow = div.attachShadow({ mode: 'open' })
-    if (styleSheet) {
-        const styleElement = Object.assign(document.createElement('style'), {
-            innerText: styleSheet,
-        })
-        shadow.appendChild(styleElement)
-    }
-    document.body.appendChild(div)
-    return shadow
-}
 
 const handleWidget = (posthog: PostHog, survey: Survey) => {
     const shadow = createWidgetShadow(survey)
@@ -131,52 +113,6 @@ export function generateSurveys(posthog: PostHog) {
     }, 3000)
 }
 
-const defaultBackgroundColor = '#eeeded'
-
-export function QuestionHeader({
-    question,
-    description,
-    backgroundColor,
-}: {
-    question: string
-    description?: string | null
-    backgroundColor?: string
-}) {
-    return (
-        <div style={{ backgroundColor: backgroundColor || defaultBackgroundColor }}>
-            <div className="survey-question">{question}</div>
-            {description && <div className="description" dangerouslySetInnerHTML={{ __html: description }} />}
-        </div>
-    )
-}
-
-export function Cancel({ onClick }: { onClick: () => void }) {
-    return (
-        <div className="cancel-btn-wrapper">
-            <button className="form-cancel" onClick={onClick}>
-                {cancelSVG}
-            </button>
-        </div>
-    )
-}
-
-export function PostHogLogo({ backgroundColor }: { backgroundColor?: string }) {
-    const { textColor, ref } = useContrastingTextColor({ appearance: { backgroundColor } })
-
-    return (
-        <a
-            href="https://posthog.com"
-            target="_blank"
-            rel="noopener"
-            ref={ref as Preact.RefObject<HTMLAnchorElement>}
-            style={{ backgroundColor: backgroundColor, color: textColor }}
-            className="footer-branding"
-        >
-            Survey by {IconPosthogLogo}
-        </a>
-    )
-}
-
 export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: Survey; style?: React.CSSProperties }) {
     const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>('survey')
 
@@ -222,6 +158,61 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
             )}
         </>
     )
+}
+
+const questionTypeMap = (
+    question: SurveyQuestion,
+    questionIndex: number,
+    appearance: SurveyAppearance,
+    onSubmit: (res: string | string[] | number | null) => void,
+    closeSurveyPopup: () => void
+): JSX.Element => {
+    const mapping = {
+        [SurveyQuestionType.Open]: (
+            <OpenTextQuestion
+                question={question as BasicSurveyQuestion}
+                appearance={appearance}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+        [SurveyQuestionType.Link]: (
+            <LinkQuestion
+                question={question as LinkSurveyQuestion}
+                appearance={appearance}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+        [SurveyQuestionType.Rating]: (
+            <RatingQuestion
+                question={question as RatingSurveyQuestion}
+                appearance={appearance}
+                questionIndex={questionIndex}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+        [SurveyQuestionType.SingleChoice]: (
+            <MultipleChoiceQuestion
+                question={question as MultipleSurveyQuestion}
+                appearance={appearance}
+                questionIndex={questionIndex}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+        [SurveyQuestionType.MultipleChoice]: (
+            <MultipleChoiceQuestion
+                question={question as MultipleSurveyQuestion}
+                appearance={appearance}
+                questionIndex={questionIndex}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+    }
+    return mapping[question.type]
 }
 
 export function Questions({
@@ -300,347 +291,6 @@ const closeSurveyPopup = (posthog: PostHog, survey: Survey) => {
     window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
-export function OpenTextQuestion({
-    question,
-    appearance,
-    onSubmit,
-    closeSurveyPopup,
-}: {
-    question: BasicSurveyQuestion
-    appearance: SurveyAppearance
-    onSubmit: (text: string) => void
-    closeSurveyPopup: () => void
-}) {
-    const textRef = useRef(null)
-    const [text, setText] = useState('')
-
-    return (
-        <div
-            className="survey-box"
-            style={{ backgroundColor: appearance.backgroundColor || defaultBackgroundColor }}
-            ref={textRef}
-        >
-            <Cancel onClick={() => closeSurveyPopup()} />
-            <QuestionHeader
-                question={question.question}
-                description={question.description}
-                backgroundColor={appearance.backgroundColor}
-            />
-            <textarea rows={4} placeholder={appearance?.placeholder} onInput={(e) => setText(e.currentTarget.value)} />
-            <BottomSection
-                text={question.buttonText || 'Submit'}
-                submitDisabled={!text && !question.optional}
-                appearance={appearance}
-                onSubmit={() => onSubmit(text)}
-            />
-        </div>
-    )
-}
-
-export function LinkQuestion({
-    question,
-    appearance,
-    onSubmit,
-    closeSurveyPopup,
-}: {
-    question: LinkSurveyQuestion
-    appearance: SurveyAppearance
-    onSubmit: (clicked: string) => void
-    closeSurveyPopup: () => void
-}) {
-    return (
-        <div className="survey-box">
-            <Cancel onClick={() => closeSurveyPopup()} />
-            <QuestionHeader question={question.question} description={question.description} />
-            <BottomSection
-                text={question.buttonText || 'Submit'}
-                submitDisabled={false}
-                link={question.link}
-                appearance={appearance}
-                onSubmit={() => onSubmit('link clicked')}
-            />
-        </div>
-    )
-}
-
-export function RatingQuestion({
-    question,
-    questionIndex,
-    appearance,
-    onSubmit,
-    closeSurveyPopup,
-}: {
-    question: RatingSurveyQuestion
-    questionIndex: number
-    appearance: SurveyAppearance
-    onSubmit: (rating: number | null) => void
-    closeSurveyPopup: () => void
-}) {
-    const scale = question.scale
-    const starting = question.scale === 10 ? 0 : 1
-    const [rating, setRating] = useState<number | null>(null)
-
-    return (
-        <div className="survey-box">
-            <Cancel onClick={() => closeSurveyPopup()} />
-            <QuestionHeader
-                question={question.question}
-                description={question.description}
-                backgroundColor={appearance.backgroundColor}
-            />
-            <div className="rating-section">
-                <div className="rating-options">
-                    {question.display === 'emoji' && (
-                        <div className="rating-options-emoji">
-                            {(question.scale === 3 ? threeScaleEmojis : fiveScaleEmojis).map((emoji, idx) => {
-                                const active = idx + 1 === rating
-                                return (
-                                    <button
-                                        className={`ratings-emoji question-${questionIndex}-rating-${idx} ${
-                                            active ? 'rating-active' : null
-                                        }`}
-                                        value={idx + 1}
-                                        key={idx}
-                                        type="button"
-                                        onClick={() => {
-                                            setRating(idx + 1)
-                                        }}
-                                    >
-                                        {emoji}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    )}
-                    {question.display === 'number' && (
-                        <div
-                            className="rating-options-number"
-                            style={{ gridTemplateColumns: `repeat(${scale - starting + 1}, minmax(0, 1fr))` }}
-                        >
-                            {(question.scale === 5 ? fiveScaleNumbers : tenScaleNumbers).map((number, idx) => {
-                                const active = rating === number
-                                return (
-                                    <RatingButton
-                                        key={idx}
-                                        questionIndex={questionIndex}
-                                        active={active}
-                                        appearance={appearance}
-                                        num={number}
-                                        setActiveNumber={(num) => {
-                                            setRating(num)
-                                        }}
-                                    />
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-                <div className="rating-text">
-                    <div>{question.lowerBoundLabel}</div>
-                    <div>{question.upperBoundLabel}</div>
-                </div>
-            </div>
-            <BottomSection
-                text={question.buttonText || appearance?.submitButtonText || 'Submit'}
-                submitDisabled={_isNull(rating) && !question.optional}
-                appearance={appearance}
-                onSubmit={() => onSubmit(rating)}
-            />
-        </div>
-    )
-}
-
-export function RatingButton({
-    num,
-    active,
-    questionIndex,
-    appearance,
-    setActiveNumber,
-}: {
-    num: number
-    active: boolean
-    questionIndex: number
-    appearance: any
-    setActiveNumber: (num: number) => void
-}) {
-    const { textColor, ref } = useContrastingTextColor({ appearance, defaultTextColor: 'black' })
-
-    return (
-        <button
-            ref={ref as Preact.RefObject<HTMLButtonElement>}
-            className={`ratings-number question-${questionIndex}-rating-${num} ${active ? 'rating-active' : null}`}
-            type="button"
-            onClick={() => setActiveNumber(num)}
-            style={{
-                color: textColor,
-                backgroundColor: active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor,
-                borderColor: appearance.borderColor,
-            }}
-        >
-            {num}
-        </button>
-    )
-}
-
-export function ConfirmationMessage({
-    confirmationHeader,
-    confirmationDescription,
-    appearance,
-    onClose,
-    styleOverrides,
-}: {
-    confirmationHeader: string
-    confirmationDescription: string
-    appearance: SurveyAppearance
-    onClose: () => void
-    styleOverrides?: React.CSSProperties
-}) {
-    return (
-        <>
-            <div className="thank-you-message" style={{ ...styleOverrides }}>
-                <div className="thank-you-message-container">
-                    <Cancel onClick={() => onClose()} />
-                    <h3 className="thank-you-message-header">{confirmationHeader}</h3>
-                    {confirmationDescription && (
-                        <div
-                            className="thank-you-message-body"
-                            dangerouslySetInnerHTML={{ __html: confirmationDescription }}
-                        />
-                    )}
-                    <BottomSection
-                        text={'Close'}
-                        submitDisabled={false}
-                        appearance={appearance}
-                        onSubmit={() => onClose()}
-                    />
-                </div>
-            </div>
-        </>
-    )
-}
-
-export function MultipleChoiceQuestion({
-    question,
-    questionIndex,
-    appearance,
-    onSubmit,
-    closeSurveyPopup,
-}: {
-    question: MultipleSurveyQuestion
-    questionIndex: number
-    appearance: SurveyAppearance
-    onSubmit: (choices: string | string[] | null) => void
-    closeSurveyPopup: () => void
-}) {
-    const textRef = useRef(null)
-    const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
-        question.type === SurveyQuestionType.MultipleChoice ? [] : null
-    )
-    const [openChoiceSelected, setOpenChoiceSelected] = useState(false)
-    const [openEndedInput, setOpenEndedInput] = useState('')
-
-    const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
-    return (
-        <div
-            className="survey-box"
-            style={{ backgroundColor: appearance.backgroundColor || defaultBackgroundColor }}
-            ref={textRef}
-        >
-            <Cancel onClick={() => closeSurveyPopup()} />
-            <QuestionHeader
-                question={question.question}
-                description={question.description}
-                backgroundColor={appearance.backgroundColor}
-            />
-            <div className="multiple-choice-options">
-                {question.choices.map((choice: string, idx: number) => {
-                    let choiceClass = 'choice-option'
-                    const val = choice
-                    const option = choice
-                    if (!!question.hasOpenChoice && idx === question.choices.length - 1) {
-                        choiceClass += ' choice-option-open'
-                    }
-                    return (
-                        <div className={choiceClass}>
-                            <input
-                                type={inputType}
-                                id={`surveyQuestion${questionIndex}Choice${idx}`}
-                                name={`question${questionIndex}`}
-                                value={val}
-                                disabled={!val}
-                                onInput={() => {
-                                    if (question.hasOpenChoice && idx === question.choices.length - 1) {
-                                        return setOpenChoiceSelected(!openChoiceSelected)
-                                    }
-                                    if (question.type === SurveyQuestionType.SingleChoice) {
-                                        return setSelectedChoices(val)
-                                    }
-                                    if (
-                                        question.type === SurveyQuestionType.MultipleChoice &&
-                                        _isArray(selectedChoices)
-                                    ) {
-                                        if (selectedChoices.includes(val)) {
-                                            // filter out values because clicking on a selected choice should deselect it
-                                            return setSelectedChoices(
-                                                selectedChoices.filter((choice) => choice !== val)
-                                            )
-                                        }
-                                        return setSelectedChoices([...selectedChoices, val])
-                                    }
-                                }}
-                            />
-                            <label htmlFor={`surveyQuestion${questionIndex}Choice${idx}`}>
-                                {question.hasOpenChoice && idx === question.choices.length - 1 ? (
-                                    <>
-                                        <span>{option}:</span>
-                                        <input
-                                            type="text"
-                                            id={`surveyQuestion${questionIndex}Choice${idx}Open`}
-                                            name={`question${questionIndex}`}
-                                            onInput={(e) => {
-                                                const userValue = e.currentTarget.value
-                                                if (question.type === SurveyQuestionType.SingleChoice) {
-                                                    return setSelectedChoices(userValue)
-                                                }
-                                                if (
-                                                    question.type === SurveyQuestionType.MultipleChoice &&
-                                                    _isArray(selectedChoices)
-                                                ) {
-                                                    return setOpenEndedInput(userValue)
-                                                }
-                                            }}
-                                        />
-                                    </>
-                                ) : (
-                                    option
-                                )}
-                            </label>
-                            <span className="choice-check">{checkSVG}</span>
-                        </div>
-                    )
-                })}
-            </div>
-            <BottomSection
-                text={question.buttonText || 'Submit'}
-                submitDisabled={
-                    (_isNull(selectedChoices) || (_isArray(selectedChoices) && selectedChoices.length === 0)) &&
-                    !question.optional
-                }
-                appearance={appearance}
-                onSubmit={() => {
-                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                        if (_isArray(selectedChoices)) {
-                            onSubmit([...selectedChoices, openEndedInput])
-                        }
-                    } else {
-                        onSubmit(selectedChoices)
-                    }
-                }}
-            />
-        </div>
-    )
-}
-
 export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: Survey }): JSX.Element {
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyle] = useState({})
@@ -681,63 +331,3 @@ export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: 
         </>
     )
 }
-
-const questionTypeMap = (
-    question: SurveyQuestion,
-    questionIndex: number,
-    appearance: SurveyAppearance,
-    onSubmit: (res: string | string[] | number | null) => void,
-    closeSurveyPopup: () => void
-): JSX.Element => {
-    const mapping = {
-        [SurveyQuestionType.Open]: (
-            <OpenTextQuestion
-                question={question as BasicSurveyQuestion}
-                appearance={appearance}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-        [SurveyQuestionType.Link]: (
-            <LinkQuestion
-                question={question as LinkSurveyQuestion}
-                appearance={appearance}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-        [SurveyQuestionType.Rating]: (
-            <RatingQuestion
-                question={question as RatingSurveyQuestion}
-                appearance={appearance}
-                questionIndex={questionIndex}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-        [SurveyQuestionType.SingleChoice]: (
-            <MultipleChoiceQuestion
-                question={question as MultipleSurveyQuestion}
-                appearance={appearance}
-                questionIndex={questionIndex}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-        [SurveyQuestionType.MultipleChoice]: (
-            <MultipleChoiceQuestion
-                question={question as MultipleSurveyQuestion}
-                appearance={appearance}
-                questionIndex={questionIndex}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-    }
-    return mapping[question.type]
-}
-
-const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, dissatisfiedEmoji]
-const fiveScaleEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
-const fiveScaleNumbers = [1, 2, 3, 4, 5]
-const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

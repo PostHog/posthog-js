@@ -1,5 +1,6 @@
 import 'regenerator-runtime/runtime'
-import { createShadow, generateSurveys } from '../../extensions/surveys'
+import { generateSurveys } from '../../extensions/surveys'
+import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { SurveyType } from '../../posthog-surveys-types'
 
 describe('survey display logic', () => {

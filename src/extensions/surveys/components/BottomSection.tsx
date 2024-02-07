@@ -1,4 +1,4 @@
-import * as Preact from 'preact'
+import { RefObject } from 'preact'
 import { window } from '../../../utils/globals'
 
 import { SurveyAppearance } from '../../../posthog-surveys-types'
@@ -26,7 +26,7 @@ export function BottomSection({
             <div className="buttons">
                 <button
                     className="form-submit"
-                    ref={ref as Preact.RefObject<HTMLButtonElement>}
+                    ref={ref as RefObject<HTMLButtonElement>}
                     disabled={submitDisabled}
                     type="button"
                     style={{ color: textColor }}
