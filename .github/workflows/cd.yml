@@ -74,7 +74,7 @@ jobs:
                 # read from the first until the second header in the changelog file
                 # this assumes the formatting of the file
                 # and that this workflow is always running for the most recent entry in the file 
-                LAST_CHANGELOG_ENTRY=$(awk -v default='see CHANGELOG.md' '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print default}' CHANGELOG.md)
+                awk -v defText='see CHANGELOG.md' '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md
                 echo "LAST_CHANGELOG_ENTRY=$LAST_CHANGELOG_ENTRY" >> "$GITHUB_OUTPUT"
 
             - name: Create GitHub release
