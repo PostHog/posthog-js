@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-core'
+import { PostHog } from '../posthog-core'
 import { Survey, SurveyType } from '../posthog-surveys-types'
 import { SurveysWidget } from './surveys-widget'
 

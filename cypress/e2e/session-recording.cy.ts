@@ -1,35 +1,22 @@
 /// <reference types="cypress" />
 
 import { _isNull } from '../../src/utils/type-utils'
-
-function onPageLoad() {
-    cy.posthogInit(given.options)
-    cy.wait('@decide')
-    cy.wait('@recorder')
-}
+import { start } from '../support/setup'
 
 describe('Session recording', () => {
-    given('options', () => ({}))
-
     describe('array.full.js', () => {
-        beforeEach(() => {
-            cy.intercept('POST', '**/decide/*', {
-                config: { enable_collect_everything: false },
-                editorParams: {},
-                featureFlags: ['session-recording-player'],
-                isAuthenticated: false,
-                sessionRecording: {
-                    endpoint: '/ses/',
-                },
-                capture_performance: true,
-            }).as('decide')
-
-            cy.visit('./playground/cypress-full')
-            cy.posthogInit(given.options)
-            cy.wait('@decide')
-        })
-
         it('captures session events', () => {
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                    },
+                    capturePerformance: true,
+                },
+            })
+
             cy.get('[data-cy-input]').type('hello world! ')
             cy.wait(500)
             cy.get('[data-cy-input]')
@@ -55,20 +42,18 @@ describe('Session recording', () => {
 
     describe('array.js', () => {
         beforeEach(() => {
-            cy.intercept('POST', '**/decide/*', {
-                config: { enable_collect_everything: false },
-                editorParams: {},
-                featureFlags: ['session-recording-player'],
-                isAuthenticated: false,
-                sessionRecording: {
-                    endpoint: '/ses/',
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                    },
+                    capturePerformance: true,
                 },
-                supportedCompression: ['gzip', 'lz64'],
-                capture_performance: true,
-            }).as('decide')
-
-            cy.visit('./playground/cypress')
-            onPageLoad()
+                url: './playground/cypress',
+            })
+            cy.wait('@recorder')
         })
 
         it('captures session events', () => {
@@ -95,7 +80,7 @@ describe('Session recording', () => {
         })
 
         it('captures snapshots when the mouse moves', () => {
-            let sessionId = null
+            let sessionId: string | null = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
@@ -158,7 +143,7 @@ describe('Session recording', () => {
         })
 
         it('continues capturing to the same session when the page reloads', () => {
-            let sessionId = null
+            let sessionId: string | null = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
@@ -178,7 +163,9 @@ describe('Session recording', () => {
             cy.resetPhCaptures()
             // and refresh the page
             cy.reload()
-            onPageLoad()
+            cy.posthogInit({})
+            cy.wait('@decide')
+            cy.wait('@recorder')
 
             cy.get('body')
                 .trigger('mousemove', { clientX: 200, clientY: 300 })
@@ -231,7 +218,7 @@ describe('Session recording', () => {
         })
 
         it('rotates sessions after 24 hours', () => {
-            let firstSessionId = null
+            let firstSessionId: string | null = null
 
             // first we start a session and give it some activity
             cy.get('[data-cy-input]').type('hello world! ')

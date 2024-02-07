@@ -5,11 +5,11 @@
 Unit tests:
 
 ```bash
-yarn test
+pnpm test
 ```
 
 Build:
 
 ```bash
-yarn build
+pnpm build
 ```

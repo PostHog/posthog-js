@@ -4,7 +4,6 @@ on:
     push:
         branches:
             - main
-            - master
 
 jobs:
     check-package-version:
@@ -32,19 +31,35 @@ jobs:
             PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
         steps:
             - name: Checkout the repository
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
               with:
                   fetch-depth: 0
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
+            - uses: pnpm/action-setup@v2
+              with:
+                version: 8.x.x
+
             - name: Set up Node 18
-              uses: actions/setup-node@v3
+              uses: actions/setup-node@v4
               with:
                   node-version: 18
                   registry-url: https://registry.npmjs.org
 
-            - name: Install dependencies
-              run: yarn --frozen-lockfile
+            - name: Get pnpm cache directory path
+              id: pnpm-cache-dir
+              run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+            - uses: actions/cache@v3
+              id: pnpm-cache
+              with:
+                  path: |
+                      ${{ steps.pnpm-cache-dir.outputs.PNPM_STORE_PATH }}
+                  key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pnpm-
+            - name: Install package.json dependencies with pnpm
+              run: pnpm install --frozen-lockfile
 
             - name: Publish the package in the npm registry
               run: npm publish --access public
@@ -53,6 +68,15 @@ jobs:
                   REDIS_URL: 'redis://localhost'
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+            - name: Set LAST_CHANGELOG_ENTRY
+              id: set-last-changelog-entry
+              run: |
+                # read from the first until the second header in the changelog file
+                # this assumes the formatting of the file
+                # and that this workflow is always running for the most recent entry in the file 
+                awk -v defText='see CHANGELOG.md' '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md
+                echo "LAST_CHANGELOG_ENTRY=$LAST_CHANGELOG_ENTRY" >> "$GITHUB_OUTPUT"
+
             - name: Create GitHub release
               uses: actions/create-release@v1
               env:
@@ -60,6 +84,7 @@ jobs:
               with:
                   tag_name: v${{ env.COMMITTED_VERSION }}
                   release_name: ${{ env.COMMITTED_VERSION }}
+                  body: ${{ steps.set-last-changelog-entry.outputs.LAST_CHANGELOG_ENTRY }}
 
     create-pull-request:
         name: Create main repo PR with new posthog-js version
