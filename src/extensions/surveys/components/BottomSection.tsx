@@ -1,3 +1,5 @@
+/** @jsx Preact.h */
+
 import * as Preact from 'preact'
 import { window } from '../../../utils/globals'
 
