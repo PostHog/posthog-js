@@ -1,3 +1,10 @@
+## 1.105.1 - 2024-02-07
+
+- fix: autocapture allowlist should consider the tree (#1000)
+- chore: move posthog test instance helper (#999)
+- chore: nit pick log message (#997)
+- chore: copy most recent changelog entry when creating a release (#995)
+
 ## 1.105.0 - 2024-02-06
 
 - fix: Add warning and conversion for number distinct_id (#993)
