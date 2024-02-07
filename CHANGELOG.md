@@ -1,3 +1,7 @@
+## 1.105.2 - 2024-02-07
+
+
+
 ## 1.105.1 - 2024-02-07
 
 - fix: autocapture allowlist should consider the tree (#1000)
