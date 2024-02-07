@@ -2,7 +2,7 @@ import React from 'react'
 import Head from 'next/head'
 import { useEffect, useRef } from 'react'
 
-export default function Home() {
+export default function Canvas() {
     const ref = useRef<HTMLCanvasElement>(null)
 
     useEffect(() => {

@@ -3,6 +3,7 @@ import {
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
+    SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../constants'
 import {
@@ -102,9 +103,6 @@ export class SessionRecording {
     private _linkedFlag: string | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
-    private _recordCanvas: boolean = false
-    private _canvasFps: number | null = null
-    private _canvasQuality: number | null = null
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -147,6 +145,17 @@ export class SessionRecording {
         const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = this.instance.config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
+    }
+
+    private get canvasRecording(): { enabled: boolean; fps: number; quality: number } | undefined {
+        const canvasRecording_server_side = this.instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
+        return canvasRecording_server_side && canvasRecording_server_side.fps && canvasRecording_server_side.quality
+            ? {
+                  enabled: canvasRecording_server_side.enabled,
+                  fps: canvasRecording_server_side.fps,
+                  quality: canvasRecording_server_side.quality,
+              }
+            : undefined
     }
 
     private get recordingVersion() {
@@ -285,6 +294,11 @@ export class SessionRecording {
                     capturePerformance: response.capturePerformance,
                     ...response.sessionRecording?.networkPayloadCapture,
                 },
+                [SESSION_RECORDING_CANVAS_RECORDING]: {
+                    enabled: response.sessionRecording?.recordCanvas,
+                    fps: response.sessionRecording?.canvasFps,
+                    quality: response.sessionRecording?.canvasQuality,
+                },
             })
         }
 
@@ -294,19 +308,6 @@ export class SessionRecording {
 
         const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
         this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
-
-        const receivedRecordCanvas = response.sessionRecording?.recordCanvas
-        this._recordCanvas =
-            _isUndefined(receivedRecordCanvas) || _isNull(receivedRecordCanvas) ? false : receivedRecordCanvas
-
-        const receivedCanvasFps = response.sessionRecording?.canvasFps
-        this._canvasFps = _isUndefined(receivedCanvasFps) ? null : receivedCanvasFps
-
-        const receivedCanvasQuality = response.sessionRecording?.canvasQuality
-        this._canvasQuality =
-            _isUndefined(receivedCanvasQuality) || _isNull(receivedCanvasQuality)
-                ? null
-                : parseFloat(receivedCanvasQuality)
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
@@ -509,10 +510,10 @@ export class SessionRecording {
             }
         }
 
-        if (this._recordCanvas && !_isNull(this._canvasFps) && !_isNull(this._canvasQuality)) {
+        if (this.canvasRecording && this.canvasRecording.enabled) {
             sessionRecordingOptions.recordCanvas = true
-            sessionRecordingOptions.sampling = { canvas: this._canvasFps }
-            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasQuality }
+            sessionRecordingOptions.sampling = { canvas: this.canvasRecording.fps }
+            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this.canvasRecording.quality }
         }
 
         if (!this.rrwebRecord) {
