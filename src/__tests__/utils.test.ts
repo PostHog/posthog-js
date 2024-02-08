@@ -215,6 +215,15 @@ describe('utils', () => {
                 ).toBe(true)
             })
 
+            it('should block an ahrefs bot', () => {
+                expect(
+                    _isBlockedUA(
+                        'AhrefsSiteAudit (Desktop) - Mozilla/5.0 (compatible; AhrefsSiteAudit/6.1; +http://ahrefs.com/robot/)',
+                        []
+                    )
+                ).toBe(true)
+            })
+
             it('should block openai bot', () => {
                 expect(
                     _isBlockedUA(
