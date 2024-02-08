@@ -27,8 +27,9 @@ function ensureActivitySendsSnapshots() {
                 expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                 expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
                 expect(captures[0]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                expect(captures[0]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
                 // Making a set from the rest should all be 3 - incremental snapshots
-                expect(new Set(captures[0]['properties']['$snapshot_data'].slice(3).map((s) => s.type))).to.deep.equal(
+                expect(new Set(captures[0]['properties']['$snapshot_data'].slice(4).map((s) => s.type))).to.deep.equal(
                     new Set([3])
                 )
             })
@@ -59,13 +60,14 @@ describe('Session recording', () => {
                         // should be a pageview and a $snapshot
                         expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
 
-                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(38)
+                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(39)
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
                         expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                        expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
                         // Making a set from the rest should all be 3 - incremental snapshots
-                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(3)
+                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(4)
                         expect(new Set(incrementalSnapshots.map((s) => s.type))).to.deep.equal(new Set([3]))
                     })
                 })
@@ -240,9 +242,9 @@ describe('Session recording', () => {
                     expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                     expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
                     expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-
+                    expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
                     const xPositions = []
-                    for (let i = 3; i < captures[1]['properties']['$snapshot_data'].length; i++) {
+                    for (let i = 4; i < captures[1]['properties']['$snapshot_data'].length; i++) {
                         expect(captures[1]['properties']['$snapshot_data'][i].type).to.equal(3)
                         expect(captures[1]['properties']['$snapshot_data'][i].data.source).to.equal(
                             6,

@@ -616,6 +616,10 @@ export class SessionRecording {
             sessionRecordingOptions,
             activePlugins: activePlugins.map((p) => p?.name),
         })
+
+        this._tryAddCustomEvent('$posthog_config', {
+            config: this.instance.config,
+        })
     }
 
     private _scheduleFullSnapshot(): void {
