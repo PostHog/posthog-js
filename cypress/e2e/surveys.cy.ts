@@ -287,6 +287,7 @@ describe('Surveys', () => {
                         type: 'popover',
                         start_date: '2021-01-01T00:00:00Z',
                         questions: [{ ...singleChoiceQuestion, hasOpenChoice: true }],
+                        appearance: { backgroundColor: 'black', submitButtonColor: 'white' },
                     },
                 ],
             }).as('surveys')

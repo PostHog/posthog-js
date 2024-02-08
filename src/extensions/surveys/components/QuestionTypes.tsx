@@ -275,7 +275,7 @@ export function MultipleChoiceQuestion({
                                     }
                                 }}
                             />
-                            <label htmlFor={`surveyQuestion${questionIndex}Choice${idx}`}>
+                            <label htmlFor={`surveyQuestion${questionIndex}Choice${idx}`} style={{ color: 'black' }}>
                                 {question.hasOpenChoice && idx === question.choices.length - 1 ? (
                                     <>
                                         <span>{option}:</span>
@@ -301,7 +301,9 @@ export function MultipleChoiceQuestion({
                                     option
                                 )}
                             </label>
-                            <span className="choice-check">{checkSVG}</span>
+                            <span className="choice-check" style={{ color: 'black' }}>
+                                {checkSVG}
+                            </span>
                         </div>
                     )
                 })}
