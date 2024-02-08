@@ -3,6 +3,38 @@
 import { _isNull } from '../../src/utils/type-utils'
 import { start } from '../support/setup'
 
+function ensureRecordingIsStopped() {
+    cy.get('[data-cy-input]')
+        .type('hello posthog!')
+        .wait(250)
+        .then(() => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                // should be no captured data
+                expect(captures.map((c) => c.event)).to.deep.equal([])
+            })
+        })
+}
+
+function ensureActivitySendsSnapshots() {
+    cy.get('[data-cy-input]')
+        .type('hello posthog!')
+        .wait('@session-recording')
+        .then(() => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+                expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(14).and.below(39)
+                // a meta and then a full snapshot
+                expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+                expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                expect(captures[0]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                // Making a set from the rest should all be 3 - incremental snapshots
+                expect(new Set(captures[0]['properties']['$snapshot_data'].slice(3).map((s) => s.type))).to.deep.equal(
+                    new Set([3])
+                )
+            })
+        })
+}
+
 describe('Session recording', () => {
     describe('array.full.js', () => {
         it('captures session events', () => {
@@ -57,26 +89,39 @@ describe('Session recording', () => {
         })
 
         it('captures session events', () => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                // should be a pageview at the beginning
+                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
+            })
+            cy.resetPhCaptures()
+
+            let startingSessionId: string | null = null
+            cy.posthog().then((ph) => {
+                startingSessionId = ph.get_session_id()
+            })
+
             cy.get('[data-cy-input]').type('hello world! ')
             cy.wait(500)
-            cy.get('[data-cy-input]')
-                .type('hello posthog!')
-                .wait('@session-recording')
-                .then(() => {
-                    cy.phCaptures({ full: true }).then((captures) => {
-                        // should be a pageview and a $snapshot
-                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
-                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(38)
-                        // a meta and then a full snapshot
-                        expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
-                        expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-                        // Making a set from the rest should all be 3 - incremental snapshots
-                        expect(
-                            new Set(captures[1]['properties']['$snapshot_data'].slice(3).map((s) => s.type))
-                        ).to.deep.equal(new Set([3]))
-                    })
-                })
+            ensureActivitySendsSnapshots()
+            cy.posthog().then((ph) => {
+                ph.stopSessionRecording()
+            })
+            cy.resetPhCaptures()
+            ensureRecordingIsStopped()
+
+            // restarting recording
+            cy.posthog().then((ph) => {
+                ph.startSessionRecording()
+            })
+            ensureActivitySendsSnapshots()
+
+            // the session id is not rotated by stopping and starting the recording
+            cy.posthog().then((ph) => {
+                const secondSessionId = ph.get_session_id()
+                expect(startingSessionId).not.to.be.null
+                expect(secondSessionId).not.to.be.null
+                expect(secondSessionId).to.equal(startingSessionId)
+            })
         })
 
         it('captures snapshots when the mouse moves', () => {
