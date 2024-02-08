@@ -207,31 +207,16 @@ describe('utils', () => {
             }
         )
 
-        it('should block googlebot desktop', () => {
-            expect(
-                _isBlockedUA(
-                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
-                    []
-                )
-            ).toBe(true)
-        })
-
-        it('should block an ahrefs bot', () => {
-            expect(
-                _isBlockedUA(
-                    'AhrefsSiteAudit (Desktop) - Mozilla/5.0 (compatible; AhrefsSiteAudit/6.1; +http://ahrefs.com/robot/)',
-                    []
-                )
-            ).toBe(true)
-        })
-
-        it('should block openai bot', () => {
-            expect(
-                _isBlockedUA(
-                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)',
-                    []
-                )
-            ).toBe(true)
+        it.each([
+            [
+                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
+            ],
+            ['AhrefsSiteAudit (Desktop) - Mozilla/5.0 (compatible; AhrefsSiteAudit/6.1; +http://ahrefs.com/robot/)'],
+            ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)'],
+        ])('blocks based on user agent', (botString) => {
+            expect(_isBlockedUA(botString, [])).toBe(true)
+            expect(_isBlockedUA(botString.toLowerCase(), [])).toBe(true)
+            expect(_isBlockedUA(botString.toUpperCase(), [])).toBe(true)
         })
     })
 
