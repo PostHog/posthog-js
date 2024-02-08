@@ -7,6 +7,7 @@ import {
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
+    SESSION_RECORDING_CANVAS_RECORDING,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import {
@@ -24,6 +25,7 @@ import {
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow } from '../../../utils/globals'
+import { RequestRouter } from '../../../utils/request-router'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -117,6 +119,7 @@ describe('SessionRecording', () => {
                 onFeatureFlagsCallback = cb
             },
             sessionManager: sessionManager,
+            requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: jest.fn(),
         } as unknown as PostHog
 
@@ -292,6 +295,22 @@ describe('SessionRecording', () => {
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(true)
         })
 
+        it('stores true in persistence if canvas is enabled from the server', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_CANVAS_RECORDING]: undefined })
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', recordCanvas: true, canvasFps: 6, canvasQuality: '0.2' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_CANVAS_RECORDING)).toEqual({
+                enabled: true,
+                fps: 6,
+                quality: '0.2',
+            })
+        })
+
         it('stores false in persistence if recording is not enabled from the server', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
 
@@ -422,16 +441,15 @@ describe('SessionRecording', () => {
 
         describe('canvas', () => {
             it('passes the remote config to rrweb', () => {
-                sessionRecording.startRecordingIfEnabled()
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_CANVAS_RECORDING]: {
+                        enabled: true,
+                        fps: 6,
+                        quality: 0.2,
+                    },
+                })
 
-                sessionRecording.afterDecideResponse(
-                    makeDecideResponse({
-                        sessionRecording: { endpoint: '/s/', recordCanvas: true, canvasFps: 6, canvasQuality: '0.2' },
-                    })
-                )
-                expect(sessionRecording['_recordCanvas']).toStrictEqual(true)
-                expect(sessionRecording['_canvasFps']).toStrictEqual(6)
-                expect(sessionRecording['_canvasQuality']).toStrictEqual(0.2)
+                sessionRecording.startRecordingIfEnabled()
 
                 sessionRecording['_onScriptLoaded']()
                 expect(assignableWindow.rrwebRecord).toHaveBeenCalledWith(
@@ -537,7 +555,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -574,7 +592,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -658,7 +676,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -1283,7 +1301,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _metrics: { rrweb_full_snapshot: false },
                     _noTruncate: true,
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     method: 'POST',
                 }
             )

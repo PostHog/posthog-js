@@ -5,6 +5,8 @@ import { SurveyType, SurveyQuestionType, Survey } from '../posthog-surveys-types
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
+import { window } from '../utils/globals'
+import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
 
 describe('surveys', () => {
@@ -60,6 +62,7 @@ describe('surveys', () => {
             config: config,
             _prepare_callback: (callback: any) => callback,
             persistence: new PostHogPersistence(config),
+            requestRouter: new RequestRouter({ config } as any),
             register: (props: Properties) => instance.persistence?.register(props),
             unregister: (key: string) => instance.persistence?.unregister(key),
             get_property: (key: string) => instance.persistence?.props[key],

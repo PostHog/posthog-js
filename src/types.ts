@@ -142,6 +142,8 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
+    /** WARNING: This is an experimental option not meant for public use. */
+    __preview_ingestion_endpoints?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -204,10 +206,10 @@ export interface XHROptions {
 export interface CaptureOptions extends XHROptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
+    _url?: string /** Used to override the desired endpoint for the captured event */
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _metrics?: Properties
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
-    endpoint?: string /** defaults to '/e/' */
     send_instantly?: boolean /** if set skips the batched queue */
     timestamp?: Date
 }
@@ -281,6 +283,7 @@ export interface DecideResponse {
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
+    __preview_ingestion_endpoints?: boolean
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void

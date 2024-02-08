@@ -1,3 +1,13 @@
+## 1.105.5 - 2024-02-08
+
+- feat: account for persistence for canvas recording (#1006)
+- chore: improve template to account for backwards compatibility (#1007)
+
+## 1.105.4 - 2024-02-07
+
+- feat: Add dynamic routing of ingestion endpoints (#986)
+- Update CHANGELOG.md (#1004)
+
 ## 1.105.3 - 2024-02-07
 
 identical to 1.105.1 - bug in CI scripts

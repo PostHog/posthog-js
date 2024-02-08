@@ -3,6 +3,7 @@ import {
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
+    SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../constants'
 import {
@@ -123,9 +124,6 @@ export class SessionRecording {
     private _linkedFlag: string | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
-    private _recordCanvas: boolean = false
-    private _canvasFps: number | null = null
-    private _canvasQuality: number | null = null
 
     private _fullSnapshotTimer?: number
 
@@ -170,6 +168,17 @@ export class SessionRecording {
         const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = this.instance.config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
+    }
+
+    private get canvasRecording(): { enabled: boolean; fps: number; quality: number } | undefined {
+        const canvasRecording_server_side = this.instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
+        return canvasRecording_server_side && canvasRecording_server_side.fps && canvasRecording_server_side.quality
+            ? {
+                  enabled: canvasRecording_server_side.enabled,
+                  fps: canvasRecording_server_side.fps,
+                  quality: canvasRecording_server_side.quality,
+              }
+            : undefined
     }
 
     private get recordingVersion() {
@@ -318,6 +327,11 @@ export class SessionRecording {
                     capturePerformance: response.capturePerformance,
                     ...response.sessionRecording?.networkPayloadCapture,
                 },
+                [SESSION_RECORDING_CANVAS_RECORDING]: {
+                    enabled: response.sessionRecording?.recordCanvas,
+                    fps: response.sessionRecording?.canvasFps,
+                    quality: response.sessionRecording?.canvasQuality,
+                },
             })
         }
 
@@ -327,19 +341,6 @@ export class SessionRecording {
 
         const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
         this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
-
-        const receivedRecordCanvas = response.sessionRecording?.recordCanvas
-        this._recordCanvas =
-            _isUndefined(receivedRecordCanvas) || _isNull(receivedRecordCanvas) ? false : receivedRecordCanvas
-
-        const receivedCanvasFps = response.sessionRecording?.canvasFps
-        this._canvasFps = _isUndefined(receivedCanvasFps) ? null : receivedCanvasFps
-
-        const receivedCanvasQuality = response.sessionRecording?.canvasQuality
-        this._canvasQuality =
-            _isUndefined(receivedCanvasQuality) || _isNull(receivedCanvasQuality)
-                ? null
-                : parseFloat(receivedCanvasQuality)
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
@@ -412,13 +413,16 @@ export class SessionRecording {
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
         if (this.instance.__loaded_recorder_version !== this.recordingVersion) {
-            loadScript(this.instance.config.api_host + `/static/${recorderJS}?v=${Config.LIB_VERSION}`, (err) => {
-                if (err) {
-                    return logger.error(`Could not load ${recorderJS}`, err)
-                }
+            loadScript(
+                this.instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
+                (err) => {
+                    if (err) {
+                        return logger.error(`Could not load ${recorderJS}`, err)
+                    }
 
-                this._onScriptLoaded()
-            })
+                    this._onScriptLoaded()
+                }
+            )
         } else {
             this._onScriptLoaded()
         }
@@ -546,10 +550,10 @@ export class SessionRecording {
             }
         }
 
-        if (this._recordCanvas && !_isNull(this._canvasFps) && !_isNull(this._canvasQuality)) {
+        if (this.canvasRecording && this.canvasRecording.enabled) {
             sessionRecordingOptions.recordCanvas = true
-            sessionRecordingOptions.sampling = { canvas: this._canvasFps }
-            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasQuality }
+            sessionRecordingOptions.sampling = { canvas: this.canvasRecording.fps }
+            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this.canvasRecording.quality }
         }
 
         if (!this.rrwebRecord) {
@@ -839,7 +843,7 @@ export class SessionRecording {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
             method: 'POST',
-            endpoint: this._endpoint,
+            _url: this.instance.requestRouter.endpointFor('capture_recordings', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
             _metrics: {
