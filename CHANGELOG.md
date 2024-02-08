@@ -1,3 +1,8 @@
+## 1.105.6 - 2024-02-08
+
+- feat: save posthog config at start of session recording (#1005)
+- chore: test stopping and starting (#1009)
+
 ## 1.105.5 - 2024-02-08
 
 - feat: account for persistence for canvas recording (#1006)
