@@ -5,6 +5,8 @@ import { SurveyAppearance } from '../../../posthog-surveys-types'
 
 import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import { PostHogLogo } from './PostHogLogo'
+import { SurveyContext } from '../../surveys'
+import { useContext } from 'preact/hooks'
 
 export function BottomSection({
     text,
@@ -20,6 +22,7 @@ export function BottomSection({
     link?: string | null
 }) {
     const { textColor, ref } = useContrastingTextColor({ appearance })
+    const { readOnly } = useContext(SurveyContext)
 
     return (
         <div className="bottom-section">
@@ -27,7 +30,7 @@ export function BottomSection({
                 <button
                     className="form-submit"
                     ref={ref as RefObject<HTMLButtonElement>}
-                    disabled={submitDisabled}
+                    disabled={submitDisabled || readOnly}
                     type="button"
                     style={{ color: textColor }}
                     onClick={() => {

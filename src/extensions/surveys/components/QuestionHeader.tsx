@@ -1,5 +1,7 @@
 import { defaultSurveyAppearance } from '../surveys-utils'
 import { cancelSVG } from '../icons'
+import { SurveyContext } from '../surveys'
+import { useContext } from 'preact/hooks'
 
 export function QuestionHeader({
     question,
@@ -19,9 +21,11 @@ export function QuestionHeader({
 }
 
 export function Cancel({ onClick }: { onClick: () => void }) {
+    const { readOnly } = useContext(SurveyContext)
+
     return (
         <div className="cancel-btn-wrapper">
-            <button className="form-cancel" onClick={onClick}>
+            <button className="form-cancel" onClick={onClick} disabled={readOnly}>
                 {cancelSVG}
             </button>
         </div>
