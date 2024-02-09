@@ -104,7 +104,8 @@ export const renderSurveysPreview = (
     posthog: PostHog,
     survey: Survey,
     root: HTMLElement,
-    displayState: 'survey' | 'confirmation'
+    displayState: 'survey' | 'confirmation',
+    previewQuestionIndex: number
 ) => {
     const surveyStyleSheet = style(survey.appearance)
     // remove fixed position from the style and bottom 0
@@ -119,6 +120,7 @@ export const renderSurveysPreview = (
             survey={survey}
             readOnly={true}
             initialDisplayState={displayState}
+            previewQuestionIndex={previewQuestionIndex}
             style={{ position: 'relative', borderBottom: `1px solid ${survey.appearance?.borderColor}` }}
         />
     )
@@ -127,7 +129,10 @@ export const renderSurveysPreview = (
     root.appendChild(surveyDiv)
 }
 
-export const SurveyContext = Preact.createContext<{ readOnly: boolean }>({ readOnly: false })
+export const SurveyContext = Preact.createContext<{ readOnly: boolean; previewQuestionIndex: number }>({
+    readOnly: false,
+    previewQuestionIndex: 0,
+})
 
 // This is the main exported function
 export function generateSurveys(posthog: PostHog) {
@@ -149,12 +154,14 @@ export function Surveys({
     readOnly,
     style,
     initialDisplayState,
+    previewQuestionIndex,
 }: {
     posthog: PostHog
     survey: Survey
     readOnly?: boolean
     style?: React.CSSProperties
     initialDisplayState?: 'survey' | 'confirmation' | 'closed'
+    previewQuestionIndex?: number
 }) {
     const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>(
         initialDisplayState || 'survey'
@@ -194,7 +201,7 @@ export function Surveys({
 
     return (
         <>
-            <SurveyContext.Provider value={{ readOnly: !!readOnly }}>
+            <SurveyContext.Provider value={{ readOnly: !!readOnly, previewQuestionIndex: previewQuestionIndex ?? 0 }}>
                 {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
                 {displayState === 'confirmation' && (
                     <ConfirmationMessage
@@ -276,8 +283,8 @@ export function Questions({
 }) {
     const { textColor, ref } = useContrastingTextColor({ appearance: survey.appearance || defaultSurveyAppearance })
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const [currentQuestion, setCurrentQuestion] = useState(0)
-    const { readOnly } = useContext(SurveyContext)
+    const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
+    const [currentQuestion, setCurrentQuestion] = useState(readOnly ? previewQuestionIndex : 0)
 
     const onNextClick = (res: string | string[] | number | null, idx: number) => {
         const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`

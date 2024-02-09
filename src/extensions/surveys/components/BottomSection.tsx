@@ -30,10 +30,11 @@ export function BottomSection({
                 <button
                     className="form-submit"
                     ref={ref as RefObject<HTMLButtonElement>}
-                    disabled={submitDisabled || readOnly}
+                    disabled={submitDisabled}
                     type="button"
                     style={{ color: textColor }}
                     onClick={() => {
+                        if (readOnly) return
                         if (link) {
                             window?.open(link)
                         }
