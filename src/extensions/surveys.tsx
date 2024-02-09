@@ -127,7 +127,7 @@ export const renderSurveysPreview = (
     root.appendChild(surveyDiv)
 }
 
-export const SurveyContext = Preact.createContext(null)
+export const SurveyContext = Preact.createContext<{ readOnly: boolean }>({ readOnly: false })
 
 // This is the main exported function
 export function generateSurveys(posthog: PostHog) {
@@ -194,7 +194,7 @@ export function Surveys({
 
     return (
         <>
-            <SurveyContext.Provider value={{ readOnly }}>
+            <SurveyContext.Provider value={{ readOnly: !!readOnly }}>
                 {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
                 {displayState === 'confirmation' && (
                     <ConfirmationMessage

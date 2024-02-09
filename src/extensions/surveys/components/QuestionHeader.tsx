@@ -1,6 +1,6 @@
 import { defaultSurveyAppearance } from '../surveys-utils'
 import { cancelSVG } from '../icons'
-import { SurveyContext } from '../surveys'
+import { SurveyContext } from '../../surveys'
 import { useContext } from 'preact/hooks'
 
 export function QuestionHeader({
