@@ -131,6 +131,7 @@ export const renderSurveysPreview = (
             previewQuestionIndex={previewQuestionIndex}
             style={{
                 position: 'relative',
+                right: 0,
                 borderBottom: `1px solid ${survey.appearance?.borderColor}`,
                 color: textColor,
             }}
