@@ -1,16 +1,14 @@
-import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
-import * as Preact from 'preact'
 import { IconPosthogLogo } from '../icons'
+import { getContrastingTextColor } from '../surveys-utils'
 
-export function PostHogLogo({ backgroundColor }: { backgroundColor?: string }) {
-    const { textColor, ref } = useContrastingTextColor({ appearance: { backgroundColor } })
+export function PostHogLogo({ backgroundColor }: { backgroundColor: string }) {
+    const textColor = getContrastingTextColor(backgroundColor)
 
     return (
         <a
             href="https://posthog.com"
             target="_blank"
             rel="noopener"
-            ref={ref as Preact.RefObject<HTMLAnchorElement>}
             style={{ backgroundColor: backgroundColor, color: textColor }}
             className="footer-branding"
         >

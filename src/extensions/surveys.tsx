@@ -12,8 +12,13 @@ import {
 } from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
-import { style, defaultSurveyAppearance, sendSurveyEvent, createShadow } from './surveys/surveys-utils'
-import { useContrastingTextColor } from './surveys/hooks/useContrastingTextColor'
+import {
+    style,
+    defaultSurveyAppearance,
+    sendSurveyEvent,
+    createShadow,
+    getContrastingTextColor,
+} from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { render } from 'preact-render-to-string'
 import { createWidgetShadow } from './surveys-widget'
@@ -114,6 +119,9 @@ export const renderSurveysPreview = (
     // styleElement.innerText = styleElement.innerText.replace(/position: fixed;/g, '')
     // styleElement.innerText = styleElement.innerText.replace(/bottom: 0;/g, '')
     root.appendChild(styleElement)
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
+    )
     const surveyHtml = render(
         <Surveys
             posthog={posthog}
@@ -121,7 +129,11 @@ export const renderSurveysPreview = (
             readOnly={true}
             initialDisplayState={displayState}
             previewQuestionIndex={previewQuestionIndex}
-            style={{ position: 'relative', borderBottom: `1px solid ${survey.appearance?.borderColor}` }}
+            style={{
+                position: 'relative',
+                borderBottom: `1px solid ${survey.appearance?.borderColor}`,
+                color: textColor,
+            }}
         />
     )
     const surveyDiv = document.createElement('div')
@@ -129,9 +141,14 @@ export const renderSurveysPreview = (
     root.appendChild(surveyDiv)
 }
 
-export const SurveyContext = Preact.createContext<{ readOnly: boolean; previewQuestionIndex: number }>({
+export const SurveyContext = Preact.createContext<{
+    readOnly: boolean
+    previewQuestionIndex: number
+    textColor: string
+}>({
     readOnly: false,
     previewQuestionIndex: 0,
+    textColor: 'black',
 })
 
 // This is the main exported function
@@ -201,13 +218,21 @@ export function Surveys({
 
     return (
         <>
-            <SurveyContext.Provider value={{ readOnly: !!readOnly, previewQuestionIndex: previewQuestionIndex ?? 0 }}>
+            <SurveyContext.Provider
+                value={{
+                    readOnly: !!readOnly,
+                    previewQuestionIndex: previewQuestionIndex ?? 0,
+                    textColor: getContrastingTextColor(
+                        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+                    ),
+                }}
+            >
                 {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
                 {displayState === 'confirmation' && (
                     <ConfirmationMessage
                         confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                         confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
-                        appearance={survey.appearance || {}}
+                        appearance={survey.appearance || defaultSurveyAppearance}
                         styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
                         onClose={() => setDisplayState('closed')}
                     />
@@ -281,7 +306,9 @@ export function Questions({
     posthog: PostHog
     styleOverrides?: React.CSSProperties
 }) {
-    const { textColor, ref } = useContrastingTextColor({ appearance: survey.appearance || defaultSurveyAppearance })
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+    )
     const [questionsResponses, setQuestionsResponses] = useState({})
     const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
     const [currentQuestion, setCurrentQuestion] = useState(readOnly ? previewQuestionIndex : 0)
@@ -302,7 +329,6 @@ export function Questions({
             // TODO: BEMify classes
             className="survey-form"
             style={{ color: textColor, borderColor: survey.appearance?.borderColor, ...styleOverrides }}
-            ref={ref as Preact.RefObject<HTMLFormElement>}
         >
             {survey.questions.map((question, idx) => {
                 if (isMultipleQuestion) {
