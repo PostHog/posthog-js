@@ -1,9 +1,9 @@
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
-    SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../constants'
 import {
@@ -602,6 +602,7 @@ export class SessionRecording {
                         return
                     }
                     this._tryAddCustomEvent('$pageview', { href })
+                    this._tryTakeFullSnapshot()
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)
@@ -690,7 +691,8 @@ export class SessionRecording {
 
         this._updateWindowAndSessionIds(event)
 
-        if (this.isIdle) {
+        // allow custom events even when idle
+        if (this.isIdle && event.type !== EventType.Custom) {
             // When in an idle state we keep recording, but don't capture the events
             return
         }
