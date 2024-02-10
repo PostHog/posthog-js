@@ -1143,31 +1143,19 @@ describe('SessionRecording', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
-            const emptyBuffer = {
-                data: [],
-                sessionId: null,
-                size: 0,
-                windowId: null,
-            }
-            expect(sessionRecording['buffer']).toEqual(emptyBuffer)
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
             // a plugin event doesn't count as returning from idle
             sessionRecording.onRRwebEmit(createPluginSnapshot({}) as unknown as eventWithTime)
 
             // buffer is still empty
-            expect(sessionRecording['buffer']).toEqual(emptyBuffer)
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
         })
 
         it('emits custom events even when idle', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
-            const emptyBuffer = {
-                data: [],
-                sessionId: null,
-                size: 0,
-                windowId: null,
-            }
-            expect(sessionRecording['buffer']).toEqual(emptyBuffer)
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
 
             sessionRecording.onRRwebEmit(createCustomSnapshot({}) as unknown as eventWithTime)
 
