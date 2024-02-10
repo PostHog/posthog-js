@@ -254,16 +254,11 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
     return internalDeepCircularCopy(value)
 }
 
-const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
-
 export function _copyAndTruncateStrings<T extends Record<string, any> = Record<string, any>>(
     object: T,
     maxStringLength: number | null
 ): T {
-    return deepCircularCopy(object, (value: any, key) => {
-        if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key as string) > -1) {
-            return value
-        }
+    return deepCircularCopy(object, (value: any) => {
         if (_isString(value) && !_isNull(maxStringLength)) {
             return (value as string).slice(0, maxStringLength)
         }
