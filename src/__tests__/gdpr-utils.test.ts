@@ -15,13 +15,13 @@ const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
 const CUSTOM_PERSISTENCE_PREFIX = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
 
 function deleteAllCookies() {
-    const cookies = document.cookie.split(';')
+    const cookies = document!.cookie.split(';')
 
     for (let i = 0; i < cookies.length; i++) {
         const cookie = cookies[i]
         const eqPos = cookie.indexOf('=')
-        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
-        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT'
+        const name = eqPos > -1 ? cookie.substring(0, eqPos) : cookie
+        document!.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT'
     }
 }
 
@@ -39,9 +39,9 @@ function assertPersistenceValue(
 ) {
     if (persistenceType === `cookie`) {
         if (_isNull(value)) {
-            expect(document.cookie).not.toContain(token)
+            expect(document!.cookie).not.toContain(token)
         } else {
-            expect(document.cookie).toContain(token + `=${value}`)
+            expect(document!.cookie).toContain(token + `=${value}`)
         }
     } else {
         if (_isNull(value)) {
@@ -57,7 +57,7 @@ describe(`GDPR utils`, () => {
     // so that they reference the correct jsdom document
 
     afterEach(() => {
-        document.getElementsByTagName('html')[0].innerHTML = ''
+        document!.getElementsByTagName('html')[0].innerHTML = ''
         assignableWindow.localStorage.clear()
         deleteAllCookies()
     })

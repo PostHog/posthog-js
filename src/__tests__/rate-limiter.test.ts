@@ -10,7 +10,7 @@ describe('Rate Limiter', () => {
     beforeEach(() => {
         jest.useFakeTimers()
         rateLimiter = new RateLimiter()
-        jest.spyOn(window.console, 'error').mockImplementation()
+        jest.spyOn(window!.console, 'error').mockImplementation()
     })
 
     it('is not rate limited with no batch key', () => {
