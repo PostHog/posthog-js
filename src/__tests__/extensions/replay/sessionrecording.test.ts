@@ -4,10 +4,10 @@ import { loadScript } from '../../../utils'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
-    SESSION_RECORDING_CANVAS_RECORDING,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import {
@@ -18,7 +18,6 @@ import {
 import { PostHog } from '../../../posthog-core'
 import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import Mock = jest.Mock
 import {
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
     RECORDING_MAX_EVENT_SIZE,
@@ -26,6 +25,8 @@ import {
 } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
+import { customEvent, EventType, eventWithTime, pluginEvent } from '@rrweb/types'
+import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -52,6 +53,24 @@ const createIncrementalSnapshot = (event = {}) => ({
     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     data: {
         source: 1,
+    },
+    ...event,
+})
+
+const createCustomSnapshot = (event = {}): customEvent => ({
+    type: EventType.Custom,
+    data: {
+        tag: 'custom',
+        payload: {},
+    },
+    ...event,
+})
+
+const createPluginSnapshot = (event = {}): pluginEvent => ({
+    type: EventType.Plugin,
+    data: {
+        plugin: 'plugin',
+        payload: {},
     },
     ...event,
 })
@@ -1118,6 +1137,43 @@ describe('SessionRecording', () => {
             // options will have been emitted
             expect(_addCustomEvent).toHaveBeenCalled()
             _addCustomEvent.mockClear()
+        })
+
+        it('does not emit when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            // a plugin event doesn't count as returning from idle
+            sessionRecording.onRRwebEmit(createPluginSnapshot({}) as unknown as eventWithTime)
+
+            // buffer is still empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+        })
+
+        it('emits custom events even when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+
+            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as unknown as eventWithTime)
+
+            // custom event is buffered
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            payload: {},
+                            tag: 'custom',
+                        },
+                        type: 5,
+                    },
+                ],
+                sessionId: null,
+                size: 47,
+                windowId: null,
+            })
         })
 
         it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
