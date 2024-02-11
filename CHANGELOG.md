@@ -1,3 +1,10 @@
+## 1.105.7 - 2024-02-11
+
+- fix: allow custom events when idle (#1013)
+- chore: no need to account for performance raw (#1012)
+- chore: add test case for ahrefs bot (#1011)
+- chore: really really write changelog to release (#1008)
+
 ## 1.105.6 - 2024-02-08
 
 - feat: save posthog config at start of session recording (#1005)
