@@ -59,7 +59,7 @@ export class RequestRouter {
             case 'assets':
                 return `https://${this.region}-assets.${suffix}`
             case 'api':
-                return `https://${this.region}-api.${suffix}`
+                return `https://${this.region}.${suffix}`
         }
     }
 }

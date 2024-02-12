@@ -15,16 +15,16 @@ describe('request-router', () => {
         // US domain
         ['https://app.posthog.com', 'ui', 'https://app.posthog.com'],
         ['https://app.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
-        ['https://app.posthog.com', 'api', 'https://us-api.i.posthog.com'],
+        ['https://app.posthog.com', 'api', 'https://us.i.posthog.com'],
         // US domain via app domain
         ['https://us.posthog.com', 'ui', 'https://us.posthog.com'],
         ['https://us.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
-        ['https://us.posthog.com', 'api', 'https://us-api.i.posthog.com'],
+        ['https://us.posthog.com', 'api', 'https://us.i.posthog.com'],
 
         // EU domain
         ['https://eu.posthog.com', 'ui', 'https://eu.posthog.com'],
         ['https://eu.posthog.com', 'assets', 'https://eu-assets.i.posthog.com'],
-        ['https://eu.posthog.com', 'api', 'https://eu-api.i.posthog.com'],
+        ['https://eu.posthog.com', 'api', 'https://eu.i.posthog.com'],
 
         // custom domain
         ['https://my-custom-domain.com', 'ui', 'https://my-custom-domain.com'],
@@ -41,7 +41,7 @@ describe('request-router', () => {
 
     it('should sanitize the api_host values', () => {
         expect(router('https://app.posthog.com/').endpointFor('api', '/decide?v=3')).toEqual(
-            'https://us-api.i.posthog.com/decide?v=3'
+            'https://us.i.posthog.com/decide?v=3'
         )
 
         expect(router('https://example.com/').endpointFor('api', '/decide?v=3')).toEqual(
@@ -59,9 +59,9 @@ describe('request-router', () => {
         const mockPostHog = { config: { api_host: 'https://app.posthog.com', __preview_ingestion_endpoints: true } }
 
         const router = new RequestRouter(mockPostHog as any)
-        expect(router.endpointFor('api')).toEqual('https://us-api.i.posthog.com')
+        expect(router.endpointFor('api')).toEqual('https://us.i.posthog.com')
 
         mockPostHog.config.api_host = 'https://eu.posthog.com'
-        expect(router.endpointFor('api')).toEqual('https://eu-api.i.posthog.com')
+        expect(router.endpointFor('api')).toEqual('https://eu.i.posthog.com')
     })
 })
