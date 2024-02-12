@@ -62,6 +62,6 @@ describe('request-router', () => {
         expect(router.endpointFor('api')).toEqual('https://us-api.i.posthog.com')
 
         mockPostHog.config.api_host = 'https://eu.posthog.com'
-        expect(router.endpointFor('api')).toEqual('https://eu-c.i.posthog.com')
+        expect(router.endpointFor('api')).toEqual('https://eu-api.i.posthog.com')
     })
 })
