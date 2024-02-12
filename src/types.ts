@@ -37,12 +37,20 @@ export interface AutocaptureConfig {
     /**
      * List of DOM elements to allow autocapture on
      * e.g. ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * if the allowlist has button then we allow the capture when the button or the svg is the click target
+     * but not if either of the divs are detected as the click target
      */
     element_allowlist?: AutocaptureCompatibleElement[]
 
     /**
      * List of CSS selectors to allow autocapture on
      * e.g. ['[ph-capture]']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * and allow list config `['[id]']`
+     * we will capture the click if the click-target or its parents has any id
      */
     css_selector_allowlist?: string[]
 
@@ -134,6 +142,8 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
+    /** WARNING: This is an experimental option not meant for public use. */
+    __preview_ingestion_endpoints?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -196,10 +206,10 @@ export interface XHROptions {
 export interface CaptureOptions extends XHROptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
+    _url?: string /** Used to override the desired endpoint for the captured event */
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _metrics?: Properties
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
-    endpoint?: string /** defaults to '/e/' */
     send_instantly?: boolean /** if set skips the batched queue */
     timestamp?: Date
 }
@@ -273,6 +283,7 @@ export interface DecideResponse {
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
+    __preview_ingestion_endpoints?: boolean
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
