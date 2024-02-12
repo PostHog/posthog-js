@@ -190,7 +190,7 @@ export class PostHogFeatureFlags {
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            this.instance.config.api_host + '/decide/?v=3',
+            this.instance.requestRouter.endpointFor('decide', '/decide/?v=3'),
             { data: encoded_data },
             { method: 'POST' },
             this.instance._prepare_callback((response) => {
@@ -357,7 +357,10 @@ export class PostHogFeatureFlags {
 
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request(
-                `${this.instance.config.api_host}/api/early_access_features/?token=${this.instance.config.token}`,
+                this.instance.requestRouter.endpointFor(
+                    'api',
+                    `/api/early_access_features/?token=${this.instance.config.token}`
+                ),
                 {},
                 { method: 'GET' },
                 (response) => {

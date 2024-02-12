@@ -107,6 +107,62 @@ export function isDocumentFragment(el: Element | ParentNode | undefined | null):
 }
 
 export const autocaptureCompatibleElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+
+/*
+ if there is no config, then all elements are allowed
+ if there is a config, and there is an allow list, then only elements in the allow list are allowed
+ assumes that some other code is checking this element's parents
+ */
+function checkIfElementTreePassesElementAllowList(
+    elements: Element[],
+    autocaptureConfig: AutocaptureConfig | undefined
+): boolean {
+    const allowlist = autocaptureConfig?.element_allowlist
+    if (_isUndefined(allowlist)) {
+        // everything is allowed, when there is no allow list
+        return true
+    }
+
+    // check each element in the tree
+    // if any of the elements are in the allow list, then the tree is allowed
+    for (const el of elements) {
+        if (allowlist.some((elementType) => el.tagName.toLowerCase() === elementType)) {
+            return true
+        }
+    }
+
+    // otherwise there is an allow list and this element tree didn't match it
+    return false
+}
+
+/*
+ if there is no config, then all elements are allowed
+ if there is a config, and there is an allow list, then
+ only elements that match the css selector in the allow list are allowed
+ assumes that some other code is checking this element's parents
+ */
+function checkIfElementTreePassesCSSSelectorAllowList(
+    elements: Element[],
+    autocaptureConfig: AutocaptureConfig | undefined
+): boolean {
+    const allowlist = autocaptureConfig?.css_selector_allowlist
+    if (_isUndefined(allowlist)) {
+        // everything is allowed, when there is no allow list
+        return true
+    }
+
+    // check each element in the tree
+    // if any of the elements are in the allow list, then the tree is allowed
+    for (const el of elements) {
+        if (allowlist.some((selector) => el.matches(selector))) {
+            return true
+        }
+    }
+
+    // otherwise there is an allow list and this element tree didn't match it
+    return false
+}
+
 /*
  * Check whether a DOM event should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
@@ -139,22 +195,8 @@ export function shouldCaptureDomEvent(
         }
     }
 
-    if (autocaptureConfig?.element_allowlist) {
-        const allowlist = autocaptureConfig.element_allowlist
-        if (allowlist && !allowlist.some((elementType) => el.tagName.toLowerCase() === elementType)) {
-            return false
-        }
-    }
-
-    if (autocaptureConfig?.css_selector_allowlist) {
-        const allowlist = autocaptureConfig.css_selector_allowlist
-        if (allowlist && !allowlist.some((selector) => el.matches(selector))) {
-            return false
-        }
-    }
-
     let parentIsUsefulElement = false
-    const targetElementList: Element[] = [el] // TODO: remove this var, it's never queried
+    const targetElementList: Element[] = [el]
     let parentNode: Element | boolean = true
     let curEl: Element = el
     while (curEl.parentNode && !isTag(curEl, 'body')) {
@@ -177,6 +219,14 @@ export function shouldCaptureDomEvent(
 
         targetElementList.push(parentNode)
         curEl = parentNode
+    }
+
+    if (!checkIfElementTreePassesElementAllowList(targetElementList, autocaptureConfig)) {
+        return false
+    }
+
+    if (!checkIfElementTreePassesCSSSelectorAllowList(targetElementList, autocaptureConfig)) {
+        return false
     }
 
     const compStyles = window.getComputedStyle(el)

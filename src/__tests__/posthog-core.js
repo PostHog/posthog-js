@@ -39,7 +39,10 @@ describe('posthog core', () => {
 
         given('overrides', () => ({
             __loaded: true,
-            config: given.config,
+            config: {
+                api_host: 'https://app.posthog.com',
+                ...given.config,
+            },
             persistence: {
                 remove_event_timer: jest.fn(),
                 properties: jest.fn(),
@@ -254,7 +257,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to overriden endpoint if given', () => {
-            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
+            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://app.posthog.com/s/',
                 expect.any(Object),
@@ -263,9 +266,9 @@ describe('posthog core', () => {
             )
         })
 
-        it('sends payloads to overriden endpoint, even if alternative endpoint is set', () => {
+        it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
-            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
+            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://app.posthog.com/s/',
                 expect.any(Object),
@@ -741,15 +744,6 @@ describe('posthog core', () => {
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
         })
 
-        it('sanitizes api_host urls', () => {
-            given('config', () => ({
-                api_host: 'https://example.com/custom/',
-            }))
-            given.subject()
-
-            expect(given.lib.config.api_host).toBe('https://example.com/custom')
-        })
-
         it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
             given('overrides', () => ({
                 __loaded_recorder_version: undefined,
@@ -979,7 +973,10 @@ describe('posthog core', () => {
         describe('subsequent capture calls', () => {
             given('overrides', () => ({
                 __loaded: true,
-                config: given.config,
+                config: {
+                    api_host: 'https://app.posthog.com',
+                    ...given.config,
+                },
                 persistence: new PostHogPersistence(given.config),
                 sessionPersistence: new PostHogPersistence(given.config),
                 _requestQueue: {

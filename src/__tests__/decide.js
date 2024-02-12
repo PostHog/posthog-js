@@ -2,6 +2,7 @@ import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
 import { _base64Encode } from '../utils'
 import { PostHogPersistence } from '../posthog-persistence'
+import { RequestRouter } from '../utils/request-router'
 
 const expectDecodedSendRequest = (send_request, data) => {
     const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
@@ -49,6 +50,7 @@ describe('Decide', () => {
             setReloadingPaused: jest.fn(),
             _startReloadTimer: jest.fn(),
         },
+        requestRouter: new RequestRouter({ config: given.config }),
         _hasBootstrappedFeatureFlags: jest.fn(),
         getGroups: () => ({ organization: '5' }),
     }))

@@ -1,3 +1,45 @@
+## 1.105.7 - 2024-02-11
+
+- fix: allow custom events when idle (#1013)
+- chore: no need to account for performance raw (#1012)
+- chore: add test case for ahrefs bot (#1011)
+- chore: really really write changelog to release (#1008)
+
+## 1.105.6 - 2024-02-08
+
+- feat: save posthog config at start of session recording (#1005)
+- chore: test stopping and starting (#1009)
+
+## 1.105.5 - 2024-02-08
+
+- feat: account for persistence for canvas recording (#1006)
+- chore: improve template to account for backwards compatibility (#1007)
+
+## 1.105.4 - 2024-02-07
+
+- feat: Add dynamic routing of ingestion endpoints (#986)
+- Update CHANGELOG.md (#1004)
+
+## 1.105.3 - 2024-02-07
+
+identical to 1.105.1 - bug in CI scripts
+
+## 1.105.2 - 2024-02-07
+
+identical to 1.105.1 - bug in CI scripts
+
+## 1.105.1 - 2024-02-07
+
+- fix: autocapture allowlist should consider the tree (#1000)
+- chore: move posthog test instance helper (#999)
+- chore: nit pick log message (#997)
+- chore: copy most recent changelog entry when creating a release (#995)
+
+## 1.105.0 - 2024-02-06
+
+- fix: Add warning and conversion for number distinct_id (#993)
+- fix: Remove `baseUrl` from TypeScript compiler options (#996)
+
 ## 1.104.4 - 2024-02-02
 
 - fix: very defensive body redaction (#988)

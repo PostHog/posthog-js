@@ -4,6 +4,7 @@ import { loadScript } from '../../../utils'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
@@ -17,13 +18,15 @@ import {
 import { PostHog } from '../../../posthog-core'
 import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import Mock = jest.Mock
 import {
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow } from '../../../utils/globals'
+import { RequestRouter } from '../../../utils/request-router'
+import { customEvent, EventType, eventWithTime, pluginEvent } from '@rrweb/types'
+import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -50,6 +53,24 @@ const createIncrementalSnapshot = (event = {}) => ({
     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     data: {
         source: 1,
+    },
+    ...event,
+})
+
+const createCustomSnapshot = (event = {}): customEvent => ({
+    type: EventType.Custom,
+    data: {
+        tag: 'custom',
+        payload: {},
+    },
+    ...event,
+})
+
+const createPluginSnapshot = (event = {}): pluginEvent => ({
+    type: EventType.Plugin,
+    data: {
+        plugin: 'plugin',
+        payload: {},
     },
     ...event,
 })
@@ -117,6 +138,7 @@ describe('SessionRecording', () => {
                 onFeatureFlagsCallback = cb
             },
             sessionManager: sessionManager,
+            requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: jest.fn(),
         } as unknown as PostHog
 
@@ -292,6 +314,22 @@ describe('SessionRecording', () => {
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(true)
         })
 
+        it('stores true in persistence if canvas is enabled from the server', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_CANVAS_RECORDING]: undefined })
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', recordCanvas: true, canvasFps: 6, canvasQuality: '0.2' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_CANVAS_RECORDING)).toEqual({
+                enabled: true,
+                fps: 6,
+                quality: '0.2',
+            })
+        })
+
         it('stores false in persistence if recording is not enabled from the server', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
 
@@ -422,16 +460,15 @@ describe('SessionRecording', () => {
 
         describe('canvas', () => {
             it('passes the remote config to rrweb', () => {
-                sessionRecording.startRecordingIfEnabled()
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_CANVAS_RECORDING]: {
+                        enabled: true,
+                        fps: 6,
+                        quality: 0.2,
+                    },
+                })
 
-                sessionRecording.afterDecideResponse(
-                    makeDecideResponse({
-                        sessionRecording: { endpoint: '/s/', recordCanvas: true, canvasFps: 6, canvasQuality: '0.2' },
-                    })
-                )
-                expect(sessionRecording['_recordCanvas']).toStrictEqual(true)
-                expect(sessionRecording['_canvasFps']).toStrictEqual(6)
-                expect(sessionRecording['_canvasQuality']).toStrictEqual(0.2)
+                sessionRecording.startRecordingIfEnabled()
 
                 sessionRecording['_onScriptLoaded']()
                 expect(assignableWindow.rrwebRecord).toHaveBeenCalledWith(
@@ -537,7 +574,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -574,7 +611,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -658,7 +695,7 @@ describe('SessionRecording', () => {
                 },
                 {
                     method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
                     _metrics: expect.anything(),
@@ -1102,6 +1139,43 @@ describe('SessionRecording', () => {
             _addCustomEvent.mockClear()
         })
 
+        it('does not emit when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            // a plugin event doesn't count as returning from idle
+            sessionRecording.onRRwebEmit(createPluginSnapshot({}) as unknown as eventWithTime)
+
+            // buffer is still empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+        })
+
+        it('emits custom events even when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+
+            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as unknown as eventWithTime)
+
+            // custom event is buffered
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            payload: {},
+                            tag: 'custom',
+                        },
+                        type: 5,
+                    },
+                ],
+                sessionId: null,
+                size: 47,
+                windowId: null,
+            })
+        })
+
         it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
             const firstActivityTimestamp = startingTimestamp + 100
             const secondActivityTimestamp = startingTimestamp + 200
@@ -1283,7 +1357,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _metrics: { rrweb_full_snapshot: false },
                     _noTruncate: true,
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     method: 'POST',
                 }
             )

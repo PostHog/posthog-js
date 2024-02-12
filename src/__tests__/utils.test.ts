@@ -195,51 +195,45 @@ describe('utils', () => {
             new_script.onerror!('uh-oh')
             expect(callback).toHaveBeenCalledWith('uh-oh')
         })
+    })
 
-        describe('user agent blocking', () => {
-            it.each(DEFAULT_BLOCKED_UA_STRS.concat('testington'))(
-                'blocks a bot based on the user agent %s',
-                (botString) => {
-                    const randomisedUserAgent = userAgentFor(botString)
+    describe('user agent blocking', () => {
+        it.each(DEFAULT_BLOCKED_UA_STRS.concat('testington'))(
+            'blocks a bot based on the user agent %s',
+            (botString) => {
+                const randomisedUserAgent = userAgentFor(botString)
 
-                    expect(_isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
-                }
-            )
+                expect(_isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
+            }
+        )
 
-            it('should block googlebot desktop', () => {
-                expect(
-                    _isBlockedUA(
-                        'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
-                        []
-                    )
-                ).toBe(true)
-            })
-
-            it('should block openai bot', () => {
-                expect(
-                    _isBlockedUA(
-                        'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)',
-                        []
-                    )
-                ).toBe(true)
-            })
+        it.each([
+            [
+                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
+            ],
+            ['AhrefsSiteAudit (Desktop) - Mozilla/5.0 (compatible; AhrefsSiteAudit/6.1; +http://ahrefs.com/robot/)'],
+            ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)'],
+        ])('blocks based on user agent', (botString) => {
+            expect(_isBlockedUA(botString, [])).toBe(true)
+            expect(_isBlockedUA(botString.toLowerCase(), [])).toBe(true)
+            expect(_isBlockedUA(botString.toUpperCase(), [])).toBe(true)
         })
+    })
 
-        describe('check for cross domain cookies', () => {
-            it.each([
-                [false, 'https://test.herokuapp.com'],
-                [false, 'test.herokuapp.com'],
-                [false, 'herokuapp.com'],
-                [false, undefined],
-                // ensure it isn't matching herokuapp anywhere in the domain
-                [true, 'https://test.herokuapp.com.impersonator.io'],
-                [true, 'mysite-herokuapp.com'],
-                [true, 'https://bbc.co.uk'],
-                [true, 'bbc.co.uk'],
-                [true, 'www.bbc.co.uk'],
-            ])('should return %s when hostname is %s', (expectedResult, hostname) => {
-                expect(isCrossDomainCookie({ hostname } as unknown as Location)).toEqual(expectedResult)
-            })
+    describe('check for cross domain cookies', () => {
+        it.each([
+            [false, 'https://test.herokuapp.com'],
+            [false, 'test.herokuapp.com'],
+            [false, 'herokuapp.com'],
+            [false, undefined],
+            // ensure it isn't matching herokuapp anywhere in the domain
+            [true, 'https://test.herokuapp.com.impersonator.io'],
+            [true, 'mysite-herokuapp.com'],
+            [true, 'https://bbc.co.uk'],
+            [true, 'bbc.co.uk'],
+            [true, 'www.bbc.co.uk'],
+        ])('should return %s when hostname is %s', (expectedResult, hostname) => {
+            expect(isCrossDomainCookie({ hostname } as unknown as Location)).toEqual(expectedResult)
         })
     })
 
