@@ -927,7 +927,7 @@ export class PostHog {
         logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
-        const url = options._url ?? this.requestRouter.endpointFor('capture_events', this.analyticsDefaultEndpoint)
+        const url = options._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 

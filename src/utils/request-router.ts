@@ -12,7 +12,7 @@ export enum RequestRouterRegion {
     CUSTOM = 'custom',
 }
 
-export type RequestRouterTarget = 'ui' | 'capture_events' | 'capture_recordings' | 'decide' | 'assets' | 'api'
+export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 
 export class RequestRouter {
     instance: PostHog
@@ -56,12 +56,6 @@ export class RequestRouter {
         const suffix = 'i.posthog.com' + path
 
         switch (target) {
-            case 'capture_events':
-                return `https://${this.region}-c.${suffix}`
-            case 'capture_recordings':
-                return `https://${this.region}-s.${suffix}`
-            case 'decide':
-                return `https://${this.region}-d.${suffix}`
             case 'assets':
                 return `https://${this.region}-assets.${suffix}`
             case 'api':
