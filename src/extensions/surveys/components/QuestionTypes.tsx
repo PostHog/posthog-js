@@ -311,7 +311,13 @@ export function MultipleChoiceQuestion({
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={
-                    (_isNull(selectedChoices) || (_isArray(selectedChoices) && selectedChoices.length === 0)) &&
+                    (_isNull(selectedChoices) ||
+                        (_isArray(selectedChoices) && !openChoiceSelected && selectedChoices.length === 0) ||
+                        (_isArray(selectedChoices) &&
+                            openChoiceSelected &&
+                            !openEndedInput &&
+                            selectedChoices.length === 0 &&
+                            !question.optional)) &&
                     !question.optional
                 }
                 appearance={appearance}
