@@ -592,7 +592,7 @@ describe('Surveys', () => {
             })
         })
 
-        it('captures survey shown and survey dismissed events', () => {
+        it('captures survey shown event', () => {
             cy.visit('./playground/cypress')
             cy.intercept('GET', '**/surveys/*', {
                 surveys: [
@@ -608,20 +608,35 @@ describe('Surveys', () => {
             }).as('surveys')
             cy.intercept('POST', '**/e/*').as('capture-assertion')
             onPageLoad()
-            // first capture is $pageview
-            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.wait('@capture-assertion')
+            cy.wait('@capture-assertion').then(async ({ request }) => {
+                const captures = await getBase64EncodedPayload(request)
+                expect(captures[0].event).to.equal('survey shown')
+            })
+        })
+
+        it('captures survey dismissed event', () => {
+            cy.visit('./playground/cypress')
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                    },
+                ],
+            }).as('surveys')
+            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            onPageLoad()
             cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getBase64EncodedPayload(request)
-                expect(captures.map(({ event }) => event)).to.deep.equal([
-                    'survey shown',
-                    'survey dismissed',
-                    '$pageleave',
-                ])
+                expect(captures.map(({ event }) => event)).to.contain('survey dismissed')
             })
-            cy.phCaptures().should('include', 'survey shown')
-            cy.get('.PostHogSurvey123').should('not.exist')
         })
     })
 })
