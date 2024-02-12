@@ -113,11 +113,7 @@ export const renderSurveysPreview = (
     previewQuestionIndex: number
 ) => {
     const surveyStyleSheet = style(survey.appearance)
-    // remove fixed position from the style and bottom 0
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
-    // remove fixed position from the style and bottom 0
-    // styleElement.innerText = styleElement.innerText.replace(/position: fixed;/g, '')
-    // styleElement.innerText = styleElement.innerText.replace(/bottom: 0;/g, '')
     root.appendChild(styleElement)
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
