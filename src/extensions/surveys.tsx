@@ -133,6 +133,7 @@ export const renderSurveysPreview = (
                 position: 'relative',
                 right: 0,
                 borderBottom: `1px solid ${survey.appearance?.borderColor}`,
+                borderRadius: 10,
                 color: textColor,
             }}
         />
