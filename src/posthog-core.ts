@@ -56,6 +56,7 @@ import { SurveyCallback } from './posthog-surveys-types'
 import {
     _isArray,
     _isEmptyObject,
+    _isEmptyString,
     _isFunction,
     _isNumber,
     _isObject,
@@ -379,6 +380,12 @@ export class PostHog {
             logger.critical('You must name your new library: init(token, config, name)')
             return
         }
+
+        if (_isUndefined(token) || _isEmptyString(token)) {
+            logger.critical('You must provide a token to initialize posthog')
+            return
+        }
+
         if (name === PRIMARY_INSTANCE_NAME) {
             logger.critical(
                 'You must initialize the main posthog object right after you include the PostHog js snippet'
