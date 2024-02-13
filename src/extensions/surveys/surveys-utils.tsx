@@ -1,7 +1,7 @@
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveyAppearance } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
-
+import { createContext } from 'preact'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -532,8 +532,9 @@ export const createShadow = (styleSheet: string, surveyId: string) => {
 export const sendSurveyEvent = (
     responses: Record<string, string | number | string[] | null> = {},
     survey: Survey,
-    posthog: PostHog
+    posthog?: PostHog
 ) => {
+    if (!posthog) return
     localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
     posthog.capture('survey sent', {
         $survey_name: survey.name,
@@ -547,3 +548,13 @@ export const sendSurveyEvent = (
     })
     window.dispatchEvent(new Event('PHSurveySent'))
 }
+
+export const SurveyContext = createContext<{
+    readOnly: boolean
+    previewQuestionIndex: number
+    textColor: string
+}>({
+    readOnly: false,
+    previewQuestionIndex: 0,
+    textColor: 'black',
+})

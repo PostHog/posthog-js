@@ -18,6 +18,7 @@ import {
     sendSurveyEvent,
     createShadow,
     getContrastingTextColor,
+    SurveyContext,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { render } from 'preact-render-to-string'
@@ -106,7 +107,6 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
 }
 
 export const renderSurveysPreview = (
-    posthog: PostHog,
     survey: Survey,
     root: HTMLElement,
     displayState: 'survey' | 'confirmation',
@@ -120,7 +120,6 @@ export const renderSurveysPreview = (
     )
     const surveyHtml = render(
         <Surveys
-            posthog={posthog}
             survey={survey}
             readOnly={true}
             initialDisplayState={displayState}
@@ -139,16 +138,6 @@ export const renderSurveysPreview = (
     root.appendChild(surveyDiv)
 }
 
-export const SurveyContext = Preact.createContext<{
-    readOnly: boolean
-    previewQuestionIndex: number
-    textColor: string
-}>({
-    readOnly: false,
-    previewQuestionIndex: 0,
-    textColor: 'black',
-})
-
 // This is the main exported function
 export function generateSurveys(posthog: PostHog) {
     // NOTE: Important to ensure we never try and run surveys without a window environment
@@ -164,15 +153,15 @@ export function generateSurveys(posthog: PostHog) {
 }
 
 export function Surveys({
-    posthog,
     survey,
+    posthog,
     readOnly,
     style,
     initialDisplayState,
     previewQuestionIndex,
 }: {
-    posthog: PostHog
     survey: Survey
+    posthog?: PostHog
     readOnly?: boolean
     style?: React.CSSProperties
     initialDisplayState?: 'survey' | 'confirmation' | 'closed'
@@ -183,7 +172,7 @@ export function Surveys({
     )
 
     useEffect(() => {
-        if (readOnly) {
+        if (readOnly || !posthog) {
             return
         }
 
@@ -301,7 +290,7 @@ export function Questions({
     styleOverrides,
 }: {
     survey: Survey
-    posthog: PostHog
+    posthog?: PostHog
     styleOverrides?: React.CSSProperties
 }) {
     const textColor = getContrastingTextColor(
@@ -339,7 +328,7 @@ export function Questions({
                                         idx,
                                         survey.appearance || defaultSurveyAppearance,
                                         (res) => onNextClick(res, idx),
-                                        () => closeSurveyPopup(posthog, survey, readOnly)
+                                        () => closeSurveyPopup(survey, posthog, readOnly)
                                     )}
                                 </div>
                             )}
@@ -351,16 +340,16 @@ export function Questions({
                     idx,
                     survey.appearance || defaultSurveyAppearance,
                     (res) => onNextClick(res, idx),
-                    () => closeSurveyPopup(posthog, survey, readOnly)
+                    () => closeSurveyPopup(survey, posthog, readOnly)
                 )
             })}
         </form>
     )
 }
 
-const closeSurveyPopup = (posthog: PostHog, survey: Survey, readOnly?: boolean) => {
+const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
     // TODO: state management and unit tests for this would be nice
-    if (readOnly) {
+    if (readOnly || !posthog) {
         return
     }
     posthog.capture('survey dismissed', {
