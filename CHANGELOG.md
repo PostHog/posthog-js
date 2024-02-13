@@ -1,3 +1,8 @@
+## 1.105.8 - 2024-02-13
+
+- feat: Simplify to just -api and -assets (#1018)
+- fix: for want of a v the war was lost (#1017)
+
 ## 1.105.7 - 2024-02-11
 
 - fix: allow custom events when idle (#1013)
