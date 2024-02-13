@@ -35,7 +35,7 @@ export class Decide {
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            this.instance.requestRouter.endpointFor('decide', '/decide/?v=3'),
+            this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             { data: encoded_data, verbose: true },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response as DecideResponse)
