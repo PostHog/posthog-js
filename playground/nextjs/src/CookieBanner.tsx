@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
 
+export function cookieConsentGiven() {
+    return localStorage.getItem('cookie_consent') === 'true'
+}
+
 export function CookieBanner() {
     const [show, setShow] = useState<null | boolean>(null)
 
     useEffect(() => {
-        setShow(localStorage.getItem('cookie_consent') !== 'true')
+        setShow(!cookieConsentGiven())
     }, [])
 
     // eslint-disable-next-line posthog-js/no-direct-null-check
