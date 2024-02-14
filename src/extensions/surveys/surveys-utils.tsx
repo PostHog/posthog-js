@@ -461,7 +461,7 @@ function hex2rgb(c: string) {
     return 'rgb(255, 255, 255)'
 }
 
-export function getContrastingTextColor(color: string) {
+export function getContrastingTextColor(color: string = 'white') {
     let rgb
     if (color[0] === '#') {
         rgb = hex2rgb(color)
