@@ -12,11 +12,18 @@ import {
 } from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
-import { style, defaultSurveyAppearance, sendSurveyEvent, createShadow } from './surveys/surveys-utils'
-import { useContrastingTextColor } from './surveys/hooks/useContrastingTextColor'
+import {
+    style,
+    defaultSurveyAppearance,
+    sendSurveyEvent,
+    createShadow,
+    getContrastingTextColor,
+    SurveyContext,
+} from './surveys/surveys-utils'
 import * as Preact from 'preact'
+import { render } from 'preact-render-to-string'
 import { createWidgetShadow } from './surveys-widget'
-import { useState, useEffect, useRef } from 'preact/hooks'
+import { useState, useEffect, useRef, useContext } from 'preact/hooks'
 import { _isNumber } from '../utils/type-utils'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import {
@@ -99,6 +106,38 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     }, forceReload)
 }
 
+export const renderSurveysPreview = (
+    survey: Survey,
+    root: HTMLElement,
+    displayState: 'survey' | 'confirmation',
+    previewQuestionIndex: number
+) => {
+    const surveyStyleSheet = style(survey.appearance)
+    const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
+    root.appendChild(styleElement)
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
+    )
+    const surveyHtml = render(
+        <Surveys
+            survey={survey}
+            readOnly={true}
+            initialDisplayState={displayState}
+            previewQuestionIndex={previewQuestionIndex}
+            style={{
+                position: 'relative',
+                right: 0,
+                borderBottom: `1px solid ${survey.appearance?.borderColor}`,
+                borderRadius: 10,
+                color: textColor,
+            }}
+        />
+    )
+    const surveyDiv = document.createElement('div')
+    surveyDiv.innerHTML = surveyHtml
+    root.appendChild(surveyDiv)
+}
+
 // This is the main exported function
 export function generateSurveys(posthog: PostHog) {
     // NOTE: Important to ensure we never try and run surveys without a window environment
@@ -113,10 +152,30 @@ export function generateSurveys(posthog: PostHog) {
     }, 3000)
 }
 
-export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: Survey; style?: React.CSSProperties }) {
-    const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>('survey')
+export function Surveys({
+    survey,
+    posthog,
+    readOnly,
+    style,
+    initialDisplayState,
+    previewQuestionIndex,
+}: {
+    survey: Survey
+    posthog?: PostHog
+    readOnly?: boolean
+    style?: React.CSSProperties
+    initialDisplayState?: 'survey' | 'confirmation' | 'closed'
+    previewQuestionIndex?: number
+}) {
+    const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>(
+        initialDisplayState || 'survey'
+    )
 
     useEffect(() => {
+        if (readOnly || !posthog) {
+            return
+        }
+
         window.dispatchEvent(new Event('PHSurveyShown'))
 
         posthog.capture('survey shown', {
@@ -146,16 +205,26 @@ export function Surveys({ posthog, survey, style }: { posthog: PostHog; survey: 
 
     return (
         <>
-            {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
-            {displayState === 'confirmation' && (
-                <ConfirmationMessage
-                    confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
-                    confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
-                    appearance={survey.appearance || {}}
-                    styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
-                    onClose={() => setDisplayState('closed')}
-                />
-            )}
+            <SurveyContext.Provider
+                value={{
+                    readOnly: !!readOnly,
+                    previewQuestionIndex: previewQuestionIndex ?? 0,
+                    textColor: getContrastingTextColor(
+                        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+                    ),
+                }}
+            >
+                {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
+                {displayState === 'confirmation' && (
+                    <ConfirmationMessage
+                        confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
+                        confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
+                        appearance={survey.appearance || defaultSurveyAppearance}
+                        styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
+                        onClose={() => setDisplayState('closed')}
+                    />
+                )}
+            </SurveyContext.Provider>
         </>
     )
 }
@@ -221,18 +290,20 @@ export function Questions({
     styleOverrides,
 }: {
     survey: Survey
-    posthog: PostHog
+    posthog?: PostHog
     styleOverrides?: React.CSSProperties
 }) {
-    const { textColor, ref } = useContrastingTextColor({ appearance: survey.appearance || defaultSurveyAppearance })
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+    )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const [currentQuestion, setCurrentQuestion] = useState(0)
+    const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
+    const [currentQuestion, setCurrentQuestion] = useState(readOnly ? previewQuestionIndex : 0)
 
     const onNextClick = (res: string | string[] | number | null, idx: number) => {
         const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
         if (idx === survey.questions.length - 1) {
-            sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
-            return
+            return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
             setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
             setCurrentQuestion(idx + 1)
@@ -245,7 +316,6 @@ export function Questions({
             // TODO: BEMify classes
             className="survey-form"
             style={{ color: textColor, borderColor: survey.appearance?.borderColor, ...styleOverrides }}
-            ref={ref as Preact.RefObject<HTMLFormElement>}
         >
             {survey.questions.map((question, idx) => {
                 if (isMultipleQuestion) {
@@ -258,7 +328,7 @@ export function Questions({
                                         idx,
                                         survey.appearance || defaultSurveyAppearance,
                                         (res) => onNextClick(res, idx),
-                                        () => closeSurveyPopup(posthog, survey)
+                                        () => closeSurveyPopup(survey, posthog, readOnly)
                                     )}
                                 </div>
                             )}
@@ -270,15 +340,18 @@ export function Questions({
                     idx,
                     survey.appearance || defaultSurveyAppearance,
                     (res) => onNextClick(res, idx),
-                    () => closeSurveyPopup(posthog, survey)
+                    () => closeSurveyPopup(survey, posthog, readOnly)
                 )
             })}
         </form>
     )
 }
 
-const closeSurveyPopup = (posthog: PostHog, survey: Survey) => {
+const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
     // TODO: state management and unit tests for this would be nice
+    if (readOnly || !posthog) {
+        return
+    }
     posthog.capture('survey dismissed', {
         $survey_name: survey.name,
         $survey_id: survey.id,

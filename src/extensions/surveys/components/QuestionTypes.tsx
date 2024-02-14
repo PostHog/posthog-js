@@ -185,7 +185,7 @@ export function RatingButton({
     appearance: any
     setActiveNumber: (num: number) => void
 }) {
-    const { textColor, ref } = useContrastingTextColor({ appearance, defaultTextColor: 'white', forceUpdate: active })
+    const { textColor, ref } = useContrastingTextColor({ appearance, defaultTextColor: 'black', forceUpdate: active })
     return (
         <button
             ref={ref as RefObject<HTMLButtonElement>}

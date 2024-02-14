@@ -1,7 +1,7 @@
 import 'regenerator-runtime/runtime'
-import { generateSurveys } from '../../extensions/surveys'
+import { generateSurveys, renderSurveysPreview } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
-import { SurveyType } from '../../posthog-surveys-types'
+import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
 
 describe('survey display logic', () => {
     beforeEach(() => {
@@ -54,5 +54,39 @@ describe('survey display logic', () => {
         jest.advanceTimersByTime(3000)
         expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(2)
         expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 3000)
+    })
+})
+
+describe('survey render preview', () => {
+    test('renderSurveysPreview', () => {
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Popover,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        expect(surveyDiv.innerHTML).toBe('')
+        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 'survey', 0)
+        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
     })
 })

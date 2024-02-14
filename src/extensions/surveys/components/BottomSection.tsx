@@ -1,10 +1,15 @@
-import { RefObject } from 'preact'
 import { window } from '../../../utils/globals'
 
 import { SurveyAppearance } from '../../../posthog-surveys-types'
 
-import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import { PostHogLogo } from './PostHogLogo'
+import { useContext } from 'preact/hooks'
+import {
+    SurveyContext,
+    defaultBackgroundColor,
+    defaultSurveyAppearance,
+    getContrastingTextColor,
+} from '../surveys-utils'
 
 export function BottomSection({
     text,
@@ -19,18 +24,18 @@ export function BottomSection({
     onSubmit: () => void
     link?: string | null
 }) {
-    const { textColor, ref } = useContrastingTextColor({ appearance })
-
+    const { readOnly } = useContext(SurveyContext)
+    const textColor = getContrastingTextColor(appearance.submitButtonColor || defaultSurveyAppearance.submitButtonColor)
     return (
         <div className="bottom-section">
             <div className="buttons">
                 <button
                     className="form-submit"
-                    ref={ref as RefObject<HTMLButtonElement>}
-                    disabled={submitDisabled}
+                    disabled={submitDisabled && !readOnly}
                     type="button"
                     style={{ color: textColor }}
                     onClick={() => {
+                        if (readOnly) return
                         if (link) {
                             window?.open(link)
                         }
@@ -40,7 +45,9 @@ export function BottomSection({
                     {text}
                 </button>
             </div>
-            {!appearance.whiteLabel && <PostHogLogo backgroundColor={appearance.backgroundColor || '#FF'} />}
+            {!appearance.whiteLabel && (
+                <PostHogLogo backgroundColor={appearance.backgroundColor || defaultBackgroundColor} />
+            )}
         </div>
     )
 }

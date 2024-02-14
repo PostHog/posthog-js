@@ -8,6 +8,7 @@ export interface SurveyAppearance {
     // keep in sync with frontend/src/types.ts -> SurveyAppearance
     backgroundColor?: string
     submitButtonColor?: string
+    // text color is deprecated, use auto contrast text color instead
     textColor?: string
     // deprecate submit button text eventually
     submitButtonText?: string
