@@ -2,9 +2,13 @@ import { _each, _isValidRegex } from './'
 
 import { _isArray, _isUndefined } from './type-utils'
 import { logger } from './logger'
-import { document } from './globals'
+import { document, fetch, XMLHttpRequest } from './globals'
 
 const localDomains = ['localhost', '127.0.0.1']
+
+export const SUPPORTS_XHR = !!(XMLHttpRequest && 'withCredentials' in new XMLHttpRequest())
+// eslint-disable-next-line compat/compat
+export const SUPPORTS_REQUEST = SUPPORTS_XHR || !!fetch
 
 /**
  * IE11 doesn't support `new URL`

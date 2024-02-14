@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-core'
+import { PostHog } from '../posthog-core'
 import { Survey, SurveyType } from '../posthog-surveys-types'
 import { SurveysWidget } from './surveys-widget'
 
@@ -163,7 +163,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                     if (survey.questions.length > 1) {
                         const currentQuestion = 0
-                        showQuestion(currentQuestion, survey.id)
+                        showQuestion(currentQuestion, survey.id, survey.type)
                     }
                     setTextColors(shadow)
                     window.dispatchEvent(new Event('PHSurveyShown'))

@@ -15,8 +15,6 @@ const rules = {
 const extend = [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:react/recommended',
-    'plugin:react-hooks/recommended',
     'prettier',
     'plugin:compat/recommended',
     'plugin:posthog-js/all',
@@ -71,6 +69,10 @@ module.exports = {
                 'no-console': 'off',
                 'no-restricted-globals': 'off',
             },
+        },
+        {
+            files: 'react/src/**/',
+            extends: [...extend, 'plugin:react/recommended', 'plugin:react-hooks/recommended'],
         },
         {
             files: 'eslint-rules/**/*',

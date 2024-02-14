@@ -1,3 +1,133 @@
+## 1.105.8 - 2024-02-13
+
+- feat: Simplify to just -api and -assets (#1018)
+- fix: for want of a v the war was lost (#1017)
+
+## 1.105.7 - 2024-02-11
+
+- fix: allow custom events when idle (#1013)
+- chore: no need to account for performance raw (#1012)
+- chore: add test case for ahrefs bot (#1011)
+- chore: really really write changelog to release (#1008)
+
+## 1.105.6 - 2024-02-08
+
+- feat: save posthog config at start of session recording (#1005)
+- chore: test stopping and starting (#1009)
+
+## 1.105.5 - 2024-02-08
+
+- feat: account for persistence for canvas recording (#1006)
+- chore: improve template to account for backwards compatibility (#1007)
+
+## 1.105.4 - 2024-02-07
+
+- feat: Add dynamic routing of ingestion endpoints (#986)
+- Update CHANGELOG.md (#1004)
+
+## 1.105.3 - 2024-02-07
+
+identical to 1.105.1 - bug in CI scripts
+
+## 1.105.2 - 2024-02-07
+
+identical to 1.105.1 - bug in CI scripts
+
+## 1.105.1 - 2024-02-07
+
+- fix: autocapture allowlist should consider the tree (#1000)
+- chore: move posthog test instance helper (#999)
+- chore: nit pick log message (#997)
+- chore: copy most recent changelog entry when creating a release (#995)
+
+## 1.105.0 - 2024-02-06
+
+- fix: Add warning and conversion for number distinct_id (#993)
+- fix: Remove `baseUrl` from TypeScript compiler options (#996)
+
+## 1.104.4 - 2024-02-02
+
+- fix: very defensive body redaction (#988)
+- fix: less eager timeout (#989)
+
+## 1.104.3 - 2024-02-01
+
+- feat: Fetch without window (#985)
+
+## 1.104.2 - 2024-01-31
+
+- fix: no throwing when reading the body (#984)
+
+## 1.104.1 - 2024-01-31
+
+- chore: make rate limiter error less scary (#983)
+
+## 1.104.0 - 2024-01-31
+
+- feat: Fetch support (#898)
+- chore: Swap to main (#979)
+
+## 1.103.2 - 2024-01-31
+
+- fix: safer body processing (#980)
+
+## 1.103.1 - 2024-01-28
+
+- feat: safer rrweb events and regular full snapshots (#973)
+- chore: update rollup (#974)
+- chore: re-enable bundle checker now main and branches both use pnpm (#972)
+
+## 1.103.0 - 2024-01-26
+
+- feat: pnpm patch rrweb (#971)
+- chore: convert to pnpm (#970)
+
+## 1.102.1 - 2024-01-25
+
+- chore: add debug logging for session id/recording (#969)
+
+## 1.102.0 - 2024-01-24
+
+- feat: send custom event when network status changes (#965)
+- fix: integration test opting out (#959)
+
+## 1.101.0 - 2024-01-22
+
+- feat: canvas recording support (#946)
+- refactor(surveys): Use Preact instead of vanilla JS (#963)
+
+## 1.100.0 - 2024-01-15
+
+- Enable scroll stats by default (#962)
+
+## 1.99.0 - 2024-01-15
+
+- feat: Support custom scroll selector (#961)
+
+## 1.98.2 - 2024-01-11
+
+- fix: Don't allow us.posthog.com to be used (#957)
+
+## 1.98.1 - 2024-01-11
+
+- fix: set the session id as soon as it changes (#956)
+- fix: simplify test setup (#955)
+
+## 1.98.0 - 2024-01-10
+
+- feat: capture session options in a custom event (#954)
+
+## 1.97.1 - 2024-01-09
+
+- fix(surveys): fix feedback widget bugs (#953)
+
+## 1.97.0 - 2024-01-09
+
+- fix: add a comment explaining browser type prop (#952)
+- feat: add opt_out_useragent_filter and $browser_type (#949)
+- chore(surveys): add basic survey e2e tests (#948)
+- Tidying and removing of old value (#941)
+
 ## 1.96.1 - 2023-12-15
 
 - Add gas_source to campaign params (#934)

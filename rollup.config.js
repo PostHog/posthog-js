@@ -2,18 +2,17 @@ import babel from '@rollup/plugin-babel'
 import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
-import dts from 'rollup-plugin-dts'
+import { dts } from 'rollup-plugin-dts'
 import pkg from './package.json'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 
-const extensions = ['.js', '.jsx', '.ts', '.tsx']
 const plugins = [
     json(),
-    resolve({ browser: true, modulesOnly: true }),
+    resolve({ browser: true }),
     typescript({ sourceMap: true }),
     babel({
-        extensions,
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
     }),
@@ -21,6 +20,7 @@ const plugins = [
     visualizer(),
 ]
 
+/** @type {import('rollup').RollupOptions[]} */
 export default [
     {
         input: 'src/loader-recorder.ts',
@@ -54,6 +54,9 @@ export default [
                 sourcemap: true,
                 format: 'iife',
                 name: 'posthog',
+                globals: {
+                    preact: 'preact',
+                },
             },
         ],
         plugins: [...plugins],

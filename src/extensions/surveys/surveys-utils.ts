@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-core'
+import { PostHog } from '../../posthog-core'
 import {
     BasicSurveyQuestion,
     LinkSurveyQuestion,
@@ -7,6 +7,7 @@ import {
     Survey,
     SurveyAppearance,
     SurveyQuestion,
+    SurveyType,
 } from '../../posthog-surveys-types'
 import { _isUndefined } from '../../utils/type-utils'
 import { window as _window, document as _document } from '../../utils/globals'
@@ -67,7 +68,7 @@ export const style = (id: string, appearance: SurveyAppearance | null) => {
               padding-top: 10px;
               border-radius: 6px;
               border-color: ${appearance?.borderColor || '#c9c6c6'};
-              margin-top: 14px; 
+              margin-top: 14px;
           }
           .form-submit {
               box-sizing: border-box;
@@ -406,7 +407,7 @@ export const createMultipleQuestionSurvey = (posthog: PostHog, survey: Survey) =
             questionElementSubmitButton.innerText = question.buttonText || 'Next'
             questionElementSubmitButton.type = 'button'
             questionElementSubmitButton.addEventListener('click', () => {
-                nextQuestion(idx, survey.id)
+                nextQuestion(idx, survey.id, survey.type)
             })
         }
         questionTab.insertAdjacentElement('beforeend', questionElement)
@@ -782,22 +783,24 @@ export function setTextColors(parentEl: any) {
     }
 }
 
-export function showQuestion(n: number, surveyId: string) {
+export function showQuestion(n: number, surveyId: string, surveyType: SurveyType) {
     // This function will display the specified tab of the form...
+    const surveyTypeClassName = surveyType === SurveyType.Popover ? 'Survey' : 'Widget'
     const tabs = document
-        .getElementsByClassName(`PostHogSurvey${surveyId}`)[0]
+        .getElementsByClassName(`PostHog${surveyTypeClassName}${surveyId}`)[0]
         ?.shadowRoot?.querySelectorAll('.tab') as NodeListOf<HTMLElement>
     tabs[n].style.display = 'block'
 }
 
-export function nextQuestion(currentQuestionIdx: number, surveyId: string) {
+export function nextQuestion(currentQuestionIdx: number, surveyId: string, surveyType: SurveyType) {
     // figure out which tab to display
+    const surveyTypeClassName = surveyType === SurveyType.Popover ? 'Survey' : 'Widget'
     const tabs = document
-        ?.getElementsByClassName(`PostHogSurvey${surveyId}`)[0]
+        ?.getElementsByClassName(`PostHog${surveyTypeClassName}${surveyId}`)[0]
         ?.shadowRoot?.querySelectorAll('.tab') as NodeListOf<HTMLElement>
 
     tabs[currentQuestionIdx].style.display = 'none'
-    showQuestion(currentQuestionIdx + 1, surveyId)
+    showQuestion(currentQuestionIdx + 1, surveyId, surveyType)
 }
 
 export const satisfiedEmoji =

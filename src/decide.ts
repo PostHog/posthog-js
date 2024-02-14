@@ -35,7 +35,7 @@ export class Decide {
 
         const encoded_data = _base64Encode(json_data)
         this.instance._send_request(
-            `${this.instance.config.api_host}/decide/?v=3`,
+            this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             { data: encoded_data, verbose: true },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response as DecideResponse)
@@ -76,7 +76,7 @@ export class Decide {
         const surveysGenerator = window?.extendPostHogWithSurveys
 
         if (response['surveys'] && !surveysGenerator) {
-            loadScript(this.instance.config.api_host + `/static/surveys.js`, (err) => {
+            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)
                 }
@@ -95,7 +95,7 @@ export class Decide {
             !!response['autocaptureExceptions'] &&
             _isUndefined(exceptionAutoCaptureAddedToWindow)
         ) {
-            loadScript(this.instance.config.api_host + `/static/exception-autocapture.js`, (err) => {
+            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/exception-autocapture.js'), (err) => {
                 if (err) {
                     return logger.error(`Could not load exception autocapture script`, err)
                 }
@@ -108,12 +108,8 @@ export class Decide {
 
         if (response['siteApps']) {
             if (this.instance.config.opt_in_site_apps) {
-                const apiHost = this.instance.config.api_host
                 for (const { id, url } of response['siteApps']) {
-                    const scriptUrl = [
-                        apiHost,
-                        apiHost[apiHost.length - 1] === '/' && url[0] === '/' ? url.substring(1) : url,
-                    ].join('')
+                    const scriptUrl = this.instance.requestRouter.endpointFor('assets', url)
 
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
 

@@ -1,35 +1,55 @@
 /// <reference types="cypress" />
 
 import { _isNull } from '../../src/utils/type-utils'
+import { start } from '../support/setup'
 
-function onPageLoad() {
-    cy.posthogInit(given.options)
-    cy.wait('@decide')
-    cy.wait('@recorder')
+function ensureRecordingIsStopped() {
+    cy.get('[data-cy-input]')
+        .type('hello posthog!')
+        .wait(250)
+        .then(() => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                // should be no captured data
+                expect(captures.map((c) => c.event)).to.deep.equal([])
+            })
+        })
+}
+
+function ensureActivitySendsSnapshots() {
+    cy.get('[data-cy-input]')
+        .type('hello posthog!')
+        .wait('@session-recording')
+        .then(() => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+                expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(14).and.below(39)
+                // a meta and then a full snapshot
+                expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+                expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                expect(captures[0]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                expect(captures[0]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+                // Making a set from the rest should all be 3 - incremental snapshots
+                expect(new Set(captures[0]['properties']['$snapshot_data'].slice(4).map((s) => s.type))).to.deep.equal(
+                    new Set([3])
+                )
+            })
+        })
 }
 
 describe('Session recording', () => {
-    given('options', () => ({}))
-
     describe('array.full.js', () => {
-        beforeEach(() => {
-            cy.intercept('POST', '**/decide/*', {
-                config: { enable_collect_everything: false },
-                editorParams: {},
-                featureFlags: ['session-recording-player'],
-                isAuthenticated: false,
-                sessionRecording: {
-                    endpoint: '/ses/',
-                },
-                capture_performance: true,
-            }).as('decide')
-
-            cy.visit('./playground/cypress-full')
-            cy.posthogInit(given.options)
-            cy.wait('@decide')
-        })
-
         it('captures session events', () => {
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                    },
+                    capturePerformance: true,
+                },
+            })
+
             cy.get('[data-cy-input]').type('hello world! ')
             cy.wait(500)
             cy.get('[data-cy-input]')
@@ -40,12 +60,14 @@ describe('Session recording', () => {
                         // should be a pageview and a $snapshot
                         expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
 
-                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(38)
+                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(39)
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                        expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
                         // Making a set from the rest should all be 3 - incremental snapshots
-                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(2)
+                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(4)
                         expect(new Set(incrementalSnapshots.map((s) => s.type))).to.deep.equal(new Set([3]))
                     })
                 })
@@ -54,46 +76,58 @@ describe('Session recording', () => {
 
     describe('array.js', () => {
         beforeEach(() => {
-            cy.intercept('POST', '**/decide/*', {
-                config: { enable_collect_everything: false },
-                editorParams: {},
-                featureFlags: ['session-recording-player'],
-                isAuthenticated: false,
-                sessionRecording: {
-                    endpoint: '/ses/',
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                    },
+                    capturePerformance: true,
                 },
-                supportedCompression: ['gzip', 'lz64'],
-                capture_performance: true,
-            }).as('decide')
-
-            cy.visit('./playground/cypress')
-            onPageLoad()
+                url: './playground/cypress',
+            })
+            cy.wait('@recorder')
         })
 
         it('captures session events', () => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                // should be a pageview at the beginning
+                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
+            })
+            cy.resetPhCaptures()
+
+            let startingSessionId: string | null = null
+            cy.posthog().then((ph) => {
+                startingSessionId = ph.get_session_id()
+            })
+
             cy.get('[data-cy-input]').type('hello world! ')
             cy.wait(500)
-            cy.get('[data-cy-input]')
-                .type('hello posthog!')
-                .wait('@session-recording')
-                .then(() => {
-                    cy.phCaptures({ full: true }).then((captures) => {
-                        // should be a pageview and a $snapshot
-                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
-                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(38)
-                        // a meta and then a full snapshot
-                        expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
-                        expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                        // Making a set from the rest should all be 3 - incremental snapshots
-                        expect(
-                            new Set(captures[1]['properties']['$snapshot_data'].slice(2).map((s) => s.type))
-                        ).to.deep.equal(new Set([3]))
-                    })
-                })
+            ensureActivitySendsSnapshots()
+            cy.posthog().then((ph) => {
+                ph.stopSessionRecording()
+            })
+            cy.resetPhCaptures()
+            ensureRecordingIsStopped()
+
+            // restarting recording
+            cy.posthog().then((ph) => {
+                ph.startSessionRecording()
+            })
+            ensureActivitySendsSnapshots()
+
+            // the session id is not rotated by stopping and starting the recording
+            cy.posthog().then((ph) => {
+                const secondSessionId = ph.get_session_id()
+                expect(startingSessionId).not.to.be.null
+                expect(secondSessionId).not.to.be.null
+                expect(secondSessionId).to.equal(startingSessionId)
+            })
         })
 
         it('captures snapshots when the mouse moves', () => {
-            let sessionId = null
+            let sessionId: string | null = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
@@ -156,7 +190,7 @@ describe('Session recording', () => {
         })
 
         it('continues capturing to the same session when the page reloads', () => {
-            let sessionId = null
+            let sessionId: string | null = null
 
             // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
@@ -176,7 +210,9 @@ describe('Session recording', () => {
             cy.resetPhCaptures()
             // and refresh the page
             cy.reload()
-            onPageLoad()
+            cy.posthogInit({})
+            cy.wait('@decide')
+            cy.wait('@recorder')
 
             cy.get('body')
                 .trigger('mousemove', { clientX: 200, clientY: 300 })
@@ -205,9 +241,10 @@ describe('Session recording', () => {
                     // a meta and then a full snapshot
                     expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                     expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-
+                    expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                    expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
                     const xPositions = []
-                    for (let i = 2; i < captures[1]['properties']['$snapshot_data'].length; i++) {
+                    for (let i = 4; i < captures[1]['properties']['$snapshot_data'].length; i++) {
                         expect(captures[1]['properties']['$snapshot_data'][i].type).to.equal(3)
                         expect(captures[1]['properties']['$snapshot_data'][i].data.source).to.equal(
                             6,
@@ -228,7 +265,7 @@ describe('Session recording', () => {
         })
 
         it('rotates sessions after 24 hours', () => {
-            let firstSessionId = null
+            let firstSessionId: string | null = null
 
             // first we start a session and give it some activity
             cy.get('[data-cy-input]').type('hello world! ')

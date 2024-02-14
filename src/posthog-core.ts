@@ -9,7 +9,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { window } from './utils/globals'
+import { window, assignableWindow } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -21,9 +21,10 @@ import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } f
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { compressData, decideCompression } from './compression'
-import { addParamsToURL, encodePostData, xhr } from './send-request'
+import { addParamsToURL, encodePostData, request } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
+import { RequestRouter } from './utils/request-router'
 import {
     AutocaptureConfig,
     CaptureOptions,
@@ -52,12 +53,21 @@ import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
-import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
+import {
+    _isArray,
+    _isEmptyObject,
+    _isFunction,
+    _isNumber,
+    _isObject,
+    _isString,
+    _isUndefined,
+} from './utils/type-utils'
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
+import { SUPPORTS_REQUEST } from './utils/request-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -82,12 +92,11 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
  */
 // http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
 // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-const USE_XHR = window?.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
 
 // IE<10 does not support cross-origin XHR's but script tags
 // with defer won't block window.onload; ENQUEUE_REQUESTS
 // should only be true for Opera<12
-let ENQUEUE_REQUESTS = !USE_XHR && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
+let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
@@ -120,13 +129,14 @@ export const defaultConfig = (): PostHogConfig => ({
     ip: true,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
+    opt_out_useragent_filter: false,
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
     property_blacklist: [],
     respect_dnt: false,
     sanitize_properties: null,
-    xhr_headers: {}, // { header: value, header2: value }
+    request_headers: {}, // { header: value, header2: value }
     inapp_protocol: '//',
     inapp_link_new_window: false,
     request_batching: true,
@@ -138,8 +148,8 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
-    on_xhr_error: (req) => {
-        const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
+    on_request_error: (req) => {
+        const error = 'Bad HTTP status: ' + req.statusCode + ' ' + req.responseText
         logger.error(error)
     },
     get_device_id: (uuid) => uuid,
@@ -186,6 +196,7 @@ export class PostHog {
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
+    requestRouter: RequestRouter
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -228,9 +239,10 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
-        this.pageViewManager = new PageViewManager()
+        this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
+        this.requestRouter = new RequestRouter(this)
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -310,6 +322,8 @@ export class PostHog {
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
 
+        config.request_headers = config.request_headers || config.xhr_headers
+
         this.set_config(
             _extend({}, defaultConfig(), config, {
                 name: name,
@@ -332,7 +346,7 @@ export class PostHog {
         this.persistence = new PostHogPersistence(this.config)
 
         this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
-        this._retryQueue = new RetryQueue(this.config.on_xhr_error, this.rateLimiter)
+        this._retryQueue = new RetryQueue(this.config.on_request_error, this.rateLimiter)
         this.__captureHooks = []
         this.__request_queue = []
 
@@ -474,6 +488,10 @@ export class PostHog {
         if (response.elementsChainAsString) {
             this.elementsChainAsString = response.elementsChainAsString
         }
+
+        if (response.__preview_ingestion_endpoints) {
+            this.config.__preview_ingestion_endpoints = response.__preview_ingestion_endpoints
+        }
     }
 
     _loaded(): void {
@@ -546,23 +564,23 @@ export class PostHog {
             return null
         }
 
-        if (USE_XHR) {
+        if (SUPPORTS_REQUEST) {
             return function (response) {
                 callback(response, data)
             }
-        } else {
-            // if the user gives us a callback, we store as a random
-            // property on this instances jsc function and update our
-            // callback string to reflect that.
-            const jsc = this._jsc
-            const randomized_cb = '' + Math.floor(Math.random() * 100000000)
-            const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
-            jsc[randomized_cb] = function (response: any) {
-                delete jsc[randomized_cb]
-                callback(response, data)
-            }
-            return callback_string
         }
+
+        // if the user gives us a callback, we store as a random
+        // property on this instances jsc function and update our
+        // callback string to reflect that.
+        const jsc = this._jsc
+        const randomized_cb = '' + Math.floor(Math.random() * 100000000)
+        const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
+        jsc[randomized_cb] = function (response: any) {
+            delete jsc[randomized_cb]
+            callback(response, data)
+        }
+        return callback_string
     }
 
     _handle_unload(): void {
@@ -616,7 +634,7 @@ export class PostHog {
         }
 
         options = _extend(DEFAULT_OPTIONS, options || {})
-        if (!USE_XHR) {
+        if (!SUPPORTS_REQUEST) {
             options.method = 'GET'
         }
 
@@ -634,17 +652,17 @@ export class PostHog {
                 // send beacon is a best-effort, fire-and-forget mechanism on page unload,
                 // we don't want to throw errors here
             }
-        } else if (USE_XHR || !document) {
+        } else if (SUPPORTS_REQUEST || !document) {
             try {
-                xhr({
-                    url: url,
-                    data: data,
-                    headers: this.config.xhr_headers,
-                    options: options,
+                request({
+                    url,
+                    data,
+                    headers: this.config.request_headers,
+                    options,
                     callback,
                     retriesPerformedSoFar: 0,
                     retryQueue: this._retryQueue,
-                    onXHRError: this.config.on_xhr_error,
+                    onError: this.config.on_request_error,
                     onResponse: this.rateLimiter.checkForLimiting,
                 })
             } catch (e) {
@@ -788,7 +806,11 @@ export class PostHog {
             return
         }
 
-        if (userAgent && _isBlockedUA(userAgent, this.config.custom_blocked_useragents)) {
+        if (
+            userAgent &&
+            !this.config.opt_out_useragent_filter &&
+            _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+        ) {
             return
         }
 
@@ -826,7 +848,7 @@ export class PostHog {
         logger.info('send', data)
         const jsonData = JSON.stringify(data)
 
-        const url = this.config.api_host + (options.endpoint || this.analyticsDefaultEndpoint)
+        const url = options._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 
@@ -883,7 +905,7 @@ export class PostHog {
             properties = _extend(properties, sessionProps)
         }
 
-        if (this.config.__preview_measure_pageview_stats) {
+        if (!this.config.disable_scroll_properties) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
                 performanceProperties = this.pageViewManager.doPageView()
@@ -909,6 +931,14 @@ export class PostHog {
         if (!_isUndefined(start_timestamp)) {
             const duration_in_ms = new Date().getTime() - start_timestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
+        }
+
+        // this is only added when this.config.opt_out_useragent_filter is true,
+        // or it would always add "browser"
+        if (userAgent && this.config.opt_out_useragent_filter) {
+            properties['$browser_type'] = _isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+                ? 'bot'
+                : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -1199,6 +1229,13 @@ export class PostHog {
         if (!this.__loaded || !this.persistence) {
             return logger.uninitializedWarning('posthog.identify')
         }
+        if (_isNumber(new_distinct_id)) {
+            new_distinct_id = (new_distinct_id as number).toString()
+            logger.warn(
+                'The first argument to posthog.identify was a number, but it should be a string. It has been converted to a string.'
+            )
+        }
+
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
             logger.error('Unique user id has not been set in posthog.identify')
@@ -1436,9 +1473,8 @@ export class PostHog {
         if (!this.sessionManager) {
             return ''
         }
-        const host = this.config.ui_host || this.config.api_host
         const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        let url = host + '/replay/' + sessionId
+        let url = this.requestRouter.endpointFor('ui', '/replay/' + sessionId)
         if (options?.withTimestamp && sessionStartTimestamp) {
             const LOOK_BACK = options.timestampLookBack ?? 10
             if (!sessionStartTimestamp) {
@@ -1553,6 +1589,9 @@ export class PostHog {
      *       // opt users out of browser data storage by this PostHog instance by default
      *       opt_out_persistence_by_default: false
      *
+     *       // opt out of user agent filtering such as googlebot or other bots
+     *       opt_out_useragent_filter: false
+     *
      *       // persistence mechanism used by opt-in/opt-out methods - cookie
      *       // or localStorage - falls back to cookie if localStorage is unavailable
      *       opt_out_capturing_persistence_type: 'localStorage'
@@ -1592,7 +1631,7 @@ export class PostHog {
      *
      *       // extra HTTP request headers to set for each API request, in
      *       // the format {'Header-Name': value}
-     *       xhr_headers: {}
+     *       response_headers: {}
      *
      *       // protocol for fetching in-app message resources, e.g.
      *       // 'https://' or 'http://'; defaults to '//' (which defers to the
@@ -1642,8 +1681,6 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
-            // We assume the api_host is without a trailing slash in most places throughout the codebase
-            this.config.api_host = this.config.api_host.replace(/\/$/, '')
             this.persistence?.update_config(this.config)
             this.sessionPersistence?.update_config(this.config)
 
@@ -1655,7 +1692,13 @@ export class PostHog {
             }
 
             if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
-                if (oldConfig.disable_session_recording !== config.disable_session_recording) {
+                const disable_session_recording_has_changed =
+                    oldConfig.disable_session_recording !== config.disable_session_recording
+                // if opting back in, this config might not have changed
+                const try_enable_after_opt_in =
+                    !userOptedOut(this) && !config.disable_session_recording && !this.sessionRecording.started
+
+                if (disable_session_recording_has_changed || try_enable_after_opt_in) {
                     if (config.disable_session_recording) {
                         this.sessionRecording.stopRecording()
                     } else {
@@ -2041,9 +2084,9 @@ const add_dom_loaded_handler = function () {
 }
 
 export function init_from_snippet(): void {
-    const posthogMaster = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
+    const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
-    const snippetPostHog = (window as any)['posthog']
+    const snippetPostHog = assignableWindow['posthog']
 
     if (snippetPostHog) {
         /**
@@ -2080,7 +2123,7 @@ export function init_from_snippet(): void {
 
         _each(snippetPostHog['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
             if (item && _isArray(item)) {
-                const instance = posthogMaster.init(item[0], item[1], item[2])
+                const instance = posthogMain.init(item[0], item[1], item[2])
 
                 const instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
 
@@ -2094,15 +2137,15 @@ export function init_from_snippet(): void {
         })
     }
 
-    ;(window as any)['posthog'] = posthogMaster
+    assignableWindow['posthog'] = posthogMain
 
     add_dom_loaded_handler()
 }
 
 export function init_as_module(): PostHog {
-    const posthogMaster = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
+    const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     add_dom_loaded_handler()
 
-    return posthogMaster
+    return posthogMain
 }

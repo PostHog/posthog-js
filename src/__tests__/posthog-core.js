@@ -6,6 +6,7 @@ import { autocapture } from '../autocapture'
 import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
+import * as globals from '../utils/globals'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
@@ -41,6 +42,10 @@ describe('posthog core', () => {
 
         given('overrides', () => ({
             __loaded: true,
+            config: {
+                api_host: 'https://app.posthog.com',
+                ...given.config,
+            },
             persistence: {
                 remove_event_timer: jest.fn(),
                 properties: jest.fn(),
@@ -127,6 +132,44 @@ describe('posthog core', () => {
             expect(() => given.subject()).not.toThrow()
             expect(hook).not.toHaveBeenCalled()
             expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'No event name provided to posthog.capture')
+        })
+
+        it('respects opt_out_useragent_filter (default: false)', () => {
+            const originalUseragent = globals.userAgent
+            // eslint-disable-next-line no-import-assign
+            globals['userAgent'] =
+                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
+
+            const hook = jest.fn()
+            given.lib._addCaptureHook(hook)
+            given.subject()
+            expect(hook).not.toHaveBeenCalledWith('$event')
+
+            // eslint-disable-next-line no-import-assign
+            globals['userAgent'] = originalUseragent
+        })
+
+        it('respects opt_out_useragent_filter', () => {
+            const originalUseragent = globals.userAgent
+
+            given('config', () => ({
+                opt_out_useragent_filter: true,
+                property_blacklist: [],
+                _onCapture: jest.fn(),
+            }))
+
+            // eslint-disable-next-line no-import-assign
+            globals['userAgent'] =
+                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
+
+            const hook = jest.fn()
+            given.lib._addCaptureHook(hook)
+            const event = given.subject()
+            expect(hook).toHaveBeenCalledWith('$event')
+            expect(event.properties['$browser_type']).toEqual('bot')
+
+            // eslint-disable-next-line no-import-assign
+            globals['userAgent'] = originalUseragent
         })
 
         it('truncates long properties', () => {
@@ -217,7 +260,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to overriden endpoint if given', () => {
-            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
+            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://app.posthog.com/s/',
                 expect.any(Object),
@@ -226,9 +269,9 @@ describe('posthog core', () => {
             )
         })
 
-        it('sends payloads to overriden endpoint, even if alternative endpoint is set', () => {
+        it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
-            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
+            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://app.posthog.com/s/',
                 expect.any(Object),
@@ -691,14 +734,6 @@ describe('posthog core', () => {
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
         })
 
-        it('sanitizes api_host urls', () => {
-            given('config', () => ({
-                api_host: 'https://example.com/custom/',
-            }))
-
-            expect(given.lib.config.api_host).toBe('https://example.com/custom')
-        })
-
         it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
             delete window.rrweb
             window.rrweb = { record: undefined }
@@ -906,7 +941,10 @@ describe('posthog core', () => {
         describe('subsequent capture calls', () => {
             given('overrides', () => ({
                 __loaded: true,
-                config: given.config,
+                config: {
+                    api_host: 'https://app.posthog.com',
+                    ...given.config,
+                },
                 persistence: new PostHogPersistence(given.config),
                 sessionPersistence: new PostHogPersistence(given.config),
                 _requestQueue: {

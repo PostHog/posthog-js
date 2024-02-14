@@ -15,6 +15,8 @@ if (typeof window !== 'undefined') {
         },
         debug: true,
         __preview_send_client_session_params: true,
+        __preview_measure_pageview_stats: true,
+        scroll_root_selector: ['#scroll_element', 'html'],
     })
     ;(window as any).posthog = posthog
 }

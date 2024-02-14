@@ -4,7 +4,6 @@ on:
     push:
         branches:
             - main
-            - master
 
 jobs:
     check-package-version:
@@ -32,19 +31,35 @@ jobs:
             PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
         steps:
             - name: Checkout the repository
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
               with:
                   fetch-depth: 0
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
+            - uses: pnpm/action-setup@v2
+              with:
+                version: 8.x.x
+
             - name: Set up Node 18
-              uses: actions/setup-node@v3
+              uses: actions/setup-node@v4
               with:
                   node-version: 18
                   registry-url: https://registry.npmjs.org
 
-            - name: Install dependencies
-              run: yarn --frozen-lockfile
+            - name: Get pnpm cache directory path
+              id: pnpm-cache-dir
+              run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+            - uses: actions/cache@v3
+              id: pnpm-cache
+              with:
+                  path: |
+                      ${{ steps.pnpm-cache-dir.outputs.PNPM_STORE_PATH }}
+                  key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pnpm-
+            - name: Install package.json dependencies with pnpm
+              run: pnpm install --frozen-lockfile
 
             - name: Publish the package in the npm registry
               run: npm publish --access public
@@ -54,12 +69,30 @@ jobs:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
             - name: Create GitHub release
-              uses: actions/create-release@v1
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  tag_name: v${{ env.COMMITTED_VERSION }}
-                  release_name: ${{ env.COMMITTED_VERSION }}
+                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                # read from the first until the second header in the changelog file
+                # this assumes the formatting of the file
+                # and that this workflow is always running for the most recent entry in the file 
+                LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
+                # the action we used to use was archived, and made it really difficult to create a release with a body
+                # because the LAST_CHANGELOG_ENTRY contains bash special characters so passing it between steps
+                # was a pain.
+                # we can use the github cli to create a release with a body
+                # all as part of one step
+                gh api \
+                  --method POST \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  /repos/posthog/posthog-js/releases \
+                  -f tag_name="v${{ env.COMMITTED_VERSION }}" \
+                -f target_commitish='main' \
+                -f name="${{ env.COMMITTED_VERSION }}" \
+                -f body="$LAST_CHANGELOG_ENTRY" \
+                -F draft=false \
+                -F prerelease=false \
+                -F generate_release_notes=false 
 
     create-pull-request:
         name: Create main repo PR with new posthog-js version
