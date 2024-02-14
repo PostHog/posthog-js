@@ -15,10 +15,48 @@ if (typeof window !== 'undefined') {
         },
         debug: true,
         __preview_send_client_session_params: true,
-        __preview_measure_pageview_stats: true,
         scroll_root_selector: ['#scroll_element', 'html'],
     })
     ;(window as any).posthog = posthog
+}
+
+function CookieBanner() {
+    const [show, setShow] = React.useState(false)
+
+    useEffect(() => {
+        if (localStorage.getItem('cookie_consent') !== 'true') {
+            setShow(true)
+        }
+    }, [])
+
+    return (
+        <div className="absolute left-2 bottom-2 border rounded p-2">
+            {show ? (
+                <>
+                    <p>I am a cookie banner - hear me roar.</p>
+                    <button
+                        onClick={() => {
+                            localStorage.setItem('cookie_consent', 'true')
+                            setShow(false)
+                        }}
+                    >
+                        Approved!
+                    </button>
+                </>
+            ) : (
+                <>
+                    <button
+                        onClick={() => {
+                            localStorage.removeItem('cookie_consent')
+                            setShow(true)
+                        }}
+                    >
+                        No cookies!
+                    </button>
+                </>
+            )}
+        </div>
+    )
 }
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -37,6 +75,8 @@ export default function App({ Component, pageProps }: AppProps) {
     return (
         <PostHogProvider client={posthog}>
             <Component {...pageProps} />
+
+            <CookieBanner />
         </PostHogProvider>
     )
 }

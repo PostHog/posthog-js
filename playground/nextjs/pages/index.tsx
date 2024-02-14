@@ -32,10 +32,10 @@ export default function Home() {
 
                 <p>The current time is {time}</p>
 
-                <div className="buttons">
+                <div className="flex items-center gap-2 flex-wrap">
                     <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
                     <button data-attr="autocapture-button">Autocapture buttons</button>
-                    <a data-attr="autocapture-button" href="#">
+                    <a className="Button" data-attr="autocapture-button" href="#">
                         <span>Autocapture a &gt; span</span>
                     </a>
 
@@ -54,7 +54,7 @@ export default function Home() {
                     </button>
                 </div>
 
-                <div className="buttons">
+                <div className="flex items-center gap-2">
                     <Link href="/animations">Animations</Link>
                     <Link href="/iframe">Iframe</Link>
                     <Link href="/canvas">Canvas</Link>

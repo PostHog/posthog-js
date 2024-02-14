@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 main {
     margin: 0 auto;
     max-width: 1200px;
@@ -9,7 +13,33 @@ html, body {
     margin: 0
 }
 
-.buttons {
-    display: flex;
-    gap: 0.5rem;
+h1 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
 }
+
+
+a {
+    color: rgb(9, 105, 218);
+    text-decoration: none;
+    font-weight: 600;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+button, .Button {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    background-color: rgba(0,0,0,.1);
+
+    &:hover {
+        background-color: rgba(0,0,0,.2);
+    }
+}
+

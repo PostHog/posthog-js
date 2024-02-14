@@ -27,6 +27,7 @@ export default function Home() {
 
                 {otherHost && (
                     <iframe
+                        className="border rounded"
                         src={`http://${otherHost}:3000/`}
                         style={{ width: '100%', height: '500px' }}
                         onLoad={() => {
