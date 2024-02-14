@@ -6,10 +6,10 @@
     "author": "hey@posthog.com",
     "license": "MIT",
     "scripts": {
-        "start": "pnpm build-rollup -w",
+        "start": "pnpm build-react && pnpm build-rollup -w",
         "build": "pnpm build-rollup && pnpm build-react",
         "build-rollup": "rm -rf lib && tsc -b && rollup -c --bundleConfigAsCjs",
-        "build-react": "cd react; pnpm i; pnpm build;",
+        "build-react": "cd react; pnpm i; pnpm build; rm -rf ./node_modules/",
         "lint": "eslint src",
         "prettier": "prettier --write src/ functional_tests/",
         "prepublishOnly": "pnpm lint && pnpm test && pnpm build && pnpm test:react",

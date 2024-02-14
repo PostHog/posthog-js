@@ -1760,8 +1760,10 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
-            this.persistence?.update_config(this.config)
-            this.sessionPersistence?.update_config(this.config)
+            console.log('PostHog initialized with', this.config)
+            this.persistence?.update_config(this.config, oldConfig)
+            // TODO: Fix this - we don't want to update the sessionPersistence mode
+            // this.sessionPersistence?.update_config(this.config)
 
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true

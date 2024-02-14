@@ -1,3 +1,5 @@
+/* eslint-disable posthog-js/no-direct-null-check */
+import posthog from 'posthog-js'
 import { useEffect, useState } from 'react'
 
 export function cookieConsentGiven() {
@@ -5,24 +7,28 @@ export function cookieConsentGiven() {
 }
 
 export function CookieBanner() {
-    const [show, setShow] = useState<null | boolean>(null)
+    const [consentGiven, setConsentGiven] = useState<null | boolean>(null)
 
     useEffect(() => {
-        setShow(!cookieConsentGiven())
+        setConsentGiven(cookieConsentGiven())
     }, [])
 
-    // eslint-disable-next-line posthog-js/no-direct-null-check
-    if (show === null) return null
+    useEffect(() => {
+        if (consentGiven === null) return
+        posthog.set_config({ persistence: consentGiven ? 'localStorage+cookie' : 'memory' })
+    }, [consentGiven])
+
+    if (consentGiven === null) return null
 
     return (
         <div className="fixed right-2 bottom-2 border rounded p-2 bg-gray-100 text-sm">
-            {show ? (
+            {!consentGiven ? (
                 <>
                     <p>I am a cookie banner - hear me roar.</p>
                     <button
                         onClick={() => {
                             localStorage.setItem('cookie_consent', 'true')
-                            setShow(false)
+                            setConsentGiven(true)
                         }}
                     >
                         Approved!
@@ -33,7 +39,7 @@ export function CookieBanner() {
                     <button
                         onClick={() => {
                             localStorage.removeItem('cookie_consent')
-                            setShow(true)
+                            setConsentGiven(false)
                         }}
                     >
                         Give back my cookies!

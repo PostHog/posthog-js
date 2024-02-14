@@ -125,6 +125,7 @@ export const cookieStore: PersistentStore = {
     },
 
     set: function (name, value, days, cross_subdomain, is_secure) {
+        console.log('cookie store setting!!')
         if (!document) {
             return
         }
@@ -166,6 +167,7 @@ export const cookieStore: PersistentStore = {
     },
 
     remove: function (name, cross_subdomain) {
+        console.log('cooki store removing!!')
         try {
             cookieStore.set(name, '', -1, cross_subdomain)
         } catch (err) {
@@ -287,6 +289,7 @@ export const localPlusCookieStore: PersistentStore = {
     },
 
     remove: function (name, cross_subdomain) {
+        console.log('local store remove')
         try {
             window?.localStorage.removeItem(name)
             cookieStore.remove(name, cross_subdomain)
