@@ -6,6 +6,7 @@ import { useRouter } from 'next/router'
 
 import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
+import { CookieBanner } from '@/src/CookieBanner'
 
 if (typeof window !== 'undefined') {
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
@@ -18,45 +19,6 @@ if (typeof window !== 'undefined') {
         scroll_root_selector: ['#scroll_element', 'html'],
     })
     ;(window as any).posthog = posthog
-}
-
-function CookieBanner() {
-    const [show, setShow] = React.useState(false)
-
-    useEffect(() => {
-        if (localStorage.getItem('cookie_consent') !== 'true') {
-            setShow(true)
-        }
-    }, [])
-
-    return (
-        <div className="absolute left-2 bottom-2 border rounded p-2">
-            {show ? (
-                <>
-                    <p>I am a cookie banner - hear me roar.</p>
-                    <button
-                        onClick={() => {
-                            localStorage.setItem('cookie_consent', 'true')
-                            setShow(false)
-                        }}
-                    >
-                        Approved!
-                    </button>
-                </>
-            ) : (
-                <>
-                    <button
-                        onClick={() => {
-                            localStorage.removeItem('cookie_consent')
-                            setShow(true)
-                        }}
-                    >
-                        No cookies!
-                    </button>
-                </>
-            )}
-        </div>
-    )
 }
 
 export default function App({ Component, pageProps }: AppProps) {
