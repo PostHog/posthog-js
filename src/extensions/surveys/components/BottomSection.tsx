@@ -4,7 +4,12 @@ import { SurveyAppearance } from '../../../posthog-surveys-types'
 
 import { PostHogLogo } from './PostHogLogo'
 import { useContext } from 'preact/hooks'
-import { SurveyContext, defaultSurveyAppearance, getContrastingTextColor } from '../surveys-utils'
+import {
+    SurveyContext,
+    defaultBackgroundColor,
+    defaultSurveyAppearance,
+    getContrastingTextColor,
+} from '../surveys-utils'
 
 export function BottomSection({
     text,
@@ -41,7 +46,7 @@ export function BottomSection({
                 </button>
             </div>
             {!appearance.whiteLabel && (
-                <PostHogLogo backgroundColor={appearance.backgroundColor || defaultSurveyAppearance.backgroundColor} />
+                <PostHogLogo backgroundColor={appearance.backgroundColor || defaultBackgroundColor} />
             )}
         </div>
     )

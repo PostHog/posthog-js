@@ -461,7 +461,7 @@ function hex2rgb(c: string) {
     return 'rgb(255, 255, 255)'
 }
 
-export function getContrastingTextColor(color: string = 'white') {
+export function getContrastingTextColor(color: string = defaultBackgroundColor) {
     let rgb
     if (color[0] === '#') {
         rgb = hex2rgb(color)
@@ -514,6 +514,8 @@ export const defaultSurveyAppearance: SurveyAppearance = {
     thankYouMessageHeader: 'Thank you for your feedback!',
     position: 'right',
 }
+
+export const defaultBackgroundColor = '#eeeded'
 
 export const createShadow = (styleSheet: string, surveyId: string) => {
     const div = document.createElement('div')
