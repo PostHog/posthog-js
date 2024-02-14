@@ -26,7 +26,6 @@ export const createPosthogInstance = async (
                 ...config,
                 loaded: (p) => {
                     config.loaded?.(p)
-                    console.log('LOADED')
 
                     resolve(p)
                 },
