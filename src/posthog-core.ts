@@ -360,10 +360,7 @@ export class PostHog {
         this.sessionRecording = new SessionRecording(this)
         this.sessionRecording.startRecordingIfEnabled()
 
-        this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startRecordingIfEnabled()
-
-        if (this.config.__preview_measure_pageview_stats) {
+        if (!this.config.disable_scroll_properties) {
             this.pageViewManager.startMeasuringScrollPosition()
         }
 
