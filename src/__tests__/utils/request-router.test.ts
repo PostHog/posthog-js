@@ -45,6 +45,9 @@ describe('request-router', () => {
         ['https://app.posthog.com', 'https://us.i.posthog.com/'],
         // accepts the empty string
         ['', '/'],
+        // ignores whitespace string
+        ['     ', '/'],
+        ['  https://app.posthog.com       ', 'https://us.i.posthog.com/'],
         ['https://example.com/', 'https://example.com/'],
     ])('should sanitize the api_host values for "%s"', (apiHost, expected) => {
         expect(router(apiHost).endpointFor('api', '/decide?v=3')).toEqual(`${expected}decide?v=3`)

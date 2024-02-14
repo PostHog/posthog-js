@@ -22,7 +22,7 @@ export class RequestRouter {
     }
 
     get apiHost(): string {
-        return this.instance.config.api_host.replace(/\/$/, '')
+        return this.instance.config.api_host.trim().replace(/\/$/, '')
     }
     get uiHost(): string | undefined {
         return this.instance.config.ui_host?.replace(/\/$/, '')
