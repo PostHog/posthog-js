@@ -1,3 +1,7 @@
+## 1.105.9 - 2024-02-14
+
+- fix: empty token should be invalid (#1022)
+
 ## 1.105.8 - 2024-02-13
 
 - feat: Simplify to just -api and -assets (#1018)
