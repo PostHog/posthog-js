@@ -459,6 +459,10 @@ export class PostHog {
         }
 
         this.persistence = new PostHogPersistence(this.config)
+        this.sessionPersistence =
+            this.config.persistence === 'sessionStorage'
+                ? this.persistence
+                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
         this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
         this._retryQueue = new RetryQueue(this.config.on_request_error, this.rateLimiter)
@@ -467,10 +471,6 @@ export class PostHog {
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
-        this.sessionPersistence =
-            this.config.persistence === 'sessionStorage'
-                ? this.persistence
-                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
         this._gdpr_init()
 
@@ -1761,8 +1761,10 @@ export class PostHog {
             }
 
             this.persistence?.update_config(this.config, oldConfig)
-            // TODO: Fix this - we don't want to update the sessionPersistence mode
-            // this.sessionPersistence?.update_config(this.config)
+            this.sessionPersistence =
+                this.config.persistence === 'sessionStorage'
+                    ? this.persistence
+                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true
