@@ -11,7 +11,7 @@ export function CookieBanner() {
     if (show === null) return null
 
     return (
-        <div className="absolute left-2 bottom-2 border rounded p-2">
+        <div className="fixed right-2 bottom-2 border rounded p-2 bg-gray-100 text-sm">
             {show ? (
                 <>
                     <p>I am a cookie banner - hear me roar.</p>
@@ -32,7 +32,7 @@ export function CookieBanner() {
                             setShow(true)
                         }}
                     >
-                        No cookies!
+                        Give back my cookies!
                     </button>
                 </>
             )}
