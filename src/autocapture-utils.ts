@@ -70,7 +70,7 @@ export function getSafeText(el: Element): string {
  * @param {Element} el - element to check
  * @returns {boolean} whether el is of the correct nodeType
  */
-export function isElementNode(el: Node | Element | undefined | null): el is HTMLElement {
+export function isElementNode(el: Node | Element | undefined | null): el is Element {
     return !!el && el.nodeType === 1 // Node.ELEMENT_NODE - use integer constant for browser portability
 }
 
