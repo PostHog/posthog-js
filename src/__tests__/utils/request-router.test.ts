@@ -39,14 +39,18 @@ describe('request-router', () => {
         }
     )
 
-    it('should sanitize the api_host values', () => {
-        expect(router('https://app.posthog.com/').endpointFor('api', '/decide?v=3')).toEqual(
-            'https://us.i.posthog.com/decide?v=3'
-        )
-
-        expect(router('https://example.com/').endpointFor('api', '/decide?v=3')).toEqual(
-            'https://example.com/decide?v=3'
-        )
+    it.each([
+        ['https://app.posthog.com/', 'https://us.i.posthog.com/'],
+        // adds trailing slash
+        ['https://app.posthog.com', 'https://us.i.posthog.com/'],
+        // accepts the empty string
+        ['', '/'],
+        // ignores whitespace string
+        ['     ', '/'],
+        ['  https://app.posthog.com       ', 'https://us.i.posthog.com/'],
+        ['https://example.com/', 'https://example.com/'],
+    ])('should sanitize the api_host values for "%s"', (apiHost, expected) => {
+        expect(router(apiHost).endpointFor('api', '/decide?v=3')).toEqual(`${expected}decide?v=3`)
     })
 
     it('should use the ui_host if provided', () => {

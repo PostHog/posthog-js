@@ -38,9 +38,14 @@ export const _isEmptyObject = function (x: unknown): x is Record<string, any> {
 export const _isUndefined = function (x: unknown): x is undefined {
     return x === void 0
 }
+
 export const _isString = function (x: unknown): x is string {
     // eslint-disable-next-line posthog-js/no-direct-string-check
     return toString.call(x) == '[object String]'
+}
+
+export const _isEmptyString = function (x: unknown): boolean {
+    return _isString(x) && x.trim().length === 0
 }
 
 export const _isNull = function (x: unknown): x is null {

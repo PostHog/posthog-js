@@ -56,6 +56,7 @@ import { SurveyCallback } from './posthog-surveys-types'
 import {
     _isArray,
     _isEmptyObject,
+    _isEmptyString,
     _isFunction,
     _isNumber,
     _isObject,
@@ -306,7 +307,7 @@ export class PostHog {
     // code a bit cleaner, but will add some overhead.
     //
     _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog | void {
-        if (!token) {
+        if (_isUndefined(token) || _isEmptyString(token)) {
             logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
             )
