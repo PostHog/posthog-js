@@ -368,28 +368,28 @@ function prepareRequest(
 
 const contentTypePrefixDenyList = ['video/', 'audio/']
 
-function _checkForCannotReadBody(res: Response): string | null {
-    if (res.headers.get('Transfer-Encoding') === 'chunked') {
+function _checkForCannotReadBody(r: Request | Response): string | null {
+    if (r.headers.get('Transfer-Encoding') === 'chunked') {
         return 'Chunked Transfer-Encoding is not supported'
     }
 
     // `get` and `has` are case-insensitive
     // but return the header value with the casing that was supplied
-    const contentType = res.headers.get('Content-Type')?.toLowerCase()
+    const contentType = r.headers.get('Content-Type')?.toLowerCase()
     const contentTypeIsDenied = contentTypePrefixDenyList.some((prefix) => contentType?.startsWith(prefix))
     if (contentType && contentTypeIsDenied) {
         return `Content-Type ${contentType} is not supported`
     }
 
-    if (!res.headers.has('Content-Length')) {
+    if (!r.headers.has('Content-Length')) {
         return 'Content-Length is not set, not reading body'
     }
 
     return null
 }
 
-async function _tryReadBody(res: Response): Promise<string> {
-    const cannotReadBodyReason: string | null = _checkForCannotReadBody(res)
+async function _tryReadBody(r: Request | Response): Promise<string> {
+    const cannotReadBodyReason: string | null = _checkForCannotReadBody(r)
     if (!_isNull(cannotReadBodyReason)) {
         return Promise.resolve(cannotReadBodyReason)
     }
@@ -398,7 +398,7 @@ async function _tryReadBody(res: Response): Promise<string> {
     // eslint-disable-next-line compat/compat
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read response body'), 500)
-        res.clone()
+        r.clone()
             .text()
             .then(
                 (txt) => resolve(txt),
@@ -441,11 +441,7 @@ function initFetchObserver(
                     networkRequest.requestHeaders = requestHeaders
                 }
                 if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
-                    if (_isUndefined(req.body) || _isNull(req.body)) {
-                        networkRequest.requestBody = null
-                    } else {
-                        networkRequest.requestBody = req.body
-                    }
+                    networkRequest.requestBody = await _tryReadBody(req)
                 }
                 after = win.performance.now()
                 res = await originalFetch(req)
@@ -458,12 +454,7 @@ function initFetchObserver(
                     networkRequest.responseHeaders = responseHeaders
                 }
                 if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                    const body: string | undefined = await _tryReadBody(res)
-                    if (_isUndefined(res.body) || _isNull(res.body)) {
-                        networkRequest.responseBody = null
-                    } else {
-                        networkRequest.responseBody = body
-                    }
+                    networkRequest.responseBody = await _tryReadBody(res)
                 }
                 return res
             } finally {
