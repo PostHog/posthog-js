@@ -1,3 +1,7 @@
+## 1.106.0 - 2024-02-15
+
+- feat(surveys): preact surveys components (#964)
+
 ## 1.105.9 - 2024-02-14
 
 - fix: empty token should be invalid (#1022)
