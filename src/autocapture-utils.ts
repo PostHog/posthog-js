@@ -166,7 +166,7 @@ function checkIfElementTreePassesCSSSelectorAllowList(
 function getParentElement(curEl: Element): Element | false {
     const parentNode = curEl.parentNode
     if (!parentNode || !isElementNode(parentNode)) return false
-    return parentNode as Element
+    return parentNode
 }
 
 /*
