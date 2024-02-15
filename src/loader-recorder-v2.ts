@@ -368,7 +368,13 @@ function prepareRequest(
 
 const contentTypePrefixDenyList = ['video/', 'audio/']
 
-function _checkForCannotReadBody(r: Request | Response): string | null {
+function _checkForCannotReadRequestBody(): string | null {
+    /* _r: Request */
+    // can't guarantee we have headers here
+    return null
+}
+
+function _checkForCannotReadResponseBody(r: Response): string | null {
     if (r.headers.get('Transfer-Encoding') === 'chunked') {
         return 'Chunked Transfer-Encoding is not supported'
     }
@@ -388,16 +394,11 @@ function _checkForCannotReadBody(r: Request | Response): string | null {
     return null
 }
 
-async function _tryReadBody(r: Request | Response): Promise<string> {
-    const cannotReadBodyReason: string | null = _checkForCannotReadBody(r)
-    if (!_isNull(cannotReadBodyReason)) {
-        return Promise.resolve(cannotReadBodyReason)
-    }
-
+function _tryReadBody(r: Request | Response): Promise<string> {
     // there are now already multiple places where we're using Promise...
     // eslint-disable-next-line compat/compat
     return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read response body'), 500)
+        const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read body'), 500)
         r.clone()
             .text()
             .then(
@@ -406,6 +407,24 @@ async function _tryReadBody(r: Request | Response): Promise<string> {
             )
             .finally(() => clearTimeout(timeout))
     })
+}
+
+async function _tryReadRequestBody(r: Request): Promise<string> {
+    const cannotReadBodyReason: string | null = _checkForCannotReadRequestBody(r)
+    if (!_isNull(cannotReadBodyReason)) {
+        return Promise.resolve(cannotReadBodyReason)
+    }
+
+    return _tryReadBody(r)
+}
+
+async function _tryReadResponseBody(r: Response): Promise<string> {
+    const cannotReadBodyReason: string | null = _checkForCannotReadResponseBody(r)
+    if (!_isNull(cannotReadBodyReason)) {
+        return Promise.resolve(cannotReadBodyReason)
+    }
+
+    return _tryReadBody(r)
 }
 
 function initFetchObserver(
@@ -441,7 +460,7 @@ function initFetchObserver(
                     networkRequest.requestHeaders = requestHeaders
                 }
                 if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
-                    networkRequest.requestBody = await _tryReadBody(req)
+                    networkRequest.requestBody = await _tryReadRequestBody(req)
                 }
                 after = win.performance.now()
                 res = await originalFetch(req)
@@ -454,7 +473,7 @@ function initFetchObserver(
                     networkRequest.responseHeaders = responseHeaders
                 }
                 if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                    networkRequest.responseBody = await _tryReadBody(res)
+                    networkRequest.responseBody = await _tryReadResponseBody(res)
                 }
                 return res
             } finally {
