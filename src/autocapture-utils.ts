@@ -70,7 +70,7 @@ export function getSafeText(el: Element): string {
  * @param {Element} el - element to check
  * @returns {boolean} whether el is of the correct nodeType
  */
-export function isElementNode(el: Element | undefined | null): el is HTMLElement {
+export function isElementNode(el: Node | Element | undefined | null): el is HTMLElement {
     return !!el && el.nodeType === 1 // Node.ELEMENT_NODE - use integer constant for browser portability
 }
 
@@ -163,6 +163,12 @@ function checkIfElementTreePassesCSSSelectorAllowList(
     return false
 }
 
+function getParentElement(curEl: Element): Element | false {
+    const parentNode = curEl.parentNode
+    if (!parentNode || !isElementNode(parentNode)) return false
+    return parentNode as Element
+}
+
 /*
  * Check whether a DOM event should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
@@ -206,7 +212,7 @@ export function shouldCaptureDomEvent(
             curEl = (curEl.parentNode as any).host
             continue
         }
-        parentNode = (curEl.parentNode as Element) || false
+        parentNode = getParentElement(curEl)
         if (!parentNode) break
         if (autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true

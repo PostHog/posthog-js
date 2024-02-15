@@ -153,7 +153,7 @@ describe(`Autocapture utility functions`, () => {
         it(`should NOT capture "click" events on <form> elements`, () => {
             expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
-        ;[`html`].forEach((tagName) => {
+        ;[`html`, 'body'].forEach((tagName) => {
             it(`should NOT capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
                 expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
             })
