@@ -87,6 +87,9 @@ devDependencies:
   cypress:
     specifier: 13.6.3
     version: 13.6.3
+  cypress-localstorage-commands:
+    specifier: ^2.2.5
+    version: 2.2.5(cypress@13.6.3)
   eslint:
     specifier: 8.56.0
     version: 8.56.0
@@ -150,6 +153,9 @@ devDependencies:
   posthog-js:
     specifier: 'link:'
     version: 'link:'
+  preact-render-to-string:
+    specifier: ^6.3.1
+    version: 6.3.1(preact@10.19.3)
   prettier:
     specifier: ^2.7.1
     version: 2.7.1
@@ -4373,6 +4379,15 @@ packages:
 
   /cuint@0.2.2:
     resolution: {integrity: sha512-d4ZVpCW31eWwCMe1YT3ur7mUDnTXbgwyzaL320DrcRT45rfjYxkt5QWLrmOJ+/UEAI2+fQgKe/fCjR8l4TpRgw==}
+    dev: true
+
+  /cypress-localstorage-commands@2.2.5(cypress@13.6.3):
+    resolution: {integrity: sha512-07zpwzWdY+uPi1NEHFhWQNylIJqRxR78Ile05L6WT8h1Gz0OaxgBSZRuzp+pqUni/3Pk4d2ieq/cSh++ZmujEA==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      cypress: '>=2.1.0'
+    dependencies:
+      cypress: 13.6.3
     dev: true
 
   /cypress@13.6.3:
@@ -8615,9 +8630,17 @@ packages:
     engines: {node: '>=0.10.0'}
     dev: true
 
+  /preact-render-to-string@6.3.1(preact@10.19.3):
+    resolution: {integrity: sha512-NQ28WrjLtWY6lKDlTxnFpKHZdpjfF+oE6V4tZ0rTrunHrtZp6Dm0oFrcJalt/5PNeqJz4j1DuZDS0Y6rCBoqDA==}
+    peerDependencies:
+      preact: '>=10'
+    dependencies:
+      preact: 10.19.3
+      pretty-format: 3.8.0
+    dev: true
+
   /preact@10.19.3:
     resolution: {integrity: sha512-nHHTeFVBTHRGxJXKkKu5hT8C/YWBkPso4/Gad6xuj5dbptt9iF9NZr9pHbPhBrnT2klheu7mHTxTZ/LjwJiEiQ==}
-    dev: false
 
   /prelude-ls@1.1.2:
     resolution: {integrity: sha512-ESF23V4SKG6lVSGZgYNpbsiaAkdab6ZgOxe52p7+Kid3W3u3bxR4Vfd/o21dmN7jSt0IwgZ4v5MUd26FEtXE9w==}
@@ -8663,6 +8686,10 @@ packages:
       '@jest/schemas': 29.4.3
       ansi-styles: 5.2.0
       react-is: 18.2.0
+    dev: true
+
+  /pretty-format@3.8.0:
+    resolution: {integrity: sha512-WuxUnVtlWL1OfZFQFuqvnvs6MiAGk9UNsBostyBOB0Is9wb5uRESevA6rnl/rkksXaGX3GzZhPup5d6Vp1nFew==}
     dev: true
 
   /pretty-hrtime@1.0.3:
