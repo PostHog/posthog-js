@@ -368,12 +368,6 @@ function prepareRequest(
 
 const contentTypePrefixDenyList = ['video/', 'audio/']
 
-function _checkForCannotReadRequestBody(): string | null {
-    /* _r: Request */
-    // can't guarantee we have headers here
-    return null
-}
-
 function _checkForCannotReadResponseBody(r: Response): string | null {
     if (r.headers.get('Transfer-Encoding') === 'chunked') {
         return 'Chunked Transfer-Encoding is not supported'
@@ -410,11 +404,6 @@ function _tryReadBody(r: Request | Response): Promise<string> {
 }
 
 async function _tryReadRequestBody(r: Request): Promise<string> {
-    const cannotReadBodyReason: string | null = _checkForCannotReadRequestBody(r)
-    if (!_isNull(cannotReadBodyReason)) {
-        return Promise.resolve(cannotReadBodyReason)
-    }
-
     return _tryReadBody(r)
 }
 
