@@ -1,6 +1,6 @@
 import { _extend } from './utils'
 import { PersistentStore, Properties } from './types'
-import { DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constants'
+import { DEVICE_ID, DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constants'
 
 import { _isNull, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
@@ -248,7 +248,7 @@ export const localStore: PersistentStore = {
 // Use localstorage for most data but still use cookie for COOKIE_PERSISTED_PROPERTIES
 // This solves issues with cookies having too much data in them causing headers too large
 // Also makes sure we don't have to send a ton of data to the server
-const COOKIE_PERSISTED_PROPERTIES = [DISTINCT_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED]
+const COOKIE_PERSISTED_PROPERTIES = [DISTINCT_ID, DEVICE_ID, SESSION_ID, SESSION_RECORDING_IS_SAMPLED]
 
 export const localPlusCookieStore: PersistentStore = {
     ...localStore,

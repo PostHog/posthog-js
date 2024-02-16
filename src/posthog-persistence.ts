@@ -8,7 +8,6 @@ import {
     EVENT_TIMERS_KEY,
     ENABLED_FEATURE_FLAGS,
     POSTHOG_QUOTA_LIMITED,
-    USER_STATE,
 } from './constants'
 
 import { _isObject, _isUndefined } from './utils/type-utils'
@@ -299,15 +298,6 @@ export class PostHogPersistence {
             this.save()
         }
         return timestamp
-    }
-
-    get_user_state(): 'anonymous' | 'identified' {
-        return this.props[USER_STATE] || 'anonymous'
-    }
-
-    set_user_state(state: 'anonymous' | 'identified'): void {
-        this.props[USER_STATE] = state
-        this.save()
     }
 
     get_quota_limits(): Record<string, number> {

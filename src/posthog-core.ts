@@ -490,7 +490,6 @@ export class PostHog {
                 this.register({
                     distinct_id: config.segment.user().id(),
                 })
-                this.persistence.set_user_state('identified')
             }
 
             config.segment.register(this.segmentIntegration()).then(updateInitComplete('segmentRegister'))
@@ -503,7 +502,6 @@ export class PostHog {
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.config.get_device_id(uuidv7())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
-            this.persistence.set_user_state(config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
                 distinct_id: config.bootstrap.distinctID,
                 $device_id: deviceID,
@@ -543,8 +541,6 @@ export class PostHog {
                 },
                 ''
             )
-            // distinct id == $device_id is a proxy for anonymous user
-            this.persistence.set_user_state('anonymous')
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
@@ -1351,19 +1347,19 @@ export class PostHog {
             )
         }
 
+        const isKnownAnonymous = !this.is_identified()
+
         // if the previous distinct id had an alias stored, then we clear it
         if (new_distinct_id !== previous_distinct_id && new_distinct_id !== this.get_property(ALIAS_ID_KEY)) {
             this.unregister(ALIAS_ID_KEY)
             this.register({ distinct_id: new_distinct_id })
         }
 
-        const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
+        console.log(new_distinct_id, previous_distinct_id, this.get_device_id(), this.is_identified(), isKnownAnonymous)
 
         // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
-            this.persistence.set_user_state('identified')
-
             // Update current user properties
             this.setPersonPropertiesForFlags(userPropertiesToSet || {}, false)
 
@@ -1490,6 +1486,20 @@ export class PostHog {
         this.featureFlags.resetGroupPropertiesForFlags(group_type)
     }
 
+    /** This method should be called for all sessions where the user is not logged in.
+     * If the user was previously identified, then posthog-js will be reset, generating new distinct_id and device_id.
+     * If the user was anonymous, then nothing happens, making it safe to call on every page load.
+     * */
+    unidentify(): void {
+        if (!this.__loaded) {
+            return logger.uninitializedWarning('posthog.unidentify')
+        }
+
+        if (this.is_identified()) {
+            this.reset(true)
+        }
+    }
+
     /**
      * Clears super properties and generates a new random distinct_id for this instance.
      * Useful for clearing data when a user logs out.
@@ -1501,7 +1511,6 @@ export class PostHog {
         const device_id = this.get_property('$device_id')
         this.persistence?.clear()
         this.sessionPersistence?.clear()
-        this.persistence?.set_user_state('anonymous')
         this.sessionManager?.resetSessionId()
         const uuid = this.config.get_device_id(uuidv7())
         this.register_once(
@@ -1531,6 +1540,10 @@ export class PostHog {
      */
     get_distinct_id(): string {
         return this.get_property('distinct_id')
+    }
+
+    get_device_id(): string {
+        return this.get_property('$device_id')
     }
 
     getGroups(): Record<string, any> {
@@ -1574,6 +1587,10 @@ export class PostHog {
         }
 
         return url
+    }
+
+    is_identified(): boolean {
+        return this.get_distinct_id() !== this.get_device_id()
     }
 
     /**

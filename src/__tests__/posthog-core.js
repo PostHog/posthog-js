@@ -561,7 +561,7 @@ describe('posthog core', () => {
             given.subject()
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('abcd')
-            expect(given.lib.persistence.get_user_state()).toBe('anonymous')
+            expect(given.lib.is_identified()).toBe(false)
 
             given.lib.identify('efgh')
 
@@ -586,8 +586,8 @@ describe('posthog core', () => {
 
             given.subject()
             expect(given.lib.get_distinct_id()).toBe('abcd')
-            expect(given.lib.get_property('$device_id')).toBe('og-device-id')
-            expect(given.lib.persistence.get_user_state()).toBe('identified')
+            expect(given.lib.get_device_id()).toBe('og-device-id')
+            expect(given.lib.is_identified()).toBe(true)
 
             given.lib.identify('efgh')
             expect(given.overrides.capture).not.toHaveBeenCalled()

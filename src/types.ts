@@ -284,6 +284,7 @@ export interface DecideResponse {
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
     __preview_ingestion_endpoints?: boolean
+    __preview_identify_v2?: boolean
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void

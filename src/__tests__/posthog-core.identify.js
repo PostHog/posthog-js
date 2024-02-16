@@ -47,10 +47,6 @@ describe('identify()', () => {
     given('oldIdentity', () => 'oldIdentity')
     given('deviceId', () => given.oldIdentity)
 
-    beforeEach(() => {
-        given.lib.persistence.set_user_state('anonymous')
-    })
-
     it('registers new user id and updates alias', () => {
         given.subject()
 
@@ -81,7 +77,7 @@ describe('identify()', () => {
 
         given.subject()
 
-        expect(given.lib.persistence.get_user_state()).toEqual('identified')
+        expect(given.lib.is_identified()).toEqual(true)
     })
 
     it('calls capture when there is no device id', () => {
@@ -363,11 +359,9 @@ describe('reset()', () => {
     })
 
     it('sets the user as anonymous', () => {
-        given.lib.persistence.set_user_state('identified')
-
         given.subject()
 
-        expect(given.lib.persistence.get_user_state()).toEqual('anonymous')
+        expect(given.lib.is_identified()).toEqual(false)
     })
 
     it('does not reset the device id', () => {
