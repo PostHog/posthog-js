@@ -154,6 +154,28 @@ describe('Surveys', () => {
             onPageLoad()
             cy.get('.PostHogSurvey123').should('not.exist')
         })
+
+        it('does not allow user to submit non optional survey questions if they have not responded to it', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [{ ...openTextQuestion, optional: false }],
+                        appearance: { submitButtonColor: 'pink' },
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
+            cy.get('.PostHogSurvey123').shadow().find('.form-submit').should('be.disabled')
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+        })
     })
 
     describe('Survey question types', () => {

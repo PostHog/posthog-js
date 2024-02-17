@@ -33,7 +33,7 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
           .form-submit[disabled] {
               opacity: 0.6;
-              filter: grayscale(100%);
+              filter: grayscale(50%);
               cursor: not-allowed;
           }
           .survey-form {
