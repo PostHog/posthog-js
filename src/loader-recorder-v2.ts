@@ -212,6 +212,10 @@ async function getRequestPerformanceEntry(
 }
 
 function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | null | undefined): string | null {
+    if (_isNull(body) || _isUndefined(body)) {
+        return null
+    }
+
     if (_isString(body)) {
         return body
     }
@@ -224,7 +228,7 @@ function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | null | undefi
         return _formDataToQuery(body)
     }
 
-    return null
+    return '[SessionReplay] Cannot read body of type ' + toString.call(body)
 }
 
 /**
@@ -232,6 +236,10 @@ function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | null | undefi
  * @param response an ArrayBuffer, a Blob, a Document, a JavaScript object, or a string, depending on the value of XMLHttpRequest.responseType, that contains the response entity body.
  */
 function _tryReadXHRResponseBody(response: any): string | null {
+    if (_isUndefined(response) || _isNull(response)) {
+        return null
+    }
+
     if (_isString(response)) {
         return response
     }
@@ -242,7 +250,8 @@ function _tryReadXHRResponseBody(response: any): string | null {
             return '[SessionReplay] Failed to stringify response object'
         }
     }
-    return null
+
+    return '[SessionReplay] Cannot read body of type ' + toString.call(response)
 }
 
 function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>): listenerHandler {
