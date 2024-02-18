@@ -1,5 +1,5 @@
-import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig, Body } from '../../types'
-import { _isFunction, _isUndefined } from '../../utils/type-utils'
+import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../types'
+import { _isFunction, _isNull, _isString, _isUndefined } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 
@@ -79,19 +79,29 @@ const ignorePostHogPaths = (data: CapturedNetworkRequest): CapturedNetworkReques
     return data
 }
 
+function estimateBytes(payload: string): number {
+    return new Blob([payload]).size
+}
+
 function redactPayload(
-    payload: Body,
+    payload: string | null | undefined,
     headers: Record<string, any> | undefined,
     limit: number,
     description: string
-): Body {
-    const requestContentLength = headers?.['content-length']
-    if (_isUndefined(requestContentLength)) {
-        return `[SessionReplay] no content-length header for ${description}, cannot determine payload size`
+): string | null | undefined {
+    if (_isUndefined(payload) || _isNull(payload)) {
+        return payload
     }
-    if (requestContentLength && parseInt(requestContentLength) > limit) {
-        return `[SessionReplay] ${description} body too large to record`
+
+    let requestContentLength: string | number = headers?.['content-length'] || estimateBytes(payload)
+    if (_isString(requestContentLength)) {
+        requestContentLength = parseInt(requestContentLength)
     }
+
+    if (requestContentLength > limit) {
+        return `[SessionReplay] ${description} body too large to record (${requestContentLength} bytes)`
+    }
+
     return payload
 }
 

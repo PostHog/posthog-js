@@ -176,7 +176,7 @@ describe('config', () => {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
-                    requestBody: '[SessionReplay] Request body too large to record',
+                    requestBody: '[SessionReplay] Request body too large to record (1000001 bytes)',
                 })
             })
 
@@ -196,11 +196,11 @@ describe('config', () => {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
-                    responseBody: '[SessionReplay] Response body too large to record',
+                    responseBody: '[SessionReplay] Response body too large to record (1000001 bytes)',
                 })
             })
 
-            it('cannot redact when there is no content length header', () => {
+            it('no need to redact small payload when there is no content length header', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
                     name: 'something',
@@ -214,7 +214,25 @@ describe('config', () => {
                     requestHeaders: {
                         'content-type': 'application/json',
                     },
-                    requestBody: '[SessionReplay] no content-length header for Request, cannot determine payload size',
+                    requestBody: 'some body that has no content length',
+                })
+            })
+
+            it('can redact large payload when there is no content length header', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: 'a'.repeat(1000001),
+                })
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: '[SessionReplay] Request body too large to record (1000001 bytes)',
                 })
             })
         })
