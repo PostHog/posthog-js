@@ -58,6 +58,11 @@ export default [
                     preact: 'preact',
                 },
             },
+            {
+                file: 'dist/surveys.esm.js',
+                format: 'es',
+                sourcemap: true,
+            },
         ],
         plugins: [...plugins],
     },
