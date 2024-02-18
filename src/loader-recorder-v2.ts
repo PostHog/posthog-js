@@ -18,10 +18,21 @@ import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugin
 // copying here so that we can use it before rrweb adopt it
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from './types'
-import { _isArray, _isBoolean, _isFunction, _isNull, _isUndefined } from './utils/type-utils'
+import {
+    _isArray,
+    _isBoolean,
+    _isDocument,
+    _isFormData,
+    _isFunction,
+    _isNull,
+    _isObject,
+    _isString,
+    _isUndefined,
+} from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { defaultNetworkOptions } from './extensions/replay/config'
+import { _formDataToQuery } from './utils/request-utils'
 
 export type NetworkData = {
     requests: CapturedNetworkRequest[]
@@ -200,6 +211,40 @@ async function getRequestPerformanceEntry(
     return performanceEntry
 }
 
+function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | null | undefined): string | null {
+    if (_isString(body)) {
+        return body
+    }
+
+    if (_isDocument(body)) {
+        return body.textContent
+    }
+
+    if (_isFormData(body)) {
+        return _formDataToQuery(body)
+    }
+
+    return null
+}
+
+/**
+ * According to MDN https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/response
+ * @param response an ArrayBuffer, a Blob, a Document, a JavaScript object, or a string, depending on the value of XMLHttpRequest.responseType, that contains the response entity body.
+ */
+function _tryReadXHRResponseBody(response: any): string | null {
+    if (_isString(response)) {
+        return response
+    }
+    if (_isObject(response)) {
+        try {
+            return JSON.stringify(response)
+        } catch (e) {
+            return '[SessionReplay] Failed to stringify response object'
+        }
+    }
+    return null
+}
+
 function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>): listenerHandler {
     if (!options.initiatorTypes.includes('xmlhttprequest')) {
         return () => {
@@ -212,7 +257,6 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
     const restorePatch = patch(
         win.XMLHttpRequest.prototype,
         'open',
-        // TODO how should this be typed?
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         (originalOpen: typeof XMLHttpRequest.prototype.open) => {
@@ -234,6 +278,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 const networkRequest: Partial<CapturedNetworkRequest> = {}
                 let after: number | undefined
                 let before: number | undefined
+
                 const requestHeaders: Headers = {}
                 const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
                 xhr.setRequestHeader = (header: string, value: string) => {
@@ -243,18 +288,20 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 if (recordRequestHeaders) {
                     networkRequest.requestHeaders = requestHeaders
                 }
+
                 const originalSend = xhr.send.bind(xhr)
                 xhr.send = (body) => {
                     if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
                         if (_isUndefined(body) || _isNull(body)) {
                             networkRequest.requestBody = null
                         } else {
-                            networkRequest.requestBody = body
+                            networkRequest.requestBody = _tryReadXHRBody(body)
                         }
                     }
                     after = win.performance.now()
                     return originalSend(body)
                 }
+
                 xhr.addEventListener('readystatechange', () => {
                     if (xhr.readyState !== xhr.DONE) {
                         return
@@ -279,7 +326,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                             networkRequest.responseBody = null
                         } else {
                             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                            networkRequest.responseBody = xhr.response
+                            networkRequest.responseBody = _tryReadXHRResponseBody(xhr.response)
                         }
                     }
                     getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
