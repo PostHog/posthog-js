@@ -211,7 +211,14 @@ async function getRequestPerformanceEntry(
     return performanceEntry
 }
 
-function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | null | undefined): string | null {
+/**
+ * According to MDN https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/response
+ * xhr response is typed as any but can be an ArrayBuffer, a Blob, a Document, a JavaScript object,
+ * or a string, depending on the value of XMLHttpRequest.responseType, that contains the response entity body.
+ *
+ * XHR request body is Document | XMLHttpRequestBodyInit | null | undefined
+ */
+function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | any | null | undefined): string | null {
     if (_isNull(body) || _isUndefined(body)) {
         return null
     }
@@ -228,30 +235,15 @@ function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | null | undefi
         return _formDataToQuery(body)
     }
 
-    return '[SessionReplay] Cannot read body of type ' + toString.call(body)
-}
-
-/**
- * According to MDN https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/response
- * @param response an ArrayBuffer, a Blob, a Document, a JavaScript object, or a string, depending on the value of XMLHttpRequest.responseType, that contains the response entity body.
- */
-function _tryReadXHRResponseBody(response: any): string | null {
-    if (_isUndefined(response) || _isNull(response)) {
-        return null
-    }
-
-    if (_isString(response)) {
-        return response
-    }
-    if (_isObject(response)) {
+    if (_isObject(body)) {
         try {
-            return JSON.stringify(response)
+            return JSON.stringify(body)
         } catch (e) {
             return '[SessionReplay] Failed to stringify response object'
         }
     }
 
-    return '[SessionReplay] Cannot read body of type ' + toString.call(response)
+    return '[SessionReplay] Cannot read body of type ' + toString.call(body)
 }
 
 function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>): listenerHandler {
@@ -335,7 +327,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                             networkRequest.responseBody = null
                         } else {
                             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                            networkRequest.responseBody = _tryReadXHRResponseBody(xhr.response)
+                            networkRequest.responseBody = _tryReadXHRBody(xhr.response)
                         }
                     }
                     getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
@@ -435,10 +427,6 @@ function _checkForCannotReadResponseBody(r: Response): string | null {
     const contentTypeIsDenied = contentTypePrefixDenyList.some((prefix) => contentType?.startsWith(prefix))
     if (contentType && contentTypeIsDenied) {
         return `Content-Type ${contentType} is not supported`
-    }
-
-    if (!r.headers.has('Content-Length')) {
-        return 'Content-Length is not set, not reading body'
     }
 
     return null
