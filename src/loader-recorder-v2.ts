@@ -487,10 +487,6 @@ function initFetchObserver(
             let after: number | undefined
             let before: number | undefined
             try {
-                after = win.performance.now()
-                res = await originalFetch(req)
-                before = win.performance.now()
-
                 const requestHeaders: Headers = {}
                 req.headers.forEach((value, header) => {
                     requestHeaders[header] = value
@@ -501,6 +497,10 @@ function initFetchObserver(
                 if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
                     networkRequest.requestBody = await _tryReadRequestBody(req)
                 }
+
+                after = win.performance.now()
+                res = await originalFetch(req)
+                before = win.performance.now()
 
                 const responseHeaders: Headers = {}
                 res.headers.forEach((value, header) => {

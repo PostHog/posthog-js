@@ -79,7 +79,3 @@ export const _isFile = (x: unknown): x is File => {
     // eslint-disable-next-line posthog-js/no-direct-file-check
     return x instanceof File
 }
-
-export const _isIterator = (x: unknown): x is Iterator<any> => {
-    return _isFunction((x as any)[Symbol.iterator])
-}
