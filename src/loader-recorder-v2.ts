@@ -450,10 +450,6 @@ function _tryReadBody(r: Request | Response): Promise<string> {
     })
 }
 
-async function _tryReadRequestBody(r: Request): Promise<string> {
-    return _tryReadBody(r)
-}
-
 async function _tryReadResponseBody(r: Response): Promise<string> {
     const cannotReadBodyReason: string | null = _checkForCannotReadResponseBody(r)
     if (!_isNull(cannotReadBodyReason)) {
@@ -495,7 +491,7 @@ function initFetchObserver(
                     networkRequest.requestHeaders = requestHeaders
                 }
                 if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
-                    networkRequest.requestBody = await _tryReadRequestBody(req)
+                    networkRequest.requestBody = await _tryReadBody(req)
                 }
 
                 after = win.performance.now()
