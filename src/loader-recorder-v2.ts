@@ -428,7 +428,6 @@ function initFetchObserver(
     }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
-    // TODO how should this be typed?
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
@@ -441,6 +440,10 @@ function initFetchObserver(
             let after: number | undefined
             let before: number | undefined
             try {
+                after = win.performance.now()
+                res = await originalFetch(req)
+                before = win.performance.now()
+
                 const requestHeaders: Headers = {}
                 req.headers.forEach((value, header) => {
                     requestHeaders[header] = value
@@ -451,9 +454,7 @@ function initFetchObserver(
                 if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
                     networkRequest.requestBody = await _tryReadRequestBody(req)
                 }
-                after = win.performance.now()
-                res = await originalFetch(req)
-                before = win.performance.now()
+
                 const responseHeaders: Headers = {}
                 res.headers.forEach((value, header) => {
                     responseHeaders[header] = value
@@ -464,6 +465,7 @@ function initFetchObserver(
                 if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
                     networkRequest.responseBody = await _tryReadResponseBody(res)
                 }
+
                 return res
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, after, before)
