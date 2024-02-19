@@ -8,12 +8,19 @@ export function createWidgetShadow(survey: Survey) {
     const div = document.createElement('div')
     div.className = `PostHogWidget${survey.id}`
     const shadow = div.attachShadow({ mode: 'open' })
-    const widgetStyleSheet = `
+    const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
+    shadow.append(Object.assign(document.createElement('style'), { innerText: widgetStyleSheet }))
+    document.body.appendChild(div)
+    return shadow
+}
+
+export function createWidgetStyle(widgetColor?: string) {
+    return `
         .ph-survey-widget-tab {
             position: fixed;
             top: 50%;
             right: 0;
-            background: ${survey.appearance?.widgetColor || '#e0a045'};
+            background: ${widgetColor || '#e0a045'};
             color: white;
             transform: rotate(-90deg) translate(0, -100%);
             transform-origin: right top;
@@ -32,7 +39,4 @@ export function createWidgetShadow(survey: Survey) {
             position: fixed;
         }
     `
-    shadow.append(Object.assign(document.createElement('style'), { innerText: widgetStyleSheet }))
-    document.body.appendChild(div)
-    return shadow
 }

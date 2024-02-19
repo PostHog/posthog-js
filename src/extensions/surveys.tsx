@@ -22,7 +22,7 @@ import {
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { render } from 'preact-render-to-string'
-import { createWidgetShadow } from './surveys-widget'
+import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { useState, useEffect, useRef, useContext } from 'preact/hooks'
 import { _isNumber } from '../utils/type-utils'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -395,7 +395,7 @@ export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: 
     return (
         <>
             {survey.appearance?.widgetType === 'tab' && (
-                <div className="ph-survey-widget-tab" ref={widgetRef} onClick={() => setShowSurvey(!showSurvey)}>
+                <div className="ph-survey-widget-tab" ref={widgetRef} onClick={() => !readOnly && setShowSurvey(!showSurvey)} style={{color: getContrastingTextColor(survey.appearance.widgetColor)}}>
                     <div className="ph-survey-widget-tab-icon"></div>
                     {survey.appearance?.widgetLabel || ''}
                 </div>
