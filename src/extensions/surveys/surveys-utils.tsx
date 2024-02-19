@@ -24,7 +24,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-weight: normal;
               font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
               text-align: left;
-              max-width: ${parseInt(appearance?.maxWidth || '290')}px;
+              max-width: ${parseInt(appearance?.maxWidth || '300')}px;
               z-index: ${parseInt(appearance?.zIndex || '99999')};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
@@ -33,7 +33,7 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
           .form-submit[disabled] {
               opacity: 0.6;
-              filter: grayscale(100%);
+              filter: grayscale(50%);
               cursor: not-allowed;
           }
           .survey-form {
@@ -141,7 +141,8 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
           .ratings-number {
               background-color: ${appearance?.ratingButtonColor || 'white'};
-              font-size: 14px;
+              font-size: 16px;
+              font-weight: 600;
               padding: 8px 0px;
               border: none;
           }
@@ -278,7 +279,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               background: ${appearance?.backgroundColor || '#eeeded'};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               text-align: center;
-              max-width: ${parseInt(appearance?.maxWidth || '290')}px;
+              max-width: ${parseInt(appearance?.maxWidth || '300')}px;
               min-width: 150px;
               width: 100%;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}
