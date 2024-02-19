@@ -58,6 +58,13 @@ describe('survey display logic', () => {
 })
 
 describe('preview renders', () => {
+    beforeEach(() => {
+        // we have to manually reset the DOM before each test
+        document.getElementsByTagName('html')[0].innerHTML = ''
+        localStorage.clear()
+        jest.clearAllMocks()
+    })
+
     test('renderSurveysPreview', () => {
         const mockSurvey = {
             id: 'testSurvey1',
@@ -95,7 +102,7 @@ describe('preview renders', () => {
             id: 'testSurvey1',
             name: 'Test survey 1',
             type: SurveyType.Widget,
-            appearance: {},
+            appearance: { widgetLabel: 'preview test', widgetColor: 'black', widgetType: 'tab' },
             start_date: '2021-01-01T00:00:00.000Z',
             description: 'This is a survey description',
             linked_flag_key: null,
@@ -105,14 +112,14 @@ describe('preview renders', () => {
                     type: SurveyQuestionType.Open,
                 },
             ],
-            conditions: { widgetLabel: 'preview test', widgetColor: 'black' },
             end_date: null,
             targeting_flag_key: null,
         }
-        const surveyDiv = document.createElement('div')
-        expect(surveyDiv.innerHTML).toBe('')
-        renderFeedbackWidgetPreview(mockSurvey as Survey, surveyDiv)
-        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
-        expect(surveyDiv.getElementsByClassName('ph-survey-widget-tab').length).toBe(1)
+        const root = document.createElement('div')
+        expect(root.innerHTML).toBe('')
+        renderFeedbackWidgetPreview(mockSurvey as Survey, root)
+        expect(root.getElementsByTagName('style').length).toBe(1)
+        expect(root.getElementsByClassName('ph-survey-widget-tab').length).toBe(1)
+        expect(root.getElementsByClassName('ph-survey-widget-tab')[0].innerHTML).toContain('preview test')
     })
 })

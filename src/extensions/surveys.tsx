@@ -139,11 +139,13 @@ export const renderSurveysPreview = (
 }
 
 export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement) => {
-    const shadow = createWidgetShadow(survey)
-    const surveyStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
-    shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
-    Preact.render(<FeedbackWidget posthog={null as any} survey={survey} readOnly={true} />, shadow)
-    root.appendChild(shadow)
+    const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
+    const styleElement = Object.assign(document.createElement('style'), { innerText: widgetStyleSheet })
+    root.appendChild(styleElement)
+    const widgetHtml = render(<FeedbackWidget survey={survey} readOnly={true} />)
+    const widgetDiv = document.createElement('div')
+    widgetDiv.innerHTML = widgetHtml
+    root.appendChild(widgetDiv)
 }
 
 // This is the main exported function
@@ -373,12 +375,12 @@ const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean)
 }
 
 export function FeedbackWidget({
-    posthog,
     survey,
+    posthog,
     readOnly,
 }: {
-    posthog: PostHog
     survey: Survey
+    posthog?: PostHog
     readOnly?: boolean
 }): JSX.Element {
     const [showSurvey, setShowSurvey] = useState(false)
@@ -386,7 +388,7 @@ export function FeedbackWidget({
     const widgetRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        if (readOnly) {
+        if (readOnly || !posthog) {
             return
         }
 
