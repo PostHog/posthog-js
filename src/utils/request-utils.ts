@@ -1,6 +1,6 @@
 import { _each, _isValidRegex } from './'
 
-import { _isArray, _isUndefined } from './type-utils'
+import { _isArray, _isFile, _isUndefined } from './type-utils'
 import { logger } from './logger'
 import { document, fetch, XMLHttpRequest } from './globals'
 
@@ -31,18 +31,18 @@ export const _isUrlMatchingRegex = function (url: string, pattern: string): bool
     return new RegExp(pattern).test(url)
 }
 
-export const _HTTPBuildQuery = function (formdata: Record<string, any>, arg_separator = '&'): string {
+export const _formDataToQuery = function (formdata: Record<string, any> | FormData, arg_separator = '&'): string {
     let use_val: string
     let use_key: string
     const tph_arr: string[] = []
 
-    _each(formdata, function (val, key) {
+    _each(formdata, function (val: File | string | undefined, key: string | undefined) {
         // the key might be literally the string undefined for e.g. if {undefined: 'something'}
         if (_isUndefined(val) || _isUndefined(key) || key === 'undefined') {
             return
         }
 
-        use_val = encodeURIComponent(val.toString())
+        use_val = encodeURIComponent(_isFile(val) ? val.name : val.toString())
         use_key = encodeURIComponent(key)
         tph_arr[tph_arr.length] = use_key + '=' + use_val
     })

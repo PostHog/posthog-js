@@ -385,22 +385,6 @@ export interface EarlyAccessFeatureResponse {
 
 export type Headers = Record<string, string>
 
-export type Body =
-    | string
-    | Document
-    | Blob
-    | ArrayBufferView
-    | ArrayBuffer
-    | FormData
-    // rrweb uses URLSearchParams and ReadableStream<Uint8Array>
-    // as part of the union for this type
-    // because they don't support IE11
-    // but, we do 🫠
-    // what's going to happen here in IE11?
-    | URLSearchParams
-    | ReadableStream<Uint8Array>
-    | null
-
 /* for rrweb/network@1
  ** when that is released as part of rrweb this can be removed
  ** don't rely on this type, it may change without notice
@@ -467,9 +451,9 @@ export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     startTime?: number
     endTime?: number
     requestHeaders?: Headers
-    requestBody?: Body
+    requestBody?: string | null
     responseHeaders?: Headers
-    responseBody?: Body
+    responseBody?: string | null
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
 }
