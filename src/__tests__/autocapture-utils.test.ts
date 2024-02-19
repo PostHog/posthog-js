@@ -116,21 +116,17 @@ describe(`Autocapture utility functions`, () => {
                 } as unknown as Event)
             ).toBe(true)
         })
-        ;[`input`, `SELECT`, `textarea`].forEach((tagName) => {
-            it(`should capture "change" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(
-                    shouldCaptureDomEvent(document!.createElement(tagName), {
-                        type: `change`,
-                    } as unknown as Event)
-                ).toBe(true)
-            })
+
+        it.each([`input`, `SELECT`, `textarea`])(`should capture "change" events on <%s> elements`, (tagName) => {
+            expect(
+                shouldCaptureDomEvent(document!.createElement(tagName), {
+                    type: `change`,
+                } as unknown as Event)
+            ).toBe(true)
         })
 
-        // [`div`, `sPan`, `A`, `strong`, `table`]
-        ;['a'].forEach((tagName) => {
-            it(`should capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(true)
-            })
+        it.each([`A`, `a`])(`should capture "click" events on <%s> elements`, (tagName) => {
+            expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(true)
         })
 
         it(`should capture "click" events on <button> elements`, () => {
@@ -153,10 +149,9 @@ describe(`Autocapture utility functions`, () => {
         it(`should NOT capture "click" events on <form> elements`, () => {
             expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
-        ;[`html`].forEach((tagName) => {
-            it(`should NOT capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
-            })
+
+        it.each([`html`, 'body'])(`should NOT capture "click" events on <%s> elements`, (tagName) => {
+            expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
         })
 
         describe('css selector allowlist', () => {
