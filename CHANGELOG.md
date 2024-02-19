@@ -1,3 +1,7 @@
+## 1.106.2 - 2024-02-19
+
+- fix: protect against parent is not element (#1027)
+
 ## 1.106.1 - 2024-02-19
 
 - fix: body capture handling (#1026)
