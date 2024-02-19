@@ -1,3 +1,8 @@
+## 1.106.1 - 2024-02-19
+
+- fix: body capture handling (#1026)
+- ci: Use GITHUB_OUTPUT envvar instead of set-output command (#958)
+
 ## 1.106.0 - 2024-02-15
 
 - feat(surveys): preact surveys components (#964)
