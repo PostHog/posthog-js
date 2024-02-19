@@ -172,9 +172,9 @@ describe('Surveys', () => {
             cy.visit('./playground/cypress')
             onPageLoad()
             cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
-            cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').should('be.disabled')
-            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123').shadow().find('textarea').type('This is great!')
+            cy.get('.PostHogSurvey123').shadow().find('.form-submit').should('not.be.disabled')
         })
     })
 
