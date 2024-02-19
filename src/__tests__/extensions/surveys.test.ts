@@ -1,5 +1,5 @@
 import 'regenerator-runtime/runtime'
-import { generateSurveys, renderSurveysPreview } from '../../extensions/surveys'
+import { generateSurveys, renderSurveysPreview, renderFeedbackWidgetPreview } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
 
@@ -57,7 +57,7 @@ describe('survey display logic', () => {
     })
 })
 
-describe('survey render preview', () => {
+describe('preview renders', () => {
     test('renderSurveysPreview', () => {
         const mockSurvey = {
             id: 'testSurvey1',
@@ -88,5 +88,31 @@ describe('survey render preview', () => {
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+    })
+
+    test('renderFeedbackWidgetPreview', () => {
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Widget,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'What would you like to see next?',
+                    type: SurveyQuestionType.Open,
+                },
+            ],
+            conditions: { widgetLabel: 'preview test', widgetColor: 'black' },
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        expect(surveyDiv.innerHTML).toBe('')
+        renderFeedbackWidgetPreview(mockSurvey as Survey, surveyDiv)
+        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('ph-survey-widget-tab').length).toBe(1)
     })
 })

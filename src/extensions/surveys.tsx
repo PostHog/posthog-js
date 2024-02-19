@@ -138,6 +138,14 @@ export const renderSurveysPreview = (
     root.appendChild(surveyDiv)
 }
 
+export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement) => {
+    const shadow = createWidgetShadow(survey)
+    const surveyStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
+    shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
+    Preact.render(<FeedbackWidget posthog={null as any} survey={survey} readOnly={true} />, shadow)
+    root.appendChild(shadow)
+}
+
 // This is the main exported function
 export function generateSurveys(posthog: PostHog) {
     // NOTE: Important to ensure we never try and run surveys without a window environment
@@ -364,12 +372,24 @@ const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean)
     window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
-export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: Survey }): JSX.Element {
+export function FeedbackWidget({
+    posthog,
+    survey,
+    readOnly,
+}: {
+    posthog: PostHog
+    survey: Survey
+    readOnly?: boolean
+}): JSX.Element {
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyle] = useState({})
     const widgetRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
+        if (readOnly) {
+            return
+        }
+
         if (survey.appearance?.widgetType === 'tab') {
             if (widgetRef.current) {
                 const widgetPos = widgetRef.current.getBoundingClientRect()
@@ -395,7 +415,12 @@ export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: 
     return (
         <>
             {survey.appearance?.widgetType === 'tab' && (
-                <div className="ph-survey-widget-tab" ref={widgetRef} onClick={() => !readOnly && setShowSurvey(!showSurvey)} style={{color: getContrastingTextColor(survey.appearance.widgetColor)}}>
+                <div
+                    className="ph-survey-widget-tab"
+                    ref={widgetRef}
+                    onClick={() => !readOnly && setShowSurvey(!showSurvey)}
+                    style={{ color: getContrastingTextColor(survey.appearance.widgetColor) }}
+                >
                     <div className="ph-survey-widget-tab-icon"></div>
                     {survey.appearance?.widgetLabel || ''}
                 </div>
