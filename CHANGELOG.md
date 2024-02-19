@@ -1,3 +1,7 @@
+## 1.106.3 - 2024-02-19
+
+- fix(surveys): survey popover improvements (#1029)
+
 ## 1.106.2 - 2024-02-19
 
 - fix: protect against parent is not element (#1027)
