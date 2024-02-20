@@ -1,3 +1,7 @@
+## 1.108.0 - 2024-02-20
+
+- fix(surveys): Render feedback preview (#1030)
+
 ## 1.107.0 - 2024-02-20
 
 - feat: Allow changing persistence (#1025)
