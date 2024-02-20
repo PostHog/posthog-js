@@ -536,6 +536,31 @@ describe('Surveys', () => {
             cy.phCaptures().should('include', 'survey shown')
             cy.phCaptures().should('include', 'survey sent')
         })
+
+        it('auto contrasts text color for feedback tab', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Feedback tab survey',
+                        type: 'widget',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                        appearance: {
+                            widgetLabel: 'Feedback',
+                            widgetType: 'tab',
+                            widgetColor: 'white',
+                        },
+                    },
+                ],
+            }).as('surveys')
+            const black = 'rgb(0, 0, 0)'
+            const white = 'rgb(255, 255, 255)'
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').should('have.css', 'background-color', white)
+            cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').should('have.css', 'color', black)
+        })
     })
 
     describe('Thank you message', () => {

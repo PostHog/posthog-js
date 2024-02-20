@@ -58,8 +58,14 @@ export default [
                     preact: 'preact',
                 },
             },
+        ],
+        plugins: [...plugins],
+    },
+    {
+        input: 'src/loader-surveys-preview.ts',
+        output: [
             {
-                file: 'dist/surveys.esm.js',
+                file: 'dist/surveys-module-previews.js',
                 format: 'es',
                 sourcemap: true,
             },
