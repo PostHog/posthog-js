@@ -5,11 +5,13 @@ import Link from 'next/link'
 
 export default function Home() {
     const posthog = usePostHog()
+    const [isClient, setIsClient] = useState(false)
     const result = useFeatureFlagEnabled('test')
 
     const [time, setTime] = useState('')
 
     useEffect(() => {
+        setIsClient(true)
         const t = setInterval(() => {
             setTime(new Date().toISOString().split('T')[1].split('.')[0])
         }, 1000)
@@ -32,10 +34,10 @@ export default function Home() {
 
                 <p>The current time is {time}</p>
 
-                <div className="buttons">
+                <div className="flex items-center gap-2 flex-wrap">
                     <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
                     <button data-attr="autocapture-button">Autocapture buttons</button>
-                    <a data-attr="autocapture-button" href="#">
+                    <a className="Button" data-attr="autocapture-button" href="#">
                         <span>Autocapture a &gt; span</span>
                     </a>
 
@@ -52,9 +54,11 @@ export default function Home() {
                     >
                         Set user properties
                     </button>
+
+                    <button onClick={() => posthog?.reset()}>Reset</button>
                 </div>
 
-                <div className="buttons">
+                <div className="flex items-center gap-2">
                     <Link href="/animations">Animations</Link>
                     <Link href="/iframe">Iframe</Link>
                     <Link href="/canvas">Canvas</Link>
@@ -64,6 +68,26 @@ export default function Home() {
                 </div>
 
                 <p>Feature flag response: {JSON.stringify(result)}</p>
+
+                {isClient && (
+                    <>
+                        <h2 className="mt-4">PostHog info</h2>
+                        <ul className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4">
+                            <li className="font-mono">
+                                DistinctID: <b>{posthog.get_distinct_id()}</b>
+                            </li>
+                            <li className="font-mono">
+                                SessionID: <b>{posthog.get_session_id()}</b>
+                            </li>
+                            <code></code>
+                        </ul>
+
+                        <h2 className="mt-4">PostHog config</h2>
+                        <pre className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4">
+                            <code>{JSON.stringify(posthog.config, null, 2)}</code>
+                        </pre>
+                    </>
+                )}
             </main>
         </>
     )
