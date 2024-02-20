@@ -1,3 +1,7 @@
+## 1.107.0 - 2024-02-20
+
+- feat: Allow changing persistence (#1025)
+
 ## 1.106.3 - 2024-02-19
 
 - fix(surveys): survey popover improvements (#1029)
