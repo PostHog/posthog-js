@@ -24,7 +24,7 @@ export function CookieBanner() {
         <div className="fixed right-2 bottom-2 border rounded p-2 bg-gray-100 text-sm">
             {!consentGiven ? (
                 <>
-                    <p>I am a cookie banner - hear me roar.</p>
+                    <p>I am a cookie banner - you wouldn't like me when I'm hangry.</p>
                     <button
                         onClick={() => {
                             localStorage.setItem('cookie_consent', 'true')
