@@ -230,9 +230,18 @@ export const _info = {
             return 'iPod Touch'
         } else if (/iPhone/.test(user_agent)) {
             return 'iPhone'
+        } else if (/(watch)(?: ?os[,/]|\d,\d\/)[\d.]+/i.test(user_agent)) {
+            return 'Apple Watch'
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
             return 'BlackBerry'
-        } else if (/Android/.test(user_agent) && !/Mobile/.test(user_agent)) {
+        } else if (
+            (/Android/.test(user_agent) && !/Mobile/.test(user_agent)) ||
+            (/Android/.test(user_agent) && /Nexus 9/.test(user_agent)) ||
+            (/Android/.test(user_agent) && /(HUAWEISHT|BTV)/i.test(user_agent))
+        ) {
+            if (/(huaweimed-al00|tah-)/i.test(user_agent)) {
+                return 'Android'
+            }
             return 'Android Tablet'
         } else if (/Android/.test(user_agent)) {
             return 'Android'
@@ -245,6 +254,8 @@ export const _info = {
         const device = this.device(user_agent)
         if (device === 'iPad' || device === 'Android Tablet') {
             return 'Tablet'
+        } else if (device === 'Apple Watch') {
+            return 'Wearable'
         } else if (device) {
             return 'Mobile'
         } else {

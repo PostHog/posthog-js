@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -192,6 +192,9 @@ devDependencies:
   typescript:
     specifier: ^4.9.5
     version: 4.9.5
+  ua-parser-js:
+    specifier: https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173
+    version: github.com/faisalman/ua-parser-js/8087a1b4f0e25f1663ca3ddc2e06371d36642173
   yargs:
     specifier: ^17.7.2
     version: 17.7.2
@@ -10811,4 +10814,10 @@ packages:
   /yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
+    dev: true
+
+  github.com/faisalman/ua-parser-js/8087a1b4f0e25f1663ca3ddc2e06371d36642173:
+    resolution: {tarball: https://codeload.github.com/faisalman/ua-parser-js/tar.gz/8087a1b4f0e25f1663ca3ddc2e06371d36642173}
+    name: ua-parser-js
+    version: 1.0.37
     dev: true
