@@ -217,6 +217,14 @@ describe(`event-utils`, () => {
         })
 
         test.each(uaParserDeviceTestCases)('us parser test cases $ua', (testCase) => {
+            if (testCase['expect']['type'] === 'smarttv') {
+                // we'll test that separately
+                return
+            }
+            if (testCase['expect']['type'] === 'wearable') {
+                // we'll test that separately
+                return
+            }
             const actual = _info.deviceType(testCase['ua']).toLowerCase()
             const expected =
                 _isUndefined(testCase['expect']['type']) || testCase['expect']['type'] === 'undefined'
