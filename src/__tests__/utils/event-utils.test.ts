@@ -1,7 +1,5 @@
 import { _info } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
-import uaParserDeviceTestCases from 'ua-parser-js/test/device-test.json'
-import { _isUndefined } from '../../utils/type-utils'
 
 describe(`event-utils`, () => {
     describe('properties', () => {
@@ -214,15 +212,6 @@ describe(`event-utils`, () => {
 
         test.each(browserTestcases)('browser %s', ({ userAgent, vendor, expectedBrowser }) => {
             expect(_info.browser(userAgent, vendor, '')).toBe(expectedBrowser)
-        })
-
-        test.each(uaParserDeviceTestCases)('us parser test cases $ua', (testCase) => {
-            const actual = _info.deviceType(testCase['ua']).toLowerCase()
-            const expected =
-                _isUndefined(testCase['expect']['type']) || testCase['expect']['type'] === 'undefined'
-                    ? 'desktop'
-                    : testCase['expect']['type']
-            expect(actual).toBe(expected)
         })
     })
 })

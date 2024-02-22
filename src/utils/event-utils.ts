@@ -4,7 +4,6 @@ import { Properties } from '../types'
 import Config from '../config'
 import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
 import { document, window, location, userAgent, assignableWindow } from './globals'
-import UAParser from 'ua-parser-js'
 
 /**
  * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
@@ -223,36 +222,34 @@ export const _info = {
     },
 
     device: function (user_agent: string): string {
-        return new UAParser(user_agent).getOS().name || ''
-        // if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
-        //     return 'Windows Phone'
-        // } else if (/iPad/.test(user_agent)) {
-        //     return 'iPad'
-        // } else if (/iPod/.test(user_agent)) {
-        //     return 'iPod Touch'
-        // } else if (/iPhone/.test(user_agent)) {
-        //     return 'iPhone'
-        // } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
-        //     return 'BlackBerry'
-        // } else if (/Android/.test(user_agent) && !/Mobile/.test(user_agent)) {
-        //     return 'Android Tablet'
-        // } else if (/Android/.test(user_agent)) {
-        //     return 'Android'
-        // } else {
-        //     return ''
-        // }
+        if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
+            return 'Windows Phone'
+        } else if (/iPad/.test(user_agent)) {
+            return 'iPad'
+        } else if (/iPod/.test(user_agent)) {
+            return 'iPod Touch'
+        } else if (/iPhone/.test(user_agent)) {
+            return 'iPhone'
+        } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
+            return 'BlackBerry'
+        } else if (/Android/.test(user_agent) && !/Mobile/.test(user_agent)) {
+            return 'Android Tablet'
+        } else if (/Android/.test(user_agent)) {
+            return 'Android'
+        } else {
+            return ''
+        }
     },
 
     deviceType: function (user_agent: string): string {
-        return new UAParser(user_agent).getDevice().type || 'Desktop'
-        // const device = this.device(user_agent)
-        // if (device === 'iPad' || device === 'Android Tablet') {
-        //     return 'Tablet'
-        // } else if (device) {
-        //     return 'Mobile'
-        // } else {
-        //     return 'Desktop'
-        // }
+        const device = this.device(user_agent)
+        if (device === 'iPad' || device === 'Android Tablet') {
+            return 'Tablet'
+        } else if (device) {
+            return 'Mobile'
+        } else {
+            return 'Desktop'
+        }
     },
 
     referrer: function (): string {
