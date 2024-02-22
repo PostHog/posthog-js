@@ -6,10 +6,14 @@ import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from '
 import { document, window, location, userAgent, assignableWindow } from './globals'
 
 const ANDROID = 'Android'
+const ANDROID_TABLET = `${ANDROID} Tablet`
 const IPAD = 'iPad'
+const APPLE_WATCH = 'Apple Watch'
 const SAFARI = 'Safari'
 const BLACKBERRY = 'BlackBerry'
 const CHROME = 'Chrome'
+const INTERNET_EXPLORER = 'Internet Explorer'
+const INTERNET_EXPLORER_MOBILE = `${INTERNET_EXPLORER} Mobile`
 
 /**
  * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
@@ -97,7 +101,7 @@ export const _info = {
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
             return BLACKBERRY
         } else if (_includes(user_agent, 'IEMobile') || _includes(user_agent, 'WPDesktop')) {
-            return 'Internet Explorer Mobile'
+            return INTERNET_EXPLORER_MOBILE
         } else if (_includes(user_agent, 'SamsungBrowser/')) {
             // https://developer.samsung.com/internet/user-agent-string-format
             return 'Samsung Internet'
@@ -125,7 +129,7 @@ export const _info = {
         } else if (_includes(user_agent, 'Firefox')) {
             return 'Firefox'
         } else if (_includes(user_agent, 'MSIE') || _includes(user_agent, 'Trident/')) {
-            return 'Internet Explorer'
+            return INTERNET_EXPLORER
         } else if (_includes(user_agent, 'Gecko')) {
             return 'Mozilla'
         } else {
@@ -144,7 +148,7 @@ export const _info = {
     browserVersion: function (userAgent: string, vendor: string | undefined, opera: string): number | null {
         const browser = _info.browser(userAgent, vendor, opera)
         const versionRegexes: Record<string, RegExp[]> = {
-            'Internet Explorer Mobile': [/rv:(\d+(\.\d+)?)/],
+            INTERNET_EXPLORER_MOBILE: [/rv:(\d+(\.\d+)?)/],
             'Microsoft Edge': [/Edge?\/(\d+(\.\d+)?)/],
             Chrome: [/Chrome\/(\d+(\.\d+)?)/],
             'Chrome iOS': [/CriOS\/(\d+(\.\d+)?)/],
@@ -159,7 +163,7 @@ export const _info = {
             BlackBerry: [/BlackBerry (\d+(\.\d+)?)/, /Version\/(\d+(\.\d+)?)/],
             'Android Mobile': [/android\s(\d+(\.\d+)?)/],
             'Samsung Internet': [/SamsungBrowser\/(\d+(\.\d+)?)/],
-            'Internet Explorer': [/(rv:|MSIE )(\d+(\.\d+)?)/],
+            INTERNET_EXPLORER: [/(rv:|MSIE )(\d+(\.\d+)?)/],
             Mozilla: [/rv:(\d+(\.\d+)?)/],
         }
         const regexes: RegExp[] | undefined = versionRegexes[browser as keyof typeof versionRegexes]
@@ -239,7 +243,7 @@ export const _info = {
         } else if (/iPhone/.test(user_agent)) {
             return 'iPhone'
         } else if (/(watch)(?: ?os[,/]|\d,\d\/)[\d.]+/i.test(user_agent)) {
-            return 'Apple Watch'
+            return APPLE_WATCH
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
             return BLACKBERRY
         } else if (/(kobo)\s(ereader|touch)/i.test(user_agent)) {
@@ -258,7 +262,7 @@ export const _info = {
                 if (/(pixel[\daxl ]{0,6})/i.test(user_agent) || /(huaweimed-al00|tah-|APA|)/i.test(user_agent)) {
                     return ANDROID
                 }
-                return 'Android Tablet'
+                return ANDROID_TABLET
             } else {
                 return ANDROID
             }
@@ -269,11 +273,11 @@ export const _info = {
 
     deviceType: function (user_agent: string): string {
         const device = this.device(user_agent)
-        if (device === IPAD || device === 'Android Tablet' || device === 'Kobo' || device === 'Kindle Fire') {
+        if (device === IPAD || device === ANDROID_TABLET || device === 'Kobo' || device === 'Kindle Fire') {
             return 'Tablet'
         } else if (device === 'Nintendo') {
             return 'Console'
-        } else if (device === 'Apple Watch') {
+        } else if (device === APPLE_WATCH) {
             return 'Wearable'
         } else if (device) {
             return 'Mobile'
