@@ -3136,7 +3136,8 @@
         "ua": "Mozilla/5.0 (Linux; U; Android 6.0.1; i980 Build/MRA58K)",
         "expect": {
             "vendor": "Generic",
-            "model": "Android 6.0.1"
+            "model": "Android 6.0.1",
+            "type": "mobile"
         }
     },
     {

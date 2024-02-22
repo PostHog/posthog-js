@@ -254,12 +254,7 @@ export const _info = {
         ) {
             return 'Kindle Fire'
         } else if (/Android/.test(user_agent)) {
-            if (
-                !/Mobile/.test(user_agent) ||
-                /Nexus 9/.test(user_agent) ||
-                /(HUAWEISHT|BTV)/i.test(user_agent) ||
-                /nexus 7/i.test(user_agent)
-            ) {
+            if (!/Mobile/.test(user_agent) || /Nexus (9|7)i/.test(user_agent) || /(HUAWEISHT|BTV)/i.test(user_agent)) {
                 if (/(pixel[\daxl ]{0,6})/i.test(user_agent) || /(huaweimed-al00|tah-|APA|)/i.test(user_agent)) {
                     return ANDROID
                 }
