@@ -335,7 +335,7 @@ export function MultipleChoiceQuestion({
     )
 }
 
-const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, satisfiedEmojig]
+const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, satisfiedEmoji]
 const fiveScaleEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
 const fiveScaleNumbers = [1, 2, 3, 4, 5]
 const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
