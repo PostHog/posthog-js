@@ -6,6 +6,10 @@ import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from '
 import { document, window, location, userAgent, assignableWindow } from './globals'
 
 const ANDROID = 'Android'
+const IPAD = 'iPad'
+const SAFARI = 'Safari'
+const BLACKBERRY = 'BlackBerry'
+const CHROME = 'Chrome'
 
 /**
  * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
@@ -13,7 +17,7 @@ const ANDROID = 'Android'
  * before this check is made
  */
 function isSafari(userAgent: string): boolean {
-    return _includes(userAgent, 'Safari') && !_includes(userAgent, 'Chrome') && !_includes(userAgent, ANDROID)
+    return _includes(userAgent, SAFARI) && !_includes(userAgent, CHROME) && !_includes(userAgent, ANDROID)
 }
 
 export const _info = {
@@ -91,7 +95,7 @@ export const _info = {
             }
             return 'Opera'
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
-            return 'BlackBerry'
+            return BLACKBERRY
         } else if (_includes(user_agent, 'IEMobile') || _includes(user_agent, 'WPDesktop')) {
             return 'Internet Explorer Mobile'
         } else if (_includes(user_agent, 'SamsungBrowser/')) {
@@ -101,8 +105,8 @@ export const _info = {
             return 'Microsoft Edge'
         } else if (_includes(user_agent, 'FBIOS')) {
             return 'Facebook Mobile'
-        } else if (_includes(user_agent, 'Chrome')) {
-            return 'Chrome'
+        } else if (_includes(user_agent, CHROME)) {
+            return CHROME
         } else if (_includes(user_agent, 'CriOS')) {
             return 'Chrome iOS'
         } else if (_includes(user_agent, 'UCWEB') || _includes(user_agent, 'UCBrowser')) {
@@ -113,7 +117,7 @@ export const _info = {
             if (_includes(user_agent, 'Mobile')) {
                 return 'Mobile Safari'
             }
-            return 'Safari'
+            return SAFARI
         } else if (_includes(user_agent, ANDROID)) {
             return 'Android Mobile'
         } else if (_includes(user_agent, 'Konqueror') || _includes(user_agent, 'konqueror')) {
@@ -206,7 +210,7 @@ export const _info = {
             }
             return { os_name: ANDROID, os_version: '' }
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
-            return { os_name: 'BlackBerry', os_version: '' }
+            return { os_name: BLACKBERRY, os_version: '' }
         } else if (/Mac/i.test(user_agent)) {
             const match = /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i.exec(user_agent)
             if (match && match[1]) {
@@ -229,7 +233,7 @@ export const _info = {
         } else if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
             return 'Windows Phone'
         } else if (/iPad/.test(user_agent)) {
-            return 'iPad'
+            return IPAD
         } else if (/iPod/.test(user_agent)) {
             return 'iPod Touch'
         } else if (/iPhone/.test(user_agent)) {
@@ -237,7 +241,7 @@ export const _info = {
         } else if (/(watch)(?: ?os[,/]|\d,\d\/)[\d.]+/i.test(user_agent)) {
             return 'Apple Watch'
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
-            return 'BlackBerry'
+            return BLACKBERRY
         } else if (/(kobo)\s(ereader|touch)/i.test(user_agent)) {
             return 'Kobo'
         } else if (/Nokia/i.test(user_agent)) {
@@ -265,7 +269,7 @@ export const _info = {
 
     deviceType: function (user_agent: string): string {
         const device = this.device(user_agent)
-        if (device === 'iPad' || device === 'Android Tablet' || device === 'Kobo' || device === 'Kindle Fire') {
+        if (device === IPAD || device === 'Android Tablet' || device === 'Kobo' || device === 'Kindle Fire') {
             return 'Tablet'
         } else if (device === 'Nintendo') {
             return 'Console'
