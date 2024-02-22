@@ -5,13 +5,15 @@ import Config from '../config'
 import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
 import { document, window, location, userAgent, assignableWindow } from './globals'
 
+const ANDROID = 'Android'
+
 /**
  * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
  * We can be slightly loose because some options have been ruled out (e.g. firefox on iOS)
  * before this check is made
  */
 function isSafari(userAgent: string): boolean {
-    return _includes(userAgent, 'Safari') && !_includes(userAgent, 'Chrome') && !_includes(userAgent, 'Android')
+    return _includes(userAgent, 'Safari') && !_includes(userAgent, 'Chrome') && !_includes(userAgent, ANDROID)
 }
 
 export const _info = {
@@ -112,7 +114,7 @@ export const _info = {
                 return 'Mobile Safari'
             }
             return 'Safari'
-        } else if (_includes(user_agent, 'Android')) {
+        } else if (_includes(user_agent, ANDROID)) {
             return 'Android Mobile'
         } else if (_includes(user_agent, 'Konqueror') || _includes(user_agent, 'konqueror')) {
             return 'Konqueror'
@@ -200,9 +202,9 @@ export const _info = {
             const match = /Android (\d+)\.(\d+)\.?(\d+)?/i.exec(user_agent)
             if (match && match[1]) {
                 const versionParts = [match[1], match[2], match[3] || '0']
-                return { os_name: 'Android', os_version: versionParts.join('.') }
+                return { os_name: ANDROID, os_version: versionParts.join('.') }
             }
-            return { os_name: 'Android', os_version: '' }
+            return { os_name: ANDROID, os_version: '' }
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
             return { os_name: 'BlackBerry', os_version: '' }
         } else if (/Mac/i.test(user_agent)) {
@@ -222,7 +224,9 @@ export const _info = {
     },
 
     device: function (user_agent: string): string {
-        if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
+        if (/(Nintendo \w+)/i.test(user_agent) || /(playstation \w+)/i.test(user_agent)) {
+            return 'Nintendo'
+        } else if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
             return 'Windows Phone'
         } else if (/iPad/.test(user_agent)) {
             return 'iPad'
@@ -234,17 +238,26 @@ export const _info = {
             return 'Apple Watch'
         } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
             return 'BlackBerry'
+        } else if (/(kobo)\s(ereader|touch)/i.test(user_agent)) {
+            return 'Kobo'
+        } else if (/Nokia/i.test(user_agent)) {
+            return 'Nokia'
         } else if (
-            (/Android/.test(user_agent) && !/Mobile/.test(user_agent)) ||
-            (/Android/.test(user_agent) && /Nexus 9/.test(user_agent)) ||
-            (/Android/.test(user_agent) && /(HUAWEISHT|BTV)/i.test(user_agent))
+            // Kindle Fire without Silk / Echo Show
+            /(kf[a-z]{2}wi|aeo[c-r]{2})( bui|\))/i.test(user_agent) ||
+            // Kindle Fire HD
+            /(kf[a-z]+)( bui|\)).+silk\//i.test(user_agent)
         ) {
-            if (/(huaweimed-al00|tah-)/i.test(user_agent)) {
-                return 'Android'
-            }
-            return 'Android Tablet'
+            return 'Kindle Fire'
         } else if (/Android/.test(user_agent)) {
-            return 'Android'
+            if (!/Mobile/.test(user_agent) || /Nexus 9/.test(user_agent) || /(HUAWEISHT|BTV)/i.test(user_agent)) {
+                if (/(huaweimed-al00|tah-|APA)/i.test(user_agent)) {
+                    return ANDROID
+                }
+                return 'Android Tablet'
+            } else {
+                return ANDROID
+            }
         } else {
             return ''
         }
@@ -252,8 +265,10 @@ export const _info = {
 
     deviceType: function (user_agent: string): string {
         const device = this.device(user_agent)
-        if (device === 'iPad' || device === 'Android Tablet') {
+        if (device === 'iPad' || device === 'Android Tablet' || device === 'Kobo' || device === 'Kindle Fire') {
             return 'Tablet'
+        } else if (device === 'Nintendo') {
+            return 'Console'
         } else if (device === 'Apple Watch') {
             return 'Wearable'
         } else if (device) {

@@ -94,7 +94,6 @@
         "testcafe-browser-provider-browserstack": "1.14.0",
         "tslib": "^2.5.0",
         "typescript": "^4.9.5",
-        "ua-parser-js": "https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173",
         "yargs": "^17.7.2"
     },
     "lint-staged": {
