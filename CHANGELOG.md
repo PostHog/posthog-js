@@ -1,3 +1,7 @@
+## 1.108.2 - 2024-02-22
+
+- fix: Path for site apps (#1037)
+
 ## 1.108.1 - 2024-02-22
 
 - fix(surveys): fix emoji scale (#1036)
