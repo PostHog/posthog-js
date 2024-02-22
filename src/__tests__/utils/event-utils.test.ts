@@ -1,6 +1,7 @@
 import { _info } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
 import uaParserDeviceTestCases from './device.test.json'
+import uaParserOSTestCases from './os-test.json'
 import { _isUndefined } from '../../utils/type-utils'
 
 describe(`event-utils`, () => {
@@ -221,7 +222,7 @@ describe(`event-utils`, () => {
          * at "https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173"
          * they were copied here
          */
-        test.each(uaParserDeviceTestCases)('us parser test cases $ua', (testCase) => {
+        test.each(uaParserDeviceTestCases)('device - $ua', (testCase) => {
             if (testCase['expect']['type'] === 'smarttv') {
                 // we'll test that separately
                 return
@@ -240,6 +241,19 @@ describe(`event-utils`, () => {
                     ? 'desktop'
                     : testCase['expect']['type']
             expect(actual).toBe(expected)
+        })
+
+        /**
+         * ua-parser-js v1 has MIT licensed test cases
+         * at "https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173"
+         * they were copied here
+         *
+         * we had to edit them a chunk because we don't aim for the same level of detail
+         */
+        test.each(uaParserOSTestCases)('OS - $ua', (testCase) => {
+            const actual = _info.os(testCase['ua'])
+            const expected = testCase['expect']
+            expect(actual).toStrictEqual(expected)
         })
     })
 })

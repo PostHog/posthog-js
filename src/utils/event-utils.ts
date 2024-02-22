@@ -206,6 +206,14 @@ export const _info = {
                 return { os_name: 'iOS', os_version: versionParts.join('.') }
             }
             return { os_name: 'iOS', os_version: '' }
+        } else if (/watch|watch os/i.test(user_agent)) {
+            // e.g. Watch4,3/5.3.8 (16U680)
+            const match = /(watch.*\/(\d+\.\d+\.\d+)|watch os,(\d+\.\d+),)/i.exec(user_agent)
+            let version = ''
+            if (match && match.length >= 3) {
+                version = _isUndefined(match[2]) ? match[3] : match[2]
+            }
+            return { os_name: 'watchOS', os_version: version }
         } else if (/Android/.test(user_agent)) {
             const match = /Android (\d+)\.(\d+)\.?(\d+)?/i.exec(user_agent)
             if (match && match[1]) {
@@ -222,7 +230,7 @@ export const _info = {
                 return { os_name: 'Mac OS X', os_version: versionParts.join('.') }
             }
             return { os_name: 'Mac OS X', os_version: '' }
-        } else if (/Linux/.test(user_agent)) {
+        } else if (/(Linux|debian)/i.test(user_agent)) {
             return { os_name: 'Linux', os_version: '' }
         } else if (/CrOS/.test(user_agent)) {
             return { os_name: 'Chrome OS', os_version: '' }
