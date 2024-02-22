@@ -33,9 +33,11 @@
     ],
     "dependencies": {
         "fflate": "^0.4.8",
-        "preact": "^10.19.3"
+        "preact": "^10.19.3",
+        "ua-parser-js": "https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173"
     },
     "devDependencies": {
+        "@types/ua-parser-js": "^0.7.39",
         "@babel/core": "7.18.9",
         "@babel/plugin-syntax-decorators": "^7.23.3",
         "@babel/plugin-transform-react-jsx": "^7.23.4",

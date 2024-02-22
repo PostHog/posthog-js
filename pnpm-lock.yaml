@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -10,12 +10,18 @@ patchedDependencies:
     path: patches/rrweb@2.0.0-alpha.11.patch
 
 dependencies:
+  '@types/ua-parser-js':
+    specifier: ^0.7.39
+    version: 0.7.39
   fflate:
     specifier: ^0.4.8
     version: 0.4.8
   preact:
     specifier: ^10.19.3
     version: 10.19.3
+  ua-parser-js:
+    specifier: https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173
+    version: github.com/faisalman/ua-parser-js/8087a1b4f0e25f1663ca3ddc2e06371d36642173
 
 devDependencies:
   '@babel/core':
@@ -2936,6 +2942,10 @@ packages:
   /@types/stack-utils@2.0.1:
     resolution: {integrity: sha512-Hl219/BT5fLAaz6NDkSuhzasy49dwQS/DSdu4MdggFB8zcXv7vflBI3xp7FEmkmdDkBUI2bPUNeMttp2knYdxw==}
     dev: true
+
+  /@types/ua-parser-js@0.7.39:
+    resolution: {integrity: sha512-P/oDfpofrdtF5xw433SPALpdSchtJmY7nsJItf8h3KXqOslkbySh8zq4dSWXH2oTjRvJ5PczVEoCZPow6GicLg==}
+    dev: false
 
   /@types/uuid@9.0.1:
     resolution: {integrity: sha512-rFT3ak0/2trgvp4yYZo5iKFEPsET7vKydKF+VRCxlQ9bpheehyAJH89dAkaLEq/j/RZXJIqcgsmPJKUP1Z28HA==}
@@ -10812,3 +10822,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
     dev: true
+
+  github.com/faisalman/ua-parser-js/8087a1b4f0e25f1663ca3ddc2e06371d36642173:
+    resolution: {tarball: https://codeload.github.com/faisalman/ua-parser-js/tar.gz/8087a1b4f0e25f1663ca3ddc2e06371d36642173}
+    name: ua-parser-js
+    version: 1.0.37
+    dev: false
