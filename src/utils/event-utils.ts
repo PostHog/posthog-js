@@ -4,7 +4,7 @@ import { Properties } from '../types'
 import Config from '../config'
 import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
 import { document, window, location, userAgent, assignableWindow } from './globals'
-import UAParser from 'ua-parser-js'
+import { UAParser } from 'ua-parser-js'
 
 /**
  * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
