@@ -1,3 +1,7 @@
+## 1.108.1 - 2024-02-22
+
+- fix(surveys): fix emoji scale (#1036)
+
 ## 1.108.0 - 2024-02-20
 
 - fix(surveys): Render feedback preview (#1030)
