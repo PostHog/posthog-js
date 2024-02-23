@@ -270,6 +270,7 @@ export const _info = {
         }
     },
 
+    // currently described as "the mobile device that was used"
     device: function (user_agent: string): string {
         if (/(Nintendo \w+)/i.test(user_agent) || /(playstation \w+)/i.test(user_agent)) {
             return 'Nintendo'
@@ -297,22 +298,33 @@ export const _info = {
         ) {
             return 'Kindle Fire'
         } else if (/Android/.test(user_agent)) {
-            if (!/Mobile/.test(user_agent) || /Nexus (9|7)i/.test(user_agent) || /(HUAWEISHT|BTV)/i.test(user_agent)) {
-                if (/(pixel[\daxl ]{0,6})/i.test(user_agent) || /(huaweimed-al00|tah-|APA|)/i.test(user_agent)) {
+            if (!/Mobile/.test(user_agent) || /Nexus [97]/i.test(user_agent) || /(HUAWEISHT|BTV)/i.test(user_agent)) {
+                if (/(pixel[\daxl ]{0,6})/i.test(user_agent) || /(huaweimed-al00|tah-|APA)/i.test(user_agent)) {
                     return ANDROID
                 }
                 return ANDROID_TABLET
             } else {
                 return ANDROID
             }
+        } else if (/(pda|mobile)/i.test(user_agent)) {
+            return 'Generic mobile'
+        } else if (/tablet/i.test(user_agent)) {
+            return 'Generic tablet'
         } else {
             return ''
         }
     },
 
+    // currently described as "the type of device that was used"
     deviceType: function (user_agent: string): string {
         const device = this.device(user_agent)
-        if (device === IPAD || device === ANDROID_TABLET || device === 'Kobo' || device === 'Kindle Fire') {
+        if (
+            device === IPAD ||
+            device === ANDROID_TABLET ||
+            device === 'Kobo' ||
+            device === 'Kindle Fire' ||
+            device === 'Generic tablet'
+        ) {
             return 'Tablet'
         } else if (device === 'Nintendo') {
             return 'Console'
