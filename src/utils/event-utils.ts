@@ -3,36 +3,45 @@ import { _isNull, _isUndefined } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
 import { _each, _extend, _includes, _strip_empty_properties, _timestamp } from './index'
-import { document, window, location, userAgent, assignableWindow } from './globals'
+import { assignableWindow, document, location, userAgent, window } from './globals'
 
+const FACEBOOK = 'Facebook'
+const MOBILE = 'Mobile'
+const IOS = 'iOS'
 const ANDROID = 'Android'
-const ANDROID_TABLET = `${ANDROID} Tablet`
+const ANDROID_TABLET = ANDROID + ' Tablet'
 const IPAD = 'iPad'
 const APPLE = 'Apple'
-const APPLE_WATCH = `${APPLE} Watch`
+const APPLE_WATCH = APPLE + ' Watch'
 const SAFARI = 'Safari'
 const BLACKBERRY = 'BlackBerry'
+const SAMSUNG = 'Samsung'
+const SAMSUNG_BROWSER = SAMSUNG + 'Browser'
+const SAMSUNG_INTERNET = SAMSUNG + ' Internet'
 const CHROME = 'Chrome'
-const CHROME_OS = `${CHROME} OS`
-const CHROME_IOS = `${CHROME} iOS`
+const CHROME_OS = CHROME + ' OS'
+const CHROME_IOS = CHROME + ' ' + IOS
 const INTERNET_EXPLORER = 'Internet Explorer'
-const INTERNET_EXPLORER_MOBILE = `${INTERNET_EXPLORER} Mobile`
-const MICROSOFT = 'Microsoft'
+const INTERNET_EXPLORER_MOBILE = INTERNET_EXPLORER + ' ' + MOBILE
+const OPERA = 'Opera'
+const OPERA_MINI = OPERA + ' Mini'
 const EDGE = 'Edge'
-const MICROSOFT_EDGE = `${MICROSOFT} ${EDGE}`
+const MICROSOFT_EDGE = 'Microsoft ' + EDGE
 const FIREFOX = 'Firefox'
-const FIREFOX_IOS = `${FIREFOX} iOS`
+const FIREFOX_IOS = FIREFOX + ' ' + IOS
 const NINTENDO = 'Nintendo'
 const PLAYSTATION = 'PlayStation'
 const XBOX = 'Xbox'
+const ANDROID_MOBILE = ANDROID + ' ' + MOBILE
+const MOBILE_SAFARI = MOBILE + ' ' + SAFARI
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
-const DEFAULT_BROWSER_VERSION_REGEX = new RegExp(`Version\\/${BROWSER_VERSION_REGEX_SUFFIX}`)
+const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
 
-const XBOX_REGEX = new RegExp(`${XBOX}`, 'i')
-const PLAYSTATION_REGEX = new RegExp(`${PLAYSTATION} \\w+`, 'i')
-const NINTENDO_REGEX = new RegExp(`${NINTENDO} \\w+`, 'i')
-const BLACKBERRY_BROWSER_REGEX = new RegExp(`${BLACKBERRY}|PlayBook|BB10`, 'i')
+const XBOX_REGEX = new RegExp(XBOX, 'i')
+const PLAYSTATION_REGEX = new RegExp(PLAYSTATION + ' \\w+', 'i')
+const NINTENDO_REGEX = new RegExp(NINTENDO + ' \\w+', 'i')
+const BLACKBERRY_REGEX = new RegExp(BLACKBERRY + '|PlayBook|BB10', 'i')
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
@@ -132,21 +141,21 @@ export const _info = {
         vendor = vendor || '' // vendor is undefined for at least IE9
         if (opera || _includes(user_agent, ' OPR/')) {
             if (_includes(user_agent, 'Mini')) {
-                return 'Opera Mini'
+                return OPERA_MINI
             }
-            return 'Opera'
+            return OPERA
         } else {
-            if (BLACKBERRY_BROWSER_REGEX.test(user_agent)) {
+            if (BLACKBERRY_REGEX.test(user_agent)) {
                 return BLACKBERRY
-            } else if (_includes(user_agent, 'IEMobile') || _includes(user_agent, 'WPDesktop')) {
+            } else if (_includes(user_agent, 'IE' + MOBILE) || _includes(user_agent, 'WPDesktop')) {
                 return INTERNET_EXPLORER_MOBILE
-            } else if (_includes(user_agent, 'SamsungBrowser/')) {
+            } else if (_includes(user_agent, `${SAMSUNG_BROWSER}/`)) {
                 // https://developer.samsung.com/internet/user-agent-string-format
-                return 'Samsung Internet'
-            } else if (_includes(user_agent, 'Edge') || _includes(user_agent, 'Edg/')) {
+                return SAMSUNG_INTERNET
+            } else if (_includes(user_agent, EDGE) || _includes(user_agent, 'Edg/')) {
                 return MICROSOFT_EDGE
             } else if (_includes(user_agent, 'FBIOS')) {
-                return 'Facebook Mobile'
+                return FACEBOOK + ' ' + MOBILE
             } else if (_includes(user_agent, CHROME)) {
                 return CHROME
             } else if (_includes(user_agent, 'CriOS')) {
@@ -156,12 +165,12 @@ export const _info = {
             } else if (_includes(user_agent, 'FxiOS')) {
                 return FIREFOX_IOS
             } else if (_includes(vendor, APPLE) || isSafari(user_agent)) {
-                if (_includes(user_agent, 'Mobile')) {
-                    return 'Mobile Safari'
+                if (_includes(user_agent, MOBILE)) {
+                    return MOBILE_SAFARI
                 }
                 return SAFARI
             } else if (_includes(user_agent, ANDROID)) {
-                return 'Android Mobile'
+                return ANDROID_MOBILE
             } else if (_includes(user_agent, 'Konqueror') || _includes(user_agent, 'konqueror')) {
                 return 'Konqueror'
             } else if (_includes(user_agent, FIREFOX)) {
@@ -193,15 +202,15 @@ export const _info = {
             [CHROME_IOS]: [new RegExp(`CriOS\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
             'UC Browser': [new RegExp(`(UCBrowser|UCWEB)\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
             [SAFARI]: [DEFAULT_BROWSER_VERSION_REGEX],
-            'Mobile Safari': [DEFAULT_BROWSER_VERSION_REGEX],
-            Opera: [new RegExp(`(Opera|OPR)\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
+            [MOBILE_SAFARI]: [DEFAULT_BROWSER_VERSION_REGEX],
+            [OPERA]: [new RegExp(`(${OPERA}|OPR)\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
             [FIREFOX]: [new RegExp(`${FIREFOX}\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
             [FIREFOX_IOS]: [new RegExp(`FxiOS\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
             Konqueror: [new RegExp(`Konqueror[:/]?${BROWSER_VERSION_REGEX_SUFFIX}`, 'i')],
             // not every blackberry user agent has the version after the name
             [BLACKBERRY]: [new RegExp(`${BLACKBERRY} ${BROWSER_VERSION_REGEX_SUFFIX}`), DEFAULT_BROWSER_VERSION_REGEX],
-            'Android Mobile': [new RegExp(`android\\s${BROWSER_VERSION_REGEX_SUFFIX}`)],
-            'Samsung Internet': [new RegExp(`SamsungBrowser\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
+            [ANDROID_MOBILE]: [new RegExp(`android\\s${BROWSER_VERSION_REGEX_SUFFIX}`)],
+            [SAMSUNG_INTERNET]: [new RegExp(`${SAMSUNG_BROWSER}\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
             [INTERNET_EXPLORER]: [new RegExp(`(rv:|MSIE )${BROWSER_VERSION_REGEX_SUFFIX}`)],
             Mozilla: [new RegExp(`rv:${BROWSER_VERSION_REGEX_SUFFIX}`)],
         }
@@ -231,20 +240,20 @@ export const _info = {
         if (/xbox; xbox (.*?)[);]/i.test(user_agent)) {
             const match = /xbox; xbox (.*?)[);]/i.exec(user_agent)
             if (match && match[1]) {
-                return { os_name: 'Xbox', os_version: match[1] }
+                return { os_name: XBOX, os_version: match[1] }
             }
-            return { os_name: 'Xbox', os_version: '' }
-        } else if (/(nintendo)/i.test(user_agent)) {
-            return { os_name: 'Nintendo', os_version: '' }
-        } else if (/(playstation)/i.test(user_agent)) {
-            return { os_name: 'PlayStation', os_version: '' }
+            return { os_name: XBOX, os_version: '' }
+        } else if (/nintendo/i.test(user_agent)) {
+            return { os_name: NINTENDO, os_version: '' }
+        } else if (/playstation/i.test(user_agent)) {
+            return { os_name: PLAYSTATION, os_version: '' }
         } else if (/Windows/i.test(user_agent)) {
             if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
                 return { os_name: 'Windows Phone', os_version: '' }
             }
             // not all JS versions support negative lookbehind, so we need two checks here
             if (/Mobile\b/.test(user_agent) && !/IEMobile\b/.test(user_agent)) {
-                return { os_name: 'Windows Mobile', os_version: '' }
+                return { os_name: 'Windows ' + MOBILE, os_version: '' }
             }
             const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
             if (match && match[1]) {
@@ -260,9 +269,9 @@ export const _info = {
             const match = /OS (\d+)_(\d+)_?(\d+)?/i.exec(user_agent)
             if (match && match[1]) {
                 const versionParts = [match[1], match[2], match[3] || '0']
-                return { os_name: 'iOS', os_version: versionParts.join('.') }
+                return { os_name: IOS, os_version: versionParts.join('.') }
             }
-            return { os_name: 'iOS', os_version: '' }
+            return { os_name: IOS, os_version: '' }
         } else if (/watch|watch os/i.test(user_agent)) {
             // e.g. Watch4,3/5.3.8 (16U680)
             const match = /(watch.*\/(\d+\.\d+\.\d+)|watch os,(\d+\.\d+),)/i.exec(user_agent)
@@ -278,7 +287,7 @@ export const _info = {
                 return { os_name: ANDROID, os_version: versionParts.join('.') }
             }
             return { os_name: ANDROID, os_version: '' }
-        } else if (/(BlackBerry|PlayBook|BB10)/i.test(user_agent)) {
+        } else if (BLACKBERRY_REGEX.test(user_agent)) {
             return { os_name: BLACKBERRY, os_version: '' }
         } else if (/Mac/i.test(user_agent)) {
             const match = /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i.exec(user_agent)
@@ -316,7 +325,7 @@ export const _info = {
             return 'iPhone'
         } else if (/(watch)(?: ?os[,/]|\d,\d\/)[\d.]+/i.test(user_agent)) {
             return APPLE_WATCH
-        } else if (BLACKBERRY_BROWSER_REGEX.test(user_agent)) {
+        } else if (BLACKBERRY_REGEX.test(user_agent)) {
             return BLACKBERRY
         } else if (/(kobo)\s(ereader|touch)/i.test(user_agent)) {
             return 'Kobo'
