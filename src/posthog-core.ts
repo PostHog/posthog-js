@@ -574,10 +574,6 @@ export class PostHog {
         if (response.elementsChainAsString) {
             this.elementsChainAsString = response.elementsChainAsString
         }
-
-        if (response.__preview_ingestion_endpoints) {
-            this.config.__preview_ingestion_endpoints = response.__preview_ingestion_endpoints
-        }
     }
 
     _loaded(): void {

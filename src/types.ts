@@ -142,8 +142,6 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
-    /** WARNING: This is an experimental option not meant for public use. */
-    __preview_ingestion_endpoints?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -283,7 +281,6 @@ export interface DecideResponse {
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
-    __preview_ingestion_endpoints?: boolean
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
