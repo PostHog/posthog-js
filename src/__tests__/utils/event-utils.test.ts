@@ -256,6 +256,12 @@ describe(`event-utils`, () => {
             expect(actual).toStrictEqual(expected)
         })
 
+        test('wat', () => {
+            const ua = 'Mozilla/5.0 (compatible; MSIE 9.0; Windows Phone OS 7.5; Trident/5.0; IEMobile/9.0; Xbox)'
+            expect(_info.device(ua)).toBe('Xbox')
+            expect(_info.deviceType(ua)).toBe('Console')
+        })
+
         it('osVersion', () => {
             const osVersions = {
                 // Windows Phone
