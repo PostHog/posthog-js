@@ -189,9 +189,22 @@ export const _info = {
     },
 
     os: function (user_agent: string): { os_name: string; os_version: string } {
-        if (/Windows/i.test(user_agent)) {
+        if (/xbox; xbox (.*?)[);]/i.test(user_agent)) {
+            const match = /xbox; xbox (.*?)[);]/i.exec(user_agent)
+            if (match && match[1]) {
+                return { os_name: 'Xbox', os_version: match[1] }
+            }
+        } else if (/(nintendo)/i.test(user_agent)) {
+            return { os_name: 'Nintendo', os_version: '' }
+        } else if (/(playstation)/i.test(user_agent)) {
+            return { os_name: 'PlayStation', os_version: '' }
+        } else if (/Windows/i.test(user_agent)) {
             if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
                 return { os_name: 'Windows Phone', os_version: '' }
+            }
+            // not all JS versions support negative lookbehind, so we need two checks here
+            if (/Mobile\b/.test(user_agent) && !/IEMobile\b/.test(user_agent)) {
+                return { os_name: 'Windows Mobile', os_version: '' }
             }
             const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
             if (match && match[1]) {
