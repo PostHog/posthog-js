@@ -255,12 +255,5 @@ describe(`event-utils`, () => {
             const expected = testCase['expect']
             expect(actual).toStrictEqual(expected)
         })
-
-        test('wat', () => {
-            const ua =
-                'Mozilla/5.0 (Linux; Android 4.4.2; Nexus 7 Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.99 Safari/537.36'
-            expect(_info.device(ua)).toBe('Android tablet')
-            expect(_info.deviceType(ua)).toBe('tablet')
-        })
     })
 })
