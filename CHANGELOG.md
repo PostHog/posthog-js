@@ -1,3 +1,7 @@
+## 1.108.3 - 2024-02-23
+
+- feat: Rollout new ingestion endpoints (#1032)
+
 ## 1.108.2 - 2024-02-22
 
 - fix: Path for site apps (#1037)
