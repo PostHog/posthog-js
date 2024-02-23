@@ -208,6 +208,7 @@ export const _info = {
             if (match && match[1]) {
                 return { os_name: 'Xbox', os_version: match[1] }
             }
+            return { os_name: 'Xbox', os_version: '' }
         } else if (/(nintendo)/i.test(user_agent)) {
             return { os_name: 'Nintendo', os_version: '' }
         } else if (/(playstation)/i.test(user_agent)) {
