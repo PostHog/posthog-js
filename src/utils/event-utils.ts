@@ -12,8 +12,11 @@ const APPLE_WATCH = 'Apple Watch'
 const SAFARI = 'Safari'
 const BLACKBERRY = 'BlackBerry'
 const CHROME = 'Chrome'
+const CHROME_OS = `${CHROME} OS`
+const CHROME_IOS = `${CHROME} iOS`
 const INTERNET_EXPLORER = 'Internet Explorer'
 const INTERNET_EXPLORER_MOBILE = `${INTERNET_EXPLORER} Mobile`
+const MICROSOFT_EDGE = 'Microsoft Edge'
 
 const windowsVersionMap: Record<string, string> = {
     'NT3.51': 'NT 3.11',
@@ -120,13 +123,13 @@ export const _info = {
             // https://developer.samsung.com/internet/user-agent-string-format
             return 'Samsung Internet'
         } else if (_includes(user_agent, 'Edge') || _includes(user_agent, 'Edg/')) {
-            return 'Microsoft Edge'
+            return MICROSOFT_EDGE
         } else if (_includes(user_agent, 'FBIOS')) {
             return 'Facebook Mobile'
         } else if (_includes(user_agent, CHROME)) {
             return CHROME
         } else if (_includes(user_agent, 'CriOS')) {
-            return 'Chrome iOS'
+            return CHROME_IOS
         } else if (_includes(user_agent, 'UCWEB') || _includes(user_agent, 'UCBrowser')) {
             return 'UC Browser'
         } else if (_includes(user_agent, 'FxiOS')) {
@@ -163,9 +166,9 @@ export const _info = {
         const browser = _info.browser(userAgent, vendor, opera)
         const versionRegexes: Record<string, RegExp[]> = {
             [INTERNET_EXPLORER_MOBILE]: [/rv:(\d+(\.\d+)?)/],
-            'Microsoft Edge': [/Edge?\/(\d+(\.\d+)?)/],
+            [MICROSOFT_EDGE]: [/Edge?\/(\d+(\.\d+)?)/],
             [CHROME]: [/Chrome\/(\d+(\.\d+)?)/],
-            'Chrome iOS': [/CriOS\/(\d+(\.\d+)?)/],
+            [CHROME_IOS]: [/CriOS\/(\d+(\.\d+)?)/],
             'UC Browser': [/(UCBrowser|UCWEB)\/(\d+(\.\d+)?)/],
             [SAFARI]: [/Version\/(\d+(\.\d+)?)/],
             'Mobile Safari': [/Version\/(\d+(\.\d+)?)/],
@@ -265,7 +268,7 @@ export const _info = {
         } else if (/(Linux|debian)/i.test(user_agent)) {
             return { os_name: 'Linux', os_version: '' }
         } else if (/CrOS/.test(user_agent)) {
-            return { os_name: 'Chrome OS', os_version: '' }
+            return { os_name: CHROME_OS, os_version: '' }
         } else {
             return { os_name: '', os_version: '' }
         }
