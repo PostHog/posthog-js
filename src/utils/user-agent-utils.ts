@@ -1,6 +1,16 @@
 import { _includes } from './index'
 import { _isUndefined } from './type-utils'
 
+/**
+ * this device detection code is (at time of writing) about 3% of the size of the entire library
+ * this is mostly because the identifiers user in regexes and results can't be minified away since
+ * they have meaning
+ *
+ * so, there are some pre-uglifying choices in the code to help reduce the size
+ * e.g. many repeated strings are stored as variables and then old-fashioned concatenated together
+ *
+ * TL;DR here be dragons
+ */
 const FACEBOOK = 'Facebook'
 const MOBILE = 'Mobile'
 const IOS = 'iOS'
