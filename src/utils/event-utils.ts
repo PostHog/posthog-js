@@ -26,6 +26,9 @@ const NINTENDO = 'Nintendo'
 const PLAYSTATION = 'PlayStation'
 const XBOX = 'Xbox'
 
+const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
+const DEFAULT_BROWSER_VERSION_REGEX = new RegExp(`Version\\/${BROWSER_VERSION_REGEX_SUFFIX}`)
+
 const XBOX_REGEX = new RegExp(`${XBOX}`, 'i')
 const PLAYSTATION_REGEX = new RegExp(`${PLAYSTATION} \\w+`, 'i')
 const NINTENDO_REGEX = new RegExp(`${NINTENDO} \\w+`, 'i')
@@ -183,8 +186,6 @@ export const _info = {
      */
     browserVersion: function (userAgent: string, vendor: string | undefined, opera: string): number | null {
         const browser = _info.browser(userAgent, vendor, opera)
-        const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
-        const DEFAULT_BROWSER_VERSION_REGEX = new RegExp(`Version\\/${BROWSER_VERSION_REGEX_SUFFIX}`)
         const versionRegexes: Record<string, RegExp[]> = {
             [INTERNET_EXPLORER_MOBILE]: [new RegExp(`rv:${BROWSER_VERSION_REGEX_SUFFIX}`)],
             [MICROSOFT_EDGE]: [new RegExp(`${EDGE}?\\/${BROWSER_VERSION_REGEX_SUFFIX}`)],
