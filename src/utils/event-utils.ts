@@ -15,6 +15,20 @@ const CHROME = 'Chrome'
 const INTERNET_EXPLORER = 'Internet Explorer'
 const INTERNET_EXPLORER_MOBILE = `${INTERNET_EXPLORER} Mobile`
 
+const windowsVersionMap: Record<string, string> = {
+    'NT3.51': 'NT 3.11',
+    'NT4.0': 'NT 4.0',
+    '5.0': '2000',
+    '5.1': 'XP',
+    '5.2': 'XP',
+    '6.0': 'Vista',
+    '6.1': '7',
+    '6.2': '8',
+    '6.3': '8.1',
+    '6.4': '10',
+    '10.0': '10',
+}
+
 /**
  * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
  * We can be slightly loose because some options have been ruled out (e.g. firefox on iOS)
@@ -209,7 +223,11 @@ export const _info = {
             const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
             if (match && match[1]) {
                 const version = match[1]
-                return { os_name: 'Windows', os_version: version }
+                let osVersion = windowsVersionMap[version] || ''
+                if (/arm/i.test(user_agent)) {
+                    osVersion = 'RT'
+                }
+                return { os_name: 'Windows', os_version: osVersion }
             }
             return { os_name: 'Windows', os_version: '' }
         } else if (/(iPhone|iPad|iPod)/.test(user_agent)) {
