@@ -17,6 +17,9 @@ const CHROME_IOS = `${CHROME} iOS`
 const INTERNET_EXPLORER = 'Internet Explorer'
 const INTERNET_EXPLORER_MOBILE = `${INTERNET_EXPLORER} Mobile`
 const MICROSOFT_EDGE = 'Microsoft Edge'
+const FIREFOX = 'Firefox'
+const FIREFOX_IOS = `${FIREFOX} iOS`
+
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
 const windowsVersionMap: Record<string, string> = {
@@ -136,7 +139,7 @@ export const _info = {
         } else if (_includes(user_agent, 'UCWEB') || _includes(user_agent, 'UCBrowser')) {
             return 'UC Browser'
         } else if (_includes(user_agent, 'FxiOS')) {
-            return 'Firefox iOS'
+            return FIREFOX_IOS
         } else if (_includes(vendor, 'Apple') || isSafari(user_agent)) {
             if (_includes(user_agent, 'Mobile')) {
                 return 'Mobile Safari'
@@ -146,8 +149,8 @@ export const _info = {
             return 'Android Mobile'
         } else if (_includes(user_agent, 'Konqueror') || _includes(user_agent, 'konqueror')) {
             return 'Konqueror'
-        } else if (_includes(user_agent, 'Firefox')) {
-            return 'Firefox'
+        } else if (_includes(user_agent, FIREFOX)) {
+            return FIREFOX
         } else if (_includes(user_agent, 'MSIE') || _includes(user_agent, 'Trident/')) {
             return INTERNET_EXPLORER
         } else if (_includes(user_agent, 'Gecko')) {
@@ -176,8 +179,8 @@ export const _info = {
             [SAFARI]: [/Version\/(\d+(\.\d+)?)/],
             'Mobile Safari': [/Version\/(\d+(\.\d+)?)/],
             Opera: [/(Opera|OPR)\/(\d+(\.\d+)?)/],
-            Firefox: [/Firefox\/(\d+(\.\d+)?)/],
-            'Firefox iOS': [/FxiOS\/(\d+(\.\d+)?)/],
+            [FIREFOX]: [/Firefox\/(\d+(\.\d+)?)/],
+            [FIREFOX_IOS]: [/FxiOS\/(\d+(\.\d+)?)/],
             Konqueror: [/Konqueror[:/]?(\d+(\.\d+)?)/i],
             // not every blackberry user agent has the version after the name
             [BLACKBERRY]: [/BlackBerry (\d+(\.\d+)?)/, /Version\/(\d+(\.\d+)?)/],
