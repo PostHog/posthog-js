@@ -1,5 +1,5 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../types'
-import { _isFunction, _isNull, _isString, _isUndefined } from '../../utils/type-utils'
+import { _isFunction, _isNullish, _isString } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 
@@ -89,7 +89,7 @@ function redactPayload(
     limit: number,
     description: string
 ): string | null | undefined {
-    if (_isUndefined(payload) || _isNull(payload)) {
+    if (_isNullish(payload)) {
         return payload
     }
 

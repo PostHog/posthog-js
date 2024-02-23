@@ -1,7 +1,7 @@
 import { AutocaptureConfig, Properties } from './types'
 import { _each, _entries, _includes, _trim } from './utils'
 
-import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
+import { _isArray, _isNullish, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 
@@ -334,7 +334,7 @@ export function isSensitiveElement(el: Element): boolean {
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureValue(value: string): boolean {
-    if (_isNull(value) || _isUndefined(value)) {
+    if (_isNullish(value)) {
         return false
     }
 

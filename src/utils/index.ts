@@ -5,9 +5,9 @@ import {
     _isFormData,
     _isFunction,
     _isNull,
+    _isNullish,
     _isObject,
     _isString,
-    _isUndefined,
     hasOwnProperty,
 } from './type-utils'
 import { logger } from './logger'
@@ -53,7 +53,7 @@ export function _eachArray<E = any>(
  * @param {Object=} thisArg
  */
 export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
-    if (_isNull(obj) || _isUndefined(obj)) {
+    if (_isNullish(obj)) {
         return
     }
     if (_isArray(obj)) {

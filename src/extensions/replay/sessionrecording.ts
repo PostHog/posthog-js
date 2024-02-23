@@ -16,12 +16,21 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
+import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
 import { _timestamp, loadScript } from '../../utils'
 
-import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
+import {
+    _isBoolean,
+    _isFunction,
+    _isNull,
+    _isNullish,
+    _isNumber,
+    _isObject,
+    _isString,
+    _isUndefined,
+} from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
@@ -121,7 +130,7 @@ export class SessionRecording {
     private _lastActivityTimestamp: number = Date.now()
     private windowId: string | null = null
     private sessionId: string | null = null
-    private _linkedFlag: string | null = null
+    private _linkedFlag: string | FlagVariant | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
 
@@ -222,7 +231,7 @@ export class SessionRecording {
             return 'disabled'
         }
 
-        if (_isString(this._linkedFlag) && !this._linkedFlagSeen) {
+        if (!_isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
             return 'buffering'
         }
 
@@ -336,8 +345,7 @@ export class SessionRecording {
         }
 
         const receivedSampleRate = response.sessionRecording?.sampleRate
-        this._sampleRate =
-            _isUndefined(receivedSampleRate) || _isNull(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+        this._sampleRate = _isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
 
         const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
         this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
@@ -354,10 +362,12 @@ export class SessionRecording {
             })
         }
 
-        if (_isString(this._linkedFlag)) {
-            const linkedFlag = this._linkedFlag
-            this.instance.onFeatureFlags((flags) => {
-                this._linkedFlagSeen = flags.includes(linkedFlag)
+        if (!_isNullish(this._linkedFlag)) {
+            const linkedFlag = _isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag?.flag
+            const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag?.variant
+            this.instance.onFeatureFlags((_flags, variants) => {
+                const flagIsPresent = _isObject(variants) && linkedFlag in variants
+                this._linkedFlagSeen = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
             })
         }
 
