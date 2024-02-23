@@ -162,7 +162,7 @@ export const _info = {
     browserVersion: function (userAgent: string, vendor: string | undefined, opera: string): number | null {
         const browser = _info.browser(userAgent, vendor, opera)
         const versionRegexes: Record<string, RegExp[]> = {
-            INTERNET_EXPLORER_MOBILE: [/rv:(\d+(\.\d+)?)/],
+            [INTERNET_EXPLORER_MOBILE]: [/rv:(\d+(\.\d+)?)/],
             'Microsoft Edge': [/Edge?\/(\d+(\.\d+)?)/],
             Chrome: [/Chrome\/(\d+(\.\d+)?)/],
             'Chrome iOS': [/CriOS\/(\d+(\.\d+)?)/],
@@ -177,7 +177,7 @@ export const _info = {
             BlackBerry: [/BlackBerry (\d+(\.\d+)?)/, /Version\/(\d+(\.\d+)?)/],
             'Android Mobile': [/android\s(\d+(\.\d+)?)/],
             'Samsung Internet': [/SamsungBrowser\/(\d+(\.\d+)?)/],
-            INTERNET_EXPLORER: [/(rv:|MSIE )(\d+(\.\d+)?)/],
+            [INTERNET_EXPLORER]: [/(rv:|MSIE )(\d+(\.\d+)?)/],
             Mozilla: [/rv:(\d+(\.\d+)?)/],
         }
         const regexes: RegExp[] | undefined = versionRegexes[browser as keyof typeof versionRegexes]
