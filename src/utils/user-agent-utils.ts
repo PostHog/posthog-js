@@ -108,7 +108,7 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
 
     for (let i = 0; i < browserDetectionChecks.length; i++) {
         const [check, browser] = browserDetectionChecks[i]
-        if (check(user_agent)) {
+        if (check(user_agent, vendor)) {
             return browser
         }
     }

@@ -3,6 +3,7 @@ import * as globals from '../../utils/globals'
 import uaParserDeviceTestCases from './device.test.json'
 import uaParserOSTestCases from './os-test.json'
 import { _isUndefined } from '../../utils/type-utils'
+import { detectBrowser } from '../../utils/user-agent-utils'
 
 describe(`event-utils`, () => {
     describe('properties', () => {
@@ -256,12 +257,13 @@ describe(`event-utils`, () => {
             expect(result).toStrictEqual([expected.os_name, expected.os_version])
         })
 
-        test('wat', () => {
-            const ua = 'Mozilla/1.22 (compatible; MSIE 2.0; Windows 95)'
-            expect(_info.os(ua)).toStrictEqual(['Windows', ''])
+        test('can rely on vendor string to detect safari', () => {
+            const ua = 'Mozilla/5.0 (darwin) AppleWebKit/537.36 (KHTML, like Gecko) jsdom/16.7.0'
+            const vendor = 'Apple Computer, Inc.'
+            expect(detectBrowser(ua, vendor, '')).toBe('Safari')
         })
 
-        it('osVersion', () => {
+        test('osVersion', () => {
             const osVersions = {
                 // Windows Phone
                 'Mozilla/5.0 (Mobile; Windows Phone 8.1; Android 4.0; ARM; Trident/7.0; Touch; rv:11.0; IEMobile/11.0; NOKIA; Lumia 635; BOOST) like iPhone OS 7_0_3 Mac OS X AppleWebKit/537 (KHTML, like Gecko) Mobile Safari/537':
