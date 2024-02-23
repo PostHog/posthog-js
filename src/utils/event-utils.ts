@@ -17,6 +17,7 @@ const CHROME_IOS = `${CHROME} iOS`
 const INTERNET_EXPLORER = 'Internet Explorer'
 const INTERNET_EXPLORER_MOBILE = `${INTERNET_EXPLORER} Mobile`
 const MICROSOFT_EDGE = 'Microsoft Edge'
+const URL_REGEX_PREFIX = 'https?://(.*)'
 
 const windowsVersionMap: Record<string, string> = {
     'NT3.51': 'NT 3.11',
@@ -33,7 +34,7 @@ const windowsVersionMap: Record<string, string> = {
 }
 
 /**
- * Safari detection turns out to be complicted. For e.g. https://stackoverflow.com/a/29696509
+ * Safari detection turns out to be complicated. For e.g. https://stackoverflow.com/a/29696509
  * We can be slightly loose because some options have been ruled out (e.g. firefox on iOS)
  * before this check is made
  */
@@ -73,16 +74,18 @@ export const _info = {
         const referrer = document?.referrer
         if (!referrer) {
             return null
-        } else if (referrer.search('https?://(.*)google.([^/?]*)') === 0) {
-            return 'google'
-        } else if (referrer.search('https?://(.*)bing.com') === 0) {
-            return 'bing'
-        } else if (referrer.search('https?://(.*)yahoo.com') === 0) {
-            return 'yahoo'
-        } else if (referrer.search('https?://(.*)duckduckgo.com') === 0) {
-            return 'duckduckgo'
         } else {
-            return null
+            if (referrer.search(`${URL_REGEX_PREFIX}google.([^/?]*)`) === 0) {
+                return 'google'
+            } else if (referrer.search(`${URL_REGEX_PREFIX}bing.com`) === 0) {
+                return 'bing'
+            } else if (referrer.search(`${URL_REGEX_PREFIX}yahoo.com`) === 0) {
+                return 'yahoo'
+            } else if (referrer.search(`${URL_REGEX_PREFIX}duckduckgo.com`) === 0) {
+                return 'duckduckgo'
+            } else {
+                return null
+            }
         }
     },
 
