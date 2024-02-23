@@ -101,26 +101,26 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 })
 
 export class SessionRecording {
-    private instance: PostHog
+    private _instance: PostHog
     private _endpoint: string
-    private flushBufferTimer?: any
+    private _flushBufferTimer?: any
 
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
-    private buffer?: SnapshotBuffer
+    private _buffer?: SnapshotBuffer
     // and a queue - that contains rrweb events that we want to send to rrweb, but rrweb wasn't able to accept them yet
-    private queuedRRWebEvents: QueuedRRWebEvent[] = []
+    private _queuedRRWebEvents: QueuedRRWebEvent[] = []
 
-    private mutationRateLimiter?: MutationRateLimiter
+    private _mutationRateLimiter?: MutationRateLimiter
     private _captureStarted: boolean
-    private stopRrweb: listenerHandler | undefined
-    private receivedDecide: boolean
-    private rrwebRecord: rrwebRecord | undefined
-    private isIdle = false
+    private _stopRrweb: listenerHandler | undefined
+    private _receivedDecide: boolean
+    private _rrwebRecord: rrwebRecord | undefined
+    private _isIdle = false
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
-    private windowId: string | null = null
-    private sessionId: string | null = null
+    private _windowId: string | null = null
+    private _sessionId: string | null = null
     private _linkedFlag: string | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
@@ -135,43 +135,43 @@ export class SessionRecording {
         return this._captureStarted
     }
 
-    private get sessionManager() {
-        if (!this.instance.sessionManager) {
+    private get _sessionManager() {
+        if (!this._instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
         }
 
-        return this.instance.sessionManager
+        return this._instance.sessionManager
     }
 
-    private get isSampled(): boolean | null {
+    private get _isSampled(): boolean | null {
         if (_isNumber(this._sampleRate)) {
-            return this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+            return this._instance.get_property(SESSION_RECORDING_IS_SAMPLED)
         } else {
             return null
         }
     }
 
-    private get sessionDuration(): number | null {
-        const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
-        const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
+    private get _sessionDuration(): number | null {
+        const mostRecentSnapshot = this._buffer?.data[this._buffer?.data.length - 1]
+        const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 
-    private get isRecordingEnabled() {
-        const enabled_server_side = !!this.instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = !this.instance.config.disable_session_recording
+    private get _isRecordingEnabled() {
+        const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_client_side = !this._instance.config.disable_session_recording
         return window && enabled_server_side && enabled_client_side
     }
 
-    private get isConsoleLogCaptureEnabled() {
-        const enabled_server_side = !!this.instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = this.instance.config.enable_recording_console_log
+    private get _isConsoleLogCaptureEnabled() {
+        const enabled_server_side = !!this._instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_client_side = this._instance.config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
     }
 
-    private get canvasRecording(): { enabled: boolean; fps: number; quality: number } | undefined {
-        const canvasRecording_server_side = this.instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
+    private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } | undefined {
+        const canvasRecording_server_side = this._instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
         return canvasRecording_server_side && canvasRecording_server_side.fps && canvasRecording_server_side.quality
             ? {
                   enabled: canvasRecording_server_side.enabled,
@@ -181,28 +181,28 @@ export class SessionRecording {
             : undefined
     }
 
-    private get recordingVersion() {
-        const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
-        const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
+    private get _recordingVersion() {
+        const recordingVersion_server_side = this._instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
+        const recordingVersion_client_side = this._instance.config.session_recording?.recorderVersion
         return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
     // network payload capture config has three parts
     // each can be configured server side or client side
-    private get networkPayloadCapture():
+    private get _networkPayloadCapture():
         | Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
         | undefined {
-        const networkPayloadCapture_server_side = this.instance.get_property(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
+        const networkPayloadCapture_server_side = this._instance.get_property(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
         const networkPayloadCapture_client_side = {
-            recordHeaders: this.instance.config.session_recording?.recordHeaders,
-            recordBody: this.instance.config.session_recording?.recordBody,
+            recordHeaders: this._instance.config.session_recording?.recordHeaders,
+            recordBody: this._instance.config.session_recording?.recordBody,
         }
         const headersEnabled =
             networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
         const bodyEnabled =
             networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
         const performanceEnabled =
-            this.instance.config.capture_performance || networkPayloadCapture_server_side?.capturePerformance
+            this._instance.config.capture_performance || networkPayloadCapture_server_side?.capturePerformance
 
         return headersEnabled || bodyEnabled || performanceEnabled
             ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: performanceEnabled }
@@ -213,12 +213,12 @@ export class SessionRecording {
      * defaults to buffering mode until a decide response is received
      * once a decide response is received status can be disabled, active or sampled
      */
-    private get status(): SessionRecordingStatus {
-        if (!this.receivedDecide) {
+    private get _status(): SessionRecordingStatus {
+        if (!this._receivedDecide) {
             return 'buffering'
         }
 
-        if (!this.isRecordingEnabled) {
+        if (!this._isRecordingEnabled) {
             return 'disabled'
         }
 
@@ -226,19 +226,19 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (_isBoolean(this.isSampled)) {
-            return this.isSampled ? 'sampled' : 'disabled'
+        if (_isBoolean(this._isSampled)) {
+            return this._isSampled ? 'sampled' : 'disabled'
         } else {
             return 'active'
         }
     }
 
     constructor(instance: PostHog) {
-        this.instance = instance
+        this._instance = instance
         this._captureStarted = false
         this._endpoint = BASE_ENDPOINT
-        this.stopRrweb = undefined
-        this.receivedDecide = false
+        this._stopRrweb = undefined
+        this._receivedDecide = false
 
         window?.addEventListener('beforeunload', () => {
             this._flushBuffer()
@@ -252,44 +252,44 @@ export class SessionRecording {
             this._tryAddCustomEvent('browser online', {})
         })
 
-        if (!this.instance.sessionManager) {
+        if (!this._instance.sessionManager) {
             logger.error('Session recording started without valid sessionManager')
             throw new Error('Session recording started without valid sessionManager. This is a bug.')
         }
 
-        this.buffer = this.clearBuffer()
+        this._buffer = this._clearBuffer()
     }
 
     startRecordingIfEnabled() {
-        if (this.isRecordingEnabled) {
-            this.startCaptureAndTrySendingQueuedSnapshots()
+        if (this._isRecordingEnabled) {
+            this._startCaptureAndTrySendingQueuedSnapshots()
             logger.info('[SessionRecording] started')
         } else {
             this.stopRecording()
-            this.clearBuffer()
+            this._clearBuffer()
         }
     }
 
     stopRecording() {
-        if (this._captureStarted && this.stopRrweb) {
-            this.stopRrweb()
-            this.stopRrweb = undefined
+        if (this._captureStarted && this._stopRrweb) {
+            this._stopRrweb()
+            this._stopRrweb = undefined
             this._captureStarted = false
             logger.info('[SessionRecording] stopped')
         }
     }
 
-    private makeSamplingDecision(sessionId: string): void {
-        const sessionIdChanged = this.sessionId !== sessionId
+    private _makeSamplingDecision(sessionId: string): void {
+        const sessionIdChanged = this._sessionId !== sessionId
 
         if (!_isNumber(this._sampleRate)) {
-            this.instance.persistence?.register({
+            this._instance.persistence?.register({
                 [SESSION_RECORDING_IS_SAMPLED]: null,
             })
             return
         }
 
-        const storedIsSampled = this.isSampled
+        const storedIsSampled = this._isSampled
 
         /**
          * if we get this far then we should make a sampling decision.
@@ -312,14 +312,14 @@ export class SessionRecording {
             )
         }
 
-        this.instance.persistence?.register({
+        this._instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
         })
     }
 
     afterDecideResponse(response: DecideResponse) {
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
+        if (this._instance.persistence) {
+            this._instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
                 [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
@@ -349,24 +349,24 @@ export class SessionRecording {
         }
 
         if (_isNumber(this._sampleRate)) {
-            this.sessionManager.onSessionId((sessionId) => {
-                this.makeSamplingDecision(sessionId)
+            this._sessionManager.onSessionId((sessionId) => {
+                this._makeSamplingDecision(sessionId)
             })
         }
 
         if (_isString(this._linkedFlag)) {
             const linkedFlag = this._linkedFlag
-            this.instance.onFeatureFlags((flags) => {
+            this._instance.onFeatureFlags((flags) => {
                 this._linkedFlagSeen = flags.includes(linkedFlag)
             })
         }
 
-        this.receivedDecide = true
+        this._receivedDecide = true
         this.startRecordingIfEnabled()
     }
 
     log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
-        this.instance.sessionRecording?.onRRwebEmit({
+        this._instance.sessionRecording?.onRRwebEmit({
             type: 6,
             data: {
                 plugin: 'rrweb/console@1',
@@ -381,7 +381,7 @@ export class SessionRecording {
         })
     }
 
-    private startCaptureAndTrySendingQueuedSnapshots() {
+    private _startCaptureAndTrySendingQueuedSnapshots() {
         this._startCapture()
     }
 
@@ -399,22 +399,22 @@ export class SessionRecording {
 
         // We do not switch recorder versions midway through a recording.
         // do not start if explicitly disabled or if the user has opted out
-        if (this._captureStarted || this.instance.config.disable_session_recording || userOptedOut(this.instance)) {
+        if (this._captureStarted || this._instance.config.disable_session_recording || userOptedOut(this._instance)) {
             return
         }
 
         this._captureStarted = true
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
-        this.sessionManager.checkAndGetSessionAndWindowId()
+        this._sessionManager.checkAndGetSessionAndWindowId()
 
-        const recorderJS = this.recordingVersion === 'v2' ? 'recorder-v2.js' : 'recorder.js'
+        const recorderJS = this._recordingVersion === 'v2' ? 'recorder-v2.js' : 'recorder.js'
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
-        if (this.instance.__loaded_recorder_version !== this.recordingVersion) {
+        if (this._instance.__loaded_recorder_version !== this._recordingVersion) {
             loadScript(
-                this.instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
+                this._instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
                 (err) => {
                     if (err) {
                         return logger.error(`Could not load ${recorderJS}`, err)
@@ -439,10 +439,10 @@ export class SessionRecording {
 
         const isUserInteraction = this._isInteractiveEvent(event)
 
-        if (!isUserInteraction && !this.isIdle) {
+        if (!isUserInteraction && !this._isIdle) {
             // We check if the lastActivityTimestamp is old enough to go idle
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
-                this.isIdle = true
+                this._isIdle = true
                 this._tryAddCustomEvent('sessionIdle', {
                     reason: 'user inactivity',
                     timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
@@ -454,9 +454,9 @@ export class SessionRecording {
         let returningFromIdle = false
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
-            if (this.isIdle) {
+            if (this._isIdle) {
                 // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
-                this.isIdle = false
+                this._isIdle = false
                 this._tryAddCustomEvent('sessionNoLongerIdle', {
                     reason: 'user activity',
                     type: event.type,
@@ -465,21 +465,21 @@ export class SessionRecording {
             }
         }
 
-        if (this.isIdle) {
+        if (this._isIdle) {
             return
         }
 
         // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this.sessionManager.checkAndGetSessionAndWindowId(
+        const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
             event.timestamp
         )
 
-        const sessionIdChanged = this.sessionId !== sessionId
-        const windowIdChanged = this.windowId !== windowId
+        const sessionIdChanged = this._sessionId !== sessionId
+        const windowIdChanged = this._windowId !== windowId
 
-        this.windowId = windowId
-        this.sessionId = sessionId
+        this._windowId = windowId
+        this._sessionId = sessionId
 
         if (
             returningFromIdle ||
@@ -497,8 +497,8 @@ export class SessionRecording {
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
             logger.warn('[Session-Recording] could not emit queued rrweb event.', e)
-            this.queuedRRWebEvents.length < 10 &&
-                this.queuedRRWebEvents.push({
+            this._queuedRRWebEvents.length < 10 &&
+                this._queuedRRWebEvents.push({
                     enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
                     attempt: queuedRRWebEvent.attempt++,
                     rrwebMethod: queuedRRWebEvent.rrwebMethod,
@@ -508,11 +508,11 @@ export class SessionRecording {
     }
 
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
-        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.addCustomEvent(tag, payload)))
+        return this._tryRRWebMethod(newQueuedEvent(() => this._rrwebRecord!.addCustomEvent(tag, payload)))
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
+        return this._tryRRWebMethod(newQueuedEvent(() => this._rrwebRecord!.takeFullSnapshot()))
     }
 
     private _onScriptLoaded() {
@@ -538,10 +538,10 @@ export class SessionRecording {
         // keep backwards compatibility if someone hasn't upgraded PostHog
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
-        this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
+        this._rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
 
         // only allows user to set our allow-listed options
-        const userSessionRecordingOptions = this.instance.config.session_recording
+        const userSessionRecordingOptions = this._instance.config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -550,22 +550,22 @@ export class SessionRecording {
             }
         }
 
-        if (this.canvasRecording && this.canvasRecording.enabled) {
+        if (this._canvasRecording && this._canvasRecording.enabled) {
             sessionRecordingOptions.recordCanvas = true
-            sessionRecordingOptions.sampling = { canvas: this.canvasRecording.fps }
-            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this.canvasRecording.quality }
+            sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
+            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
         }
 
-        if (!this.rrwebRecord) {
+        if (!this._rrwebRecord) {
             logger.error(
                 'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
             )
             return
         }
 
-        this.mutationRateLimiter =
-            this.mutationRateLimiter ??
-            new MutationRateLimiter(this.rrwebRecord, {
+        this._mutationRateLimiter =
+            this._mutationRateLimiter ??
+            new MutationRateLimiter(this._rrwebRecord, {
                 onBlockedNode: (id, node) => {
                     const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
                     logger.info(message, {
@@ -582,7 +582,7 @@ export class SessionRecording {
         this._scheduleFullSnapshot()
 
         const activePlugins = this._gatherRRWebPlugins()
-        this.stopRrweb = this.rrwebRecord({
+        this._stopRrweb = this._rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
@@ -592,7 +592,7 @@ export class SessionRecording {
 
         // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
         //   Dropping the initial event is fine (it's always captured by rrweb).
-        this.instance._addCaptureHook((eventName) => {
+        this._instance._addCaptureHook((eventName) => {
             // If anything could go wrong here it has the potential to block the main loop,
             // so we catch all errors.
             try {
@@ -611,7 +611,7 @@ export class SessionRecording {
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
-        this.isIdle = false
+        this._isIdle = false
 
         this._tryAddCustomEvent('$session_options', {
             sessionRecordingOptions,
@@ -619,7 +619,7 @@ export class SessionRecording {
         })
 
         this._tryAddCustomEvent('$posthog_config', {
-            config: this.instance.config,
+            config: this._instance.config,
         })
     }
 
@@ -636,17 +636,17 @@ export class SessionRecording {
     private _gatherRRWebPlugins() {
         const plugins: RecordPlugin<unknown>[] = []
 
-        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
+        if (assignableWindow.rrwebConsoleRecord && this._isConsoleLogCaptureEnabled) {
             plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
         }
 
-        if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
+        if (this._networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
                 plugins.push(
                     assignableWindow.getRecordNetworkPlugin(
-                        buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
+                        buildNetworkRequestOptions(this._instance.config, this._networkPayloadCapture)
                     )
                 )
             } else {
@@ -677,8 +677,8 @@ export class SessionRecording {
             this._scheduleFullSnapshot()
         }
 
-        const throttledEvent = this.mutationRateLimiter
-            ? this.mutationRateLimiter.throttleMutations(rawEvent)
+        const throttledEvent = this._mutationRateLimiter
+            ? this._mutationRateLimiter.throttleMutations(rawEvent)
             : rawEvent
 
         if (!throttledEvent) {
@@ -692,7 +692,7 @@ export class SessionRecording {
         this._updateWindowAndSessionIds(event)
 
         // allow custom events even when idle
-        if (this.isIdle && event.type !== EventType.Custom) {
+        if (this._isIdle && event.type !== EventType.Custom) {
             // When in an idle state we keep recording, but don't capture the events
             return
         }
@@ -700,19 +700,19 @@ export class SessionRecording {
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: event,
-            $session_id: this.sessionId,
-            $window_id: this.windowId,
+            $session_id: this._sessionId,
+            $window_id: this._windowId,
         }
 
-        if (this.status !== 'disabled') {
+        if (this._status !== 'disabled') {
             this._captureSnapshotBuffered(properties)
         } else {
-            this.clearBuffer()
+            this._clearBuffer()
         }
     }
 
     private _processQueuedEvents() {
-        if (this.queuedRRWebEvents.length) {
+        if (this._queuedRRWebEvents.length) {
             // if rrweb isn't ready to accept events earlier then we queued them up
             // now that emit has been called rrweb should be ready to accept them
             // so, before we process this event, we try our queued events _once_ each
@@ -723,8 +723,8 @@ export class SessionRecording {
             // so its length is limited elsewhere
             // for now this is to help us ensure we can capture events that happen
             // and try to identify more about when it is failing
-            const itemsToProcess = [...this.queuedRRWebEvents]
-            this.queuedRRWebEvents = []
+            const itemsToProcess = [...this._queuedRRWebEvents]
+            this._queuedRRWebEvents = []
             itemsToProcess.forEach((queuedRRWebEvent) => {
                 if (Date.now() - queuedRRWebEvent.enqueuedAt > TWO_SECONDS) {
                     this._tryAddCustomEvent('rrwebQueueTimeout', {
@@ -746,7 +746,7 @@ export class SessionRecording {
     }
 
     private _maskUrl(url: string): string | undefined {
-        const userSessionRecordingOptions = this.instance.config.session_recording
+        const userSessionRecordingOptions = this._instance.config.session_recording
 
         if (userSessionRecordingOptions.maskNetworkRequestFn) {
             let networkRequest: NetworkRequest | null | undefined = {
@@ -763,14 +763,14 @@ export class SessionRecording {
         return url
     }
 
-    private clearBuffer(): SnapshotBuffer {
-        this.buffer = undefined
+    private _clearBuffer(): SnapshotBuffer {
+        this._buffer = undefined
 
         return {
             size: 0,
             data: [],
-            sessionId: this.sessionId,
-            windowId: this.windowId,
+            sessionId: this._sessionId,
+            windowId: this._windowId,
         }
     }
 
@@ -781,61 +781,61 @@ export class SessionRecording {
     // first change: if the recording is in buffering mode,
     //  flush buffer simply resets the timer and returns the existing flush buffer
     private _flushBuffer() {
-        if (this.flushBufferTimer) {
-            clearTimeout(this.flushBufferTimer)
-            this.flushBufferTimer = undefined
+        if (this._flushBufferTimer) {
+            clearTimeout(this._flushBufferTimer)
+            this._flushBufferTimer = undefined
         }
 
         const minimumDuration = this._minimumDuration
-        const sessionDuration = this.sessionDuration
+        const sessionDuration = this._sessionDuration
         // if we have old data in the buffer but the session has rotated then the
         // session duration might be negative, in that case we want to flush the buffer
         const isPositiveSessionDuration = _isNumber(sessionDuration) && sessionDuration >= 0
         const isBelowMinimumDuration =
             _isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
-        if (this.status === 'buffering' || isBelowMinimumDuration) {
-            this.flushBufferTimer = setTimeout(() => {
+        if (this._status === 'buffering' || isBelowMinimumDuration) {
+            this._flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
-            return this.buffer || this.clearBuffer()
+            return this._buffer || this._clearBuffer()
         }
 
-        if (this.buffer && this.buffer.data.length !== 0) {
+        if (this._buffer && this._buffer.data.length !== 0) {
             this._captureSnapshot({
-                $snapshot_bytes: this.buffer.size,
-                $snapshot_data: this.buffer.data,
-                $session_id: this.buffer.sessionId,
-                $window_id: this.buffer.windowId,
+                $snapshot_bytes: this._buffer.size,
+                $snapshot_data: this._buffer.data,
+                $session_id: this._buffer.sessionId,
+                $window_id: this._buffer.windowId,
             })
 
-            return this.clearBuffer()
+            return this._clearBuffer()
         } else {
-            return this.buffer || this.clearBuffer()
+            return this._buffer || this._clearBuffer()
         }
     }
 
     private _captureSnapshotBuffered(properties: Properties) {
-        const additionalBytes = 2 + (this.buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
+        const additionalBytes = 2 + (this._buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
         if (
-            !this.buffer ||
-            this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            (!!this.buffer.sessionId && this.buffer.sessionId !== this.sessionId)
+            !this._buffer ||
+            this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
+            (!!this._buffer.sessionId && this._buffer.sessionId !== this._sessionId)
         ) {
-            this.buffer = this._flushBuffer()
+            this._buffer = this._flushBuffer()
         }
 
-        if (_isNull(this.buffer.sessionId) && !_isNull(this.sessionId)) {
+        if (_isNull(this._buffer.sessionId) && !_isNull(this._sessionId)) {
             // session id starts null but has now been assigned, update the buffer
-            this.buffer.sessionId = this.sessionId
-            this.buffer.windowId = this.windowId
+            this._buffer.sessionId = this._sessionId
+            this._buffer.windowId = this._windowId
         }
 
-        this.buffer.size += properties.$snapshot_bytes
-        this.buffer.data.push(properties.$snapshot_data)
+        this._buffer.size += properties.$snapshot_bytes
+        this._buffer.data.push(properties.$snapshot_data)
 
-        if (!this.flushBufferTimer) {
-            this.flushBufferTimer = setTimeout(() => {
+        if (!this._flushBufferTimer) {
+            this._flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
         }
@@ -843,9 +843,9 @@ export class SessionRecording {
 
     private _captureSnapshot(properties: Properties) {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
-        this.instance.capture('$snapshot', properties, {
+        this._instance.capture('$snapshot', properties, {
             method: 'POST',
-            _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
+            _url: this._instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
             _metrics: {
