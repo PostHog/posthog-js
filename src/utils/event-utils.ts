@@ -236,73 +236,127 @@ export const _info = {
         )
     },
 
-    os: function (user_agent: string): { os_name: string; os_version: string } {
-        if (/xbox; xbox (.*?)[);]/i.test(user_agent)) {
-            const match = /xbox; xbox (.*?)[);]/i.exec(user_agent)
-            if (match && match[1]) {
-                return { os_name: XBOX, os_version: match[1] }
+    os: function (user_agent: string): [string, string] {
+        // to avoid repeating regexes or calling them twice, we have an array of matches
+        // the first regex that matches uses its matcher function to return the result
+        const osMatchers: [RegExp, (match: RegExpMatchArray | null) => [string, string]][] = [
+            [
+                /xbox; xbox (.*?)[);]/i,
+                (match) => {
+                    return [XBOX, (match && match[1]) || '']
+                },
+            ],
+            [
+                /nintendo/i,
+                () => {
+                    return [NINTENDO, '']
+                },
+            ],
+            [
+                /playstation/i,
+                () => {
+                    return [PLAYSTATION, '']
+                },
+            ],
+            [
+                BLACKBERRY_REGEX,
+                () => {
+                    return [BLACKBERRY, '']
+                },
+            ],
+            [
+                /Windows/i,
+                () => {
+                    if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
+                        return ['Windows Phone', '']
+                    }
+                    // not all JS versions support negative lookbehind, so we need two checks here
+                    if (/Mobile\b/.test(user_agent) && !/IEMobile\b/.test(user_agent)) {
+                        return ['Windows ' + MOBILE, '']
+                    }
+                    const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
+                    if (match && match[1]) {
+                        const version = match[1]
+                        let osVersion = windowsVersionMap[version] || ''
+                        if (/arm/i.test(user_agent)) {
+                            osVersion = 'RT'
+                        }
+                        return ['Windows', osVersion]
+                    }
+                    return ['Windows', '']
+                },
+            ],
+            [
+                /((iPhone|iPad|iPod).*?OS (\d+)_(\d+)_?(\d+)?|iPhone)/,
+                (match) => {
+                    if (match && match[3]) {
+                        const versionParts = [match[3], match[4], match[5] || '0']
+                        return [IOS, versionParts.join('.')]
+                    }
+                    return [IOS, '']
+                },
+            ],
+            [
+                /(watch.*\/(\d+\.\d+\.\d+)|watch os,(\d+\.\d+),)/i,
+                (match) => {
+                    // e.g. Watch4,3/5.3.8 (16U680)
+                    let version = ''
+                    if (match && match.length >= 3) {
+                        version = _isUndefined(match[2]) ? match[3] : match[2]
+                    }
+                    return ['watchOS', version]
+                },
+            ],
+            [
+                /(Android (\d+)\.(\d+)\.?(\d+)?|Android)/i,
+                (match) => {
+                    if (match && match[2]) {
+                        const versionParts = [match[2], match[3], match[4] || '0']
+                        return [ANDROID, versionParts.join('.')]
+                    }
+                    return [ANDROID, '']
+                },
+            ],
+            [
+                /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i,
+                (match) => {
+                    const result: [string, string] = ['Mac OS X', '']
+                    if (match && match[1]) {
+                        const versionParts = [match[1], match[2], match[3] || '0']
+                        result[1] = versionParts.join('.')
+                    }
+                    return result
+                },
+            ],
+            [
+                /Mac/i,
+                () => {
+                    // mop up a few non-standard UAs that should match mac
+                    return ['Mac OS X', '']
+                },
+            ],
+            [
+                /CrOS/,
+                () => {
+                    return [CHROME_OS, '']
+                },
+            ],
+            [
+                /Linux|debian/i,
+                () => {
+                    return ['Linux', '']
+                },
+            ],
+        ]
+        for (let i = 0; i < osMatchers.length; i++) {
+            const [rgex, matcherFn] = osMatchers[i]
+            const match = rgex.exec(user_agent)
+            const result = match && matcherFn(match)
+            if (result) {
+                return result
             }
-            return { os_name: XBOX, os_version: '' }
-        } else if (/nintendo/i.test(user_agent)) {
-            return { os_name: NINTENDO, os_version: '' }
-        } else if (/playstation/i.test(user_agent)) {
-            return { os_name: PLAYSTATION, os_version: '' }
-        } else if (/Windows/i.test(user_agent)) {
-            if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
-                return { os_name: 'Windows Phone', os_version: '' }
-            }
-            // not all JS versions support negative lookbehind, so we need two checks here
-            if (/Mobile\b/.test(user_agent) && !/IEMobile\b/.test(user_agent)) {
-                return { os_name: 'Windows ' + MOBILE, os_version: '' }
-            }
-            const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
-            if (match && match[1]) {
-                const version = match[1]
-                let osVersion = windowsVersionMap[version] || ''
-                if (/arm/i.test(user_agent)) {
-                    osVersion = 'RT'
-                }
-                return { os_name: 'Windows', os_version: osVersion }
-            }
-            return { os_name: 'Windows', os_version: '' }
-        } else if (/(iPhone|iPad|iPod)/.test(user_agent)) {
-            const match = /OS (\d+)_(\d+)_?(\d+)?/i.exec(user_agent)
-            if (match && match[1]) {
-                const versionParts = [match[1], match[2], match[3] || '0']
-                return { os_name: IOS, os_version: versionParts.join('.') }
-            }
-            return { os_name: IOS, os_version: '' }
-        } else if (/watch|watch os/i.test(user_agent)) {
-            // e.g. Watch4,3/5.3.8 (16U680)
-            const match = /(watch.*\/(\d+\.\d+\.\d+)|watch os,(\d+\.\d+),)/i.exec(user_agent)
-            let version = ''
-            if (match && match.length >= 3) {
-                version = _isUndefined(match[2]) ? match[3] : match[2]
-            }
-            return { os_name: 'watchOS', os_version: version }
-        } else if (/Android/.test(user_agent)) {
-            const match = /Android (\d+)\.(\d+)\.?(\d+)?/i.exec(user_agent)
-            if (match && match[1]) {
-                const versionParts = [match[1], match[2], match[3] || '0']
-                return { os_name: ANDROID, os_version: versionParts.join('.') }
-            }
-            return { os_name: ANDROID, os_version: '' }
-        } else if (BLACKBERRY_REGEX.test(user_agent)) {
-            return { os_name: BLACKBERRY, os_version: '' }
-        } else if (/Mac/i.test(user_agent)) {
-            const match = /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i.exec(user_agent)
-            if (match && match[1]) {
-                const versionParts = [match[1], match[2], match[3] || '0']
-                return { os_name: 'Mac OS X', os_version: versionParts.join('.') }
-            }
-            return { os_name: 'Mac OS X', os_version: '' }
-        } else if (/(Linux|debian)/i.test(user_agent)) {
-            return { os_name: 'Linux', os_version: '' }
-        } else if (/CrOS/.test(user_agent)) {
-            return { os_name: CHROME_OS, os_version: '' }
-        } else {
-            return { os_name: '', os_version: '' }
         }
+        return ['', '']
     },
 
     // currently described as "the mobile device that was used"
@@ -400,7 +454,7 @@ export const _info = {
         if (!userAgent) {
             return {}
         }
-        const { os_name, os_version } = _info.os(userAgent)
+        const [os_name, os_version] = _info.os(userAgent)
         return _extend(
             _strip_empty_properties({
                 $os: os_name,
@@ -433,7 +487,7 @@ export const _info = {
             return {}
         }
 
-        const { os_name, os_version } = _info.os(userAgent)
+        const [os_name, os_version] = _info.os(userAgent)
         return _extend(
             _strip_empty_properties({
                 $os: os_name,

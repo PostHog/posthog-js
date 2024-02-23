@@ -251,15 +251,14 @@ describe(`event-utils`, () => {
          * we had to edit them a chunk because we don't aim for the same level of detail
          */
         test.each(uaParserOSTestCases)('OS - $ua', (testCase) => {
-            const actual = _info.os(testCase['ua'])
+            const result = _info.os(testCase['ua'])
             const expected = testCase['expect']
-            expect(actual).toStrictEqual(expected)
+            expect(result).toStrictEqual([expected.os_name, expected.os_version])
         })
 
         test('wat', () => {
-            const ua = 'Mozilla/5.0 (compatible; MSIE 9.0; Windows Phone OS 7.5; Trident/5.0; IEMobile/9.0; Xbox)'
-            expect(_info.device(ua)).toBe('Xbox')
-            expect(_info.deviceType(ua)).toBe('Console')
+            const ua = 'Mozilla/1.22 (compatible; MSIE 2.0; Windows 95)'
+            expect(_info.os(ua)).toStrictEqual(['Windows', ''])
         })
 
         it('osVersion', () => {
@@ -310,7 +309,9 @@ describe(`event-utils`, () => {
             }
 
             for (const [userAgent, osInfo] of Object.entries(osVersions)) {
-                expect(_info.os(userAgent)).toEqual(osInfo)
+                const [os_name, os_version] = _info.os(userAgent)
+                expect(os_name).toBe(osInfo.os_name)
+                expect(os_version).toBe(osInfo.os_version)
             }
         })
     })
