@@ -41,13 +41,13 @@ export const _info = {
         if (!referrer) {
             return null
         } else {
-            if (referrer.search(`${URL_REGEX_PREFIX}google.([^/?]*)`) === 0) {
+            if (referrer.search(URL_REGEX_PREFIX + 'google.([^/?]*)') === 0) {
                 return 'google'
-            } else if (referrer.search(`${URL_REGEX_PREFIX}bing.com`) === 0) {
+            } else if (referrer.search(URL_REGEX_PREFIX + 'bing.com') === 0) {
                 return 'bing'
-            } else if (referrer.search(`${URL_REGEX_PREFIX}yahoo.com`) === 0) {
+            } else if (referrer.search(URL_REGEX_PREFIX + 'yahoo.com') === 0) {
                 return 'yahoo'
-            } else if (referrer.search(`${URL_REGEX_PREFIX}duckduckgo.com`) === 0) {
+            } else if (referrer.search(URL_REGEX_PREFIX + 'duckduckgo.com') === 0) {
                 return 'duckduckgo'
             } else {
                 return null
