@@ -272,8 +272,14 @@ export const _info = {
 
     // currently described as "the mobile device that was used"
     device: function (user_agent: string): string {
-        if (/(Nintendo \w+)/i.test(user_agent) || /(playstation \w+)/i.test(user_agent)) {
+        if (/(Nintendo \w+)/i.test(user_agent)) {
             return 'Nintendo'
+        } else if (/playstation \w+/i.test(user_agent)) {
+            return 'Playstation'
+        } else if (/xbox/i.test(user_agent)) {
+            return 'Xbox'
+        } else if (/ouya/i.test(user_agent)) {
+            return 'Ouya'
         } else if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
             return 'Windows Phone'
         } else if (/iPad/.test(user_agent)) {
@@ -297,9 +303,16 @@ export const _info = {
             /(kf[a-z]+)( bui|\)).+silk\//i.test(user_agent)
         ) {
             return 'Kindle Fire'
-        } else if (/Android/.test(user_agent)) {
-            if (!/Mobile/.test(user_agent) || /Nexus [97]/i.test(user_agent) || /(HUAWEISHT|BTV)/i.test(user_agent)) {
-                if (/(pixel[\daxl ]{0,6})/i.test(user_agent) || /(huaweimed-al00|tah-|APA)/i.test(user_agent)) {
+        } else if (/(Android|ZTE)/i.test(user_agent)) {
+            if (
+                !/Mobile/.test(user_agent) ||
+                /(9138B|TB782B|Nexus [97]|pixel c|HUAWEISHT|BTV|noble nook|smart ultra 6)/i.test(user_agent)
+            ) {
+                if (
+                    (/pixel[\daxl ]{1,6}/i.test(user_agent) && !/pixel c/i.test(user_agent)) ||
+                    /(huaweimed-al00|tah-|APA|SM-G92|i980|zte|U304AA)/i.test(user_agent) ||
+                    (/lmy47v/i.test(user_agent) && !/QTAQZ3/i.test(user_agent))
+                ) {
                     return ANDROID
                 }
                 return ANDROID_TABLET
@@ -308,7 +321,7 @@ export const _info = {
             }
         } else if (/(pda|mobile)/i.test(user_agent)) {
             return 'Generic mobile'
-        } else if (/tablet/i.test(user_agent)) {
+        } else if (/tablet/i.test(user_agent) && !/tablet pc/i.test(user_agent)) {
             return 'Generic tablet'
         } else {
             return ''
@@ -326,7 +339,7 @@ export const _info = {
             device === 'Generic tablet'
         ) {
             return 'Tablet'
-        } else if (device === 'Nintendo') {
+        } else if (device === 'Nintendo' || device === 'Xbox' || device === 'Playstation' || device === 'Ouya') {
             return 'Console'
         } else if (device === APPLE_WATCH) {
             return 'Wearable'
