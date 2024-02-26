@@ -43,6 +43,8 @@ const ANDROID_MOBILE = ANDROID + ' ' + MOBILE
 const MOBILE_SAFARI = MOBILE + ' ' + SAFARI
 const WINDOWS = 'Windows'
 const WINDOWS_PHONE = WINDOWS + ' Phone'
+const NOKIA = 'Nokia'
+const OUYA = 'Ouya'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
@@ -167,122 +169,123 @@ export const detectBrowserVersion = function (
     return null
 }
 
+// to avoid repeating regexes or calling them twice, we have an array of matches
+// the first regex that matches uses its matcher function to return the result
+const osMatchers: [RegExp, (match: RegExpMatchArray | null, user_agent: string) => [string, string]][] = [
+    [
+        new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),
+        (match) => {
+            return [XBOX, (match && match[1]) || '']
+        },
+    ],
+    [
+        new RegExp(NINTENDO, 'i'),
+        () => {
+            return [NINTENDO, '']
+        },
+    ],
+    [
+        new RegExp(PLAYSTATION, 'i'),
+        () => {
+            return [PLAYSTATION, '']
+        },
+    ],
+    [
+        BLACKBERRY_REGEX,
+        () => {
+            return [BLACKBERRY, '']
+        },
+    ],
+    [
+        new RegExp(WINDOWS, 'i'),
+        (_, user_agent) => {
+            if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
+                return [WINDOWS_PHONE, '']
+            }
+            // not all JS versions support negative lookbehind, so we need two checks here
+            if (/Mobile\b/.test(user_agent) && !/IEMobile\b/.test(user_agent)) {
+                return [WINDOWS + ' ' + MOBILE, '']
+            }
+            const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
+            if (match && match[1]) {
+                const version = match[1]
+                let osVersion = windowsVersionMap[version] || ''
+                if (/arm/i.test(user_agent)) {
+                    osVersion = 'RT'
+                }
+                return [WINDOWS, osVersion]
+            }
+            return [WINDOWS, '']
+        },
+    ],
+    [
+        /((iPhone|iPad|iPod).*?OS (\d+)_(\d+)_?(\d+)?|iPhone)/,
+        (match) => {
+            if (match && match[3]) {
+                const versionParts = [match[3], match[4], match[5] || '0']
+                return [IOS, versionParts.join('.')]
+            }
+            return [IOS, '']
+        },
+    ],
+    [
+        /(watch.*\/(\d+\.\d+\.\d+)|watch os,(\d+\.\d+),)/i,
+        (match) => {
+            // e.g. Watch4,3/5.3.8 (16U680)
+            let version = ''
+            if (match && match.length >= 3) {
+                version = _isUndefined(match[2]) ? match[3] : match[2]
+            }
+            return ['watchOS', version]
+        },
+    ],
+    [
+        new RegExp('(' + ANDROID + ' (\\d+)\\.(\\d+)\\.?(\\d+)?|' + ANDROID + ')', 'i'),
+        (match) => {
+            if (match && match[2]) {
+                const versionParts = [match[2], match[3], match[4] || '0']
+                return [ANDROID, versionParts.join('.')]
+            }
+            return [ANDROID, '']
+        },
+    ],
+    [
+        /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i,
+        (match) => {
+            const result: [string, string] = ['Mac OS X', '']
+            if (match && match[1]) {
+                const versionParts = [match[1], match[2], match[3] || '0']
+                result[1] = versionParts.join('.')
+            }
+            return result
+        },
+    ],
+    [
+        /Mac/i,
+        () => {
+            // mop up a few non-standard UAs that should match mac
+            return ['Mac OS X', '']
+        },
+    ],
+    [
+        /CrOS/,
+        () => {
+            return [CHROME_OS, '']
+        },
+    ],
+    [
+        /Linux|debian/i,
+        () => {
+            return ['Linux', '']
+        },
+    ],
+]
+
 export const detectOS = function (user_agent: string): [string, string] {
-    // to avoid repeating regexes or calling them twice, we have an array of matches
-    // the first regex that matches uses its matcher function to return the result
-    const osMatchers: [RegExp, (match: RegExpMatchArray | null) => [string, string]][] = [
-        [
-            new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),
-            (match) => {
-                return [XBOX, (match && match[1]) || '']
-            },
-        ],
-        [
-            new RegExp(NINTENDO, 'i'),
-            () => {
-                return [NINTENDO, '']
-            },
-        ],
-        [
-            new RegExp(PLAYSTATION, 'i'),
-            () => {
-                return [PLAYSTATION, '']
-            },
-        ],
-        [
-            BLACKBERRY_REGEX,
-            () => {
-                return [BLACKBERRY, '']
-            },
-        ],
-        [
-            new RegExp(WINDOWS, 'i'),
-            () => {
-                if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
-                    return [WINDOWS_PHONE, '']
-                }
-                // not all JS versions support negative lookbehind, so we need two checks here
-                if (/Mobile\b/.test(user_agent) && !/IEMobile\b/.test(user_agent)) {
-                    return [WINDOWS + ' ' + MOBILE, '']
-                }
-                const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
-                if (match && match[1]) {
-                    const version = match[1]
-                    let osVersion = windowsVersionMap[version] || ''
-                    if (/arm/i.test(user_agent)) {
-                        osVersion = 'RT'
-                    }
-                    return [WINDOWS, osVersion]
-                }
-                return [WINDOWS, '']
-            },
-        ],
-        [
-            /((iPhone|iPad|iPod).*?OS (\d+)_(\d+)_?(\d+)?|iPhone)/,
-            (match) => {
-                if (match && match[3]) {
-                    const versionParts = [match[3], match[4], match[5] || '0']
-                    return [IOS, versionParts.join('.')]
-                }
-                return [IOS, '']
-            },
-        ],
-        [
-            /(watch.*\/(\d+\.\d+\.\d+)|watch os,(\d+\.\d+),)/i,
-            (match) => {
-                // e.g. Watch4,3/5.3.8 (16U680)
-                let version = ''
-                if (match && match.length >= 3) {
-                    version = _isUndefined(match[2]) ? match[3] : match[2]
-                }
-                return ['watchOS', version]
-            },
-        ],
-        [
-            new RegExp('(' + ANDROID + ' (\\d+)\\.(\\d+)\\.?(\\d+)?|' + ANDROID + ')', 'i'),
-            (match) => {
-                if (match && match[2]) {
-                    const versionParts = [match[2], match[3], match[4] || '0']
-                    return [ANDROID, versionParts.join('.')]
-                }
-                return [ANDROID, '']
-            },
-        ],
-        [
-            /Mac OS X (\d+)[_.](\d+)[_.]?(\d+)?/i,
-            (match) => {
-                const result: [string, string] = ['Mac OS X', '']
-                if (match && match[1]) {
-                    const versionParts = [match[1], match[2], match[3] || '0']
-                    result[1] = versionParts.join('.')
-                }
-                return result
-            },
-        ],
-        [
-            /Mac/i,
-            () => {
-                // mop up a few non-standard UAs that should match mac
-                return ['Mac OS X', '']
-            },
-        ],
-        [
-            /CrOS/,
-            () => {
-                return [CHROME_OS, '']
-            },
-        ],
-        [
-            /Linux|debian/i,
-            () => {
-                return ['Linux', '']
-            },
-        ],
-    ]
     for (let i = 0; i < osMatchers.length; i++) {
         const [rgex, matcherFn] = osMatchers[i]
         const match = rgex.exec(user_agent)
-        const result = match && matcherFn(match)
+        const result = match && matcherFn(match, user_agent)
         if (result) {
             return result
         }
@@ -297,9 +300,9 @@ export const detectDevice = function (user_agent: string): string {
         return PLAYSTATION
     } else if (XBOX_REGEX.test(user_agent)) {
         return XBOX
-    } else if (/ouya/i.test(user_agent)) {
-        return 'Ouya'
-    } else if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
+    } else if (new RegExp(OUYA, 'i').test(user_agent)) {
+        return OUYA
+    } else if (new RegExp('(' + WINDOWS_PHONE + '|WPDesktop)', 'i').test(user_agent)) {
         return WINDOWS_PHONE
     } else if (/iPad/.test(user_agent)) {
         return IPAD
@@ -313,8 +316,8 @@ export const detectDevice = function (user_agent: string): string {
         return BLACKBERRY
     } else if (/(kobo)\s(ereader|touch)/i.test(user_agent)) {
         return 'Kobo'
-    } else if (/Nokia/i.test(user_agent)) {
-        return 'Nokia'
+    } else if (new RegExp(NOKIA, 'i').test(user_agent)) {
+        return NOKIA
     } else if (
         // Kindle Fire without Silk / Echo Show
         /(kf[a-z]{2}wi|aeo[c-r]{2})( bui|\))/i.test(user_agent) ||
@@ -357,7 +360,7 @@ export const detectDeviceType = function (user_agent: string): string {
         device === 'Generic tablet'
     ) {
         return TABLET
-    } else if (device === NINTENDO || device === XBOX || device === PLAYSTATION || device === 'Ouya') {
+    } else if (device === NINTENDO || device === XBOX || device === PLAYSTATION || device === OUYA) {
         return 'Console'
     } else if (device === APPLE_WATCH) {
         return 'Wearable'
