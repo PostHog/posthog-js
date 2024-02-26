@@ -45,6 +45,9 @@ const WINDOWS = 'Windows'
 const WINDOWS_PHONE = WINDOWS + ' Phone'
 const NOKIA = 'Nokia'
 const OUYA = 'Ouya'
+const GENERIC = 'Generic'
+const GENERIC_MOBILE = GENERIC + ' ' + MOBILE.toLowerCase()
+const GENERIC_TABLET = GENERIC + ' ' + TABLET.toLowerCase()
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
@@ -203,7 +206,7 @@ const osMatchers: [RegExp, (match: RegExpMatchArray | null, user_agent: string) 
                 return [WINDOWS_PHONE, '']
             }
             // not all JS versions support negative lookbehind, so we need two checks here
-            if (/Mobile\b/.test(user_agent) && !/IEMobile\b/.test(user_agent)) {
+            if (new RegExp(MOBILE).test(user_agent) && !/IEMobile\b/.test(user_agent)) {
                 return [WINDOWS + ' ' + MOBILE, '']
             }
             const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
@@ -327,7 +330,7 @@ export const detectDevice = function (user_agent: string): string {
         return 'Kindle Fire'
     } else if (/(Android|ZTE)/i.test(user_agent)) {
         if (
-            !/Mobile/.test(user_agent) ||
+            !new RegExp(MOBILE).test(user_agent) ||
             /(9138B|TB782B|Nexus [97]|pixel c|HUAWEISHT|BTV|noble nook|smart ultra 6)/i.test(user_agent)
         ) {
             if (
@@ -341,10 +344,10 @@ export const detectDevice = function (user_agent: string): string {
         } else {
             return ANDROID
         }
-    } else if (/(pda|mobile)/i.test(user_agent)) {
-        return 'Generic mobile'
-    } else if (/tablet/i.test(user_agent) && !/tablet pc/i.test(user_agent)) {
-        return 'Generic tablet'
+    } else if (new RegExp('(pda|' + MOBILE + ')', 'i').test(user_agent)) {
+        return GENERIC_MOBILE
+    } else if (new RegExp(TABLET, 'i').test(user_agent) && !new RegExp(TABLET + ' pc', 'i').test(user_agent)) {
+        return GENERIC_TABLET
     } else {
         return ''
     }
@@ -357,7 +360,7 @@ export const detectDeviceType = function (user_agent: string): string {
         device === ANDROID_TABLET ||
         device === 'Kobo' ||
         device === 'Kindle Fire' ||
-        device === 'Generic tablet'
+        device === GENERIC_TABLET
     ) {
         return TABLET
     } else if (device === NINTENDO || device === XBOX || device === PLAYSTATION || device === OUYA) {
