@@ -1,5 +1,8 @@
 [
     {
+        "//": "test cases copied from https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173"
+    },
+    {
         "desc": "Windows 95",
         "ua": "Mozilla/1.22 (compatible; MSIE 2.0; Windows 95)",
         "expect": {

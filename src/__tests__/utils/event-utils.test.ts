@@ -223,7 +223,7 @@ describe(`event-utils`, () => {
          * at "https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173"
          * they were copied here
          */
-        test.each(uaParserDeviceTestCases)('device - $ua', (testCase) => {
+        test.each(uaParserDeviceTestCases.filter((tc) => !tc['//']))('device - $ua', (testCase) => {
             if (testCase['expect']['type'] === 'smarttv') {
                 // we'll test that separately
                 return
@@ -251,7 +251,7 @@ describe(`event-utils`, () => {
          *
          * we had to edit them a chunk because we don't aim for the same level of detail
          */
-        test.each(uaParserOSTestCases)('OS - $ua', (testCase) => {
+        test.each(uaParserOSTestCases.filter((tc) => !tc['//']))('OS - $ua', (testCase) => {
             const result = _info.os(testCase['ua'])
             const expected = testCase['expect']
             expect(result).toStrictEqual([expected.os_name, expected.os_version])
