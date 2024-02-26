@@ -15,7 +15,8 @@ const FACEBOOK = 'Facebook'
 const MOBILE = 'Mobile'
 const IOS = 'iOS'
 const ANDROID = 'Android'
-const ANDROID_TABLET = ANDROID + ' Tablet'
+const TABLET = 'Tablet'
+const ANDROID_TABLET = ANDROID + ' ' + TABLET
 const IPAD = 'iPad'
 const APPLE = 'Apple'
 const APPLE_WATCH = APPLE + ' Watch'
@@ -40,6 +41,8 @@ const PLAYSTATION = 'PlayStation'
 const XBOX = 'Xbox'
 const ANDROID_MOBILE = ANDROID + ' ' + MOBILE
 const MOBILE_SAFARI = MOBILE + ' ' + SAFARI
+const WINDOWS = 'Windows'
+const WINDOWS_PHONE = WINDOWS + ' Phone'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
@@ -169,19 +172,19 @@ export const detectOS = function (user_agent: string): [string, string] {
     // the first regex that matches uses its matcher function to return the result
     const osMatchers: [RegExp, (match: RegExpMatchArray | null) => [string, string]][] = [
         [
-            /xbox; xbox (.*?)[);]/i,
+            new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),
             (match) => {
                 return [XBOX, (match && match[1]) || '']
             },
         ],
         [
-            /nintendo/i,
+            new RegExp(NINTENDO, 'i'),
             () => {
                 return [NINTENDO, '']
             },
         ],
         [
-            /playstation/i,
+            new RegExp(PLAYSTATION, 'i'),
             () => {
                 return [PLAYSTATION, '']
             },
@@ -193,14 +196,14 @@ export const detectOS = function (user_agent: string): [string, string] {
             },
         ],
         [
-            /Windows/i,
+            new RegExp(WINDOWS, 'i'),
             () => {
                 if (/Phone/.test(user_agent) || /WPDesktop/.test(user_agent)) {
-                    return ['Windows Phone', '']
+                    return [WINDOWS_PHONE, '']
                 }
                 // not all JS versions support negative lookbehind, so we need two checks here
                 if (/Mobile\b/.test(user_agent) && !/IEMobile\b/.test(user_agent)) {
-                    return ['Windows ' + MOBILE, '']
+                    return [WINDOWS + ' ' + MOBILE, '']
                 }
                 const match = /Windows NT ([0-9.]+)/i.exec(user_agent)
                 if (match && match[1]) {
@@ -209,9 +212,9 @@ export const detectOS = function (user_agent: string): [string, string] {
                     if (/arm/i.test(user_agent)) {
                         osVersion = 'RT'
                     }
-                    return ['Windows', osVersion]
+                    return [WINDOWS, osVersion]
                 }
-                return ['Windows', '']
+                return [WINDOWS, '']
             },
         ],
         [
@@ -236,7 +239,7 @@ export const detectOS = function (user_agent: string): [string, string] {
             },
         ],
         [
-            /(Android (\d+)\.(\d+)\.?(\d+)?|Android)/i,
+            new RegExp('(' + ANDROID + ' (\\d+)\\.(\\d+)\\.?(\\d+)?|' + ANDROID + ')', 'i'),
             (match) => {
                 if (match && match[2]) {
                     const versionParts = [match[2], match[3], match[4] || '0']
@@ -297,7 +300,7 @@ export const detectDevice = function (user_agent: string): string {
     } else if (/ouya/i.test(user_agent)) {
         return 'Ouya'
     } else if (/Windows Phone/i.test(user_agent) || /WPDesktop/.test(user_agent)) {
-        return 'Windows Phone'
+        return WINDOWS_PHONE
     } else if (/iPad/.test(user_agent)) {
         return IPAD
     } else if (/iPod/.test(user_agent)) {
@@ -353,13 +356,13 @@ export const detectDeviceType = function (user_agent: string): string {
         device === 'Kindle Fire' ||
         device === 'Generic tablet'
     ) {
-        return 'Tablet'
+        return TABLET
     } else if (device === NINTENDO || device === XBOX || device === PLAYSTATION || device === 'Ouya') {
         return 'Console'
     } else if (device === APPLE_WATCH) {
         return 'Wearable'
     } else if (device) {
-        return 'Mobile'
+        return MOBILE
     } else {
         return 'Desktop'
     }
