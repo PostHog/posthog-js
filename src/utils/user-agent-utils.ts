@@ -48,6 +48,7 @@ const OUYA = 'Ouya'
 const GENERIC = 'Generic'
 const GENERIC_MOBILE = GENERIC + ' ' + MOBILE.toLowerCase()
 const GENERIC_TABLET = GENERIC + ' ' + TABLET.toLowerCase()
+const KONQUEROR = 'Konqueror'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
@@ -79,29 +80,8 @@ const windowsVersionMap: Record<string, string> = {
 function isSafari(userAgent: string): boolean {
     return _includes(userAgent, SAFARI) && !_includes(userAgent, CHROME) && !_includes(userAgent, ANDROID)
 }
-const safariCheck = (ua: string, vendor?: string) => (vendor && _includes(vendor, APPLE)) || isSafari(ua)
 
-const browserDetectionChecks: [(userAgent: string, navigatorVendor?: string) => boolean, string][] = [
-    [(ua) => _includes(ua, ' OPR/') && _includes(ua, 'Mini'), OPERA_MINI],
-    [(ua) => _includes(ua, ' OPR/'), OPERA],
-    [(ua) => BLACKBERRY_REGEX.test(ua), BLACKBERRY],
-    [(ua) => _includes(ua, 'IE' + MOBILE) || _includes(ua, 'WPDesktop'), INTERNET_EXPLORER_MOBILE],
-    // https://developer.samsung.com/internet/user-agent-string-format
-    [(ua) => _includes(ua, SAMSUNG_BROWSER), SAMSUNG_INTERNET],
-    [(ua) => _includes(ua, EDGE) || _includes(ua, 'Edg/'), MICROSOFT_EDGE],
-    [(ua) => _includes(ua, 'FBIOS'), FACEBOOK + ' ' + MOBILE],
-    [(ua) => _includes(ua, CHROME), CHROME],
-    [(ua) => _includes(ua, 'CriOS'), CHROME_IOS],
-    [(ua) => _includes(ua, 'UCWEB') || _includes(ua, 'UCBrowser'), 'UC Browser'],
-    [(ua) => _includes(ua, 'FxiOS'), FIREFOX_IOS],
-    [(ua) => _includes(ua, ANDROID), ANDROID_MOBILE],
-    [(ua) => _includes(ua, 'Konqueror') || _includes(ua, 'konqueror'), 'Konqueror'],
-    [(ua, vendor) => safariCheck(ua, vendor) && _includes(ua, MOBILE), MOBILE_SAFARI],
-    [(ua, vendor) => safariCheck(ua, vendor), SAFARI],
-    [(ua) => _includes(ua, FIREFOX), FIREFOX],
-    [(ua) => _includes(ua, 'MSIE') || _includes(ua, 'Trident/'), INTERNET_EXPLORER],
-    [(ua) => _includes(ua, 'Gecko'), FIREFOX],
-]
+const safariCheck = (ua: string, vendor?: string) => (vendor && _includes(vendor, APPLE)) || isSafari(ua)
 
 /**
  * This function detects which browser is running this script.
@@ -114,11 +94,42 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
     }
     vendor = vendor || '' // vendor is undefined for at least IE9
 
-    for (let i = 0; i < browserDetectionChecks.length; i++) {
-        const [check, browser] = browserDetectionChecks[i]
-        if (check(user_agent, vendor)) {
-            return browser
-        }
+    if (_includes(user_agent, ' OPR/') && _includes(user_agent, 'Mini')) {
+        return OPERA_MINI
+    } else if (_includes(user_agent, ' OPR/')) {
+        return OPERA
+    } else if (BLACKBERRY_REGEX.test(user_agent)) {
+        return BLACKBERRY
+    } else if (_includes(user_agent, 'IE' + MOBILE) || _includes(user_agent, 'WPDesktop')) {
+        return INTERNET_EXPLORER_MOBILE
+    }
+    // https://developer.samsung.com/internet/user-agent-string-format
+    else if (_includes(user_agent, SAMSUNG_BROWSER)) {
+        return SAMSUNG_INTERNET
+    } else if (_includes(user_agent, EDGE) || _includes(user_agent, 'Edg/')) {
+        return MICROSOFT_EDGE
+    } else if (_includes(user_agent, 'FBIOS')) {
+        return FACEBOOK + ' ' + MOBILE
+    } else if (_includes(user_agent, CHROME)) {
+        return CHROME
+    } else if (_includes(user_agent, 'CriOS')) {
+        return CHROME_IOS
+    } else if (_includes(user_agent, 'UCWEB') || _includes(user_agent, 'UCBrowser')) {
+        return 'UC Browser'
+    } else if (_includes(user_agent, 'FxiOS')) {
+        return FIREFOX_IOS
+    } else if (_includes(user_agent, ANDROID)) {
+        return ANDROID_MOBILE
+    } else if (_includes(user_agent.toLowerCase(), KONQUEROR.toLowerCase())) {
+        return KONQUEROR
+    } else if (safariCheck(user_agent, vendor)) {
+        return _includes(user_agent, MOBILE) ? MOBILE_SAFARI : SAFARI
+    } else if (_includes(user_agent, FIREFOX)) {
+        return FIREFOX
+    } else if (_includes(user_agent, 'MSIE') || _includes(user_agent, 'Trident/')) {
+        return INTERNET_EXPLORER
+    } else if (_includes(user_agent, 'Gecko')) {
+        return FIREFOX
     }
 
     return ''
