@@ -1,5 +1,5 @@
 import { _includes } from './index'
-import { _isUndefined } from './type-utils'
+import { _isFunction, _isUndefined } from './type-utils'
 
 /**
  * this device detection code is (at time of writing) about 3% of the size of the entire library
@@ -186,31 +186,19 @@ export const detectBrowserVersion = function (
 
 // to avoid repeating regexes or calling them twice, we have an array of matches
 // the first regex that matches uses its matcher function to return the result
-const osMatchers: [RegExp, (match: RegExpMatchArray | null, user_agent: string) => [string, string]][] = [
+const osMatchers: [
+    RegExp,
+    [string, string] | ((match: RegExpMatchArray | null, user_agent: string) => [string, string])
+][] = [
     [
         new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),
         (match) => {
             return [XBOX, (match && match[1]) || '']
         },
     ],
-    [
-        new RegExp(NINTENDO, 'i'),
-        () => {
-            return [NINTENDO, '']
-        },
-    ],
-    [
-        new RegExp(PLAYSTATION, 'i'),
-        () => {
-            return [PLAYSTATION, '']
-        },
-    ],
-    [
-        BLACKBERRY_REGEX,
-        () => {
-            return [BLACKBERRY, '']
-        },
-    ],
+    [new RegExp(NINTENDO, 'i'), [NINTENDO, '']],
+    [new RegExp(PLAYSTATION, 'i'), [PLAYSTATION, '']],
+    [BLACKBERRY_REGEX, [BLACKBERRY, '']],
     [
         new RegExp(WINDOWS, 'i'),
         (_, user_agent) => {
@@ -277,30 +265,18 @@ const osMatchers: [RegExp, (match: RegExpMatchArray | null, user_agent: string) 
     ],
     [
         /Mac/i,
-        () => {
-            // mop up a few non-standard UAs that should match mac
-            return ['Mac OS X', '']
-        },
+        // mop up a few non-standard UAs that should match mac
+        ['Mac OS X', ''],
     ],
-    [
-        /CrOS/,
-        () => {
-            return [CHROME_OS, '']
-        },
-    ],
-    [
-        /Linux|debian/i,
-        () => {
-            return ['Linux', '']
-        },
-    ],
+    [/CrOS/, [CHROME_OS, '']],
+    [/Linux|debian/i, ['Linux', '']],
 ]
 
 export const detectOS = function (user_agent: string): [string, string] {
     for (let i = 0; i < osMatchers.length; i++) {
-        const [rgex, matcherFn] = osMatchers[i]
+        const [rgex, resultOrFn] = osMatchers[i]
         const match = rgex.exec(user_agent)
-        const result = match && matcherFn(match, user_agent)
+        const result = match && (_isFunction(resultOrFn) ? resultOrFn(match, user_agent) : resultOrFn)
         if (result) {
             return result
         }
