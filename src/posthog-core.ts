@@ -1045,7 +1045,12 @@ export class PostHog {
                 delete properties[denylisted_prop]
             })
         } else {
-            logger.error('Invalid value for property_denylist config: ' + property_denylist)
+            logger.error(
+                'Invalid value for property_denylist config: ' +
+                    property_denylist +
+                    ' or property_blacklist config: ' +
+                    this.config.property_blacklist
+            )
         }
 
         const sanitize_properties = this.config.sanitize_properties
@@ -1697,7 +1702,7 @@ export class PostHog {
      *       // names of properties/superproperties which should never
      *       // be sent with capture() calls.
      *       property_blacklist: []
-     * 
+     *
      *       // names of properties/superproperties which should never
      *       // be sent with capture() calls.
      *       property_denylist: []
