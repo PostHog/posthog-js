@@ -109,6 +109,8 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     attempt: 1,
 })
 
+const LOGGER_PREFIX = '[SessionRecording]'
+
 export class SessionRecording {
     private instance: PostHog
     private _endpoint: string
@@ -146,8 +148,8 @@ export class SessionRecording {
 
     private get sessionManager() {
         if (!this.instance.sessionManager) {
-            logger.error('Session recording started without valid sessionManager')
-            throw new Error('Session recording started without valid sessionManager. This is a bug.')
+            logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
+            throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
         return this.instance.sessionManager
@@ -262,8 +264,8 @@ export class SessionRecording {
         })
 
         if (!this.instance.sessionManager) {
-            logger.error('Session recording started without valid sessionManager')
-            throw new Error('Session recording started without valid sessionManager. This is a bug.')
+            logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
+            throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
         this.buffer = this.clearBuffer()
@@ -272,7 +274,7 @@ export class SessionRecording {
     startRecordingIfEnabled() {
         if (this.isRecordingEnabled) {
             this._startCapture()
-            logger.info('[SessionRecording] started')
+            logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
             this.clearBuffer()
@@ -284,7 +286,7 @@ export class SessionRecording {
             this.stopRrweb()
             this.stopRrweb = undefined
             this._captureStarted = false
-            logger.info('[SessionRecording] stopped')
+            logger.info(LOGGER_PREFIX + ' stopped')
         }
     }
 
@@ -317,7 +319,8 @@ export class SessionRecording {
 
         if (!shouldSample) {
             logger.warn(
-                `[SessionSampling] Sample rate (${this._sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                LOGGER_PREFIX +
+                    ` Sample rate (${this._sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
             )
         }
 
@@ -367,6 +370,11 @@ export class SessionRecording {
             const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag?.variant
             this.instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = _isObject(variants) && linkedFlag in variants
+                logger.info(LOGGER_PREFIX + ' evaluating linked flag', {
+                    flagMatches: flagIsPresent,
+                    linkedFlag,
+                    linkedVariant,
+                })
                 this._linkedFlagSeen = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
             })
         }
@@ -422,7 +430,7 @@ export class SessionRecording {
                 this.instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
                 (err) => {
                     if (err) {
-                        return logger.error(`Could not load ${recorderJS}`, err)
+                        return logger.error(LOGGER_PREFIX + ` could not load ${recorderJS}`, err)
                     }
 
                     this._onScriptLoaded()
@@ -501,7 +509,7 @@ export class SessionRecording {
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
-            logger.warn('[Session-Recording] could not emit queued rrweb event.', e)
+            logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e)
             this.queuedRRWebEvents.length < 10 &&
                 this.queuedRRWebEvents.push({
                     enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
@@ -563,7 +571,8 @@ export class SessionRecording {
 
         if (!this.rrwebRecord) {
             logger.error(
-                'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
+                LOGGER_PREFIX +
+                    'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
             )
             return
         }
@@ -577,7 +586,7 @@ export class SessionRecording {
                         node: node,
                     })
 
-                    this.log('[PostHog Recorder] ' + message, 'warn')
+                    this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
             })
 
@@ -655,7 +664,7 @@ export class SessionRecording {
                     )
                 )
             } else {
-                logger.info('[SessionReplay-NetworkCapture] not started because we are on localhost.')
+                logger.info(LOGGER_PREFIX + ' NetworkCapture not started because we are on localhost.')
             }
         }
 
