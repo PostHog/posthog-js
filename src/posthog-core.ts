@@ -1041,8 +1041,8 @@ export class PostHog {
         // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
         const property_denylist = [...this.config.property_blacklist, ...this.config.property_denylist]
         if (_isArray(property_denylist)) {
-            _each(property_denylist, function (blacklisted_prop) {
-                delete properties[blacklisted_prop]
+            _each(property_denylist, function (denylisted_prop) {
+                delete properties[denylisted_prop]
             })
         } else {
             logger.error('Invalid value for property_denylist config: ' + property_denylist)
