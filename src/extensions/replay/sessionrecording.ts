@@ -370,12 +370,14 @@ export class SessionRecording {
             const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag?.variant
             this.instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = _isObject(variants) && linkedFlag in variants
-                logger.info(LOGGER_PREFIX + ' evaluating linked flag', {
-                    flagMatches: flagIsPresent,
-                    linkedFlag,
-                    linkedVariant,
-                })
-                this._linkedFlagSeen = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
+                const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
+                if (linkedFlagMatches) {
+                    logger.info(LOGGER_PREFIX + ' linked flag matched', {
+                        linkedFlag,
+                        linkedVariant,
+                    })
+                }
+                this._linkedFlagSeen = linkedFlagMatches
             })
         }
 
