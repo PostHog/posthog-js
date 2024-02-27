@@ -271,7 +271,7 @@ export class SessionRecording {
 
     startRecordingIfEnabled() {
         if (this.isRecordingEnabled) {
-            this.startCaptureAndTrySendingQueuedSnapshots()
+            this._startCapture()
             logger.info('[SessionRecording] started')
         } else {
             this.stopRecording()
@@ -390,11 +390,6 @@ export class SessionRecording {
             timestamp: _timestamp(),
         })
     }
-
-    private startCaptureAndTrySendingQueuedSnapshots() {
-        this._startCapture()
-    }
-
     private _startCapture() {
         if (_isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
