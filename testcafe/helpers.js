@@ -43,9 +43,13 @@ export const initPosthog = (config) => {
     return ClientFunction((configParams = {}) => {
         const testSessionId = Math.round(Math.random() * 10000000000).toString()
         configParams.debug = true
-        window.posthog.init(configParams.api_key, configParams)
-        window.posthog.register({
-            testSessionId,
+        window.posthog.init(configParams.api_key, {
+            ...configParams,
+            loaded: (posthog) => {
+                posthog.register({
+                    testSessionId,
+                })
+            },
         })
 
         return testSessionId
