@@ -144,7 +144,9 @@ export const defaultConfig = (): PostHogConfig => ({
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
+    // Deprecated, use property_denylist instead.
     property_blacklist: [],
+    property_denylist: [],
     respect_dnt: false,
     sanitize_properties: null,
     request_headers: {}, // { header: value, header2: value }
@@ -1036,13 +1038,20 @@ export class PostHog {
             properties
         )
 
-        const property_blacklist = this.config.property_blacklist
-        if (_isArray(property_blacklist)) {
-            _each(property_blacklist, function (blacklisted_prop) {
-                delete properties[blacklisted_prop]
+        if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
+            // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
+            // TODO: merge this only once, requires refactoring tests
+            const property_denylist = [...this.config.property_blacklist, ...this.config.property_denylist]
+            _each(property_denylist, function (denylisted_prop) {
+                delete properties[denylisted_prop]
             })
         } else {
-            logger.error('Invalid value for property_blacklist config: ' + property_blacklist)
+            logger.error(
+                'Invalid value for property_denylist config: ' +
+                    this.config.property_denylist +
+                    ' or property_blacklist config: ' +
+                    this.config.property_blacklist
+            )
         }
 
         const sanitize_properties = this.config.sanitize_properties
@@ -1690,9 +1699,14 @@ export class PostHog {
      *       // name for super properties persistent store
      *       persistence_name: ''
      *
+     *       // deprecated, use property_denylist instead.
      *       // names of properties/superproperties which should never
-     *       // be sent with capture() calls
+     *       // be sent with capture() calls.
      *       property_blacklist: []
+     *
+     *       // names of properties/superproperties which should never
+     *       // be sent with capture() calls.
+     *       property_denylist: []
      *
      *       // if this is true, posthog cookies will be marked as
      *       // secure, meaning they will only be transmitted over https
