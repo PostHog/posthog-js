@@ -104,7 +104,9 @@ export interface PostHogConfig {
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean
     respect_dnt: boolean
+    /** @deprecated - use `property_denylist` instead  */
     property_blacklist: string[]
+    property_denylist: string[]
     request_headers: { [header_name: string]: string }
     on_request_error: (error: MinimalHTTPResponse) => void
     /** @deprecated - use `request_headers` instead  */
