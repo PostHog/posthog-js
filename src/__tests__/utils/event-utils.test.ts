@@ -1,5 +1,9 @@
 import { _info } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
+import uaParserDeviceTestCases from './device.test.json'
+import uaParserOSTestCases from './os-test.json'
+import { _isUndefined } from '../../utils/type-utils'
+import { detectBrowser } from '../../utils/user-agent-utils'
 
 describe(`event-utils`, () => {
     describe('properties', () => {
@@ -212,6 +216,105 @@ describe(`event-utils`, () => {
 
         test.each(browserTestcases)('browser %s', ({ userAgent, vendor, expectedBrowser }) => {
             expect(_info.browser(userAgent, vendor, '')).toBe(expectedBrowser)
+        })
+
+        /**
+         * ua-parser-js v1 has MIT licensed test cases
+         * at "https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173"
+         * they were copied here
+         */
+        test.each(uaParserDeviceTestCases.filter((tc) => !tc['//']))('device - $ua', (testCase) => {
+            if (testCase['expect']['type'] === 'smarttv') {
+                // we'll test that separately
+                return
+            }
+            if (testCase['expect']['type'] === 'wearable') {
+                // we'll test that separately
+                return
+            }
+            if (testCase['expect']['type'] === 'embedded') {
+                // we don't support it
+                return
+            }
+            const actual = _info.deviceType(testCase['ua']).toLowerCase()
+            const expected =
+                _isUndefined(testCase['expect']['type']) || testCase['expect']['type'] === 'undefined'
+                    ? 'desktop'
+                    : testCase['expect']['type']
+            expect(actual).toBe(expected)
+        })
+
+        /**
+         * ua-parser-js v1 has MIT licensed test cases
+         * at "https://github.com/faisalman/ua-parser-js#8087a1b4f0e25f1663ca3ddc2e06371d36642173"
+         * they were copied here
+         *
+         * we had to edit them a chunk because we don't aim for the same level of detail
+         */
+        test.each(uaParserOSTestCases.filter((tc) => !tc['//']))('OS - $ua', (testCase) => {
+            const result = _info.os(testCase['ua'])
+            const expected = testCase['expect']
+            expect(result).toStrictEqual([expected.os_name, expected.os_version])
+        })
+
+        test('can rely on vendor string to detect safari', () => {
+            const ua = 'Mozilla/5.0 (darwin) AppleWebKit/537.36 (KHTML, like Gecko) jsdom/16.7.0'
+            const vendor = 'Apple Computer, Inc.'
+            expect(detectBrowser(ua, vendor, '')).toBe('Safari')
+        })
+
+        test('osVersion', () => {
+            const osVersions = {
+                // Windows Phone
+                'Mozilla/5.0 (Mobile; Windows Phone 8.1; Android 4.0; ARM; Trident/7.0; Touch; rv:11.0; IEMobile/11.0; NOKIA; Lumia 635; BOOST) like iPhone OS 7_0_3 Mac OS X AppleWebKit/537 (KHTML, like Gecko) Mobile Safari/537':
+                    { os_name: 'Windows Phone', os_version: '' },
+                'Mozilla/5.0 (Windows NT 6.3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.122 Safari/537.36':
+                    {
+                        os_name: 'Windows',
+                        os_version: '8.1',
+                    },
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 8_2 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) CriOS/44.0.2403.67 Mobile/12D508 Safari/600.1.4':
+                    {
+                        os_name: 'iOS',
+                        os_version: '8.2.0',
+                    },
+                'Mozilla/5.0 (iPad; CPU OS 8_4 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Version/8.0 Mobile/12H143 Safari/600.1.4':
+                    {
+                        os_name: 'iOS',
+                        os_version: '8.4.0',
+                    },
+                'Mozilla/5.0 (Linux; Android 4.4.2; Lenovo A7600-F Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.133 Safari/537.36':
+                    {
+                        os_name: 'Android',
+                        os_version: '4.4.2',
+                    },
+                'Mozilla/5.0 (BlackBerry; U; BlackBerry 9300; es) AppleWebKit/534.8+ (KHTML, like Gecko) Version/6.0.0.480 Mobile Safari/534.8+':
+                    {
+                        os_name: 'BlackBerry',
+                        os_version: '',
+                    },
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.130 Safari/537.36':
+                    {
+                        os_name: 'Mac OS X',
+                        os_version: '10.9.5',
+                    },
+                'Opera/9.80 (Linux armv7l; InettvBrowser/2.2 (00014A;SonyDTV140;0001;0001) KDL40W600B; CC/MEX) Presto/2.12.407 Version/12.50':
+                    {
+                        os_name: 'Linux',
+                        os_version: '',
+                    },
+                'Mozilla/5.0 (X11; CrOS armv7l 6680.81.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.118 Safari/537.36':
+                    {
+                        os_name: 'Chrome OS',
+                        os_version: '',
+                    },
+            }
+
+            for (const [userAgent, osInfo] of Object.entries(osVersions)) {
+                const [os_name, os_version] = _info.os(userAgent)
+                expect(os_name).toBe(osInfo.os_name)
+                expect(os_version).toBe(osInfo.os_version)
+            }
         })
     })
 })

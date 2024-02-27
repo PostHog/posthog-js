@@ -1,3 +1,11 @@
+## 1.109.0 - 2024-02-27
+
+- feat: improve user agent detection (#1038)
+
+## 1.108.4 - 2024-02-26
+
+- Fix (#1042)
+
 ## 1.108.3 - 2024-02-23
 
 - feat: Rollout new ingestion endpoints (#1032)
