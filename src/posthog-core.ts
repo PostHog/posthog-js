@@ -507,10 +507,15 @@ export class PostHog {
 
         this._start_queue_if_opted_in()
 
-        // this happens after so a user can call identify in
-        // the loaded callback
-        if (this.config.capture_pageview && document) {
-            this.capture('$pageview', { title: document.title }, { send_instantly: true })
+        // this happens after "loaded" so a user can call identify or any other things before the pageview fires
+        if (this.config.capture_pageview) {
+            // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
+            // and some clients may rely on it
+            setTimeout(() => {
+                if (document) {
+                    this.capture('$pageview', { title: document.title }, { send_instantly: true })
+                }
+            }, 1)
         }
 
         // Call decide to get what features are enabled and other settings.
