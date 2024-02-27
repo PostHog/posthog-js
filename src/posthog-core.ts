@@ -1038,13 +1038,19 @@ export class PostHog {
             properties
         )
 
-        const property_denylist = this.config.property_denylist
-        if (_isArray(property_denylist)) {
+        if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
+            // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
+            const property_denylist = [...this.config.property_blacklist, ...this.config.property_denylist]
             _each(property_denylist, function (denylisted_prop) {
                 delete properties[denylisted_prop]
             })
         } else {
-            logger.error('Invalid value for property_denylist config: ' + this.config.property_denylist)
+            logger.error(
+                'Invalid value for property_denylist config: ' +
+                    this.config.property_denylist +
+                    ' or property_blacklist config: ' +
+                    this.config.property_blacklist
+            )
         }
 
         const sanitize_properties = this.config.sanitize_properties
@@ -1798,11 +1804,6 @@ export class PostHog {
                     }
                 }
             }
-
-            this.config.property_denylist = [
-                ...(this.config.property_blacklist ?? []),
-                ...(this.config.property_denylist ?? []),
-            ]
         }
     }
 
