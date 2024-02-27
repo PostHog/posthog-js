@@ -22,6 +22,7 @@ describe('posthog core', () => {
     })
 
     afterEach(() => {
+        jest.useRealTimers()
         // Make sure there's no cached persistence
         given.lib.persistence?.clear?.()
     })
@@ -1091,7 +1092,7 @@ describe('posthog core', () => {
         })
 
         describe('capturing pageviews', () => {
-            it('captures not capture pageview if disabled', () => {
+            it('captures not capture pageview if disabled', async () => {
                 given('config', () => ({
                     capture_pageview: false,
                     loaded: jest.fn(),
@@ -1102,13 +1103,16 @@ describe('posthog core', () => {
                 expect(given.overrides.capture).not.toHaveBeenCalled()
             })
 
-            it('captures pageview if enabled', () => {
+            it('captures pageview if enabled', async () => {
+                jest.useFakeTimers()
                 given('config', () => ({
                     capture_pageview: true,
                     loaded: jest.fn(),
                 }))
 
                 given.subject()
+
+                jest.runOnlyPendingTimers()
 
                 expect(given.overrides.capture).toHaveBeenCalledWith(
                     '$pageview',
