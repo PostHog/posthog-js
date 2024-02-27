@@ -33,6 +33,7 @@ describe('posthog core', () => {
         given('config', () => ({
             api_host: 'https://app.posthog.com',
             property_denylist: [],
+            property_blaacklist: [],
             _onCapture: jest.fn(),
             get_device_id: jest.fn().mockReturnValue('device-id'),
         }))
@@ -96,6 +97,7 @@ describe('posthog core', () => {
         it('calls update_campaign_params and update_referrer_info on sessionPersistence', () => {
             given('config', () => ({
                 property_denylist: [],
+                property_blaacklist: [],
                 _onCapture: jest.fn(),
                 store_google: true,
                 save_referrer: true,
@@ -152,6 +154,7 @@ describe('posthog core', () => {
             given('config', () => ({
                 opt_out_useragent_filter: true,
                 property_denylist: [],
+                property_blaacklist: [],
                 _onCapture: jest.fn(),
             }))
 
@@ -173,6 +176,7 @@ describe('posthog core', () => {
             given('config', () => ({
                 properties_string_max_length: 1000,
                 property_denylist: [],
+                property_blaacklist: [],
                 _onCapture: jest.fn(),
             }))
             given('eventProperties', () => ({
@@ -186,6 +190,7 @@ describe('posthog core', () => {
             given('config', () => ({
                 properties_string_max_length: null,
                 property_denylist: [],
+                property_blaacklist: [],
                 _onCapture: jest.fn(),
             }))
             given('eventProperties', () => ({
@@ -220,6 +225,7 @@ describe('posthog core', () => {
         it('updates persisted person properties for feature flags if $set is present', () => {
             given('config', () => ({
                 property_denylist: [],
+                property_blaacklist: [],
                 _onCapture: jest.fn(),
             }))
             given('eventProperties', () => ({
@@ -362,9 +368,11 @@ describe('posthog core', () => {
         given('config', () => ({
             token: 'testtoken',
             property_denylist: given.property_denylist,
+            property_blacklist: given.property_blacklist,
             sanitize_properties: given.sanitize_properties,
         }))
         given('property_denylist', () => [])
+        given('property_blacklist', () => [])
 
         beforeEach(() => {
             jest.spyOn(_info, 'properties').mockReturnValue({ $lib: 'web' })
@@ -881,6 +889,7 @@ describe('posthog core', () => {
             request_batching: true,
             persistence: 'memory',
             property_denylist: [],
+            property_blacklist: [],
             _onCapture: jest.fn(),
         }))
 
