@@ -32,7 +32,7 @@ describe('posthog core', () => {
 
         given('config', () => ({
             api_host: 'https://app.posthog.com',
-            property_deny: [],
+            property_denylist: [],
             _onCapture: jest.fn(),
             get_device_id: jest.fn().mockReturnValue('device-id'),
         }))
