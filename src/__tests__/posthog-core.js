@@ -382,11 +382,11 @@ describe('posthog core', () => {
             })
         })
 
-        it('respects property_denylist', () => {
+        it('respects property_denylist and property_blacklist', () => {
             given('property_denylist', () => ['$lib', 'persistent'])
+            given('property_blacklist', () => ['token'])
 
             expect(given.subject).toEqual({
-                token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
                 $window_id: 'windowId',
