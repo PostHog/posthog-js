@@ -121,7 +121,7 @@ jobs:
               id: pnpm-upgrade
               run: |
                   OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
-                  echo "::set-output name=outgoing-version::$OUTGOING_VERSION"
+                  echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
                   for i in $(seq 1 $RETRY_TIMES); do
                       # Retry loop because of npm being _eventually_ consistent
                       if pnpm upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then

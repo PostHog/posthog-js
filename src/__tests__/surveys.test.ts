@@ -103,7 +103,7 @@ describe('surveys', () => {
             expect(data).toEqual(firstSurveys)
         })
         expect(instance._send_request).toHaveBeenCalledWith(
-            'https://app.posthog.com/api/surveys/?token=testtoken',
+            'https://us.i.posthog.com/api/surveys/?token=testtoken',
             {},
             { method: 'GET' },
             expect.any(Function)
@@ -124,7 +124,7 @@ describe('surveys', () => {
             expect(data).toEqual(firstSurveys)
         })
         expect(instance._send_request).toHaveBeenCalledWith(
-            'https://app.posthog.com/api/surveys/?token=testtoken',
+            'https://us.i.posthog.com/api/surveys/?token=testtoken',
             {},
             { method: 'GET' },
             expect.any(Function)

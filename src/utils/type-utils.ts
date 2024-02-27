@@ -64,3 +64,18 @@ export const _isBoolean = function (x: unknown): x is boolean {
     // eslint-disable-next-line posthog-js/no-direct-boolean-check
     return toString.call(x) === '[object Boolean]'
 }
+
+export const _isDocument = (x: unknown): x is Document => {
+    // eslint-disable-next-line posthog-js/no-direct-document-check
+    return x instanceof Document
+}
+
+export const _isFormData = (x: unknown): x is FormData => {
+    // eslint-disable-next-line posthog-js/no-direct-form-data-check
+    return x instanceof FormData
+}
+
+export const _isFile = (x: unknown): x is File => {
+    // eslint-disable-next-line posthog-js/no-direct-file-check
+    return x instanceof File
+}

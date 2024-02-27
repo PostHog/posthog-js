@@ -1,3 +1,48 @@
+## 1.109.0 - 2024-02-27
+
+- feat: improve user agent detection (#1038)
+
+## 1.108.4 - 2024-02-26
+
+- Fix (#1042)
+
+## 1.108.3 - 2024-02-23
+
+- feat: Rollout new ingestion endpoints (#1032)
+
+## 1.108.2 - 2024-02-22
+
+- fix: Path for site apps (#1037)
+
+## 1.108.1 - 2024-02-22
+
+- fix(surveys): fix emoji scale (#1036)
+
+## 1.108.0 - 2024-02-20
+
+- fix(surveys): Render feedback preview (#1030)
+
+## 1.107.0 - 2024-02-20
+
+- feat: Allow changing persistence (#1025)
+
+## 1.106.3 - 2024-02-19
+
+- fix(surveys): survey popover improvements (#1029)
+
+## 1.106.2 - 2024-02-19
+
+- fix: protect against parent is not element (#1027)
+
+## 1.106.1 - 2024-02-19
+
+- fix: body capture handling (#1026)
+- ci: Use GITHUB_OUTPUT envvar instead of set-output command (#958)
+
+## 1.106.0 - 2024-02-15
+
+- feat(surveys): preact surveys components (#964)
+
 ## 1.105.9 - 2024-02-14
 
 - fix: empty token should be invalid (#1022)

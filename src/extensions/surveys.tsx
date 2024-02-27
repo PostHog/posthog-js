@@ -1,89 +1,47 @@
 import { PostHog } from '../posthog-core'
-import { Survey, SurveyType } from '../posthog-surveys-types'
-import { SurveysWidget } from './surveys-widget'
+import {
+    BasicSurveyQuestion,
+    LinkSurveyQuestion,
+    MultipleSurveyQuestion,
+    RatingSurveyQuestion,
+    Survey,
+    SurveyAppearance,
+    SurveyQuestion,
+    SurveyQuestionType,
+    SurveyType,
+} from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
 import {
-    createMultipleQuestionSurvey,
-    createSingleQuestionSurvey,
-    showQuestion,
-    setTextColors,
-    cancelSVG,
-    closeSurveyPopup,
-    posthogLogo,
     style,
+    defaultSurveyAppearance,
+    sendSurveyEvent,
+    createShadow,
+    getContrastingTextColor,
+    SurveyContext,
 } from './surveys/surveys-utils'
+import * as Preact from 'preact'
+import { render } from 'preact-render-to-string'
+import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
+import { useState, useEffect, useRef, useContext } from 'preact/hooks'
+import { _isNumber } from '../utils/type-utils'
+import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
+import {
+    OpenTextQuestion,
+    LinkQuestion,
+    RatingQuestion,
+    MultipleChoiceQuestion,
+} from './surveys/components/QuestionTypes'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-export const createShadow = (styleSheet: string, surveyId: string) => {
-    const div = document.createElement('div')
-    div.className = `PostHogSurvey${surveyId}`
-    const shadow = div.attachShadow({ mode: 'open' })
-    if (styleSheet) {
-        const styleElement = Object.assign(document.createElement('style'), {
-            innerText: styleSheet,
-        })
-        shadow.appendChild(styleElement)
-    }
-    document.body.appendChild(div)
-    return shadow
-}
-
-export const createThankYouMessage = (survey: Survey) => {
-    const thankYouHTML = `
-    <div class="thank-you-message-container">
-        <div class="cancel-btn-wrapper">
-            <button class="form-cancel" type="cancel">${cancelSVG}</button>
-        </div>
-        <h3 class="thank-you-message-header auto-text-color">${
-            survey.appearance?.thankYouMessageHeader || 'Thank you!'
-        }</h3>
-        <div class="thank-you-message-body auto-text-color">${survey.appearance?.thankYouMessageDescription || ''}</div>
-        <button class="form-submit auto-text-color"><span>Close</span><span class="thank-you-message-countdown"></span></button>
-        ${
-            survey.appearance?.whiteLabel
-                ? ''
-                : `<a href="https://posthog.com" target="_blank" rel="noopener" class="footer-branding auto-text-color">Survey by ${posthogLogo}</a>`
-        }
-    </div>
-    `
-    const thankYouElement = Object.assign(document.createElement('div'), {
-        className: `thank-you-message`,
-        innerHTML: thankYouHTML,
-    })
-    return thankYouElement
-}
-
-export const addCancelListeners = (
-    posthog: PostHog,
-    surveyPopup: HTMLFormElement,
-    surveyId: string,
-    surveyEventName: string
-) => {
-    const cancelButtons = surveyPopup.getElementsByClassName('form-cancel')
-    for (const button of cancelButtons) {
-        button.addEventListener('click', (e) => {
-            e.preventDefault()
-            closeSurveyPopup(surveyId, surveyPopup)
-            posthog.capture('survey dismissed', {
-                $survey_name: surveyEventName,
-                $survey_id: surveyId,
-                sessionRecordingUrl: posthog.get_session_replay_url?.(),
-                $set: {
-                    [`$survey_dismissed/${surveyId}`]: true,
-                },
-            })
-        })
-    }
-    window.dispatchEvent(new Event('PHSurveyClosed'))
-}
-
 const handleWidget = (posthog: PostHog, survey: Survey) => {
-    const posthogWidget = new SurveysWidget(posthog, survey)
-    posthogWidget.createWidget()
+    const shadow = createWidgetShadow(survey)
+    const surveyStyleSheet = style(survey.appearance)
+    shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
+    Preact.render(<FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} />, shadow)
 }
 
 export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
@@ -107,7 +65,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                             if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
                                 const surveyPopup = document
                                     .querySelector(`.PostHogWidget${survey.id}`)
-                                    ?.shadowRoot?.querySelector(`.survey-${survey.id}-form`) as HTMLFormElement
+                                    ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
                                 selectorOnPage.addEventListener('click', () => {
                                     if (surveyPopup) {
                                         surveyPopup.style.display =
@@ -140,70 +98,55 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                 }
 
                 if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
-                    const shadow = createShadow(style(survey.id, survey?.appearance), survey.id)
-                    let surveyPopup
-                    if (survey.questions.length < 2) {
-                        surveyPopup = createSingleQuestionSurvey(
-                            posthog,
-                            survey,
-                            survey.questions[0]
-                        ) as HTMLFormElement
-                    } else {
-                        surveyPopup = createMultipleQuestionSurvey(posthog, survey)
-                    }
-                    if (surveyPopup) {
-                        addCancelListeners(posthog, surveyPopup, survey.id, survey.name)
-                        if (survey.appearance?.whiteLabel) {
-                            const allBrandingElements = surveyPopup.getElementsByClassName('footer-branding')
-                            for (const brandingElement of allBrandingElements) {
-                                ;(brandingElement as HTMLAnchorElement).style.display = 'none'
-                            }
-                        }
-                        shadow.appendChild(surveyPopup)
-                    }
-                    if (survey.questions.length > 1) {
-                        const currentQuestion = 0
-                        showQuestion(currentQuestion, survey.id, survey.type)
-                    }
-                    setTextColors(shadow)
-                    window.dispatchEvent(new Event('PHSurveyShown'))
-                    posthog.capture('survey shown', {
-                        $survey_name: survey.name,
-                        $survey_id: survey.id,
-                        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-                    })
-                    localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
-                    if (survey.appearance?.displayThankYouMessage) {
-                        window.addEventListener('PHSurveySent', () => {
-                            const thankYouElement = createThankYouMessage(survey)
-                            shadow.appendChild(thankYouElement)
-                            const cancelButtons = thankYouElement.querySelectorAll('.form-cancel, .form-submit')
-                            for (const button of cancelButtons) {
-                                button.addEventListener('click', () => {
-                                    thankYouElement.remove()
-                                })
-                            }
-                            const countdownEl = thankYouElement.querySelector('.thank-you-message-countdown')
-                            if (survey.appearance?.autoDisappear && countdownEl) {
-                                let count = 3
-                                countdownEl.textContent = `(${count})`
-                                const countdown = setInterval(() => {
-                                    count -= 1
-                                    if (count <= 0) {
-                                        clearInterval(countdown)
-                                        thankYouElement.remove()
-                                        return
-                                    }
-                                    countdownEl.textContent = `(${count})`
-                                }, 1000)
-                            }
-                            setTextColors(shadow)
-                        })
-                    }
+                    const shadow = createShadow(style(survey?.appearance), survey.id)
+                    Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
             }
         })
     }, forceReload)
+}
+
+export const renderSurveysPreview = (
+    survey: Survey,
+    root: HTMLElement,
+    displayState: 'survey' | 'confirmation',
+    previewQuestionIndex: number
+) => {
+    const surveyStyleSheet = style(survey.appearance)
+    const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
+    root.appendChild(styleElement)
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
+    )
+    const surveyHtml = render(
+        <Surveys
+            key={'surveys-render-preview'}
+            survey={survey}
+            readOnly={true}
+            initialDisplayState={displayState}
+            previewQuestionIndex={previewQuestionIndex}
+            style={{
+                position: 'relative',
+                right: 0,
+                borderBottom: `1px solid ${survey.appearance?.borderColor}`,
+                borderRadius: 10,
+                color: textColor,
+            }}
+        />
+    )
+    const surveyDiv = document.createElement('div')
+    surveyDiv.innerHTML = surveyHtml
+    root.appendChild(surveyDiv)
+}
+
+export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement) => {
+    const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
+    const styleElement = Object.assign(document.createElement('style'), { innerText: widgetStyleSheet })
+    root.appendChild(styleElement)
+    const widgetHtml = render(<FeedbackWidget key={'feedback-render-preview'} survey={survey} readOnly={true} />)
+    const widgetDiv = document.createElement('div')
+    widgetDiv.innerHTML = widgetHtml
+    root.appendChild(widgetDiv)
 }
 
 // This is the main exported function
@@ -218,4 +161,276 @@ export function generateSurveys(posthog: PostHog) {
     setInterval(() => {
         callSurveys(posthog, false)
     }, 3000)
+}
+
+export function Surveys({
+    survey,
+    posthog,
+    readOnly,
+    style,
+    initialDisplayState,
+    previewQuestionIndex,
+}: {
+    survey: Survey
+    posthog?: PostHog
+    readOnly?: boolean
+    style?: React.CSSProperties
+    initialDisplayState?: 'survey' | 'confirmation' | 'closed'
+    previewQuestionIndex?: number
+}) {
+    const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>(
+        initialDisplayState || 'survey'
+    )
+
+    useEffect(() => {
+        if (readOnly || !posthog) {
+            return
+        }
+
+        window.dispatchEvent(new Event('PHSurveyShown'))
+
+        posthog.capture('survey shown', {
+            $survey_name: survey.name,
+            $survey_id: survey.id,
+            sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        })
+        localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
+
+        window.addEventListener('PHSurveyClosed', () => {
+            setDisplayState('closed')
+        })
+
+        window.addEventListener('PHSurveySent', () => {
+            if (!survey.appearance?.displayThankYouMessage) {
+                return setDisplayState('closed')
+            }
+            setDisplayState('confirmation')
+            if (survey.appearance?.autoDisappear) {
+                setTimeout(() => {
+                    setDisplayState('closed')
+                }, 5000)
+            }
+        })
+    }, [])
+    const confirmationBoxLeftStyle = style?.left && _isNumber(style?.left) ? { left: style.left - 40 } : {}
+
+    return (
+        <>
+            <SurveyContext.Provider
+                value={{
+                    readOnly: !!readOnly,
+                    previewQuestionIndex: previewQuestionIndex ?? 0,
+                    textColor: getContrastingTextColor(
+                        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+                    ),
+                }}
+            >
+                {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
+                {displayState === 'confirmation' && (
+                    <ConfirmationMessage
+                        confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
+                        confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
+                        appearance={survey.appearance || defaultSurveyAppearance}
+                        styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
+                        onClose={() => setDisplayState('closed')}
+                    />
+                )}
+            </SurveyContext.Provider>
+        </>
+    )
+}
+
+const questionTypeMap = (
+    question: SurveyQuestion,
+    questionIndex: number,
+    appearance: SurveyAppearance,
+    onSubmit: (res: string | string[] | number | null) => void,
+    closeSurveyPopup: () => void
+): JSX.Element => {
+    const mapping = {
+        [SurveyQuestionType.Open]: (
+            <OpenTextQuestion
+                question={question as BasicSurveyQuestion}
+                appearance={appearance}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+        [SurveyQuestionType.Link]: (
+            <LinkQuestion
+                question={question as LinkSurveyQuestion}
+                appearance={appearance}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+        [SurveyQuestionType.Rating]: (
+            <RatingQuestion
+                question={question as RatingSurveyQuestion}
+                appearance={appearance}
+                questionIndex={questionIndex}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+        [SurveyQuestionType.SingleChoice]: (
+            <MultipleChoiceQuestion
+                question={question as MultipleSurveyQuestion}
+                appearance={appearance}
+                questionIndex={questionIndex}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+        [SurveyQuestionType.MultipleChoice]: (
+            <MultipleChoiceQuestion
+                question={question as MultipleSurveyQuestion}
+                appearance={appearance}
+                questionIndex={questionIndex}
+                onSubmit={onSubmit}
+                closeSurveyPopup={closeSurveyPopup}
+            />
+        ),
+    }
+    return mapping[question.type]
+}
+
+export function Questions({
+    survey,
+    posthog,
+    styleOverrides,
+}: {
+    survey: Survey
+    posthog?: PostHog
+    styleOverrides?: React.CSSProperties
+}) {
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+    )
+    const [questionsResponses, setQuestionsResponses] = useState({})
+    const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
+    const [currentQuestion, setCurrentQuestion] = useState(readOnly ? previewQuestionIndex : 0)
+
+    const onNextClick = (res: string | string[] | number | null, idx: number) => {
+        const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
+        if (idx === survey.questions.length - 1) {
+            return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+        } else {
+            setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
+            setCurrentQuestion(idx + 1)
+        }
+    }
+    const isMultipleQuestion = survey.questions.length > 1
+
+    return (
+        <form
+            // TODO: BEMify classes
+            className="survey-form"
+            style={{ color: textColor, borderColor: survey.appearance?.borderColor, ...styleOverrides }}
+        >
+            {survey.questions.map((question, idx) => {
+                if (isMultipleQuestion) {
+                    return (
+                        <>
+                            {currentQuestion === idx && (
+                                <div className={`tab question-${idx} ${question.type}`}>
+                                    {questionTypeMap(
+                                        question,
+                                        idx,
+                                        survey.appearance || defaultSurveyAppearance,
+                                        (res) => onNextClick(res, idx),
+                                        () => closeSurveyPopup(survey, posthog, readOnly)
+                                    )}
+                                </div>
+                            )}
+                        </>
+                    )
+                }
+                return questionTypeMap(
+                    survey.questions[idx],
+                    idx,
+                    survey.appearance || defaultSurveyAppearance,
+                    (res) => onNextClick(res, idx),
+                    () => closeSurveyPopup(survey, posthog, readOnly)
+                )
+            })}
+        </form>
+    )
+}
+
+const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
+    // TODO: state management and unit tests for this would be nice
+    if (readOnly || !posthog) {
+        return
+    }
+    posthog.capture('survey dismissed', {
+        $survey_name: survey.name,
+        $survey_id: survey.id,
+        sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        $set: {
+            [`$survey_dismissed/${survey.id}`]: true,
+        },
+    })
+    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
+    window.dispatchEvent(new Event('PHSurveyClosed'))
+}
+
+export function FeedbackWidget({
+    survey,
+    posthog,
+    readOnly,
+}: {
+    survey: Survey
+    posthog?: PostHog
+    readOnly?: boolean
+}): JSX.Element {
+    const [showSurvey, setShowSurvey] = useState(false)
+    const [styleOverrides, setStyle] = useState({})
+    const widgetRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        if (readOnly || !posthog) {
+            return
+        }
+
+        if (survey.appearance?.widgetType === 'tab') {
+            if (widgetRef.current) {
+                const widgetPos = widgetRef.current.getBoundingClientRect()
+                const style = {
+                    top: '50%',
+                    left: parseInt(`${widgetPos.right - 360}`),
+                    bottom: 'auto',
+                    borderRadius: 10,
+                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+                }
+                setStyle(style)
+            }
+        }
+        if (survey.appearance?.widgetType === 'selector') {
+            const widget = document.querySelector(survey.appearance.widgetSelector || '')
+            widget?.addEventListener('click', () => {
+                setShowSurvey(!showSurvey)
+            })
+            widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
+        }
+    }, [])
+
+    return (
+        <>
+            {survey.appearance?.widgetType === 'tab' && (
+                <div
+                    className="ph-survey-widget-tab"
+                    ref={widgetRef}
+                    onClick={() => !readOnly && setShowSurvey(!showSurvey)}
+                    style={{ color: getContrastingTextColor(survey.appearance.widgetColor) }}
+                >
+                    <div className="ph-survey-widget-tab-icon"></div>
+                    {survey.appearance?.widgetLabel || ''}
+                </div>
+            )}
+            {showSurvey && (
+                <Surveys key={'feedback-widget-survey'} posthog={posthog} survey={survey} style={styleOverrides} />
+            )}
+        </>
+    )
 }

@@ -104,7 +104,9 @@ export interface PostHogConfig {
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean
     respect_dnt: boolean
+    /** @deprecated - use `property_denylist` instead  */
     property_blacklist: string[]
+    property_denylist: string[]
     request_headers: { [header_name: string]: string }
     on_request_error: (error: MinimalHTTPResponse) => void
     /** @deprecated - use `request_headers` instead  */
@@ -142,8 +144,6 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
-    /** WARNING: This is an experimental option not meant for public use. */
-    __preview_ingestion_endpoints?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -283,7 +283,6 @@ export interface DecideResponse {
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
-    __preview_ingestion_endpoints?: boolean
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
@@ -385,22 +384,6 @@ export interface EarlyAccessFeatureResponse {
 
 export type Headers = Record<string, string>
 
-export type Body =
-    | string
-    | Document
-    | Blob
-    | ArrayBufferView
-    | ArrayBuffer
-    | FormData
-    // rrweb uses URLSearchParams and ReadableStream<Uint8Array>
-    // as part of the union for this type
-    // because they don't support IE11
-    // but, we do 🫠
-    // what's going to happen here in IE11?
-    | URLSearchParams
-    | ReadableStream<Uint8Array>
-    | null
-
 /* for rrweb/network@1
  ** when that is released as part of rrweb this can be removed
  ** don't rely on this type, it may change without notice
@@ -467,9 +450,9 @@ export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     startTime?: number
     endTime?: number
     requestHeaders?: Headers
-    requestBody?: Body
+    requestBody?: string | null
     responseHeaders?: Headers
-    responseBody?: Body
+    responseBody?: string | null
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
 }

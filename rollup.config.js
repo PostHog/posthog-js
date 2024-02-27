@@ -62,6 +62,17 @@ export default [
         plugins: [...plugins],
     },
     {
+        input: 'src/loader-surveys-preview.ts',
+        output: [
+            {
+                file: 'dist/surveys-module-previews.js',
+                format: 'es',
+                sourcemap: true,
+            },
+        ],
+        plugins: [...plugins],
+    },
+    {
         input: 'src/loader-exception-autocapture.ts',
         output: [
             {

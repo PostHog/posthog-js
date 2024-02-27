@@ -2,6 +2,7 @@ import { Breaker, EventHandler, Properties } from '../types'
 import {
     _isArray,
     _isDate,
+    _isFormData,
     _isFunction,
     _isNull,
     _isObject,
@@ -57,6 +58,14 @@ export function _each(obj: any, iterator: (value: any, key: any) => void | Break
     }
     if (_isArray(obj)) {
         return _eachArray(obj, iterator, thisArg)
+    }
+    if (_isFormData(obj)) {
+        for (const pair of obj.entries()) {
+            if (iterator.call(thisArg, pair[1], pair[0]) === breaker) {
+                return
+            }
+        }
+        return
     }
     for (const key in obj) {
         if (hasOwnProperty.call(obj, key)) {

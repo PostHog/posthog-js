@@ -49,7 +49,7 @@ export class RequestRouter {
             return (this.uiHost || this.apiHost) + path
         }
 
-        if (!this.instance.config.__preview_ingestion_endpoints || this.region === RequestRouterRegion.CUSTOM) {
+        if (this.region === RequestRouterRegion.CUSTOM) {
             return this.apiHost + path
         }
 

@@ -140,7 +140,7 @@ export class Toolbar {
         const toolbarParams = {
             token: this.instance.config.token,
             ...params,
-            apiURL: this.instance.requestRouter.endpointFor('api'), // defaults to api_host from the instance config if nothing else set
+            apiURL: this.instance.requestRouter.endpointFor('ui'),
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
 
