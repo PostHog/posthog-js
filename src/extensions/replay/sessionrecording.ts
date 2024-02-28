@@ -16,12 +16,21 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
+import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
 import { _timestamp, loadScript } from '../../utils'
 
-import { _isBoolean, _isFunction, _isNull, _isNumber, _isObject, _isString, _isUndefined } from '../../utils/type-utils'
+import {
+    _isBoolean,
+    _isFunction,
+    _isNull,
+    _isNullish,
+    _isNumber,
+    _isObject,
+    _isString,
+    _isUndefined,
+} from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 import { assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
@@ -100,6 +109,8 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     attempt: 1,
 })
 
+const LOGGER_PREFIX = '[SessionRecording]'
+
 export class SessionRecording {
     private instance: PostHog
     private _endpoint: string
@@ -121,7 +132,7 @@ export class SessionRecording {
     private _lastActivityTimestamp: number = Date.now()
     private windowId: string | null = null
     private sessionId: string | null = null
-    private _linkedFlag: string | null = null
+    private _linkedFlag: string | FlagVariant | null = null
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
 
@@ -137,8 +148,8 @@ export class SessionRecording {
 
     private get sessionManager() {
         if (!this.instance.sessionManager) {
-            logger.error('Session recording started without valid sessionManager')
-            throw new Error('Session recording started without valid sessionManager. This is a bug.')
+            logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
+            throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
         return this.instance.sessionManager
@@ -222,7 +233,7 @@ export class SessionRecording {
             return 'disabled'
         }
 
-        if (_isString(this._linkedFlag) && !this._linkedFlagSeen) {
+        if (!_isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
             return 'buffering'
         }
 
@@ -253,8 +264,8 @@ export class SessionRecording {
         })
 
         if (!this.instance.sessionManager) {
-            logger.error('Session recording started without valid sessionManager')
-            throw new Error('Session recording started without valid sessionManager. This is a bug.')
+            logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
+            throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
         this.buffer = this.clearBuffer()
@@ -262,8 +273,8 @@ export class SessionRecording {
 
     startRecordingIfEnabled() {
         if (this.isRecordingEnabled) {
-            this.startCaptureAndTrySendingQueuedSnapshots()
-            logger.info('[SessionRecording] started')
+            this._startCapture()
+            logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
             this.clearBuffer()
@@ -275,7 +286,7 @@ export class SessionRecording {
             this.stopRrweb()
             this.stopRrweb = undefined
             this._captureStarted = false
-            logger.info('[SessionRecording] stopped')
+            logger.info(LOGGER_PREFIX + ' stopped')
         }
     }
 
@@ -308,7 +319,8 @@ export class SessionRecording {
 
         if (!shouldSample) {
             logger.warn(
-                `[SessionSampling] Sample rate (${this._sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                LOGGER_PREFIX +
+                    ` Sample rate (${this._sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
             )
         }
 
@@ -336,8 +348,7 @@ export class SessionRecording {
         }
 
         const receivedSampleRate = response.sessionRecording?.sampleRate
-        this._sampleRate =
-            _isUndefined(receivedSampleRate) || _isNull(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+        this._sampleRate = _isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
 
         const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
         this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
@@ -354,10 +365,19 @@ export class SessionRecording {
             })
         }
 
-        if (_isString(this._linkedFlag)) {
-            const linkedFlag = this._linkedFlag
-            this.instance.onFeatureFlags((flags) => {
-                this._linkedFlagSeen = flags.includes(linkedFlag)
+        if (!_isNullish(this._linkedFlag)) {
+            const linkedFlag = _isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag?.flag
+            const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag?.variant
+            this.instance.onFeatureFlags((_flags, variants) => {
+                const flagIsPresent = _isObject(variants) && linkedFlag in variants
+                const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
+                if (linkedFlagMatches) {
+                    logger.info(LOGGER_PREFIX + ' linked flag matched', {
+                        linkedFlag,
+                        linkedVariant,
+                    })
+                }
+                this._linkedFlagSeen = linkedFlagMatches
             })
         }
 
@@ -380,11 +400,6 @@ export class SessionRecording {
             timestamp: _timestamp(),
         })
     }
-
-    private startCaptureAndTrySendingQueuedSnapshots() {
-        this._startCapture()
-    }
-
     private _startCapture() {
         if (_isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -417,7 +432,7 @@ export class SessionRecording {
                 this.instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
                 (err) => {
                     if (err) {
-                        return logger.error(`Could not load ${recorderJS}`, err)
+                        return logger.error(LOGGER_PREFIX + ` could not load ${recorderJS}`, err)
                     }
 
                     this._onScriptLoaded()
@@ -496,7 +511,7 @@ export class SessionRecording {
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
-            logger.warn('[Session-Recording] could not emit queued rrweb event.', e)
+            logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e)
             this.queuedRRWebEvents.length < 10 &&
                 this.queuedRRWebEvents.push({
                     enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
@@ -558,7 +573,8 @@ export class SessionRecording {
 
         if (!this.rrwebRecord) {
             logger.error(
-                'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
+                LOGGER_PREFIX +
+                    'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
             )
             return
         }
@@ -572,7 +588,7 @@ export class SessionRecording {
                         node: node,
                     })
 
-                    this.log('[PostHog Recorder] ' + message, 'warn')
+                    this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
             })
 
@@ -650,7 +666,7 @@ export class SessionRecording {
                     )
                 )
             } else {
-                logger.info('[SessionReplay-NetworkCapture] not started because we are on localhost.')
+                logger.info(LOGGER_PREFIX + ' NetworkCapture not started because we are on localhost.')
             }
         }
 

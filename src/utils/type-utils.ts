@@ -52,6 +52,15 @@ export const _isNull = function (x: unknown): x is null {
     // eslint-disable-next-line posthog-js/no-direct-null-check
     return x === null
 }
+
+/*
+    sometimes you want to check if something is null or undefined
+    that's what this is for
+ */
+export const _isNullish = function (x: unknown): x is null | undefined {
+    return _isUndefined(x) || _isNull(x)
+}
+
 export const _isDate = function (x: unknown): x is Date {
     // eslint-disable-next-line posthog-js/no-direct-date-check
     return toString.call(x) == '[object Date]'

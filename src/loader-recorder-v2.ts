@@ -25,6 +25,7 @@ import {
     _isFormData,
     _isFunction,
     _isNull,
+    _isNullish,
     _isObject,
     _isString,
     _isUndefined,
@@ -219,7 +220,7 @@ async function getRequestPerformanceEntry(
  * XHR request body is Document | XMLHttpRequestBodyInit | null | undefined
  */
 function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | any | null | undefined): string | null {
-    if (_isNull(body) || _isUndefined(body)) {
+    if (_isNullish(body)) {
         return null
     }
 
@@ -323,7 +324,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                         networkRequest.responseHeaders = responseHeaders
                     }
                     if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                        if (_isUndefined(xhr.response) || _isNull(xhr.response)) {
+                        if (_isNullish(xhr.response)) {
                             networkRequest.responseBody = null
                         } else {
                             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment

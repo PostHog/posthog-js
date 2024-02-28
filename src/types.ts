@@ -240,6 +240,8 @@ export interface RequestData extends QueuedRequestData {
     onResponse?: (req: MinimalHTTPResponse) => void
 }
 
+export type FlagVariant = { flag: string; variant: string }
+
 export interface DecideResponse {
     status: number
     supportedCompression: Compression[]
@@ -274,7 +276,7 @@ export interface DecideResponse {
         canvasFps?: number | null
         // the API returns a decimal between 0 and 1 as a string
         canvasQuality?: string | null
-        linkedFlag?: string | null
+        linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     }
     surveys?: boolean
