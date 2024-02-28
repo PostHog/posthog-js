@@ -11,7 +11,7 @@ export default function Home() {
             </Head>
             <main>
                 <h1>A long page</h1>
-                <div className="buttons">
+                <div className="flex items-center gap-2">
                     <Link href="/">Home</Link>
                 </div>
 
@@ -25,7 +25,7 @@ export default function Home() {
                     </p>
                 ))}
 
-                <div className="buttons">
+                <div className="flex items-center gap-2">
                     <Link href="/">Home</Link>
                 </div>
             </main>

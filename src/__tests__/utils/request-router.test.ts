@@ -6,7 +6,6 @@ describe('request-router', () => {
             config: {
                 api_host,
                 ui_host,
-                __preview_ingestion_endpoints: true,
             },
         } as any)
     }
@@ -60,7 +59,7 @@ describe('request-router', () => {
     })
 
     it('should react to config changes', () => {
-        const mockPostHog = { config: { api_host: 'https://app.posthog.com', __preview_ingestion_endpoints: true } }
+        const mockPostHog = { config: { api_host: 'https://app.posthog.com' } }
 
         const router = new RequestRouter(mockPostHog as any)
         expect(router.endpointFor('api')).toEqual('https://us.i.posthog.com')

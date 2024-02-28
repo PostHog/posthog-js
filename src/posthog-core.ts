@@ -144,7 +144,9 @@ export const defaultConfig = (): PostHogConfig => ({
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
+    // Deprecated, use property_denylist instead.
     property_blacklist: [],
+    property_denylist: [],
     respect_dnt: false,
     sanitize_properties: null,
     request_headers: {}, // { header: value, header2: value }
@@ -466,6 +468,10 @@ export class PostHog {
         }
 
         this.persistence = new PostHogPersistence(this.config)
+        this.sessionPersistence =
+            this.config.persistence === 'sessionStorage'
+                ? this.persistence
+                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
         this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
         this._retryQueue = new RetryQueue(this.config.on_request_error, this.rateLimiter)
@@ -474,10 +480,6 @@ export class PostHog {
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
-        this.sessionPersistence =
-            this.config.persistence === 'sessionStorage'
-                ? this.persistence
-                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
         this._gdpr_init()
 
@@ -573,10 +575,6 @@ export class PostHog {
 
         if (response.elementsChainAsString) {
             this.elementsChainAsString = response.elementsChainAsString
-        }
-
-        if (response.__preview_ingestion_endpoints) {
-            this.config.__preview_ingestion_endpoints = response.__preview_ingestion_endpoints
         }
     }
 
@@ -1044,13 +1042,20 @@ export class PostHog {
             properties
         )
 
-        const property_blacklist = this.config.property_blacklist
-        if (_isArray(property_blacklist)) {
-            _each(property_blacklist, function (blacklisted_prop) {
-                delete properties[blacklisted_prop]
+        if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
+            // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
+            // TODO: merge this only once, requires refactoring tests
+            const property_denylist = [...this.config.property_blacklist, ...this.config.property_denylist]
+            _each(property_denylist, function (denylisted_prop) {
+                delete properties[denylisted_prop]
             })
         } else {
-            logger.error('Invalid value for property_blacklist config: ' + property_blacklist)
+            logger.error(
+                'Invalid value for property_denylist config: ' +
+                    this.config.property_denylist +
+                    ' or property_blacklist config: ' +
+                    this.config.property_blacklist
+            )
         }
 
         const sanitize_properties = this.config.sanitize_properties
@@ -1698,9 +1703,14 @@ export class PostHog {
      *       // name for super properties persistent store
      *       persistence_name: ''
      *
+     *       // deprecated, use property_denylist instead.
      *       // names of properties/superproperties which should never
-     *       // be sent with capture() calls
+     *       // be sent with capture() calls.
      *       property_blacklist: []
+     *
+     *       // names of properties/superproperties which should never
+     *       // be sent with capture() calls.
+     *       property_denylist: []
      *
      *       // if this is true, posthog cookies will be marked as
      *       // secure, meaning they will only be transmitted over https
@@ -1771,8 +1781,11 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
-            this.persistence?.update_config(this.config)
-            this.sessionPersistence?.update_config(this.config)
+            this.persistence?.update_config(this.config, oldConfig)
+            this.sessionPersistence =
+                this.config.persistence === 'sessionStorage'
+                    ? this.persistence
+                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true

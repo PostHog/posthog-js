@@ -22,7 +22,7 @@ import {
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { render } from 'preact-render-to-string'
-import { createWidgetShadow } from './surveys-widget'
+import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { useState, useEffect, useRef, useContext } from 'preact/hooks'
 import { _isNumber } from '../utils/type-utils'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -41,7 +41,7 @@ const handleWidget = (posthog: PostHog, survey: Survey) => {
     const shadow = createWidgetShadow(survey)
     const surveyStyleSheet = style(survey.appearance)
     shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
-    Preact.render(<FeedbackWidget posthog={posthog} survey={survey} />, shadow)
+    Preact.render(<FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} />, shadow)
 }
 
 export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
@@ -99,7 +99,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
 
                 if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
-                    Preact.render(<Surveys posthog={posthog} survey={survey} />, shadow)
+                    Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
             }
         })
@@ -120,6 +120,7 @@ export const renderSurveysPreview = (
     )
     const surveyHtml = render(
         <Surveys
+            key={'surveys-render-preview'}
             survey={survey}
             readOnly={true}
             initialDisplayState={displayState}
@@ -136,6 +137,16 @@ export const renderSurveysPreview = (
     const surveyDiv = document.createElement('div')
     surveyDiv.innerHTML = surveyHtml
     root.appendChild(surveyDiv)
+}
+
+export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement) => {
+    const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
+    const styleElement = Object.assign(document.createElement('style'), { innerText: widgetStyleSheet })
+    root.appendChild(styleElement)
+    const widgetHtml = render(<FeedbackWidget key={'feedback-render-preview'} survey={survey} readOnly={true} />)
+    const widgetDiv = document.createElement('div')
+    widgetDiv.innerHTML = widgetHtml
+    root.appendChild(widgetDiv)
 }
 
 // This is the main exported function
@@ -364,12 +375,24 @@ const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean)
     window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
-export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: Survey }): JSX.Element {
+export function FeedbackWidget({
+    survey,
+    posthog,
+    readOnly,
+}: {
+    survey: Survey
+    posthog?: PostHog
+    readOnly?: boolean
+}): JSX.Element {
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyle] = useState({})
     const widgetRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
+        if (readOnly || !posthog) {
+            return
+        }
+
         if (survey.appearance?.widgetType === 'tab') {
             if (widgetRef.current) {
                 const widgetPos = widgetRef.current.getBoundingClientRect()
@@ -395,12 +418,19 @@ export function FeedbackWidget({ posthog, survey }: { posthog: PostHog; survey: 
     return (
         <>
             {survey.appearance?.widgetType === 'tab' && (
-                <div className="ph-survey-widget-tab" ref={widgetRef} onClick={() => setShowSurvey(!showSurvey)}>
+                <div
+                    className="ph-survey-widget-tab"
+                    ref={widgetRef}
+                    onClick={() => !readOnly && setShowSurvey(!showSurvey)}
+                    style={{ color: getContrastingTextColor(survey.appearance.widgetColor) }}
+                >
                     <div className="ph-survey-widget-tab-icon"></div>
                     {survey.appearance?.widgetLabel || ''}
                 </div>
             )}
-            {showSurvey && <Surveys posthog={posthog} survey={survey} style={styleOverrides} />}
+            {showSurvey && (
+                <Surveys key={'feedback-widget-survey'} posthog={posthog} survey={survey} style={styleOverrides} />
+            )}
         </>
     )
 }

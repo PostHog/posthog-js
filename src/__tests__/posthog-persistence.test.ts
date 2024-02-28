@@ -112,6 +112,8 @@ describe('persistence', () => {
     })
 
     describe('localStorage+cookie', () => {
+        const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
+
         it('should migrate data from cookies to localStorage', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', 'cookie'))
             lib.register_once({ distinct_id: 'testy', test_prop: 'test_value' }, undefined, undefined)
@@ -130,8 +132,6 @@ describe('persistence', () => {
 
         it(`should additionally store certain values in cookies if localStorage+cookie`, () => {
             expect(document.cookie).toEqual('')
-
-            const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
 
             const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
             lib.register({ distinct_id: 'test', test_prop: 'test_val' })
@@ -166,6 +166,41 @@ describe('persistence', () => {
                 distinct_id: 'test',
                 $sesid: [1000, 'sid', 2000],
             })
+        })
+
+        it('should allow swapping between storage methods', () => {
+            const expectedProps = () => ({ distinct_id: 'test', test_prop: 'test_val' })
+            let config = makePostHogConfig('test', 'localStorage+cookie')
+            const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
+            lib.register(expectedProps())
+            expect(lib.properties()).toEqual(expectedProps())
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                })}`
+            )
+            expect(document.cookie).not.toContain('test_prop')
+            expect(localStorage.getItem('ph__posthog')).toEqual(JSON.stringify(expectedProps()))
+
+            // Swap to memory
+            let newConfig = makePostHogConfig('test', 'memory')
+            lib.update_config(newConfig, config)
+            config = newConfig
+
+            // Check stores were cleared but properties are the same
+            expect(document.cookie).toEqual('')
+            expect(localStorage.getItem('ph__posthog')).toEqual(null)
+            expect(lib.properties()).toEqual(expectedProps())
+
+            // Swap to localStorage
+            newConfig = makePostHogConfig('test', 'localStorage')
+            lib.update_config(newConfig, config)
+            config = newConfig
+
+            // Check store contains data and props are the same
+            expect(document.cookie).toEqual('')
+            expect(localStorage.getItem('ph__posthog')).toEqual(JSON.stringify(expectedProps()))
+            expect(lib.properties()).toEqual(expectedProps())
         })
     })
 })

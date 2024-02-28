@@ -46,7 +46,7 @@ export default function Home() {
                         The window itself does not scroll, the <code>main</code> element does. The content is exactly
                         4000px tall.
                     </p>
-                    <div className="buttons">
+                    <div className="flex items-center gap-2">
                         <Link href="/">Home</Link>
                     </div>
 
@@ -60,7 +60,7 @@ export default function Home() {
                         </p>
                     ))}
 
-                    <div className="buttons">
+                    <div className="flex items-center gap-2">
                         <Link href="/">Home</Link>
                     </div>
                 </div>

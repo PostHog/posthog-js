@@ -109,7 +109,7 @@ export class Decide {
         if (response['siteApps']) {
             if (this.instance.config.opt_in_site_apps) {
                 for (const { id, url } of response['siteApps']) {
-                    const scriptUrl = this.instance.requestRouter.endpointFor('assets', url)
+                    const scriptUrl = this.instance.requestRouter.endpointFor('api', url)
 
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
 

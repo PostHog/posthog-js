@@ -104,7 +104,9 @@ export interface PostHogConfig {
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean
     respect_dnt: boolean
+    /** @deprecated - use `property_denylist` instead  */
     property_blacklist: string[]
+    property_denylist: string[]
     request_headers: { [header_name: string]: string }
     on_request_error: (error: MinimalHTTPResponse) => void
     /** @deprecated - use `request_headers` instead  */
@@ -142,8 +144,6 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
-    /** WARNING: This is an experimental option not meant for public use. */
-    __preview_ingestion_endpoints?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -283,7 +283,6 @@ export interface DecideResponse {
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
-    __preview_ingestion_endpoints?: boolean
 }
 
 export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void

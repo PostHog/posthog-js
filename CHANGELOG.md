@@ -1,3 +1,31 @@
+## 1.109.0 - 2024-02-27
+
+- feat: improve user agent detection (#1038)
+
+## 1.108.4 - 2024-02-26
+
+- Fix (#1042)
+
+## 1.108.3 - 2024-02-23
+
+- feat: Rollout new ingestion endpoints (#1032)
+
+## 1.108.2 - 2024-02-22
+
+- fix: Path for site apps (#1037)
+
+## 1.108.1 - 2024-02-22
+
+- fix(surveys): fix emoji scale (#1036)
+
+## 1.108.0 - 2024-02-20
+
+- fix(surveys): Render feedback preview (#1030)
+
+## 1.107.0 - 2024-02-20
+
+- feat: Allow changing persistence (#1025)
+
 ## 1.106.3 - 2024-02-19
 
 - fix(surveys): survey popover improvements (#1029)
