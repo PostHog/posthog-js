@@ -921,6 +921,10 @@ export class PostHog {
 
         data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
         data.timestamp = options.timestamp || new Date()
+        if (!_isUndefined(options.timestamp)) {
+            data.properties['$event_time_override_provided'] = true
+            data.properties['$event_time_override_system_time'] = new Date()
+        }
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
         // This doesn't handle $set_once, because posthog-people doesn't either
