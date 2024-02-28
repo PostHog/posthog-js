@@ -1,3 +1,9 @@
+## 1.110.0 - 2024-02-28
+
+- feat: allow linked flag variants to control recording (#1040)
+- feat: reecord when timestamp is overriden by caller (#1033)
+- chore: deprecate property_blacklist in favor of property_denylist (#1044)
+
 ## 1.109.0 - 2024-02-27
 
 - feat: improve user agent detection (#1038)
