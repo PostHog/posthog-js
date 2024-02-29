@@ -202,7 +202,8 @@ export class PostHogFeatureFlags {
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
                 this._startReloadTimer()
-            }) as RequestCallback
+            }) as RequestCallback,
+            this.instance.config.feature_flag_request_timeout_ms
         )
     }
 

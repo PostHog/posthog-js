@@ -161,6 +161,7 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
+    feature_flag_request_timeout_ms: 3000,
     on_request_error: (req) => {
         const error = 'Bad HTTP status: ' + req.statusCode + ' ' + req.responseText
         logger.error(error)
@@ -698,7 +699,13 @@ export class PostHog {
         this._send_request(url, data, _options, callback)
     }
 
-    _send_request(url: string, data: Record<string, any>, options: CaptureOptions, callback?: RequestCallback): void {
+    _send_request(
+        url: string,
+        data: Record<string, any>,
+        options: CaptureOptions,
+        callback?: RequestCallback,
+        timeout?: number
+    ): void {
         if (!this.__loaded || !this._retryQueue) {
             return
         }
@@ -748,6 +755,7 @@ export class PostHog {
                     retryQueue: this._retryQueue,
                     onError: this.config.on_request_error,
                     onResponse: this.rateLimiter.checkForLimiting,
+                    timeout,
                 })
             } catch (e) {
                 logger.error(e)

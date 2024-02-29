@@ -126,6 +126,7 @@ export interface PostHogConfig {
     advanced_disable_feature_flags: boolean
     advanced_disable_feature_flags_on_first_load: boolean
     advanced_disable_toolbar_metrics: boolean
+    feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
     name: string
     callback_fn: string
