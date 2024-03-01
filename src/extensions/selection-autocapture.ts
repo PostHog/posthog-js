@@ -5,19 +5,32 @@ import { logger } from '../utils/logger'
 import { _isFunction } from '../utils/type-utils'
 import { makeSafeText } from '../autocapture-utils'
 
+const ARROW = 'Arrow'
+const LEFT = 'Left'
+const RIGHT = 'Right'
+const DOWN = 'Down'
+const UP = 'Up'
+const ARROW_LEFT = ARROW + LEFT
+const ARROW_UP = ARROW + UP
+const ARROW_RIGHT = ARROW + RIGHT
+const ARROW_DOWN = ARROW + DOWN
+const PAGE = 'Page'
+const PAGE_UP = PAGE + UP
+const PAGE_DOWN = PAGE + DOWN
+
 const navigationKeys = [
-    'ArrowUp',
-    'ArrowDown',
-    'ArrowLeft',
-    'ArrowRight',
-    'PageUp',
-    'PageDown',
+    ARROW_UP,
+    ARROW_DOWN,
+    ARROW_LEFT,
+    ARROW_RIGHT,
+    PAGE_UP,
+    PAGE_DOWN,
     'Home',
     'End',
-    'Left',
-    'Right',
-    'Up',
-    'Down',
+    LEFT,
+    RIGHT,
+    UP,
+    DOWN,
     'a', // select all
     'A', // select all
 ]
