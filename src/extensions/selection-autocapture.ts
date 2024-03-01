@@ -1,0 +1,71 @@
+import { PostHog } from '../posthog-core'
+import { _register_event } from '../utils'
+import { document, window } from '../utils/globals'
+import { logger } from '../utils/logger'
+import { _isFunction } from '../utils/type-utils'
+
+const navigationKeys = [
+    'ArrowUp',
+    'ArrowDown',
+    'ArrowLeft',
+    'ArrowRight',
+    'PageUp',
+    'PageDown',
+    'Home',
+    'End',
+    'Left',
+    'Right',
+    'Up',
+    'Down',
+    'a', // select all
+    'A', // select all
+]
+
+const debounce = (fn: any, ms = 50) => {
+    if (!_isFunction(fn)) {
+        return fn
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout>
+    return function (this: any, ...args: any[]) {
+        clearTimeout(timeoutId)
+        timeoutId = setTimeout(() => fn.apply(this, args), ms)
+    }
+}
+
+export const initSelectionAutocapture = (posthog: PostHog) => {
+    if (!document || !window) {
+        logger.info('document not available, selection autocapture not initialized')
+        return
+    }
+
+    const captureSelection = debounce((selectionType: string, selection: string): void => {
+        logger.info('selection event', selectionType, selection)
+        posthog.capture('$selection-autocapture', {
+            $selection_type: selectionType,
+            $selection: selection,
+        })
+    })
+
+    const handler = (event: Event) => {
+        let selectionType = 'unknown'
+        if (event.type === 'keyup') {
+            selectionType = 'keyboard'
+            // only react to a navigation key that could have changed the selection
+            // e.g. don't react when someone releases ctrl or shift
+            const keyEvent = event as KeyboardEvent
+            if (navigationKeys.indexOf(keyEvent.key) === -1) {
+                return
+            }
+        } else if (event.type === 'mouseup') {
+            selectionType = 'mouse'
+        }
+        const selection = window?.getSelection()
+        if (selection && selection.toString()) {
+            captureSelection(selectionType, selection.toString())
+        }
+    }
+
+    _register_event(document, 'mouseup', handler, false, true)
+    _register_event(document, 'keyup', handler, false, true)
+}

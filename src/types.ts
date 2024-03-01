@@ -144,6 +144,7 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
+    autocapture_text_selection?: boolean | string[]
 }
 
 export interface OptInOutCapturingOptions {
