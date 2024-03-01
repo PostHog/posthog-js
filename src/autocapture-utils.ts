@@ -33,6 +33,25 @@ export function getClassNames(el: Element): string[] {
     return splitClassString(className)
 }
 
+export function makeSafeText(s: string | null | undefined): string | null {
+    if (_isNullish(s)) {
+        return null
+    }
+
+    return (
+        _trim(s)
+            // scrub potentially sensitive values
+            .split(/(\s+)/)
+            .filter(shouldCaptureValue)
+            .join('')
+            // normalize whitespace
+            .replace(/[\r\n]/g, ' ')
+            .replace(/[ ]+/g, ' ')
+            // truncate
+            .substring(0, 255)
+    )
+}
+
 /*
  * Get the direct text content of an element, protecting against sensitive data collection.
  * Concats textContent of each of the element's text node children; this avoids potential
@@ -48,16 +67,7 @@ export function getSafeText(el: Element): string {
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         _each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += _trim(child.textContent)
-                    // scrub potentially sensitive values
-                    .split(/(\s+)/)
-                    .filter(shouldCaptureValue)
-                    .join('')
-                    // normalize whitespace
-                    .replace(/[\r\n]/g, ' ')
-                    .replace(/[ ]+/g, ' ')
-                    // truncate
-                    .substring(0, 255)
+                elText += makeSafeText(child.textContent) ?? ''
             }
         })
     }

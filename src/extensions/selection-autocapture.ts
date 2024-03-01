@@ -3,6 +3,7 @@ import { _register_event } from '../utils'
 import { document, window } from '../utils/globals'
 import { logger } from '../utils/logger'
 import { _isFunction } from '../utils/type-utils'
+import { makeSafeText } from '../autocapture-utils'
 
 const navigationKeys = [
     'ArrowUp',
@@ -45,7 +46,7 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
             $selection_type: selectionType,
             $selection: selection,
         })
-    })
+    }, 150)
 
     const handler = (event: Event) => {
         let selectionType = 'unknown'
@@ -61,8 +62,9 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
             selectionType = 'mouse'
         }
         const selection = window?.getSelection()
-        if (selection && selection.toString()) {
-            captureSelection(selectionType, selection.toString())
+        const selectedContent = makeSafeText(selection?.toString())
+        if (selectedContent) {
+            captureSelection(selectionType, selectedContent)
         }
     }
 
