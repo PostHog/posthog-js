@@ -5,16 +5,16 @@ import { logger } from '../utils/logger'
 import { _isFunction } from '../utils/type-utils'
 import { makeSafeText } from '../autocapture-utils'
 
-const ARROW = 'Arrow'
 const LEFT = 'Left'
 const RIGHT = 'Right'
-const DOWN = 'Down'
 const UP = 'Up'
-const ARROW_LEFT = ARROW + LEFT
-const ARROW_UP = ARROW + UP
-const ARROW_RIGHT = ARROW + RIGHT
-const ARROW_DOWN = ARROW + DOWN
+const DOWN = 'Down'
+const ARROW = 'Arrow'
 const PAGE = 'Page'
+const ARROW_LEFT = ARROW + LEFT
+const ARROW_RIGHT = ARROW + RIGHT
+const ARROW_UP = ARROW + UP
+const ARROW_DOWN = ARROW + DOWN
 const PAGE_UP = PAGE + UP
 const PAGE_DOWN = PAGE + DOWN
 
