@@ -35,8 +35,9 @@ const navigationKeys = [
     'A', // select all
 ]
 
-const MOUSE_UP = 'mouseup'
-const KEY_UP = 'keyup'
+const MOUSE = 'mouse'
+const MOUSE_UP = MOUSE + 'up'
+const KEY_UP = 'key' + 'up'
 
 const debounce = (fn: any, ms = 50) => {
     if (!_isFunction(fn)) {
@@ -74,7 +75,7 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
                 return
             }
         } else if (event.type === MOUSE_UP) {
-            selectionType = 'mouse'
+            selectionType = MOUSE
         }
         const selection = window?.getSelection()
         const selectedContent = makeSafeText(selection?.toString())
