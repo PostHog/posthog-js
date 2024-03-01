@@ -22,6 +22,9 @@ const navigationKeys = [
     'A', // select all
 ]
 
+const MOUSE_UP = 'mouseup'
+const KEY_UP = 'keyup'
+
 const debounce = (fn: any, ms = 50) => {
     if (!_isFunction(fn)) {
         return fn
@@ -41,7 +44,6 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
     }
 
     const captureSelection = debounce((selectionType: string, selection: string): void => {
-        logger.info('selection event', selectionType, selection)
         posthog.capture('$selection-autocapture', {
             $selection_type: selectionType,
             $selection: selection,
@@ -50,7 +52,7 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
 
     const handler = (event: Event) => {
         let selectionType = 'unknown'
-        if (event.type === 'keyup') {
+        if (event.type === KEY_UP) {
             selectionType = 'keyboard'
             // only react to a navigation key that could have changed the selection
             // e.g. don't react when someone releases ctrl or shift
@@ -58,7 +60,7 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
             if (navigationKeys.indexOf(keyEvent.key) === -1) {
                 return
             }
-        } else if (event.type === 'mouseup') {
+        } else if (event.type === MOUSE_UP) {
             selectionType = 'mouse'
         }
         const selection = window?.getSelection()
@@ -68,6 +70,6 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
         }
     }
 
-    _register_event(document, 'mouseup', handler, false, true)
-    _register_event(document, 'keyup', handler, false, true)
+    _register_event(document, MOUSE_UP, handler, false, true)
+    _register_event(document, KEY_UP, handler, false, true)
 }
