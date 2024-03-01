@@ -32,8 +32,12 @@ export class RequestRouter {
         switch (this.apiHost) {
             case 'https://app.posthog.com':
             case 'https://us.posthog.com':
+            case 'https://us.i.posthog.com':
+            case 'https://us-assets.i.posthog.com':
                 return RequestRouterRegion.US
             case 'https://eu.posthog.com':
+            case 'https://eu.i.posthog.com':
+            case 'https://eu-assets.i.posthog.com':
                 return RequestRouterRegion.EU
             default:
                 return RequestRouterRegion.CUSTOM
