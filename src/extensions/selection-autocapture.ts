@@ -2,7 +2,7 @@ import { PostHog } from '../posthog-core'
 import { _register_event } from '../utils'
 import { document, window } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { _isFunction } from '../utils/type-utils'
+import { _isFunction, _isObject } from '../utils/type-utils'
 import { makeSafeText } from '../autocapture-utils'
 
 const LEFT = 'Left'
@@ -31,13 +31,12 @@ const navigationKeys = [
     RIGHT,
     UP,
     DOWN,
-    'a', // select all
-    'A', // select all
 ]
 
 const MOUSE = 'mouse'
-const MOUSE_UP = MOUSE + 'up'
-const KEY_UP = 'key' + 'up'
+const MOUSE_UP = MOUSE + UP.toLowerCase()
+const KEY = 'key'
+const KEY_UP = KEY + UP.toLowerCase()
 
 const debounce = (fn: any, ms = 50) => {
     if (!_isFunction(fn)) {
@@ -57,21 +56,30 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
         return
     }
 
-    const captureSelection = debounce((selectionType: string, selection: string): void => {
-        posthog.capture('$selection-autocapture', {
-            $selection_type: selectionType,
-            $selection: selection,
-        })
-    }, 150)
+    const debouncedCapture = debounce(
+        (
+            phEvent: '$selection-autocapture' | '$clipboard-autocapture',
+            selection: string,
+            selectionType?: string | undefined
+        ): void => {
+            posthog.capture(phEvent, {
+                $selection_type: selectionType,
+                $selection: selection,
+            })
+        },
+        150
+    )
 
-    const handler = (event: Event) => {
+    const selectedTextHandler = (event: Event) => {
         let selectionType = 'unknown'
         if (event.type === KEY_UP) {
-            selectionType = 'keyboard'
+            selectionType = KEY
             // only react to a navigation key that could have changed the selection
             // e.g. don't react when someone releases ctrl or shift
             const keyEvent = event as KeyboardEvent
-            if (navigationKeys.indexOf(keyEvent.key) === -1) {
+            const isNavigationKey = navigationKeys.indexOf(keyEvent.key) >= 0
+            const isSelectAll = keyEvent.key.toLowerCase() === 'a' && (keyEvent.ctrlKey || keyEvent.metaKey)
+            if (!isNavigationKey && !isSelectAll) {
                 return
             }
         } else if (event.type === MOUSE_UP) {
@@ -80,10 +88,27 @@ export const initSelectionAutocapture = (posthog: PostHog) => {
         const selection = window?.getSelection()
         const selectedContent = makeSafeText(selection?.toString())
         if (selectedContent) {
-            captureSelection(selectionType, selectedContent)
+            debouncedCapture('$selection-autocapture', selectedContent, selectionType)
         }
     }
 
-    _register_event(document, MOUSE_UP, handler, false, true)
-    _register_event(document, KEY_UP, handler, false, true)
+    const copiedTextHandler = (event: Event) => {
+        // you can't read the data from the clipboard event,
+        // but you can guess that you can read it from the window's current selection
+        const selection = window?.getSelection()
+        const selectedContent = makeSafeText(selection?.toString())
+        if (selectedContent) {
+            debouncedCapture('$copy-autocapture', selectedContent, (event as ClipboardEvent)?.type || 'clipboard')
+        }
+    }
+
+    if (_isObject(posthog.config.autocapture) && posthog.config.autocapture.capture_selected_text) {
+        _register_event(document, MOUSE_UP, selectedTextHandler, false, true)
+        _register_event(document, KEY_UP, selectedTextHandler, false, true)
+    }
+
+    if (_isObject(posthog.config.autocapture) && posthog.config.autocapture.capture_copied_text) {
+        _register_event(document, 'copy', copiedTextHandler, false, true)
+        _register_event(document, 'cut', copiedTextHandler, false, true)
+    }
 }

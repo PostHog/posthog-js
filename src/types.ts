@@ -59,6 +59,11 @@ export interface AutocaptureConfig {
      * E.g. ['aria-label'] or [data-attr-pii]
      */
     element_attribute_ignorelist?: string[]
+
+    // TODO: this would mean you can't turn OG autocapture off but turn these on
+    // TODO: this also implies all of the other settings apply to these new types toos
+    capture_selected_text?: boolean
+    capture_copied_text?: boolean
 }
 
 export type UUIDVersion = 'og' | 'v7'
@@ -144,7 +149,6 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
-    autocapture_text_selection?: boolean | string[]
 }
 
 export interface OptInOutCapturingOptions {

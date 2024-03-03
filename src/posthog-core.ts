@@ -247,7 +247,7 @@ const create_phlib = function (
         }
     }
 
-    if (instance.config.autocapture_text_selection) {
+    if (_isObject(instance.config.autocapture)) {
         initSelectionAutocapture(instance)
     }
 

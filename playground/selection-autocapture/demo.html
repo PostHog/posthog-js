@@ -2,7 +2,10 @@
 <script>
     posthog.init('sTMFPsFhdP1Ssg', {
         api_host: 'http://127.0.0.1:8000',
-        autocapture_text_selection: true,
+        autocapture: {
+            capture_selected_text: true,
+            capture_copied_text: true,
+        },
         debug: true,
         persistence: 'memory',
         loaded: function(posthog) {
@@ -10,6 +13,12 @@
         },
         _onCapture: (event, eventData) => {
             if (event === '$selection-autocapture') {
+                const selectionType = eventData.properties['$selection_type']
+                const selectionText = eventData.properties['$selection']
+                document.getElementById('selection-type-outlet').innerText = selectionType
+                document.getElementById('selection-text-outlet').innerText = selectionText
+            }
+            if (event === '$copy-autocapture') {
                 const selectionType = eventData.properties['$selection_type']
                 const selectionText = eventData.properties['$selection']
                 document.getElementById('selection-type-outlet').innerText = selectionType
