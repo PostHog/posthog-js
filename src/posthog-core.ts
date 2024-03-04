@@ -69,7 +69,6 @@ import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { SUPPORTS_REQUEST } from './utils/request-utils'
-import { initSelectionAutocapture } from './extensions/selection-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -245,10 +244,6 @@ const create_phlib = function (
         } else {
             autocapture.init(instance)
         }
-    }
-
-    if (_isObject(instance.config.autocapture)) {
-        initSelectionAutocapture(instance)
     }
 
     // if any instance on the page has debug = true, we set the

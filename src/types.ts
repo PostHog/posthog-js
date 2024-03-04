@@ -60,13 +60,8 @@ export interface AutocaptureConfig {
      */
     element_attribute_ignorelist?: string[]
 
-    // TODO: this would mean you can't turn OG autocapture off but turn these on
-    // TODO: this also implies all of the other settings apply to these new types toos
-    capture_selected_text?: boolean
     capture_copied_text?: boolean
 }
-
-export type UUIDVersion = 'og' | 'v7'
 
 export interface PostHogConfig {
     api_host: string
