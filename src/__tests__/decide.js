@@ -19,7 +19,8 @@ const expectDecodedSendRequest = (send_request, data) => {
         },
         { method: 'POST' },
         expect.any(Function),
-        undefined
+        undefined,
+        false
     )
 }
 

@@ -704,7 +704,8 @@ export class PostHog {
         data: Record<string, any>,
         options: CaptureOptions,
         callback?: RequestCallback,
-        timeout?: number
+        timeout?: number,
+        retry?: boolean
     ): void {
         if (!this.__loaded || !this._retryQueue) {
             return
@@ -751,7 +752,7 @@ export class PostHog {
                     headers: this.config.request_headers,
                     options,
                     callback,
-                    retriesPerformedSoFar: 0,
+                    retriesPerformedSoFar: retry ? 0 : 100,
                     retryQueue: this._retryQueue,
                     onError: this.config.on_request_error,
                     onResponse: this.rateLimiter.checkForLimiting,

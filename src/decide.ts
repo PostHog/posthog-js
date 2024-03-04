@@ -39,7 +39,8 @@ export class Decide {
             { data: encoded_data, verbose: true },
             { method: 'POST' },
             (response) => this.parseDecideResponse(response as DecideResponse),
-            this.instance.config.feature_flag_request_timeout_ms
+            this.instance.config.feature_flag_request_timeout_ms,
+            false
         )
     }
 

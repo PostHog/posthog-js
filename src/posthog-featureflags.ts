@@ -203,7 +203,8 @@ export class PostHogFeatureFlags {
                 this.setReloadingPaused(false)
                 this._startReloadTimer()
             }) as RequestCallback,
-            this.instance.config.feature_flag_request_timeout_ms
+            this.instance.config.feature_flag_request_timeout_ms,
+            false
         )
     }
 
