@@ -638,62 +638,100 @@ describe('Autocapture system', () => {
             ])
         })
 
-        it('should capture copy', () => {
-            autocapture.init(lib)
+        describe('clipboard autocapture', () => {
+            let elTarget: HTMLDivElement
 
-            const elTarget = document.createElement('div')
-            elTarget.innerText = 'test'
-            const elParent = document.createElement('div')
-            elParent.appendChild(elTarget)
-            const fakeEvent = makeCopyEvent({
-                target: elTarget,
-                clientX: 5,
-                clientY: 5,
+            beforeEach(() => {
+                autocapture.init(lib)
+
+                elTarget = document.createElement('div')
+                elTarget.innerText = 'test'
+                const elParent = document.createElement('div')
+                elParent.appendChild(elTarget)
             })
-            Object.setPrototypeOf(fakeEvent, ClipboardEvent.prototype)
 
-            window!.getSelection = () => {
-                return {
-                    toString: () => 'test',
-                } as Selection
-            }
+            it('should capture copy', () => {
+                const fakeEvent = makeCopyEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
 
-            autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+                window!.getSelection = () => {
+                    return {
+                        toString: () => 'test',
+                    } as Selection
+                }
 
-            const spyArgs = (lib.capture as sinon.SinonSpy).args
-            expect(spyArgs.length).toBe(1)
-            expect(spyArgs[0][0]).toEqual('$copy-autocapture')
-            expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'test')
-            expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'copy')
-        })
+                autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
 
-        it('should capture copy', () => {
-            autocapture.init(lib)
-
-            const elTarget = document.createElement('div')
-            elTarget.innerText = 'test'
-            const elParent = document.createElement('div')
-            elParent.appendChild(elTarget)
-            const fakeEvent = makeCutEvent({
-                target: elTarget,
-                clientX: 5,
-                clientY: 5,
+                const spyArgs = (lib.capture as sinon.SinonSpy).args
+                expect(spyArgs.length).toBe(1)
+                expect(spyArgs[0][0]).toEqual('$copy-autocapture')
+                expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'test')
+                expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'copy')
             })
-            Object.setPrototypeOf(fakeEvent, ClipboardEvent.prototype)
 
-            window!.getSelection = () => {
-                return {
-                    toString: () => 'cut this test',
-                } as Selection
-            }
+            it('should capture cut', () => {
+                const fakeEvent = makeCutEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
 
-            autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+                window!.getSelection = () => {
+                    return {
+                        toString: () => 'cut this test',
+                    } as Selection
+                }
 
-            const spyArgs = (lib.capture as sinon.SinonSpy).args
-            expect(spyArgs.length).toBe(1)
-            expect(spyArgs[0][0]).toEqual('$copy-autocapture')
-            expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'cut this test')
-            expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'cut')
+                autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+
+                const spyArgs = (lib.capture as sinon.SinonSpy).args
+                expect(spyArgs.length).toBe(1)
+                expect(spyArgs[0][0]).toEqual('$copy-autocapture')
+                expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'cut this test')
+                expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'cut')
+            })
+
+            it('ignores empty selection', () => {
+                const fakeEvent = makeCopyEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
+
+                window!.getSelection = () => {
+                    return {
+                        toString: () => '',
+                    } as Selection
+                }
+
+                autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+
+                const spyArgs = (lib.capture as sinon.SinonSpy).args
+                expect(spyArgs.length).toBe(0)
+            })
+
+            it('runs selection through the safe text before capture', () => {
+                const fakeEvent = makeCopyEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
+
+                window!.getSelection = () => {
+                    return {
+                        // oh no, a social security number!
+                        toString: () => '123-45-6789',
+                    } as Selection
+                }
+
+                autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+
+                const spyArgs = (lib.capture as sinon.SinonSpy).args
+                expect(spyArgs.length).toBe(0)
+            })
         })
 
         it('should capture augment properties', () => {
