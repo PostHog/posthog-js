@@ -1,21 +1,21 @@
 import { _bind_instance_methods, _each, _extend, _includes, _register_event, _safewrap_instance_methods } from './utils'
 import {
+    autocaptureCompatibleElements,
     getClassNames,
+    getDirectAndNestedSpanText,
+    getElementsChainString,
     getSafeText,
+    isAngularStyleAttr,
+    isDocumentFragment,
     isElementNode,
     isSensitiveElement,
     isTag,
     isTextNode,
+    makeSafeText,
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureValue,
-    autocaptureCompatibleElements,
-    isAngularStyleAttr,
-    isDocumentFragment,
-    getDirectAndNestedSpanText,
-    getElementsChainString,
     splitClassString,
-    makeSafeText,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Properties } from './types'
@@ -24,7 +24,7 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { _isBoolean, _isFunction, _isNull, _isObject, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { window, document } from './utils/globals'
+import { document, window } from './utils/globals'
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {
@@ -217,7 +217,7 @@ const autocapture = {
                 isCopyAutocapture,
                 // we also don't want to restrict copy checks to clicks,
                 // so we pass that knowledge in here, rather than add the logic inside the check
-                isCopyAutocapture ? ['copy', 'cut'] : ['click']
+                isCopyAutocapture ? ['copy', 'cut'] : undefined
             )
         ) {
             const targetElementList = [target]
@@ -297,6 +297,18 @@ const autocapture = {
                 extraProps || {}
             )
 
+            if (eventName === '$copy-autocapture') {
+                // you can't read the data from the clipboard event,
+                // but you can guess that you can read it from the window's current selection
+                const selectedContent = makeSafeText(window?.getSelection()?.toString())
+                const clipType = (e as ClipboardEvent).type || 'clipboard'
+                if (!selectedContent) {
+                    return false
+                }
+                props['$selected_content'] = selectedContent
+                props['$copy_type'] = clipType
+            }
+
             instance.capture(eventName, props)
             return true
         }
@@ -322,16 +334,7 @@ const autocapture = {
 
         const copiedTextHandler = (e: Event) => {
             e = e || window?.event
-            // you can't read the data from the clipboard event,
-            // but you can guess that you can read it from the window's current selection
-            const selection = window?.getSelection()
-            const selectedContent = makeSafeText(selection?.toString())
-            if (selectedContent) {
-                this._captureEvent(e, instance, '$copy-autocapture', {
-                    $selected_content: selectedContent,
-                    $copy_type: (event as ClipboardEvent)?.type || 'clipboard',
-                })
-            }
+            this._captureEvent(e, instance, '$copy-autocapture')
         }
 
         _register_event(document, 'submit', handler, false, true)
