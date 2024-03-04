@@ -10,6 +10,8 @@ import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { window } from '../utils/globals'
 
+// JS DOM doesn't have ClipboardEvent, so we need to mock it
+// see https://github.com/jsdom/jsdom/issues/1568
 class MockClipboardEvent extends Event implements ClipboardEvent {
     clipboardData: DataTransfer | null = null
     type: 'copy' | 'cut' | 'paste' = 'copy'
