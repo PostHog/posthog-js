@@ -705,7 +705,7 @@ export class PostHog {
         options: CaptureOptions,
         callback?: RequestCallback,
         timeout?: number,
-        retry?: boolean
+        retry: boolean = true
     ): void {
         if (!this.__loaded || !this._retryQueue) {
             return
