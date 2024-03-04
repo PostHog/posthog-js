@@ -52,6 +52,14 @@ export function makeCutEvent(partialEvent: Partial<ClipboardEvent>) {
     return { type: 'cut', ...partialEvent } as unknown as ClipboardEvent
 }
 
+function setWindowTextSelection(s: string): void {
+    window!.getSelection = () => {
+        return {
+            toString: () => s,
+        } as Selection
+    }
+}
+
 describe('Autocapture system', () => {
     const originalWindowLocation = window!.location
 
@@ -657,18 +665,14 @@ describe('Autocapture system', () => {
                     clientY: 5,
                 })
 
-                window!.getSelection = () => {
-                    return {
-                        toString: () => 'test',
-                    } as Selection
-                }
+                setWindowTextSelection('copy this test')
 
                 autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
 
                 const spyArgs = (lib.capture as sinon.SinonSpy).args
                 expect(spyArgs.length).toBe(1)
                 expect(spyArgs[0][0]).toEqual('$copy-autocapture')
-                expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'test')
+                expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'copy this test')
                 expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'copy')
             })
 
@@ -679,11 +683,7 @@ describe('Autocapture system', () => {
                     clientY: 5,
                 })
 
-                window!.getSelection = () => {
-                    return {
-                        toString: () => 'cut this test',
-                    } as Selection
-                }
+                setWindowTextSelection('cut this test')
 
                 autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
 
@@ -701,11 +701,7 @@ describe('Autocapture system', () => {
                     clientY: 5,
                 })
 
-                window!.getSelection = () => {
-                    return {
-                        toString: () => '',
-                    } as Selection
-                }
+                setWindowTextSelection('')
 
                 autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
 
@@ -720,12 +716,8 @@ describe('Autocapture system', () => {
                     clientY: 5,
                 })
 
-                window!.getSelection = () => {
-                    return {
-                        // oh no, a social security number!
-                        toString: () => '123-45-6789',
-                    } as Selection
-                }
+                // oh no, a social security number!
+                setWindowTextSelection('123-45-6789')
 
                 autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
 
