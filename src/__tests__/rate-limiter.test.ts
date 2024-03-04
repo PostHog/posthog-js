@@ -1,5 +1,4 @@
 import { window } from '../../src/utils/globals'
-import { PostHog } from '../posthog-core'
 import { RateLimiter } from '../rate-limiter'
 import { logger } from '../utils/logger'
 
@@ -7,16 +6,8 @@ jest.mock('../../src/utils/logger')
 
 describe('Rate Limiter', () => {
     let rateLimiter: RateLimiter
-
-    const mockPostHog = {
-        config: {
-            rate_limiting: {
-                events_per_second: 10,
-                events_burst_limit: 100,
-            },
-        },
-    } as PostHog
     let systemTime: number
+    let persistedBucket = {}
 
     const moveTimeForward = (milliseconds: number) => {
         systemTime += milliseconds
@@ -33,12 +24,30 @@ describe('Rate Limiter', () => {
         systemTime = baseUTCDateTime.getTime()
         moveTimeForward(0)
 
-        rateLimiter = new RateLimiter(mockPostHog)
+        persistedBucket = {}
+
+        const mockPostHog = {
+            config: {
+                rate_limiting: {
+                    events_per_second: 10,
+                    events_burst_limit: 100,
+                },
+            },
+            persistence: {
+                get_property: jest.fn((key) => persistedBucket[key]),
+                set_property: jest.fn((key, value) => {
+                    persistedBucket[key] = value
+                }),
+            },
+        }
+
+        rateLimiter = new RateLimiter(mockPostHog as any)
     })
 
     describe('client side', () => {
         it('starts with the max tokens', () => {
-            expect(rateLimiter.bucket).toEqual({
+            rateLimiter.isCaptureRateLimited(true)
+            expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 100,
                 last: systemTime,
             })
@@ -46,60 +55,47 @@ describe('Rate Limiter', () => {
         })
 
         it('subtracts a token with each call', () => {
-            expect(rateLimiter.bucket).toEqual({
-                tokens: 100,
-                last: systemTime,
-            })
-
             range(5).forEach(() => {
                 expect(rateLimiter.isCaptureRateLimited()).toBe(false)
             })
-            expect(rateLimiter.bucket).toEqual({
+            expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 95,
                 last: systemTime,
             })
         })
 
         it('adds tokens if time has passed ', () => {
-            expect(rateLimiter.bucket).toEqual({
-                tokens: 100,
-                last: systemTime,
-            })
             range(50).forEach(() => {
                 expect(rateLimiter.isCaptureRateLimited()).toBe(false)
             })
-            expect(rateLimiter.bucket).toEqual({
+            expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 50,
                 last: systemTime,
             })
 
             moveTimeForward(2000) // 2 seconds = 20 tokens
             expect(rateLimiter.isCaptureRateLimited()).toBe(false)
-            expect(rateLimiter.bucket).toEqual({
+            expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 69, // 50 + 20 - 1
                 last: systemTime,
             })
         })
 
         it('rate limits when past the threshold ', () => {
-            expect(rateLimiter.bucket).toEqual({
-                tokens: 100,
-                last: systemTime,
-            })
             range(100).forEach(() => {
                 expect(rateLimiter.isCaptureRateLimited()).toBe(false)
             })
             range(200).forEach(() => {
                 expect(rateLimiter.isCaptureRateLimited()).toBe(true)
             })
-            expect(rateLimiter.bucket).toEqual({
+            expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 0,
                 last: systemTime,
             })
 
             moveTimeForward(2000) // 2 seconds = 20 tokens
             expect(rateLimiter.isCaptureRateLimited()).toBe(false)
-            expect(rateLimiter.bucket).toEqual({
+            expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 19, // 20 - 1
                 last: systemTime,
             })
@@ -110,11 +106,11 @@ describe('Rate Limiter', () => {
                 expect(rateLimiter.isCaptureRateLimited()).toBe(false)
             })
             expect(rateLimiter.isCaptureRateLimited()).toBe(true)
-            expect(rateLimiter.bucket.tokens).toEqual(0)
+            expect(persistedBucket['$capture_rate_limit'].tokens).toEqual(0)
 
             moveTimeForward(1000000)
             expect(rateLimiter.isCaptureRateLimited()).toBe(false)
-            expect(rateLimiter.bucket.tokens).toEqual(99) // limit - 1
+            expect(persistedBucket['$capture_rate_limit'].tokens).toEqual(99) // limit - 1
         })
     })
 

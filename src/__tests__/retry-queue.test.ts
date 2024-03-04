@@ -15,7 +15,7 @@ const defaultRequestOptions: CaptureOptions = {
 
 describe('RetryQueue', () => {
     const onRequestError = jest.fn().mockImplementation(console.error)
-    const mockPostHog = {} as any
+    const mockPostHog = { config: {} } as any
     const rateLimiter = new RateLimiter(mockPostHog)
     let retryQueue: RetryQueue
 
