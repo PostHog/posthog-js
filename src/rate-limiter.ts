@@ -19,20 +19,19 @@ export class RateLimiter {
         last: number
     }
 
-    constructor(instance: PostHog, options?: { tokensPerSecond?: number; burst?: number }) {
+    constructor(instance: PostHog) {
         this.instance = instance
 
-        this.tokensPerSecond = options?.tokensPerSecond || 10
-        this.burst = options?.burst || 100
+        this.tokensPerSecond = instance.config.rate_limiting?.events_per_second || 10
+        this.burst = Math.max(
+            instance.config.rate_limiting?.events_burst_limit || this.tokensPerSecond * 10,
+            this.tokensPerSecond
+        )
 
         this.bucket = {
-            tokens: this.bucketLimit,
+            tokens: this.burst,
             last: new Date().getTime(),
         }
-    }
-
-    private get bucketLimit() {
-        return this.burst + this.tokensPerSecond
     }
 
     public isCaptureRateLimited(checkOnly = false): boolean {
@@ -44,8 +43,8 @@ export class RateLimiter {
         this.bucket.last = now
         this.bucket.tokens += tokensToAdd
 
-        if (this.bucket.tokens > this.bucketLimit) {
-            this.bucket.tokens = this.bucketLimit
+        if (this.bucket.tokens > this.burst) {
+            this.bucket.tokens = this.burst
         }
 
         if (this.bucket.tokens < 1) {

@@ -144,6 +144,13 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
+    /** Client side rate limiting */
+    rate_limiting?: {
+        /** The average number of events per second that should be permitted (defaults to 10) */
+        events_per_second?: number
+        /** How many events can be captured in a burst. This defaults to 10 times the events_per_second count  */
+        events_burst_limit?: number
+    }
 }
 
 export interface OptInOutCapturingOptions {
