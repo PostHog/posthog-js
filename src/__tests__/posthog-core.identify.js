@@ -1,3 +1,4 @@
+import { USER_STATE } from '../constants'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 
@@ -48,7 +49,7 @@ describe('identify()', () => {
     given('deviceId', () => given.oldIdentity)
 
     beforeEach(() => {
-        given.lib.persistence.set_user_state('anonymous')
+        given.lib.persistence.set_property(USER_STATE, 'anonymous')
     })
 
     it('registers new user id and updates alias', () => {
@@ -81,7 +82,7 @@ describe('identify()', () => {
 
         given.subject()
 
-        expect(given.lib.persistence.get_user_state()).toEqual('identified')
+        expect(given.lib.persistence.get_property(USER_STATE)).toEqual('identified')
     })
 
     it('calls capture when there is no device id', () => {
@@ -101,7 +102,7 @@ describe('identify()', () => {
     })
 
     it('calls capture when there is no device id (on first check) even if user is not set to anonymous', () => {
-        given.lib.persistence.set_user_state(undefined)
+        given.lib.persistence.set_property(USER_STATE, undefined)
         given('oldIdentity', () => 'oldIdentity')
         // if null deviceId is set inside identify, but given doesn't reflect that change so....
         let wasCalled = false
@@ -133,7 +134,7 @@ describe('identify()', () => {
          */
         given('deviceId', () => 'not the oldIdentity')
         // now this is set explicitly by identify
-        given.lib.persistence.set_user_state('identified')
+        given.lib.persistence.set_property(USER_STATE, 'identified')
 
         given('identity', () => 'a-new-id')
         given('oldIdentity', () => 'oldIdentity')
@@ -152,7 +153,7 @@ describe('identify()', () => {
         given('oldIdentity', () => 'oldIdentity')
         given('deviceId', () => 'not the oldIdentity')
 
-        given.lib.persistence.set_user_state('identified')
+        given.lib.persistence.set_property(USER_STATE, 'identified')
 
         given.subject()
 
@@ -164,7 +165,7 @@ describe('identify()', () => {
         given('identity', () => 'a-new-id')
         given('oldIdentity', () => 'oldIdentity')
         given('deviceId', () => 'not the oldIdentity')
-        given.lib.persistence.set_user_state('anonymous')
+        given.lib.persistence.set_property(USER_STATE, 'anonymous')
 
         given.subject()
 
@@ -363,11 +364,11 @@ describe('reset()', () => {
     })
 
     it('sets the user as anonymous', () => {
-        given.lib.persistence.set_user_state('identified')
+        given.lib.persistence.set_property(USER_STATE, 'identified')
 
         given.subject()
 
-        expect(given.lib.persistence.get_user_state()).toEqual('anonymous')
+        expect(given.lib.persistence.get_property(USER_STATE)).toEqual('anonymous')
     })
 
     it('does not reset the device id', () => {

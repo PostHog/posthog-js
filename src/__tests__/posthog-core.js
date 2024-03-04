@@ -7,6 +7,7 @@ import { truth } from './helpers/truth'
 import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import * as globals from '../utils/globals'
+import { USER_STATE } from '../constants'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
@@ -68,7 +69,8 @@ describe('posthog core', () => {
             compression: {},
             __captureHooks: [],
             rateLimiter: {
-                isRateLimited: () => false,
+                isServerRateLimited: () => false,
+                isCaptureRateLimited: () => false,
             },
         }))
 
@@ -588,7 +590,7 @@ describe('posthog core', () => {
             given.subject()
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('abcd')
-            expect(given.lib.persistence.get_user_state()).toBe('anonymous')
+            expect(given.lib.persistence.get_property(USER_STATE)).toBe('anonymous')
 
             given.lib.identify('efgh')
 
@@ -614,7 +616,7 @@ describe('posthog core', () => {
             given.subject()
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('og-device-id')
-            expect(given.lib.persistence.get_user_state()).toBe('identified')
+            expect(given.lib.persistence.get_property(USER_STATE)).toBe('identified')
 
             given.lib.identify('efgh')
             expect(given.overrides.capture).not.toHaveBeenCalled()

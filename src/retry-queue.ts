@@ -107,7 +107,7 @@ export class RetryQueue extends RequestQueueScaffold {
         for (const { requestData } of this.queue) {
             const { url, data, options } = requestData
 
-            if (this.rateLimiter.isRateLimited(options._batchKey)) {
+            if (this.rateLimiter.isServerRateLimited(options._batchKey)) {
                 logger.warn('[RetryQueue] is quota limited. Dropping request.')
                 continue
             }
@@ -126,7 +126,7 @@ export class RetryQueue extends RequestQueueScaffold {
     }
 
     _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }: QueuedRequestData): void {
-        if (this.rateLimiter.isRateLimited(options._batchKey)) {
+        if (this.rateLimiter.isServerRateLimited(options._batchKey)) {
             return
         }
 

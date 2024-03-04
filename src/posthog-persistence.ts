@@ -3,13 +3,7 @@
 import { _each, _extend, _include, _strip_empty_properties } from './utils'
 import { cookieStore, localStore, localPlusCookieStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
-import {
-    PERSISTENCE_RESERVED_PROPERTIES,
-    EVENT_TIMERS_KEY,
-    ENABLED_FEATURE_FLAGS,
-    POSTHOG_QUOTA_LIMITED,
-    USER_STATE,
-} from './constants'
+import { PERSISTENCE_RESERVED_PROPERTIES, EVENT_TIMERS_KEY, ENABLED_FEATURE_FLAGS } from './constants'
 
 import { _isObject, _isUndefined } from './utils/type-utils'
 import { _info } from './utils/event-utils'
@@ -320,21 +314,12 @@ export class PostHogPersistence {
         return timestamp
     }
 
-    get_user_state(): 'anonymous' | 'identified' {
-        return this.props[USER_STATE] || 'anonymous'
+    get_property(prop: string): any {
+        return this.props[prop]
     }
 
-    set_user_state(state: 'anonymous' | 'identified'): void {
-        this.props[USER_STATE] = state
-        this.save()
-    }
-
-    get_quota_limits(): Record<string, number> {
-        return this.props[POSTHOG_QUOTA_LIMITED] || {}
-    }
-
-    set_quota_limits(state: Record<string, number>): void {
-        this.props[POSTHOG_QUOTA_LIMITED] = state
+    set_property(prop: string, to: any): void {
+        this.props[prop] = to
         this.save()
     }
 }

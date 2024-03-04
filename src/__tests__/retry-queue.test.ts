@@ -15,7 +15,8 @@ const defaultRequestOptions: CaptureOptions = {
 
 describe('RetryQueue', () => {
     const onRequestError = jest.fn().mockImplementation(console.error)
-    const rateLimiter = new RateLimiter()
+    const mockPostHog = {} as any
+    const rateLimiter = new RateLimiter(mockPostHog)
     let retryQueue: RetryQueue
 
     const xhrMockClass = () => ({
@@ -33,7 +34,7 @@ describe('RetryQueue', () => {
         jest.useFakeTimers()
         jest.spyOn(retryQueue, 'getTime').mockReturnValue(EPOCH)
         jest.spyOn(assignableWindow.console, 'warn').mockImplementation()
-        rateLimiter.limits = {}
+        rateLimiter.serverLimits = {}
     })
 
     const fastForwardTimeAndRunTimer = () => {
@@ -116,7 +117,7 @@ describe('RetryQueue', () => {
     })
 
     it('does not process event retry requests when events are rate limited', () => {
-        rateLimiter.limits = {
+        rateLimiter.serverLimits = {
             events: new Date().getTime() + 10_000,
         }
 
@@ -148,7 +149,7 @@ describe('RetryQueue', () => {
     })
 
     it('does not process recording retry requests when they are rate limited', () => {
-        rateLimiter.limits = {
+        rateLimiter.serverLimits = {
             [SESSION_RECORDING_BATCH_KEY]: new Date().getTime() + 10_000,
         }
 
@@ -190,7 +191,7 @@ describe('RetryQueue', () => {
     })
 
     it('does not try to send requests via beacon on unload when rate limited', () => {
-        rateLimiter.limits = {
+        rateLimiter.serverLimits = {
             events: new Date().getTime() + 10_000,
         }
         enqueueRequests()
