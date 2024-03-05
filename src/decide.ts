@@ -7,6 +7,7 @@ import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './con
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window, document, assignableWindow } from './utils/globals'
+import { request } from './request'
 
 export class Decide {
     instance: PostHog
@@ -34,16 +35,15 @@ export class Decide {
         })
 
         const encoded_data = _base64Encode(json_data)
-        this.instance._send_request(
-            this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
-            { data: encoded_data, verbose: true },
-            {
-                method: 'POST',
-                callback: (response) => this.parseDecideResponse(response as DecideResponse),
-                timeout: this.instance.config.feature_flag_request_timeout_ms,
-                noRetries: true,
-            }
-        )
+
+        request({
+            method: 'POST',
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            data: { data: encoded_data, verbose: true },
+            timeout: this.instance.config.feature_flag_request_timeout_ms,
+            callback: (response) =>
+                response.json ? this.parseDecideResponse(response.json as DecideResponse) : undefined,
+        })
     }
 
     parseDecideResponse(response: DecideResponse): void {

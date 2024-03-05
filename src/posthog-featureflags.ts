@@ -21,6 +21,7 @@ import {
 
 import { _isArray } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { request } from './request'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -189,23 +190,25 @@ export class PostHogFeatureFlags {
         })
 
         const encoded_data = _base64Encode(json_data)
-        this.instance._send_request(
-            this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
-            { data: encoded_data },
-            { method: 'POST' },
-            (response) => {
+        request({
+            method: 'POST',
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            data: { data: encoded_data },
+            timeout: this.instance.config.feature_flag_request_timeout_ms,
+            callback: (response) => {
+                if (response.statusCode !== 200) {
+                    return // or error out??
+                }
                 // reset anon_distinct_id after at least a single request with it
                 // makes it through
                 this.$anon_distinct_id = undefined
-                this.receivedFeatureFlags(response as DecideResponse)
+                this.receivedFeatureFlags(response.json as DecideResponse)
 
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
                 this._startReloadTimer()
             },
-            this.instance.config.feature_flag_request_timeout_ms,
-            false
-        )
+        })
     }
 
     /*
@@ -358,19 +361,22 @@ export class PostHogFeatureFlags {
         const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
 
         if (!existing_early_access_features || force_reload) {
-            this.instance._send_request(
-                this.instance.requestRouter.endpointFor(
+            request({
+                transport: 'XHR',
+                url: this.instance.requestRouter.endpointFor(
                     'api',
                     `/api/early_access_features/?token=${this.instance.config.token}`
                 ),
-                {},
-                { method: 'GET' },
-                (response) => {
-                    const earlyAccessFeatures = (response as EarlyAccessFeatureResponse).earlyAccessFeatures
+                method: 'GET',
+                callback: (response) => {
+                    if (!response.json) {
+                        return
+                    }
+                    const earlyAccessFeatures = (response.json as EarlyAccessFeatureResponse).earlyAccessFeatures
                     this.instance.persistence?.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
                     return callback(earlyAccessFeatures)
-                }
-            )
+                },
+            })
         } else {
             return callback(existing_early_access_features)
         }

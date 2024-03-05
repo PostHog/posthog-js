@@ -216,7 +216,39 @@ export interface CaptureOptions extends XHROptions {
     timestamp?: Date
 }
 
-export type RequestCallback = (response: Record<string, any>, data?: Properties) => void
+// Request types - these should be kept minimal to what request.ts needs
+
+export interface RequestResponse {
+    statusCode: number
+    text: string
+    json?: any
+}
+
+export type RequestCallback = (response: RequestResponse) => void
+
+export interface RequestOptions {
+    url: string
+    // Data can be a single object or an array of objects when batched
+    data?: Record<string, any> | Record<string, any>[]
+    headers?: Record<string, any>
+    transport?: 'XHR' | 'fetch' | 'sendBeacon'
+    method?: 'POST' | 'GET'
+    urlQueryArgs?: { compression: Compression }
+    callback?: RequestCallback
+    timeout?: number
+    noRetries?: boolean
+    compression?: Compression
+}
+
+// Queued request types - the same as a request but with additional queueing information
+
+export interface QueuedRequestOptions extends RequestOptions {
+    batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
+}
+
+export interface RetriableRequestOptions extends QueuedRequestOptions {
+    retriesPerformedSoFar?: number
+}
 
 export type SendRequestOptions = CaptureOptions & {
     callback?: RequestCallback

@@ -40,6 +40,7 @@ import {
     PostHogConfig,
     Properties,
     Property,
+    QueuedRequestOptions,
     RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
@@ -68,7 +69,7 @@ import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { SUPPORTS_REQUEST } from './utils/request-utils'
-import { addParamsToURL, request, RequestOptions } from './request'
+import { addParamsToURL, request } from './request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -308,7 +309,7 @@ export class PostHog {
     compression: Partial<Record<Compression, boolean>>
     _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
-    __request_queue: RequestOptions[]
+    __request_queue: QueuedRequestOptions[]
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
@@ -350,12 +351,12 @@ export class PostHog {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
                 const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(setProps)
-                callback?.({})
+                callback?.({} as any)
             },
             set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
                 const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(undefined, setProps)
-                callback?.({})
+                callback?.({} as any)
             },
         }
     }
@@ -641,19 +642,17 @@ export class PostHog {
         this._retryQueue?.unload()
     }
 
-    _send_request(options: RequestOptions): void {
+    _send_request(options: QueuedRequestOptions): void {
         if (!this.__loaded || !this._retryQueue) {
             return
         }
 
-        // TODO: Add second arg to do with retries etc.
-
-        // if (this.rateLimiter.isRateLimited(options._batchKey)) {
-        //     return
-        // }
-
         if (ENQUEUE_REQUESTS) {
             this.__request_queue.push(options)
+            return
+        }
+
+        if (this.rateLimiter.isRateLimited(options.batchKey)) {
             return
         }
 
@@ -667,16 +666,10 @@ export class PostHog {
         request(options)
 
         // request({
-        //             url,
-        //             data,
-        //             headers: this.config.request_headers,
-        //             options,
-        //             callback: options.callback,
         //             retriesPerformedSoFar: 0,
         //             retryQueue: !options.noRetries ? this._retryQueue : undefined,
         //             onError: this.config.on_request_error,
         //             onResponse: this.rateLimiter.checkForLimiting,
-        //             timeout: options.timeout,
         //         })
     }
 
@@ -857,12 +850,13 @@ export class PostHog {
 
         const has_unique_traits = options !== __NOOPTIONS
 
-        const requestOptions: RequestOptions = {
+        const requestOptions: QueuedRequestOptions = {
             transport: options.transport,
             method: options.method,
             url,
             data,
             compression: decideCompression(this.compression),
+            batchKey: options._batchKey,
             // TODO: Fix up the rest of this...
         }
 

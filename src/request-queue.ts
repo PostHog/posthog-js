@@ -1,18 +1,18 @@
 import { RequestQueueScaffold } from './base-request-queue'
+import { QueuedRequestOptions } from './types'
 import { _each } from './utils'
 
 import { _isUndefined } from './utils/type-utils'
-import { RequestOptions } from './request'
 
 export class RequestQueue extends RequestQueueScaffold {
-    handlePollRequest: (req: RequestOptions) => void
+    handlePollRequest: (req: QueuedRequestOptions) => void
 
-    constructor(handlePollRequest: (req: RequestOptions) => void, pollInterval = 3000) {
+    constructor(handlePollRequest: (req: QueuedRequestOptions) => void, pollInterval = 3000) {
         super(pollInterval)
         this.handlePollRequest = handlePollRequest
     }
 
-    enqueue(req: RequestOptions): void {
+    enqueue(req: QueuedRequestOptions): void {
         this._event_queue.push(req)
 
         if (!this.isPolling) {
@@ -31,8 +31,8 @@ export class RequestQueue extends RequestQueueScaffold {
                     if (req.data) {
                         _each(req.data, (_, dataKey) => {
                             // TODO: WWhat is this doing?
-                            req.data[dataKey]['offset'] = Math.abs(req.data[dataKey]['timestamp'] - this.getTime())
-                            delete req.data[dataKey]['timestamp']
+                            // req.data[dataKey]['offset'] = Math.abs(req.data[dataKey]['timestamp'] - this.getTime())
+                            // delete req.data[dataKey]['timestamp']
                         })
                     }
                     this.handlePollRequest(req)
@@ -77,17 +77,17 @@ export class RequestQueue extends RequestQueueScaffold {
         })
     }
 
-    formatQueue(): Record<string, RequestOptions> {
-        const requests: Record<string, RequestOptions> = {}
-        _each(this._event_queue, (request: RequestOptions) => {
+    formatQueue(): Record<string, QueuedRequestOptions> {
+        const requests: Record<string, QueuedRequestOptions> = {}
+        _each(this._event_queue, (request: QueuedRequestOptions) => {
             const req = request
-            const key = (req ? req._batchKey : null) || req.url
+            const key = (req ? req.batchKey : null) || req.url
             if (_isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
-                requests[key] = { data: [], url, options }
+                requests[key] = { data: [], ...req }
             }
 
-            requests[key].data.push(data)
+            requests[key].data?.push(req.data)
         })
         return requests
     }

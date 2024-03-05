@@ -1,33 +1,12 @@
 import { _base64Encode, _each } from './utils'
 import Config from './config'
-import { Compression } from './types'
+import { Compression, RequestOptions, RequestResponse } from './types'
 import { SUPPORTS_XHR, _formDataToQuery } from './utils/request-utils'
 
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { fetch, document, window } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
-
-export interface RequestResponse {
-    statusCode: number
-    text: string
-    json?: any
-}
-
-export type RequestCallback = (response: RequestResponse) => void
-
-export interface RequestOptions {
-    url: string
-    data?: Record<string, any>
-    headers?: Record<string, any>
-    transport?: 'XHR' | 'fetch' | 'sendBeacon'
-    method?: 'POST' | 'GET'
-    urlQueryArgs?: { compression: Compression }
-    callback?: RequestCallback
-    timeout?: number
-    noRetries?: boolean
-    compression?: Compression
-}
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestOptions) => {
