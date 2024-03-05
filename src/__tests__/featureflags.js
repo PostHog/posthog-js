@@ -27,7 +27,7 @@ describe('featureflags', () => {
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+        _send_request: jest.fn().mockImplementation((url, data, { callback }) => callback?.(given.decideResponse)),
         reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
     }))
 
@@ -331,8 +331,7 @@ describe('featureflags', () => {
             expect(given.instance._send_request).toHaveBeenCalledWith(
                 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 {},
-                { method: 'GET' },
-                expect.any(Function)
+                { method: 'GET', callback: expect.any(Function) }
             )
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
@@ -357,8 +356,7 @@ describe('featureflags', () => {
             expect(given.instance._send_request).toHaveBeenCalledWith(
                 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 {},
-                { method: 'GET' },
-                expect.any(Function)
+                { method: 'GET', callback: expect.any(Function) }
             )
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 

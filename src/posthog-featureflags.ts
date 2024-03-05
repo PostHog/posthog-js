@@ -192,19 +192,21 @@ export class PostHogFeatureFlags {
         this.instance._send_request(
             this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             { data: encoded_data },
-            { method: 'POST' },
-            this.instance._prepare_callback((response) => {
-                // reset anon_distinct_id after at least a single request with it
-                // makes it through
-                this.$anon_distinct_id = undefined
-                this.receivedFeatureFlags(response as DecideResponse)
+            {
+                method: 'POST',
+                callback: this.instance._prepare_callback((response) => {
+                    // reset anon_distinct_id after at least a single request with it
+                    // makes it through
+                    this.$anon_distinct_id = undefined
+                    this.receivedFeatureFlags(response as DecideResponse)
 
-                // :TRICKY: Reload - start another request if queued!
-                this.setReloadingPaused(false)
-                this._startReloadTimer()
-            }) as RequestCallback,
-            this.instance.config.feature_flag_request_timeout_ms,
-            false
+                    // :TRICKY: Reload - start another request if queued!
+                    this.setReloadingPaused(false)
+                    this._startReloadTimer()
+                }) as RequestCallback,
+                timeout: this.instance.config.feature_flag_request_timeout_ms,
+                noRetries: true,
+            }
         )
     }
 
@@ -364,11 +366,15 @@ export class PostHogFeatureFlags {
                     `/api/early_access_features/?token=${this.instance.config.token}`
                 ),
                 {},
-                { method: 'GET' },
-                (response) => {
-                    const earlyAccessFeatures = (response as EarlyAccessFeatureResponse).earlyAccessFeatures
-                    this.instance.persistence?.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
-                    return callback(earlyAccessFeatures)
+                {
+                    method: 'GET',
+                    callback: (response) => {
+                        const earlyAccessFeatures = (response as EarlyAccessFeatureResponse).earlyAccessFeatures
+                        this.instance.persistence?.register({
+                            [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures,
+                        })
+                        return callback(earlyAccessFeatures)
+                    },
                 }
             )
         } else {
