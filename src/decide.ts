@@ -1,7 +1,7 @@
 import { autocapture } from './autocapture'
 import { _base64Encode, loadScript } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse } from './types'
+import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 import { _isUndefined } from './utils/type-utils'
@@ -22,7 +22,7 @@ export class Decide {
         /*
         Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
         */
-        const json_data = JSON.stringify({
+        const data = {
             token: this.instance.config.token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
@@ -32,14 +32,13 @@ export class Decide {
                 this.instance.config.advanced_disable_feature_flags ||
                 this.instance.config.advanced_disable_feature_flags_on_first_load ||
                 undefined,
-        })
-
-        const encoded_data = _base64Encode(json_data)
+        }
 
         request({
             method: 'POST',
             url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
-            data: { data: encoded_data, verbose: true },
+            data,
+            compression: Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
             callback: (response) =>
                 response.json ? this.parseDecideResponse(response.json as DecideResponse) : undefined,

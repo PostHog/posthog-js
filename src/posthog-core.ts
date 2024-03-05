@@ -109,7 +109,6 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
-    api_method: 'POST',
     api_transport: 'XHR',
     ui_host: null,
     token: '',
@@ -829,6 +828,7 @@ export class PostHog {
         const has_unique_traits = options !== __NOOPTIONS
 
         const requestOptions: QueuedRequestOptions = {
+            method: 'POST',
             url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
             data,
             compression: this.compression,
@@ -1531,10 +1531,7 @@ export class PostHog {
      *     {
      *       // PostHog API host
      *       api_host: 'https://app.posthog.com',
-     *
-     *       // HTTP method for capturing requests
-     *       api_method: 'POST'
-     *
+     *     *
      *       // PostHog web app host, currently only used by the Sentry integration.
      *       // This will only be different from api_host when using a reverse-proxied API host – in that case
      *       // the original web app host needs to be passed here so that links to the web app are still convenient.

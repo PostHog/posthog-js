@@ -84,7 +84,7 @@ export class RequestQueue extends RequestQueueScaffold {
             const key = (req ? req.batchKey : null) || req.url
             if (_isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
-                requests[key] = { data: [], ...req }
+                requests[key] = { ...req, data: [] }
             }
 
             requests[key].data?.push(req.data)
