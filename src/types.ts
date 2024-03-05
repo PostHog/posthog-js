@@ -359,11 +359,6 @@ export interface PostData {
     data?: string
 }
 
-export interface JSC {
-    (): void
-    [key: string]: (response: any) => void
-}
-
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
 export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
