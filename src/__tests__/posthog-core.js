@@ -14,7 +14,8 @@ jest.mock('../gdpr-utils', () => ({
 }))
 jest.mock('../decide')
 
-jest.useFakeTimers().setSystemTime(new Date('2020-01-01'))
+const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
+jest.useFakeTimers().setSystemTime(baseUTCDateTime)
 
 given('lib', () => {
     const posthog = new PostHog()
@@ -80,7 +81,7 @@ describe('posthog core', () => {
             const captureData = given.subject()
             expect(captureData).toHaveProperty('timestamp')
             // timer is fixed at 2020-01-01
-            expect(captureData.timestamp).toEqual(new Date(2020, 0, 1))
+            expect(captureData.timestamp).toEqual(baseUTCDateTime)
         })
 
         it('captures when time is overriden by caller', () => {
@@ -89,7 +90,7 @@ describe('posthog core', () => {
             expect(captureData).toHaveProperty('timestamp')
             expect(captureData.timestamp).toEqual(new Date(2020, 0, 2, 12, 34))
             expect(captureData.properties['$event_time_override_provided']).toEqual(true)
-            expect(captureData.properties['$event_time_override_system_time']).toEqual(new Date(2020, 0, 1))
+            expect(captureData.properties['$event_time_override_system_time']).toEqual(baseUTCDateTime)
         })
 
         it('handles recursive objects', () => {

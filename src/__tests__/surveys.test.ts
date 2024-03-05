@@ -60,7 +60,6 @@ describe('surveys', () => {
 
         instance = {
             config: config,
-            _prepare_callback: (callback: any) => callback,
             persistence: new PostHogPersistence(config),
             requestRouter: new RequestRouter({ config } as any),
             register: (props: Properties) => instance.persistence?.register(props),

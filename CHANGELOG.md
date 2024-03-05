@@ -1,3 +1,8 @@
+## 1.111.0 - 2024-03-05
+
+- feat: copy and cut autocapture (#1047)
+- fix: timezones are fun (#1050)
+
 ## 1.110.0 - 2024-02-28
 
 - feat: allow linked flag variants to control recording (#1040)

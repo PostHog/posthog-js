@@ -1,0 +1,49 @@
+<script src="../../dist/array.js"></script>
+<script>
+    posthog.init('sTMFPsFhdP1Ssg', {
+        api_host: 'http://127.0.0.1:8000',
+        autocapture: {
+            capture_copied_text: true,
+        },
+        debug: true,
+        persistence: 'memory',
+        loaded: function(posthog) {
+            posthog.identify('test')
+        },
+        _onCapture: (event, eventData) => {
+            if (event === '$copy_autocapture') {
+                const selectionType = eventData.properties['$copy_type']
+                const selectionText = eventData.properties['$selected_content']
+                document.getElementById('selection-type-outlet').innerText = selectionType
+                document.getElementById('selection-text-outlet').innerText = selectionText
+            }
+        },
+    })
+</script>
+<h2>Demo site</h2>
+<button>Here's a button you could click if you want to</button><br /><br />
+<body>
+<div>
+    <a href="https://posthog.com">Here's a link to the outside world</a>
+</div>
+<div id="shadow"></div>
+
+<div style="padding: 2rem;background:green;display:none;color:white" id="feature"><h2>Look, a new beta feature</h2>
+</div>
+
+<div>
+    <h2>Result of selection autocapture</h2>
+    <p>Selection type is:
+    <div id="selection-type-outlet"></div>
+    </p>
+    <p>Selected text is:
+    <div id="selection-text-outlet"></div>
+    </p>
+</div>
+<script>
+    const header = document.createElement('header')
+    const shadowRoot = header.attachShadow({ mode: 'open' })
+    shadowRoot.innerHTML = '<div style="border: black 1px solid"><h2>shadowroot</h2><input value="some input text">bla</input></div>'
+    document.body.prepend(header)
+</script>
+</body>

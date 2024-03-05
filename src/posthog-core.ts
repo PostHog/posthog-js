@@ -32,7 +32,6 @@ import {
     EarlyAccessFeatureCallback,
     GDPROptions,
     isFeatureEnabledOptions,
-    JSC,
     JsonType,
     OptInOutCapturingOptions,
     PostHogConfig,
@@ -170,7 +169,6 @@ export const defaultConfig = (): PostHogConfig => ({
     _onCapture: __NOOP,
     capture_performance: undefined,
     name: 'posthog',
-    callback_fn: 'posthog._jsc',
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
@@ -305,7 +303,6 @@ export class PostHog {
 
     _triggered_notifs: any
     compression?: Compression
-    _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: QueuedRequestOptions[]
     __autocapture: boolean | AutocaptureConfig | undefined
@@ -332,7 +329,6 @@ export class PostHog {
         this.__loaded = false
         this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
-        this._jsc = function () {} as JSC
         this.analyticsDefaultEndpoint = '/e/'
         this.elementsChainAsString = false
 
@@ -451,11 +447,8 @@ export class PostHog {
             _extend({}, defaultConfig(), config, {
                 name: name,
                 token: token,
-                callback_fn: (name === PRIMARY_INSTANCE_NAME ? name : PRIMARY_INSTANCE_NAME + '.' + name) + '._jsc',
             })
         )
-
-        this._jsc = function () {} as JSC
 
         // Check if recorder.js is already loaded
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment

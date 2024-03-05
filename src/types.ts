@@ -59,9 +59,9 @@ export interface AutocaptureConfig {
      * E.g. ['aria-label'] or [data-attr-pii]
      */
     element_attribute_ignorelist?: string[]
-}
 
-export type UUIDVersion = 'og' | 'v7'
+    capture_copied_text?: boolean
+}
 
 export interface PostHogConfig {
     api_host: string
@@ -130,7 +130,6 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
     name: string
-    callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
@@ -356,11 +355,6 @@ export interface PostData {
     buffer?: BlobPart
     compression?: Compression
     data?: string
-}
-
-export interface JSC {
-    (): void
-    [key: string]: (response: any) => void
 }
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
