@@ -91,10 +91,6 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
 }
 
 const xhr = (options: RequestOptions) => {
-    // if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
-    //     url = addParamsToURL(url, { retry_count: retriesPerformedSoFar }, {})
-    // }
-
     const req = new XMLHttpRequest()
     req.open(options.method || 'GET', options.url, true)
     const body = encodePostData(options)
@@ -131,22 +127,6 @@ const xhr = (options: RequestOptions) => {
             }
 
             options.callback?.(response)
-
-            // if (_isFunction(onError)) {
-            //     onError(minimalResponseSummary)
-            // }
-
-            // // don't retry errors between 400 and 500 inclusive
-            // if (retryQueue && (req.status < 400 || req.status > 500)) {
-            //     retryQueue.enqueue({
-            //         url,
-            //         data,
-            //         options,
-            //         headers,
-            //         retriesPerformedSoFar: (retriesPerformedSoFar || 0) + 1,
-            //         callback,
-            //     })
-            // }
         }
     }
     req.send(body)
@@ -185,10 +165,6 @@ const _fetch = (options: RequestOptions) => {
                     statusCode: response.status,
                     text: responseText,
                 }
-                // options.onResponse?.({
-                //     statusCode,
-                //     responseText,
-                // })
 
                 if (response.status === 200) {
                     try {
@@ -199,22 +175,6 @@ const _fetch = (options: RequestOptions) => {
                 }
 
                 options.callback?.(res)
-
-                // if (_isFunction(options.onError)) {
-                //     params.onError({
-                //         statusCode,
-                //         responseText,
-                //     })
-                // }
-
-                // don't retry errors between 400 and 500 inclusive
-                // if (params.retryQueue && (statusCode < 400 || statusCode > 500)) {
-                //     params.retryQueue.enqueue({
-                //         ...params,
-                //         headers,
-                //         retriesPerformedSoFar: (params.retriesPerformedSoFar || 0) + 1,
-                //     })
-                // }
             })
         })
         .catch((error) => {

@@ -1,6 +1,5 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
-import { RetryQueue } from './retry-queue'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -109,7 +108,7 @@ export interface PostHogConfig {
     property_blacklist: string[]
     property_denylist: string[]
     request_headers: { [header_name: string]: string }
-    on_request_error: (error: RequestResponse) => void
+    on_request_error?: (error: RequestResponse) => void
     /** @deprecated - use `request_headers` instead  */
     xhr_headers?: { [header_name: string]: string }
     /** @deprecated - use `on_request_error` instead  */
@@ -226,6 +225,7 @@ export interface QueuedRequestOptions extends RequestOptions {
     batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
 }
 
+// Used explicitly for retriable requests
 export interface RetriableRequestOptions extends QueuedRequestOptions {
     retriesPerformedSoFar?: number
 }

@@ -1,10 +1,11 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { RetriableRequestOptions } from './types'
 
-import { _isUndefined } from './utils/type-utils'
+import { _isNumber, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
+import { addParamsToURL } from './request'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -121,14 +122,18 @@ export class RetryQueue extends RequestQueueScaffold {
         this.queue = []
     }
 
-    retriableRequest(options: RetriableRequestOptions): void {
+    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestOptions): void {
+        if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
+            options.url = addParamsToURL(options.url, { retry_count: retriesPerformedSoFar })
+        }
+
         this.instance._send_request({
             ...options,
             callback: (response) => {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode > 500)) {
                     this.enqueue({
                         ...options,
-                        retriesPerformedSoFar: (options.retriesPerformedSoFar || 0) + 1,
+                        retriesPerformedSoFar: (retriesPerformedSoFar || 0) + 1,
                     })
                 }
 

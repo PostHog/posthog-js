@@ -655,8 +655,11 @@ export class PostHog {
         request({
             ...options,
             callback: (response) => {
-                // TOOD: this.config.on_request_error,
                 this.rateLimiter.checkForLimiting(response)
+
+                if (response.statusCode >= 400) {
+                    this.config.on_request_error?.(response)
+                }
             },
         })
     }
