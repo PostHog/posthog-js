@@ -28,13 +28,13 @@ export class RequestQueue extends RequestQueueScaffold {
                 const requests = this.formatQueue()
                 for (const key in requests) {
                     const req = requests[key]
-                    if (req.data) {
-                        _each(req.data, (_, dataKey) => {
-                            // TODO: WWhat is this doing?
-                            // req.data[dataKey]['offset'] = Math.abs(req.data[dataKey]['timestamp'] - this.getTime())
-                            // delete req.data[dataKey]['timestamp']
-                        })
-                    }
+                    // if (req.data) {
+                    //     _each(req.data, (_, dataKey) => {
+                    //         // TODO: WWhat is this doing?
+                    //         // req.data[dataKey]['offset'] = Math.abs(req.data[dataKey]['timestamp'] - this.getTime())
+                    //         // delete req.data[dataKey]['timestamp']
+                    //     })
+                    // }
                     this.handlePollRequest(req)
                 }
                 this._event_queue.length = 0 // flush the _event_queue
