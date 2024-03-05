@@ -109,7 +109,7 @@ export interface PostHogConfig {
     property_blacklist: string[]
     property_denylist: string[]
     request_headers: { [header_name: string]: string }
-    on_request_error: (error: MinimalHTTPResponse) => void
+    on_request_error: (error: RequestResponse) => void
     /** @deprecated - use `request_headers` instead  */
     xhr_headers?: { [header_name: string]: string }
     /** @deprecated - use `on_request_error` instead  */
@@ -196,31 +196,12 @@ export enum Compression {
     Base64 = 'base64',
 }
 
-export interface XHROptions {
-    transport?: 'XHR' | 'fetch' | 'sendBeacon'
-    method?: 'POST' | 'GET'
-    urlQueryArgs?: { compression: Compression }
-    verbose?: boolean
-    blob?: boolean
-    sendBeacon?: boolean
-}
-
-export interface CaptureOptions extends XHROptions {
-    $set?: Properties /** used with $identify */
-    $set_once?: Properties /** used with $identify */
-    _url?: string /** Used to override the desired endpoint for the captured event */
-    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
-    _metrics?: Properties
-    _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
-    send_instantly?: boolean /** if set skips the batched queue */
-    timestamp?: Date
-}
-
 // Request types - these should be kept minimal to what request.ts needs
 
+// Minimal class to allow interop between different request methods (xhr / fetch)
 export interface RequestResponse {
     statusCode: number
-    text: string
+    text?: string
     json?: any
 }
 
@@ -250,36 +231,14 @@ export interface RetriableRequestOptions extends QueuedRequestOptions {
     retriesPerformedSoFar?: number
 }
 
-export type SendRequestOptions = CaptureOptions & {
-    callback?: RequestCallback
-    timeout?: number
-    noRetries?: boolean
-}
-
-export interface RetryQueueElement {
-    retryAt: Date
-    requestData: QueuedRequestData
-}
-export interface QueuedRequestData {
-    url: string
-    data: Properties
-    options: CaptureOptions
-    headers?: Properties
-    callback?: RequestCallback
-    retriesPerformedSoFar?: number
-}
-
-// Minimal class to allow interop between different request methods (xhr / fetch)
-export interface MinimalHTTPResponse {
-    statusCode: number
-    responseText: string
-}
-
-export interface RequestData extends QueuedRequestData {
-    retryQueue?: RetryQueue
-    timeout?: number
-    onError?: (req: MinimalHTTPResponse) => void
-    onResponse?: (req: MinimalHTTPResponse) => void
+export interface CaptureOptions {
+    $set?: Properties /** used with $identify */
+    $set_once?: Properties /** used with $identify */
+    _url?: string /** Used to override the desired endpoint for the captured event */
+    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
+    _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
+    send_instantly?: boolean /** if set skips the batched queue */
+    timestamp?: Date
 }
 
 export type FlagVariant = { flag: string; variant: string }

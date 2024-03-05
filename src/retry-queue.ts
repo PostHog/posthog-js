@@ -1,11 +1,10 @@
 import { RequestQueueScaffold } from './base-request-queue'
-import { encodePostData, request } from './send-request'
-import { PostHogConfig, QueuedRequestData, RetryQueueElement } from './types'
-import { RateLimiter } from './rate-limiter'
+import { RetriableRequestOptions } from './types'
 
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
+import { PostHog } from './posthog-core'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -28,20 +27,21 @@ export function pickNextRetryDelay(retriesPerformedSoFar: number): number {
     return Math.ceil(cappedBackoffTime + jitter)
 }
 
+interface RetryQueueElement {
+    retryAt: Date
+    requestOptions: RetriableRequestOptions
+}
+
 export class RetryQueue extends RequestQueueScaffold {
     queue: RetryQueueElement[]
     isPolling: boolean
     areWeOnline: boolean
-    onRequestError: PostHogConfig['on_request_error']
-    rateLimiter: RateLimiter
 
-    constructor(onRequestError: PostHogConfig['on_request_error'], rateLimiter: RateLimiter) {
+    constructor(private instance: PostHog) {
         super()
         this.isPolling = false
         this.queue = []
         this.areWeOnline = true
-        this.onRequestError = onRequestError
-        this.rateLimiter = rateLimiter
 
         if (!_isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
@@ -54,15 +54,15 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    enqueue(requestData: QueuedRequestData): void {
-        const retriesPerformedSoFar = requestData.retriesPerformedSoFar || 0
+    enqueue(requestOptions: RetriableRequestOptions): void {
+        const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
         if (retriesPerformedSoFar >= 10) {
             return
         }
         const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)
         const retryAt = new Date(Date.now() + msToNextRetry)
 
-        this.queue.push({ retryAt, requestData })
+        this.queue.push({ retryAt, requestOptions })
 
         let logMessage = `Enqueued failed request for retry in ${msToNextRetry}`
         if (!navigator.onLine) {
@@ -92,8 +92,8 @@ export class RetryQueue extends RequestQueueScaffold {
         const toFlush = this.queue.filter(({ retryAt }) => retryAt < now)
         if (toFlush.length > 0) {
             this.queue = this.queue.filter(({ retryAt }) => retryAt >= now)
-            for (const { requestData } of toFlush) {
-                this._executeXhrRequest(requestData)
+            for (const { requestOptions } of toFlush) {
+                this.retriableRequest(requestOptions)
             }
         }
     }
@@ -104,18 +104,14 @@ export class RetryQueue extends RequestQueueScaffold {
             this._poller = undefined
         }
 
-        for (const { requestData } of this.queue) {
-            const { url, data, options } = requestData
-
-            if (this.rateLimiter.isRateLimited(options._batchKey)) {
-                logger.warn('[RetryQueue] is quota limited. Dropping request.')
-                continue
-            }
-
+        for (const { requestOptions } of this.queue) {
             try {
                 // we've had send beacon in place for at least 2 years
                 // eslint-disable-next-line compat/compat
-                window?.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+                this.instance._send_request({
+                    ...requestOptions,
+                    transport: 'sendBeacon',
+                })
             } catch (e) {
                 // Note sendBeacon automatically retries, and after the first retry it will lose reference to contextual `this`.
                 // This means in some cases `this.getConfig` will be undefined.
@@ -125,21 +121,19 @@ export class RetryQueue extends RequestQueueScaffold {
         this.queue = []
     }
 
-    _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }: QueuedRequestData): void {
-        if (this.rateLimiter.isRateLimited(options._batchKey)) {
-            return
-        }
+    retriableRequest(options: RetriableRequestOptions): void {
+        this.instance._send_request({
+            ...options,
+            callback: (response) => {
+                if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode > 500)) {
+                    this.enqueue({
+                        ...options,
+                        retriesPerformedSoFar: (options.retriesPerformedSoFar || 0) + 1,
+                    })
+                }
 
-        request({
-            url,
-            data: data || {},
-            options: options || {},
-            headers: headers || {},
-            retriesPerformedSoFar: retriesPerformedSoFar || 0,
-            callback,
-            retryQueue: this,
-            onError: this.onRequestError,
-            onResponse: this.rateLimiter.checkForLimiting,
+                options.callback?.(response)
+            },
         })
     }
 

@@ -20,8 +20,6 @@ import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
-import { decideCompression } from './compression'
-// import { addParamsToURL, encodePostData, request } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { RequestRouter } from './utils/request-router'
@@ -163,8 +161,8 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,
-    on_request_error: (req) => {
-        const error = 'Bad HTTP status: ' + req.statusCode + ' ' + req.responseText
+    on_request_error: (res) => {
+        const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
         logger.error(error)
     },
     get_device_id: (uuid) => uuid,
@@ -306,7 +304,7 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
-    compression: Partial<Record<Compression, boolean>>
+    compression?: Compression
     _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: QueuedRequestOptions[]
@@ -326,7 +324,6 @@ export class PostHog {
 
     constructor() {
         this.config = defaultConfig()
-        this.compression = {}
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.segmentIntegration = () => createSegmentIntegration(this)
@@ -476,7 +473,7 @@ export class PostHog {
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
         this._requestQueue = new RequestQueue((req) => this._send_request(req))
-        this._retryQueue = new RetryQueue(this.config.on_request_error, this.rateLimiter)
+        this._retryQueue = new RetryQueue(this)
         this.__captureHooks = []
         this.__request_queue = []
 
@@ -562,13 +559,13 @@ export class PostHog {
     // Private methods
 
     _afterDecideResponse(response: DecideResponse) {
-        this.compression = {}
+        this.compression = undefined
         if (response.supportedCompression && !this.config.disable_compression) {
-            const compression: Partial<Record<Compression, boolean>> = {}
-            for (const method of response['supportedCompression']) {
-                compression[method] = true
-            }
-            this.compression = compression
+            this.compression = response['supportedCompression'].includes(Compression.GZipJS)
+                ? Compression.GZipJS
+                : response['supportedCompression'].includes(Compression.GZipJS)
+                ? Compression.Base64
+                : undefined
         }
 
         if (response.analytics?.endpoint) {
@@ -663,14 +660,13 @@ export class PostHog {
         })
         options.headers = this.config.request_headers
 
-        request(options)
-
-        // request({
-        //             retriesPerformedSoFar: 0,
-        //             retryQueue: !options.noRetries ? this._retryQueue : undefined,
-        //             onError: this.config.on_request_error,
-        //             onResponse: this.rateLimiter.checkForLimiting,
-        //         })
+        request({
+            ...options,
+            callback: (response) => {
+                // TOOD: this.config.on_request_error,
+                this.rateLimiter.checkForLimiting(response)
+            },
+        })
     }
 
     /**
@@ -773,11 +769,7 @@ export class PostHog {
      * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Date} [options.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
-    capture(
-        event_name: string,
-        properties?: Properties | null,
-        options: CaptureOptions = __NOOPTIONS
-    ): CaptureResult | void {
+    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
@@ -786,12 +778,6 @@ export class PostHog {
 
         if (userOptedOut(this)) {
             return
-        }
-
-        options = options || __NOOPTIONS
-        const transport = options['transport'] // external API, don't minify 'transport' prop
-        if (transport) {
-            options.transport = transport // 'transport' prop name can be minified internally
         }
 
         // typing doesn't prevent interesting data
@@ -824,16 +810,18 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
-        if (event_name === '$identify') {
-            data['$set'] = options['$set']
-            data['$set_once'] = options['$set_once']
-        }
+        if (options) {
+            if (event_name === '$identify') {
+                data['$set'] = options['$set']
+                data['$set_once'] = options['$set_once']
+            }
 
-        data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
-        data.timestamp = options.timestamp || new Date()
-        if (!_isUndefined(options.timestamp)) {
-            data.properties['$event_time_override_provided'] = true
-            data.properties['$event_time_override_system_time'] = new Date()
+            data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
+            data.timestamp = options.timestamp || new Date()
+            if (!_isUndefined(options.timestamp)) {
+                data.properties['$event_time_override_provided'] = true
+                data.properties['$event_time_override_system_time'] = new Date()
+            }
         }
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
@@ -844,23 +832,17 @@ export class PostHog {
         }
 
         logger.info('send', data)
-        // const jsonData = JSON.stringify(data)
-
-        const url = options._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 
         const requestOptions: QueuedRequestOptions = {
-            transport: options.transport,
-            method: options.method,
-            url,
+            url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
             data,
-            compression: decideCompression(this.compression),
-            batchKey: options._batchKey,
-            // TODO: Fix up the rest of this...
+            compression: this.compression,
+            batchKey: options?._batchKey,
         }
 
-        if (this.config.request_batching && (!has_unique_traits || options._batchKey) && !options.send_instantly) {
+        if (this.config.request_batching && (!has_unique_traits || options?._batchKey) && !options.send_instantly) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             this._send_request(requestOptions)
