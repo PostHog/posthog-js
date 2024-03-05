@@ -20,7 +20,7 @@ import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
-import { compressData, decideCompression } from './compression'
+import { decideCompression } from './compression'
 // import { addParamsToURL, encodePostData, request } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
@@ -41,11 +41,9 @@ import {
     Properties,
     Property,
     RequestCallback,
-    SendRequestOptions,
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
-    XHROptions,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
