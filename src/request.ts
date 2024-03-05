@@ -258,42 +258,6 @@ const sendBeacon = (options: RequestOptions) => {
     }
 }
 
-const scriptCallbacks: Record<string, RequestCallback>
-
-// /**
-//      * _prepare_callback() should be called by callers of _send_request for use
-//      * as the callback argument.
-//      *
-//      * If there is no callback, this returns null.
-//      * If we are going to make XHR/XDR requests, this returns a function.
-//      * If we are going to use script tags, this returns a string to use as the
-//      * callback GET param.
-//      */
-//     // TODO: get rid of the "| string"
-//     const prepareScriptCallback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
-//         if (_isUndefined(callback)) {
-//             return null
-//         }
-
-//         if (SUPPORTS_REQUEST) {
-//             return function (response) {
-//                 callback(response, data)
-//             }
-//         }
-
-//         // if the user gives us a callback, we store as a random
-//         // property on this instances jsc function and update our
-//         // callback string to reflect that.
-//         const jsc = scriptCallbacks
-//         const randomized_cb = '' + Math.floor(Math.random() * 100000000)
-//         const callback_string = 'posthog._jsc[' + randomized_cb + ']'
-//         jsc[randomized_cb] = function (response: any) {
-//             delete jsc[randomized_cb]
-//             callback(response, data)
-//         }
-//         return callback_string
-//     }
-
 const scriptRequest = (options: RequestOptions) => {
     if (!document) {
         return

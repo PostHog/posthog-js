@@ -193,7 +193,7 @@ export class PostHogFeatureFlags {
             this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             { data: encoded_data },
             { method: 'POST' },
-            this.instance._prepare_callback((response) => {
+            (response) => {
                 // reset anon_distinct_id after at least a single request with it
                 // makes it through
                 this.$anon_distinct_id = undefined
@@ -202,7 +202,7 @@ export class PostHogFeatureFlags {
                 // :TRICKY: Reload - start another request if queued!
                 this.setReloadingPaused(false)
                 this._startReloadTimer()
-            }) as RequestCallback,
+            },
             this.instance.config.feature_flag_request_timeout_ms,
             false
         )

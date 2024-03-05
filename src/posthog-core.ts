@@ -634,40 +634,6 @@ export class PostHog {
         this._start_queue_if_opted_in()
     }
 
-    // /**
-    //  * _prepare_callback() should be called by callers of _send_request for use
-    //  * as the callback argument.
-    //  *
-    //  * If there is no callback, this returns null.
-    //  * If we are going to make XHR/XDR requests, this returns a function.
-    //  * If we are going to use script tags, this returns a string to use as the
-    //  * callback GET param.
-    //  */
-    // // TODO: get rid of the "| string"
-    // _prepare_callback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
-    //     if (_isUndefined(callback)) {
-    //         return null
-    //     }
-
-    //     if (SUPPORTS_REQUEST) {
-    //         return function (response) {
-    //             callback(response, data)
-    //         }
-    //     }
-
-    //     // if the user gives us a callback, we store as a random
-    //     // property on this instances jsc function and update our
-    //     // callback string to reflect that.
-    //     const jsc = this._jsc
-    //     const randomized_cb = '' + Math.floor(Math.random() * 100000000)
-    //     const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
-    //     jsc[randomized_cb] = function (response: any) {
-    //         delete jsc[randomized_cb]
-    //         callback(response, data)
-    //     }
-    //     return callback_string
-    // }
-
     _handle_unload(): void {
         if (this.config.capture_pageview && this.config.capture_pageleave) {
             this.capture('$pageleave')
