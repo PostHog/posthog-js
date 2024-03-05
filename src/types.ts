@@ -65,7 +65,8 @@ export type UUIDVersion = 'og' | 'v7'
 
 export interface PostHogConfig {
     api_host: string
-    api_method: string
+    /** @deprecated - This porperty is no longer supported */
+    api_method?: string
     api_transport?: 'XHR' | 'fetch'
     ui_host: string | null
     token: string

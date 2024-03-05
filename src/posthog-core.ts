@@ -21,7 +21,7 @@ import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } f
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { compressData, decideCompression } from './compression'
-import { addParamsToURL, encodePostData, request } from './send-request'
+// import { addParamsToURL, encodePostData, request } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { RequestRouter } from './utils/request-router'
@@ -70,6 +70,7 @@ import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { SUPPORTS_REQUEST } from './utils/request-utils'
+import { addParamsToURL, request, RequestOptions } from './request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -309,7 +310,7 @@ export class PostHog {
     compression: Partial<Record<Compression, boolean>>
     _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
-    __request_queue: [url: string, data: Record<string, any>, options: SendRequestOptions][]
+    __request_queue: RequestOptions[]
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
@@ -625,9 +626,7 @@ export class PostHog {
 
     _dom_loaded(): void {
         if (!this.has_opted_out_capturing()) {
-            _eachArray(this.__request_queue, (item) => {
-                this._send_request(...item)
-            })
+            _eachArray(this.__request_queue, (item) => this._send_request(item))
         }
 
         this.__request_queue = []
@@ -670,13 +669,6 @@ export class PostHog {
     }
 
     _handle_unload(): void {
-        if (!this.config.request_batching) {
-            if (this.config.capture_pageview && this.config.capture_pageleave) {
-                this.capture('$pageleave', null, { transport: 'sendBeacon' })
-            }
-            return
-        }
-
         if (this.config.capture_pageview && this.config.capture_pageleave) {
             this.capture('$pageleave')
         }
@@ -695,70 +687,39 @@ export class PostHog {
         this._send_request(url, data, { ..._options })
     }
 
-    _send_request(url: string, data: Record<string, any>, options: SendRequestOptions): void {
+    _send_request(options: RequestOptions): void {
         if (!this.__loaded || !this._retryQueue) {
             return
         }
-        if (this.rateLimiter.isRateLimited(options._batchKey)) {
-            return
-        }
+        // if (this.rateLimiter.isRateLimited(options._batchKey)) {
+        //     return
+        // }
 
         if (ENQUEUE_REQUESTS) {
-            this.__request_queue.push([url, data, options])
+            this.__request_queue.push(options)
             return
         }
 
-        const DEFAULT_OPTIONS = {
-            method: this.config.api_method,
-            transport: this.config.api_transport,
-            verbose: this.config.verbose,
-        }
-
-        options = _extend(DEFAULT_OPTIONS, options || {})
-        if (!SUPPORTS_REQUEST) {
-            options.method = 'GET'
-        }
-
-        const useSendBeacon = window && 'sendBeacon' in window.navigator && options.transport === 'sendBeacon'
-        url = addParamsToURL(url, options.urlQueryArgs || {}, {
+        options.transport = options.transport || this.config.api_transport
+        options.url = addParamsToURL(options.url, options.urlQueryArgs || {}, {
             ip: this.config.ip,
         })
+        options.headers = this.config.request_headers
 
-        if (useSendBeacon) {
-            // beacon documentation https://w3c.github.io/beacon/
-            // beacons format the message and use the type property
-            try {
-                window?.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
-            } catch (e) {
-                // send beacon is a best-effort, fire-and-forget mechanism on page unload,
-                // we don't want to throw errors here
-            }
-        } else if (SUPPORTS_REQUEST || !document) {
-            try {
-                request({
-                    url,
-                    data,
-                    headers: this.config.request_headers,
-                    options,
-                    callback: options.callback,
-                    retriesPerformedSoFar: 0,
-                    retryQueue: !options.noRetries ? this._retryQueue : undefined,
-                    onError: this.config.on_request_error,
-                    onResponse: this.rateLimiter.checkForLimiting,
-                    timeout: options.timeout,
-                })
-            } catch (e) {
-                logger.error(e)
-            }
-        } else {
-            const script = document.createElement('script')
-            script.type = 'text/javascript'
-            script.async = true
-            script.defer = true
-            script.src = url
-            const s = document.getElementsByTagName('script')[0]
-            s.parentNode?.insertBefore(script, s)
-        }
+        request(options)
+
+        // request({
+        //             url,
+        //             data,
+        //             headers: this.config.request_headers,
+        //             options,
+        //             callback: options.callback,
+        //             retriesPerformedSoFar: 0,
+        //             retryQueue: !options.noRetries ? this._retryQueue : undefined,
+        //             onError: this.config.on_request_error,
+        //             onResponse: this.rateLimiter.checkForLimiting,
+        //             timeout: options.timeout,
+        //         })
     }
 
     /**
