@@ -17,10 +17,7 @@ const expectDecodedSendRequest = (send_request, data) => {
             data: _base64Encode(JSON.stringify(data)),
             verbose: true,
         },
-        { method: 'POST' },
-        expect.any(Function),
-        undefined,
-        false
+        { method: 'POST', callback: expect.any(Function), noRetries: true }
     )
 }
 
@@ -39,7 +36,7 @@ describe('Decide', () => {
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
         _send_request: jest
             .fn()
-            .mockImplementation((url, params, options, callback) => callback({ config: given.decideResponse })),
+            .mockImplementation((url, params, { callback }) => callback?.({ config: given.decideResponse })),
         toolbar: {
             maybeLoadToolbar: jest.fn(),
             afterDecideResponse: jest.fn(),

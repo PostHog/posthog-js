@@ -263,8 +263,7 @@ describe('posthog core', () => {
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://us.i.posthog.com/e/',
                 expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.any(Object)
             )
         })
 
@@ -275,8 +274,7 @@ describe('posthog core', () => {
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://us.i.posthog.com/i/v0/e/',
                 expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.any(Object)
             )
         })
 
@@ -285,8 +283,7 @@ describe('posthog core', () => {
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://app.posthog.com/s/',
                 expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.any(Object)
             )
         })
 
@@ -296,8 +293,7 @@ describe('posthog core', () => {
             expect(given.lib._send_request).toHaveBeenCalledWith(
                 'https://app.posthog.com/s/',
                 expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.any(Object)
             )
         })
     })

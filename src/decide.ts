@@ -37,10 +37,12 @@ export class Decide {
         this.instance._send_request(
             this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             { data: encoded_data, verbose: true },
-            { method: 'POST' },
-            (response) => this.parseDecideResponse(response as DecideResponse),
-            this.instance.config.feature_flag_request_timeout_ms,
-            false
+            {
+                method: 'POST',
+                callback: (response) => this.parseDecideResponse(response as DecideResponse),
+                timeout: this.instance.config.feature_flag_request_timeout_ms,
+                noRetries: true,
+            }
         )
     }
 

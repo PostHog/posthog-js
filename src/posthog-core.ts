@@ -41,6 +41,7 @@ import {
     Properties,
     Property,
     RequestCallback,
+    SendRequestOptions,
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
@@ -308,7 +309,7 @@ export class PostHog {
     compression: Partial<Record<Compression, boolean>>
     _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
-    __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
+    __request_queue: [url: string, data: Record<string, any>, options: SendRequestOptions][]
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
@@ -686,27 +687,15 @@ export class PostHog {
 
     _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
         const jsonData = JSON.stringify(data)
-        this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
+        this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS)
     }
 
-    __compress_and_send_json_request(
-        url: string,
-        jsonData: string,
-        options: XHROptions,
-        callback?: RequestCallback
-    ): void {
+    __compress_and_send_json_request(url: string, jsonData: string, options: XHROptions): void {
         const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
-        this._send_request(url, data, _options, callback)
+        this._send_request(url, data, { ..._options })
     }
 
-    _send_request(
-        url: string,
-        data: Record<string, any>,
-        options: CaptureOptions,
-        callback?: RequestCallback,
-        timeout?: number,
-        retry: boolean = true
-    ): void {
+    _send_request(url: string, data: Record<string, any>, options: SendRequestOptions): void {
         if (!this.__loaded || !this._retryQueue) {
             return
         }
@@ -715,7 +704,7 @@ export class PostHog {
         }
 
         if (ENQUEUE_REQUESTS) {
-            this.__request_queue.push([url, data, options, callback])
+            this.__request_queue.push([url, data, options])
             return
         }
 
@@ -751,12 +740,12 @@ export class PostHog {
                     data,
                     headers: this.config.request_headers,
                     options,
-                    callback,
-                    retriesPerformedSoFar: retry ? 0 : 100,
-                    retryQueue: this._retryQueue,
+                    callback: options.callback,
+                    retriesPerformedSoFar: 0,
+                    retryQueue: !options.noRetries ? this._retryQueue : undefined,
                     onError: this.config.on_request_error,
                     onResponse: this.rateLimiter.checkForLimiting,
-                    timeout,
+                    timeout: options.timeout,
                 })
             } catch (e) {
                 logger.error(e)

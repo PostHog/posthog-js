@@ -215,6 +215,14 @@ export interface CaptureOptions extends XHROptions {
     timestamp?: Date
 }
 
+export type RequestCallback = (response: Record<string, any>, data?: Properties) => void
+
+export type SendRequestOptions = CaptureOptions & {
+    callback?: RequestCallback
+    timeout?: number
+    noRetries?: boolean
+}
+
 export interface RetryQueueElement {
     retryAt: Date
     requestData: QueuedRequestData
@@ -235,7 +243,7 @@ export interface MinimalHTTPResponse {
 }
 
 export interface RequestData extends QueuedRequestData {
-    retryQueue: RetryQueue
+    retryQueue?: RetryQueue
     timeout?: number
     onError?: (req: MinimalHTTPResponse) => void
     onResponse?: (req: MinimalHTTPResponse) => void
@@ -319,8 +327,6 @@ export interface GDPROptions {
     respectDnt?: boolean
     window?: Window
 }
-
-export type RequestCallback = (response: Record<string, any>, data?: Properties) => void
 
 export interface PersistentStore {
     is_supported: () => boolean

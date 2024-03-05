@@ -114,7 +114,7 @@ export const request = (params: RequestData) => {
                     }
 
                     // don't retry errors between 400 and 500 inclusive
-                    if (statusCode < 400 || statusCode > 500) {
+                    if (params.retryQueue && (statusCode < 400 || statusCode > 500)) {
                         params.retryQueue.enqueue({
                             ...params,
                             headers,
@@ -193,7 +193,7 @@ const xhr = ({
                 }
 
                 // don't retry errors between 400 and 500 inclusive
-                if (req.status < 400 || req.status > 500) {
+                if (retryQueue && (req.status < 400 || req.status > 500)) {
                     retryQueue.enqueue({
                         url,
                         data,
