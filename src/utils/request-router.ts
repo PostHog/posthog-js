@@ -16,6 +16,7 @@ export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 
 export class RequestRouter {
     instance: PostHog
+    private _regionCache: Record<string, RequestRouterRegion> = {}
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -29,19 +30,17 @@ export class RequestRouter {
     }
 
     get region(): RequestRouterRegion {
-        switch (this.apiHost) {
-            case 'https://app.posthog.com':
-            case 'https://us.posthog.com':
-            case 'https://us.i.posthog.com':
-            case 'https://us-assets.i.posthog.com':
-                return RequestRouterRegion.US
-            case 'https://eu.posthog.com':
-            case 'https://eu.i.posthog.com':
-            case 'https://eu-assets.i.posthog.com':
-                return RequestRouterRegion.EU
-            default:
-                return RequestRouterRegion.CUSTOM
+        // We don't need to compute this every time so we cache the result
+        if (!this._regionCache[this.apiHost]) {
+            if (/https:\/\/(app|us|us-assets)(\.i)?\.posthog\.com/i.test(this.apiHost)) {
+                this._regionCache[this.apiHost] = RequestRouterRegion.US
+            } else if (/https:\/\/(eu|eu-assets)(\.i)?\.posthog\.com/i.test(this.apiHost)) {
+                this._regionCache[this.apiHost] = RequestRouterRegion.EU
+            } else {
+                this._regionCache[this.apiHost] = RequestRouterRegion.CUSTOM
+            }
         }
+        return this._regionCache[this.apiHost]
     }
 
     endpointFor(target: RequestRouterTarget, path: string = ''): string {
