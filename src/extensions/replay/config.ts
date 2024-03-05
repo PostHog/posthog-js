@@ -73,7 +73,7 @@ const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/']
 // because calls to PostHog would be reported using a call to PostHog which would be reported....
 const ignorePostHogPaths = (data: CapturedNetworkRequest): CapturedNetworkRequest | undefined => {
     const url = convertToURL(data.name)
-    if (url && url.pathname && POSTHOG_PATHS_TO_IGNORE.some((path) => url.pathname.startsWith(path))) {
+    if (url && url.pathname && POSTHOG_PATHS_TO_IGNORE.some((path) => url.pathname.indexOf(path) === 0)) {
         return undefined
     }
     return data
