@@ -21,6 +21,22 @@ export class RequestQueue extends RequestQueueScaffold {
         }
     }
 
+    unload(): void {
+        clearTimeout(this._poller)
+        const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
+        this._event_queue.length = 0
+        const requestValues = Object.values(requests)
+
+        // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
+        const sortedRequests = [
+            ...requestValues.filter((r) => r.url.indexOf('/e') === 0),
+            ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
+        ]
+        sortedRequests.map((req) => {
+            this.handlePollRequest({ ...req, transport: 'sendBeacon' })
+        })
+    }
+
     poll(): void {
         clearTimeout(this._poller)
         this._poller = setTimeout(() => {
@@ -61,23 +77,7 @@ export class RequestQueue extends RequestQueueScaffold {
         }, this._pollInterval) as any as number
     }
 
-    unload(): void {
-        clearTimeout(this._poller)
-        const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
-        this._event_queue.length = 0
-        const requestValues = Object.values(requests)
-
-        // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
-        const sortedRequests = [
-            ...requestValues.filter((r) => r.url.indexOf('/e') === 0),
-            ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
-        ]
-        sortedRequests.map((req) => {
-            this.handlePollRequest({ ...req, transport: 'sendBeacon' })
-        })
-    }
-
-    formatQueue(): Record<string, QueuedRequestOptions> {
+    private formatQueue(): Record<string, QueuedRequestOptions> {
         const requests: Record<string, QueuedRequestOptions> = {}
         _each(this._event_queue, (request: QueuedRequestOptions) => {
             const req = request

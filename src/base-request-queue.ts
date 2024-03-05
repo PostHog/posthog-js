@@ -12,29 +12,4 @@ export class RequestQueueScaffold {
         this._poller = undefined // to become interval for reference to clear later
         this._pollInterval = pollInterval
     }
-
-    setPollInterval(interval: number): void {
-        this._pollInterval = interval
-        // Reset interval if running already
-        if (this.isPolling) {
-            this.poll()
-        }
-    }
-
-    // // eslint-disable-next-line no-unused-vars
-    // enqueue(_requestData: Record<string, any>): void {
-    //     return
-    // }
-
-    poll(): void {
-        return
-    }
-
-    unload(): void {
-        return
-    }
-
-    getTime(): number {
-        return new Date().getTime()
-    }
 }

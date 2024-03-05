@@ -47,7 +47,8 @@ export class RetryQueue extends RequestQueueScaffold {
         if (!_isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
-                this._handleWeAreNowOnline()
+                this.areWeOnline = true
+                this.flush()
             })
             window.addEventListener('offline', () => {
                 this.areWeOnline = false
@@ -55,7 +56,27 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    enqueue(requestOptions: RetriableRequestOptions): void {
+    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestOptions): void {
+        if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
+            options.url = addParamsToURL(options.url, { retry_count: retriesPerformedSoFar })
+        }
+
+        this.instance._send_request({
+            ...options,
+            callback: (response) => {
+                if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode > 500)) {
+                    this.enqueue({
+                        ...options,
+                        retriesPerformedSoFar: (retriesPerformedSoFar || 0) + 1,
+                    })
+                }
+
+                options.callback?.(response)
+            },
+        })
+    }
+
+    private enqueue(requestOptions: RetriableRequestOptions): void {
         const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
         if (retriesPerformedSoFar >= 10) {
             return
@@ -77,7 +98,7 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    poll(): void {
+    private poll(): void {
         this._poller && clearTimeout(this._poller)
         this._poller = setTimeout(() => {
             if (this.areWeOnline && this.queue.length > 0) {
@@ -87,7 +108,7 @@ export class RetryQueue extends RequestQueueScaffold {
         }, this._pollInterval) as any as number
     }
 
-    flush(): void {
+    private flush(): void {
         // using Date.now to make tests easier, as recommended here https://codewithhugo.com/mocking-the-current-date-in-jest-tests/
         const now = new Date(Date.now())
         const toFlush = this.queue.filter(({ retryAt }) => retryAt < now)
@@ -120,30 +141,5 @@ export class RetryQueue extends RequestQueueScaffold {
             }
         }
         this.queue = []
-    }
-
-    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestOptions): void {
-        if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
-            options.url = addParamsToURL(options.url, { retry_count: retriesPerformedSoFar })
-        }
-
-        this.instance._send_request({
-            ...options,
-            callback: (response) => {
-                if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode > 500)) {
-                    this.enqueue({
-                        ...options,
-                        retriesPerformedSoFar: (retriesPerformedSoFar || 0) + 1,
-                    })
-                }
-
-                options.callback?.(response)
-            },
-        })
-    }
-
-    _handleWeAreNowOnline(): void {
-        this.areWeOnline = true
-        this.flush()
     }
 }

@@ -614,7 +614,7 @@ export class PostHog {
 
     _dom_loaded(): void {
         if (!this.has_opted_out_capturing()) {
-            _eachArray(this.__request_queue, (item) => this._send_request(item))
+            _eachArray(this.__request_queue, (item) => this._send_retriable_request(item))
         }
 
         this.__request_queue = []
@@ -632,7 +632,7 @@ export class PostHog {
     }
 
     _send_request(options: QueuedRequestOptions): void {
-        if (!this.__loaded || !this._retryQueue) {
+        if (!this.__loaded) {
             return
         }
 
@@ -662,6 +662,14 @@ export class PostHog {
                 }
             },
         })
+    }
+
+    _send_retriable_request(options: QueuedRequestOptions): void {
+        if (this._retryQueue) {
+            this._retryQueue.retriableRequest(options)
+        } else {
+            this._send_request(options)
+        }
     }
 
     /**
@@ -841,7 +849,7 @@ export class PostHog {
         if (this.config.request_batching && (!has_unique_traits || options?._batchKey) && !options.send_instantly) {
             this._requestQueue.enqueue(requestOptions)
         } else {
-            this._send_request(requestOptions)
+            this._send_retriable_request(requestOptions)
         }
 
         this._invokeCaptureHooks(event_name, data)
