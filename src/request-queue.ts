@@ -1,19 +1,19 @@
 import { RequestQueueScaffold } from './base-request-queue'
 import { _each } from './utils'
-import { Properties, QueuedRequestData, XHROptions } from './types'
 
 import { _isUndefined } from './utils/type-utils'
+import { RequestOptions } from './request'
 
 export class RequestQueue extends RequestQueueScaffold {
-    handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void
+    handlePollRequest: (req: RequestOptions) => void
 
-    constructor(handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void, pollInterval = 3000) {
+    constructor(handlePollRequest: (req: RequestOptions) => void, pollInterval = 3000) {
         super(pollInterval)
         this.handlePollRequest = handlePollRequest
     }
 
-    enqueue(url: string, data: Properties, options: XHROptions): void {
-        this._event_queue.push({ url, data, options })
+    enqueue(req: RequestOptions): void {
+        this._event_queue.push(req)
 
         if (!this.isPolling) {
             this.isPolling = true
@@ -27,12 +27,15 @@ export class RequestQueue extends RequestQueueScaffold {
             if (this._event_queue.length > 0) {
                 const requests = this.formatQueue()
                 for (const key in requests) {
-                    const { url, data, options } = requests[key]
-                    _each(data, (_, dataKey) => {
-                        data[dataKey]['offset'] = Math.abs(data[dataKey]['timestamp'] - this.getTime())
-                        delete data[dataKey]['timestamp']
-                    })
-                    this.handlePollRequest(url, data, options)
+                    const req = requests[key]
+                    if (req.data) {
+                        _each(req.data, (_, dataKey) => {
+                            // TODO: WWhat is this doing?
+                            req.data[dataKey]['offset'] = Math.abs(req.data[dataKey]['timestamp'] - this.getTime())
+                            delete req.data[dataKey]['timestamp']
+                        })
+                    }
+                    this.handlePollRequest(req)
                 }
                 this._event_queue.length = 0 // flush the _event_queue
                 this._empty_queue_count = 0
@@ -69,30 +72,21 @@ export class RequestQueue extends RequestQueueScaffold {
             ...requestValues.filter((r) => r.url.indexOf('/e') === 0),
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
-        sortedRequests.map(({ url, data, options }) => {
-            this.handlePollRequest(url, data, { ...options, transport: 'sendBeacon' })
+        sortedRequests.map((req) => {
+            this.handlePollRequest({ ...req, transport: 'sendBeacon' })
         })
     }
 
-    formatQueue(): Record<string, QueuedRequestData> {
-        const requests: Record<string, QueuedRequestData> = {}
-        _each(this._event_queue, (request) => {
-            const { url, data, options } = request
-            const key = (options ? options._batchKey : null) || url
+    formatQueue(): Record<string, RequestOptions> {
+        const requests: Record<string, RequestOptions> = {}
+        _each(this._event_queue, (request: RequestOptions) => {
+            const req = request
+            const key = (req ? req._batchKey : null) || req.url
             if (_isUndefined(requests[key])) {
+                // TODO: What about this -it seems to batch data into an array - do we always want that?
                 requests[key] = { data: [], url, options }
             }
 
-            // :TRICKY: Metrics-only code
-            if (
-                options &&
-                requests[key].options &&
-                requests[key].options._metrics &&
-                !(requests[key].options._metrics as any)['rrweb_full_snapshot']
-            ) {
-                ;(requests[key].options._metrics as any)['rrweb_full_snapshot'] =
-                    options._metrics['rrweb_full_snapshot']
-            }
             requests[key].data.push(data)
         })
         return requests

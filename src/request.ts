@@ -1,18 +1,20 @@
-import { _each } from './utils'
+import { _base64Encode, _each } from './utils'
 import Config from './config'
-import { PostData, Compression } from './types'
+import { Compression } from './types'
 import { SUPPORTS_XHR, _formDataToQuery } from './utils/request-utils'
 
-import { _isArray, _isUint8Array, _isUndefined } from './utils/type-utils'
+import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { fetch, document, window } from './utils/globals'
+import { gzipSync, strToU8 } from 'fflate'
 
-export interface MinimalHTTPResponse {
+export interface RequestResponse {
     statusCode: number
-    responseText: string
+    text: string
+    json?: any
 }
 
-export type RequestCallback = (response: Record<string, any>, data?: Record<string, any>) => void
+export type RequestCallback = (response: RequestResponse) => void
 
 export interface RequestOptions {
     url: string
@@ -21,21 +23,46 @@ export interface RequestOptions {
     transport?: 'XHR' | 'fetch' | 'sendBeacon'
     method?: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
-    blob?: boolean
     callback?: RequestCallback
     timeout?: number
     noRetries?: boolean
+    compression?: Compression
 }
 
-export const addParamsToURL = (
-    url: string,
-    urlQueryArgs: Record<string, any> | undefined,
-    parameterOptions: { ip?: boolean }
-): string => {
-    const args = urlQueryArgs || {}
-    args['ip'] = parameterOptions['ip'] ? 1 : 0
-    args['_'] = new Date().getTime().toString()
-    args['ver'] = Config.LIB_VERSION
+// This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
+export const request = (_options: RequestOptions) => {
+    // Clone the options so we don't modify the original object
+    const options = { ..._options }
+    options.timeout = options.timeout || 60000
+
+    options.url = addParamsToURL(options.url, {
+        // TODO: Move the ip to the right place
+        // ip: parameterOptions['ip'] ? 1 : 0,
+        _: new Date().getTime().toString(),
+        ver: Config.LIB_VERSION,
+        compression: options.compression,
+    })
+
+    if (options.transport === 'sendBeacon' && window?.navigator?.sendBeacon) {
+        return sendBeacon(options)
+    }
+
+    // NOTE: Until we are confident with it, we only use fetch if explicitly told so
+    // At some point we will make it the default over xhr
+    if (options.transport === 'fetch' && fetch) {
+        return _fetch(options)
+    }
+
+    if (SUPPORTS_XHR || !document) {
+        return xhr(options)
+    }
+
+    // Final fallback if everything else fails...
+    scriptRequest(options)
+}
+
+export const addParamsToURL = (url: string, params: Record<string, any> | undefined): string => {
+    const args = params || {}
 
     const halves = url.split('?')
     if (halves.length > 1) {
@@ -52,34 +79,28 @@ export const addParamsToURL = (
     return url + argSeparator + _formDataToQuery(args)
 }
 
-const encodeDataToString = (data: PostData | Uint8Array): string => {
-    let body_data
-
-    if (_isArray(data) || _isUint8Array(data)) {
-        // TODO: eh? passing an Array here?
-        body_data = 'data=' + encodeURIComponent(data as any)
-    } else {
-        body_data = 'data=' + encodeURIComponent(data.data as string)
-    }
-
-    if ('compression' in data && data.compression) {
-        body_data += '&compression=' + data.compression
-    }
-
-    return body_data
+const encodeToDataString = (data: string | Record<string, any>): string => {
+    return 'data=' + encodeURIComponent(typeof data === 'string' ? data : JSON.stringify(data))
 }
 
-const encodePostData = ({ data, blob, transport, method }: RequestOptions): string | BlobPart | null => {
+const encodePostData = ({ data, compression, transport, method }: RequestOptions): string | BlobPart | null => {
     if (!data) {
         return null
     }
 
-    if (blob && data?.buffer) {
-        return new Blob([_isUint8Array(data) ? data : data.buffer], { type: 'text/plain' })
+    // :TRICKY: This returns an UInt8Array. We don't encode this to a string - returning a blob will do this for us.
+    if (compression === Compression.GZipJS) {
+        const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
+        return new Blob([gzipData], { type: 'text/plain' })
     }
 
-    if (transport === 'sendBeacon' || blob) {
-        const body = encodeDataToString(data)
+    if (compression === Compression.Base64) {
+        const b64data = _base64Encode(JSON.stringify(data))
+        return encodeToDataString(b64data)
+    }
+
+    if (transport === 'sendBeacon') {
+        const body = encodeToDataString(data)
         return new Blob([body], { type: 'application/x-www-form-urlencoded' })
     }
 
@@ -87,26 +108,7 @@ const encodePostData = ({ data, blob, transport, method }: RequestOptions): stri
         return null
     }
 
-    return encodeDataToString(data)
-}
-
-export const request = (options: RequestOptions) => {
-    options.timeout = options.timeout || 60000
-    // NOTE: Until we are confident with it, we only use fetch if explicitly told so
-    if (options.transport === 'fetch' && fetch) {
-        return _fetch(options)
-    }
-
-    if (options.transport === 'sendBeacon' && window?.navigator?.sendBeacon) {
-        return sendBeacon(options)
-    }
-
-    if (SUPPORTS_XHR || !document) {
-        return xhr(options)
-    }
-
-    // Final fallback if everything else fails...
-    scriptRequest(options)
+    return encodeToDataString(data)
 }
 
 const xhr = (options: RequestOptions) => {
@@ -122,7 +124,7 @@ const xhr = (options: RequestOptions) => {
         req.setRequestHeader(headerName, headerValue)
     })
 
-    if (options.method === 'POST' && !options.blob) {
+    if (options.method === 'POST' && typeof body === 'string') {
         req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     }
 
@@ -135,41 +137,37 @@ const xhr = (options: RequestOptions) => {
     req.onreadystatechange = () => {
         // XMLHttpRequest.DONE == 4, except in safari 4
         if (req.readyState === 4) {
-            const minimalResponseSummary: MinimalHTTPResponse = {
+            const response: RequestResponse = {
                 statusCode: req.status,
-                responseText: req.responseText,
+                text: req.responseText,
             }
             // onResponse?.(minimalResponseSummary)
             if (req.status === 200) {
-                if (options.callback) {
-                    let response
-                    try {
-                        response = JSON.parse(req.responseText)
-                    } catch (e) {
-                        logger.error(e)
-                        return
-                    }
-                    options.callback(response)
+                try {
+                    response.json = JSON.parse(req.responseText)
+                } catch (e) {
+                    logger.error(e)
+                    return
                 }
-            } else {
-                // if (_isFunction(onError)) {
-                //     onError(minimalResponseSummary)
-                // }
-
-                // // don't retry errors between 400 and 500 inclusive
-                // if (retryQueue && (req.status < 400 || req.status > 500)) {
-                //     retryQueue.enqueue({
-                //         url,
-                //         data,
-                //         options,
-                //         headers,
-                //         retriesPerformedSoFar: (retriesPerformedSoFar || 0) + 1,
-                //         callback,
-                //     })
-                // }
-
-                options.callback?.({ status: 0 })
             }
+
+            options.callback?.(response)
+
+            // if (_isFunction(onError)) {
+            //     onError(minimalResponseSummary)
+            // }
+
+            // // don't retry errors between 400 and 500 inclusive
+            // if (retryQueue && (req.status < 400 || req.status > 500)) {
+            //     retryQueue.enqueue({
+            //         url,
+            //         data,
+            //         options,
+            //         headers,
+            //         retriesPerformedSoFar: (retriesPerformedSoFar || 0) + 1,
+            //         callback,
+            //     })
+            // }
         }
     }
     req.send(body)
@@ -189,7 +187,7 @@ const _fetch = (options: RequestOptions) => {
         headers.append(headerName, headerValue)
     })
 
-    if (options.method === 'POST' && !options.blob) {
+    if (options.method === 'POST' && typeof body === 'string') {
         headers.append('Content-Type', 'application/x-www-form-urlencoded')
     }
 
@@ -202,22 +200,26 @@ const _fetch = (options: RequestOptions) => {
         body,
     })
         .then((response) => {
-            const statusCode = response.status
             // Report to the callback handlers
             return response.text().then((responseText) => {
+                const res: RequestResponse = {
+                    statusCode: response.status,
+                    text: responseText,
+                }
                 // options.onResponse?.({
                 //     statusCode,
                 //     responseText,
                 // })
 
-                if (statusCode === 200) {
+                if (response.status === 200) {
                     try {
-                        options.callback?.(JSON.parse(responseText))
+                        res.json = JSON.parse(responseText)
                     } catch (e) {
                         logger.error(e)
                     }
-                    return
                 }
+
+                options.callback?.(res)
 
                 // if (_isFunction(options.onError)) {
                 //     params.onError({
@@ -234,12 +236,11 @@ const _fetch = (options: RequestOptions) => {
                 //         retriesPerformedSoFar: (params.retriesPerformedSoFar || 0) + 1,
                 //     })
                 // }
-                options.callback?.({ status: 0 })
             })
         })
         .catch((error) => {
             logger.error(error)
-            options.callback?.({ status: 0 })
+            options.callback?.({ statusCode: 0, text: error })
         })
 
     return
@@ -256,6 +257,42 @@ const sendBeacon = (options: RequestOptions) => {
         // we don't want to throw errors here
     }
 }
+
+const scriptCallbacks: Record<string, RequestCallback>
+
+// /**
+//      * _prepare_callback() should be called by callers of _send_request for use
+//      * as the callback argument.
+//      *
+//      * If there is no callback, this returns null.
+//      * If we are going to make XHR/XDR requests, this returns a function.
+//      * If we are going to use script tags, this returns a string to use as the
+//      * callback GET param.
+//      */
+//     // TODO: get rid of the "| string"
+//     const prepareScriptCallback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
+//         if (_isUndefined(callback)) {
+//             return null
+//         }
+
+//         if (SUPPORTS_REQUEST) {
+//             return function (response) {
+//                 callback(response, data)
+//             }
+//         }
+
+//         // if the user gives us a callback, we store as a random
+//         // property on this instances jsc function and update our
+//         // callback string to reflect that.
+//         const jsc = scriptCallbacks
+//         const randomized_cb = '' + Math.floor(Math.random() * 100000000)
+//         const callback_string = 'posthog._jsc[' + randomized_cb + ']'
+//         jsc[randomized_cb] = function (response: any) {
+//             delete jsc[randomized_cb]
+//             callback(response, data)
+//         }
+//         return callback_string
+//     }
 
 const scriptRequest = (options: RequestOptions) => {
     if (!document) {

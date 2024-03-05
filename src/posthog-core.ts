@@ -476,7 +476,7 @@ export class PostHog {
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
-        this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
+        this._requestQueue = new RequestQueue((req) => this._send_request(req))
         this._retryQueue = new RetryQueue(this.config.on_request_error, this.rateLimiter)
         this.__captureHooks = []
         this.__request_queue = []
@@ -634,39 +634,39 @@ export class PostHog {
         this._start_queue_if_opted_in()
     }
 
-    /**
-     * _prepare_callback() should be called by callers of _send_request for use
-     * as the callback argument.
-     *
-     * If there is no callback, this returns null.
-     * If we are going to make XHR/XDR requests, this returns a function.
-     * If we are going to use script tags, this returns a string to use as the
-     * callback GET param.
-     */
-    // TODO: get rid of the "| string"
-    _prepare_callback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
-        if (_isUndefined(callback)) {
-            return null
-        }
+    // /**
+    //  * _prepare_callback() should be called by callers of _send_request for use
+    //  * as the callback argument.
+    //  *
+    //  * If there is no callback, this returns null.
+    //  * If we are going to make XHR/XDR requests, this returns a function.
+    //  * If we are going to use script tags, this returns a string to use as the
+    //  * callback GET param.
+    //  */
+    // // TODO: get rid of the "| string"
+    // _prepare_callback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
+    //     if (_isUndefined(callback)) {
+    //         return null
+    //     }
 
-        if (SUPPORTS_REQUEST) {
-            return function (response) {
-                callback(response, data)
-            }
-        }
+    //     if (SUPPORTS_REQUEST) {
+    //         return function (response) {
+    //             callback(response, data)
+    //         }
+    //     }
 
-        // if the user gives us a callback, we store as a random
-        // property on this instances jsc function and update our
-        // callback string to reflect that.
-        const jsc = this._jsc
-        const randomized_cb = '' + Math.floor(Math.random() * 100000000)
-        const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
-        jsc[randomized_cb] = function (response: any) {
-            delete jsc[randomized_cb]
-            callback(response, data)
-        }
-        return callback_string
-    }
+    //     // if the user gives us a callback, we store as a random
+    //     // property on this instances jsc function and update our
+    //     // callback string to reflect that.
+    //     const jsc = this._jsc
+    //     const randomized_cb = '' + Math.floor(Math.random() * 100000000)
+    //     const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
+    //     jsc[randomized_cb] = function (response: any) {
+    //         delete jsc[randomized_cb]
+    //         callback(response, data)
+    //     }
+    //     return callback_string
+    // }
 
     _handle_unload(): void {
         if (this.config.capture_pageview && this.config.capture_pageleave) {
@@ -677,20 +677,13 @@ export class PostHog {
         this._retryQueue?.unload()
     }
 
-    _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
-        const jsonData = JSON.stringify(data)
-        this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS)
-    }
-
-    __compress_and_send_json_request(url: string, jsonData: string, options: XHROptions): void {
-        const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
-        this._send_request(url, data, { ..._options })
-    }
-
     _send_request(options: RequestOptions): void {
         if (!this.__loaded || !this._retryQueue) {
             return
         }
+
+        // TODO: Add second arg to do with retries etc.
+
         // if (this.rateLimiter.isRateLimited(options._batchKey)) {
         //     return
         // }
@@ -701,7 +694,8 @@ export class PostHog {
         }
 
         options.transport = options.transport || this.config.api_transport
-        options.url = addParamsToURL(options.url, options.urlQueryArgs || {}, {
+        options.url = addParamsToURL(options.url, {
+            // Whether to use IP Anonymization or not
             ip: this.config.ip,
         })
         options.headers = this.config.request_headers
@@ -893,16 +887,25 @@ export class PostHog {
         }
 
         logger.info('send', data)
-        const jsonData = JSON.stringify(data)
+        // const jsonData = JSON.stringify(data)
 
         const url = options._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
 
         const has_unique_traits = options !== __NOOPTIONS
 
+        const requestOptions: RequestOptions = {
+            transport: options.transport,
+            method: options.method,
+            url,
+            data,
+            compression: decideCompression(this.compression),
+            // TODO: Fix up the rest of this...
+        }
+
         if (this.config.request_batching && (!has_unique_traits || options._batchKey) && !options.send_instantly) {
-            this._requestQueue.enqueue(url, data, options)
+            this._requestQueue.enqueue(requestOptions)
         } else {
-            this.__compress_and_send_json_request(url, jsonData, options)
+            this._send_request(requestOptions)
         }
 
         this._invokeCaptureHooks(event_name, data)
