@@ -1,6 +1,6 @@
 <script src="../../dist/array.js"></script>
 <script>
-    posthog.init('sTMFPsFhdP1Ssg', {
+    posthog.init('phc_kKW0Fy5FBgKmb1JoS5ksTcajK9fnj8EYsHLd6rv7KKi', {
         api_host: 'http://127.0.0.1:8000',
         autocapture: {
             capture_copied_text: true,
@@ -29,6 +29,16 @@
 <div id="shadow"></div>
 
 <div style="padding: 2rem;background:green;display:none;color:white" id="feature"><h2>Look, a new beta feature</h2>
+</div>
+
+<div>
+    <p>This input is a password we shouldn't copy that</p>
+    <input value="i am secret" type="password" />
+</div>
+
+<div>
+    <p>This valie is marked no capture so we shouldn't copy that</p>
+    <div class='ph-no-capture'>I am a secret</div>
 </div>
 
 <div>
