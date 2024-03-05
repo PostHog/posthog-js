@@ -24,11 +24,6 @@ export class RateLimiter {
             instance.config.rate_limiting?.events_burst_limit || this.tokensPerSecond * 10,
             this.tokensPerSecond
         )
-
-        this.bucket = {
-            tokens: this.burst,
-            last: new Date().getTime(),
-        }
     }
 
     public isCaptureRateLimited(checkOnly = false): boolean {
