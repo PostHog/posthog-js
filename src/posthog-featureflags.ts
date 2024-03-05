@@ -1,4 +1,4 @@
-import { _base64Encode, _entries, _extend } from './utils'
+import { _entries, _extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
     DecideResponse,
@@ -7,7 +7,6 @@ import {
     EarlyAccessFeatureResponse,
     Properties,
     JsonType,
-    RequestCallback,
     Compression,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
