@@ -1,4 +1,3 @@
-import { RequestQueueScaffold } from './base-request-queue'
 import { RetriableRequestOptions } from './types'
 
 import { _isNumber, _isUndefined } from './utils/type-utils'
@@ -33,14 +32,14 @@ interface RetryQueueElement {
     requestOptions: RetriableRequestOptions
 }
 
-export class RetryQueue extends RequestQueueScaffold {
-    queue: RetryQueueElement[]
-    isPolling: boolean
-    areWeOnline: boolean
+export class RetryQueue {
+    private isPolling: boolean = false // flag to continue to recursively poll or not
+    private poller: number | undefined // to become interval for reference to clear later
+    private pollIntervalMs: number = 3000
+    private queue: RetryQueueElement[] = []
+    private areWeOnline: boolean
 
     constructor(private instance: PostHog) {
-        super()
-        this.isPolling = false
         this.queue = []
         this.areWeOnline = true
 
@@ -99,13 +98,13 @@ export class RetryQueue extends RequestQueueScaffold {
     }
 
     private poll(): void {
-        this._poller && clearTimeout(this._poller)
-        this._poller = setTimeout(() => {
+        this.poller && clearTimeout(this.poller)
+        this.poller = setTimeout(() => {
             if (this.areWeOnline && this.queue.length > 0) {
                 this.flush()
             }
             this.poll()
-        }, this._pollInterval) as any as number
+        }, this.pollIntervalMs) as any as number
     }
 
     private flush(): void {
@@ -121,9 +120,9 @@ export class RetryQueue extends RequestQueueScaffold {
     }
 
     unload(): void {
-        if (this._poller) {
-            clearTimeout(this._poller)
-            this._poller = undefined
+        if (this.poller) {
+            clearTimeout(this.poller)
+            this.poller = undefined
         }
 
         for (const { requestOptions } of this.queue) {

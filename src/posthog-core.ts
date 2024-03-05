@@ -607,7 +607,7 @@ export class PostHog {
     _start_queue_if_opted_in(): void {
         if (!this.has_opted_out_capturing()) {
             if (this.config.request_batching) {
-                this._requestQueue?.poll()
+                this._requestQueue?.enable()
             }
         }
     }
@@ -618,7 +618,6 @@ export class PostHog {
         }
 
         this.__request_queue = []
-
         this._start_queue_if_opted_in()
     }
 
