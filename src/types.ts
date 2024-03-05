@@ -128,7 +128,6 @@ export interface PostHogConfig {
     advanced_disable_toolbar_metrics: boolean
     get_device_id: (uuid: string) => string
     name: string
-    callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
