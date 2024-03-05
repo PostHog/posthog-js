@@ -20,7 +20,7 @@
         },
     })
 </script>
-<h2>Demo site</h2>
+<h2>Demo site for Copy/Cut Autocapture</h2>
 <button>Here's a button you could click if you want to</button><br /><br />
 <body>
 <div>
@@ -29,6 +29,16 @@
 <div id="shadow"></div>
 
 <div style="padding: 2rem;background:green;display:none;color:white" id="feature"><h2>Look, a new beta feature</h2>
+</div>
+
+<div>
+    <p>This input is a password we shouldn't copy that</p>
+    <input value="i am secret" type="password" />
+</div>
+
+<div>
+    <p>The value below is marked no capture so we shouldn't copy that</p>
+    <div class='ph-no-capture'>I am a secret</div>
 </div>
 
 <div>
