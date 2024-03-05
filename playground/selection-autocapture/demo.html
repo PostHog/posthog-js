@@ -11,7 +11,7 @@
             posthog.identify('test')
         },
         _onCapture: (event, eventData) => {
-            if (event === '$copy-autocapture') {
+            if (event === '$copy_autocapture') {
                 const selectionType = eventData.properties['$copy_type']
                 const selectionText = eventData.properties['$selected_content']
                 document.getElementById('selection-type-outlet').innerText = selectionType

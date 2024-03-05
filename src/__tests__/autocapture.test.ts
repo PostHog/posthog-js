@@ -667,11 +667,11 @@ describe('Autocapture system', () => {
 
                 setWindowTextSelection('copy this test')
 
-                autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+                autocapture._captureEvent(fakeEvent, lib, '$copy_autocapture')
 
                 const spyArgs = (lib.capture as sinon.SinonSpy).args
                 expect(spyArgs.length).toBe(1)
-                expect(spyArgs[0][0]).toEqual('$copy-autocapture')
+                expect(spyArgs[0][0]).toEqual('$copy_autocapture')
                 expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'copy this test')
                 expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'copy')
             })
@@ -685,11 +685,11 @@ describe('Autocapture system', () => {
 
                 setWindowTextSelection('cut this test')
 
-                autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+                autocapture._captureEvent(fakeEvent, lib, '$copy_autocapture')
 
                 const spyArgs = (lib.capture as sinon.SinonSpy).args
                 expect(spyArgs.length).toBe(1)
-                expect(spyArgs[0][0]).toEqual('$copy-autocapture')
+                expect(spyArgs[0][0]).toEqual('$copy_autocapture')
                 expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'cut this test')
                 expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'cut')
             })
@@ -703,7 +703,7 @@ describe('Autocapture system', () => {
 
                 setWindowTextSelection('')
 
-                autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+                autocapture._captureEvent(fakeEvent, lib, '$copy_autocapture')
 
                 const spyArgs = (lib.capture as sinon.SinonSpy).args
                 expect(spyArgs.length).toBe(0)
@@ -719,7 +719,7 @@ describe('Autocapture system', () => {
                 // oh no, a social security number!
                 setWindowTextSelection('123-45-6789')
 
-                autocapture._captureEvent(fakeEvent, lib, '$copy-autocapture')
+                autocapture._captureEvent(fakeEvent, lib, '$copy_autocapture')
 
                 const spyArgs = (lib.capture as sinon.SinonSpy).args
                 expect(spyArgs.length).toBe(0)

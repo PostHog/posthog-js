@@ -26,6 +26,8 @@ import { _isBoolean, _isFunction, _isNull, _isObject, _isUndefined } from './uti
 import { logger } from './utils/logger'
 import { document, window } from './utils/globals'
 
+const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
+
 function limitText(length: number, text: string): string {
     if (text.length > length) {
         return text.slice(0, length) + '...'
@@ -205,7 +207,7 @@ const autocapture = {
             }
         }
 
-        const isCopyAutocapture = eventName === '$copy-autocapture'
+        const isCopyAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
         if (
             target &&
             shouldCaptureDomEvent(
@@ -297,7 +299,7 @@ const autocapture = {
                 extraProps || {}
             )
 
-            if (eventName === '$copy-autocapture') {
+            if (eventName === COPY_AUTOCAPTURE_EVENT) {
                 // you can't read the data from the clipboard event,
                 // but you can guess that you can read it from the window's current selection
                 const selectedContent = makeSafeText(window?.getSelection()?.toString())
@@ -334,7 +336,7 @@ const autocapture = {
 
         const copiedTextHandler = (e: Event) => {
             e = e || window?.event
-            this._captureEvent(e, instance, '$copy-autocapture')
+            this._captureEvent(e, instance, COPY_AUTOCAPTURE_EVENT)
         }
 
         _register_event(document, 'submit', handler, false, true)
