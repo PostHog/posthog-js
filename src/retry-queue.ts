@@ -63,11 +63,13 @@ export class RetryQueue {
         this.instance._send_request({
             ...options,
             callback: (response) => {
-                if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode > 500)) {
-                    this.enqueue({
-                        ...options,
-                    })
-                    return
+                if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
+                    if ((retriesPerformedSoFar ?? 0) < 10) {
+                        this.enqueue({
+                            ...options,
+                        })
+                        return
+                    }
                 }
 
                 options.callback?.(response)
@@ -77,10 +79,6 @@ export class RetryQueue {
 
     private enqueue(requestOptions: RetriableRequestOptions): void {
         const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
-        if (retriesPerformedSoFar >= 10) {
-            return
-        }
-
         requestOptions.retriesPerformedSoFar = retriesPerformedSoFar + 1
 
         const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)

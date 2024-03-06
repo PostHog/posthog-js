@@ -168,6 +168,47 @@ describe('RetryQueue', () => {
         expect(retryQueuePrivate.queue.length).toEqual(0)
     })
 
+    it('only calls the callback when successful', () => {
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 500 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+        })
+
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 200, text: 'it worked!' })
+        })
+
+        fastForwardTimeAndRunTimer()
+
+        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(cb).toHaveBeenCalledTimes(1)
+        expect(cb).toHaveBeenCalledWith({ statusCode: 200, text: 'it worked!' })
+    })
+
+    it('only calls the callback when retries are exhausted', () => {
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 500 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+            retriesPerformedSoFar: 10,
+        })
+
+        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(cb).toHaveBeenCalledTimes(1)
+        expect(cb).toHaveBeenCalledWith({ statusCode: 500 })
+    })
+
     describe('backoff calculation', () => {
         const retryDelaysOne = Array.from({ length: 10 }, (_, i) => i).map((i) => {
             return pickNextRetryDelay(i + 1)
