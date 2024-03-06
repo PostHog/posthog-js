@@ -1,3 +1,7 @@
+## 1.111.2 - 2024-03-06
+
+- feat: Ensure ingestion domains follow the same logic. (#1049)
+
 ## 1.111.1 - 2024-03-06
 
 - chore: Removed jsc callbacks (#1052)
