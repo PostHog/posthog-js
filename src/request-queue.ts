@@ -26,7 +26,6 @@ export class RequestQueue {
     unload(): void {
         this.clearFlushTimeout()
         const requests = this.queue.length > 0 ? this.formatQueue() : {}
-        this.queue.length = 0
         const requestValues = Object.values(requests)
 
         // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
@@ -64,7 +63,6 @@ export class RequestQueue {
                     }
                     this.sendRequest(req)
                 }
-                this.queue = []
             }
         }, this.flushTimeoutMs)
     }
@@ -86,6 +84,8 @@ export class RequestQueue {
 
             requests[key].data?.push(req.data)
         })
+
+        this.queue = []
         return requests
     }
 }
