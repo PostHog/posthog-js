@@ -351,12 +351,6 @@ export interface ToolbarParams {
     featureFlags?: Record<string, string | boolean>
 }
 
-export interface PostData {
-    buffer?: BlobPart
-    compression?: Compression
-    data?: string
-}
-
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
 export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>

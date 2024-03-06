@@ -65,8 +65,7 @@ import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
-import { SUPPORTS_REQUEST } from './utils/request-utils'
-import { addParamsToURL, request } from './request'
+import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -645,9 +644,9 @@ export class PostHog {
         }
 
         options.transport = options.transport || this.config.api_transport
-        options.url = addParamsToURL(options.url, {
-            // Whether to use IP Anonymization or not
-            ip: this.config.ip,
+        options.url = extendURLParams(options.url, {
+            // Whether to detect ip info or not
+            ip: this.config.ip ? 1 : 0,
         })
         options.headers = this.config.request_headers
 

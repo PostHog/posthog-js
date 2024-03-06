@@ -1,12 +1,15 @@
 import { _base64Encode, _each } from './utils'
 import Config from './config'
 import { Compression, RequestOptions, RequestResponse } from './types'
-import { SUPPORTS_XHR, _formDataToQuery } from './utils/request-utils'
+import { _formDataToQuery } from './utils/request-utils'
 
-import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { fetch, document, window } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
+
+export const SUPPORTS_XHR = !!(XMLHttpRequest && 'withCredentials' in new XMLHttpRequest())
+// eslint-disable-next-line compat/compat
+export const SUPPORTS_REQUEST = SUPPORTS_XHR || !!fetch
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestOptions) => {
@@ -14,7 +17,7 @@ export const request = (_options: RequestOptions) => {
     const options = { ..._options }
     options.timeout = options.timeout || 60000
 
-    options.url = addParamsToURL(options.url, {
+    options.url = extendURLParams(options.url, {
         // TODO: Move the ip to the right place
         // ip: parameterOptions['ip'] ? 1 : 0,
         _: new Date().getTime().toString(),
@@ -40,22 +43,19 @@ export const request = (_options: RequestOptions) => {
     scriptRequest(options)
 }
 
-export const addParamsToURL = (url: string, params: Record<string, any> | undefined): string => {
-    const args = params || {}
+export const extendURLParams = (url: string, params: Record<string, any>): string => {
+    const [baseUrl, search] = url.split('?')
+    const newParams = { ...params }
 
-    const halves = url.split('?')
-    if (halves.length > 1) {
-        const params = halves[1].split('&')
-        for (const p of params) {
-            const key = p.split('=')[0]
-            if (!_isUndefined(args[key])) {
-                delete args[key]
-            }
-        }
-    }
+    search?.split('&').forEach((pair) => {
+        const [key] = pair.split('=')
+        delete newParams[key]
+    })
 
-    const argSeparator = url.indexOf('?') > -1 ? '&' : '?'
-    return url + argSeparator + _formDataToQuery(args)
+    let newSearch = _formDataToQuery(newParams)
+    newSearch = newSearch ? (search ? search + '&' : '') + newSearch : search
+
+    return `${baseUrl}?${newSearch}`
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {

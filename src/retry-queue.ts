@@ -4,7 +4,7 @@ import { _isNumber, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
-import { addParamsToURL } from './request'
+import { extendURLParams } from './request'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -57,7 +57,7 @@ export class RetryQueue {
 
     retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestOptions): void {
         if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
-            options.url = addParamsToURL(options.url, { retry_count: retriesPerformedSoFar })
+            options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
         this.instance._send_request({

@@ -1,11 +1,8 @@
 /* eslint-disable compat/compat */
 /// <reference lib="dom" />
 
-import { addParamsToURL, encodePostData, request } from '../request'
-import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
-import { Compression, PostData, XHROptions, RequestData, MinimalHTTPResponse } from '../types'
-
-import { _isUndefined } from '../utils/type-utils'
+import { extendURLParams, request } from '../request'
+import { Compression, RequestOptions } from '../types'
 
 jest.mock('../utils/request-utils', () => ({
     ...jest.requireActual('../utils/request-utils'),
@@ -21,474 +18,233 @@ jest.mock('../utils/globals', () => ({
 
 import { assignableWindow, fetch } from '../utils/globals'
 
-const mockedFetch = fetch as jest.MockedFunction<any>
-
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
-const flushPromises = () => new Promise((r) => setTimeout(r, 0))
+const flushPromises = async () => {
+    jest.useRealTimers()
+    await new Promise((res) => setTimeout(res, 0))
+    jest.useRealTimers()
+}
 
 describe('request', () => {
+    let mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
+    const mockedXHR = {
+        open: jest.fn(),
+        setRequestHeader: jest.fn(),
+        onreadystatechange: jest.fn(),
+        send: jest.fn(),
+        readyState: 4,
+        responseText: JSON.stringify('something here'),
+        status: 200,
+    }
+
+    const now = 1700000000000
+
+    const mockCallback = jest.fn()
+    let createRequest: (overrides?: Partial<RequestOptions>) => RequestOptions
+    let transport: RequestOptions['transport']
+
+    beforeEach(() => {
+        mockedFetch = fetch as jest.MockedFunction<any>
+        mockedXHR.open.mockClear()
+        // ignore TS complaining about us cramming a fake in here
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        assignableWindow.XMLHttpRequest = jest.fn(() => mockedXHR) as unknown as XMLHttpRequest
+        jest.useFakeTimers()
+        jest.setSystemTime(now)
+
+        createRequest = (overrides) => ({
+            url: 'https://any.posthog-instance.com?ver=1.23.45',
+            data: {},
+            headers: {},
+            callback: mockCallback,
+            transport,
+            ...overrides,
+        })
+    })
+
     describe('xhr', () => {
-        let mockXHR: XMLHttpRequest
-        let createRequestData: (overrides?: Partial<RequestData>) => RequestData
-        let checkForLimiting: RequestData['onResponse']
-
         beforeEach(() => {
-            mockXHR = {
-                open: jest.fn(),
-                setRequestHeader: jest.fn,
-                onreadystatechange: jest.fn(),
-                send: jest.fn(),
-                readyState: 4,
-                responseText: JSON.stringify('something here'),
-                status: 502,
-            } as Partial<XMLHttpRequest> as XMLHttpRequest
-
-            checkForLimiting = jest.fn()
-            createRequestData = (overrides?: Partial<RequestData>) => {
-                return {
-                    url: 'https://any.posthog-instance.com?ver=1.23.45',
-                    data: {},
-                    headers: {},
-                    callback: () => {},
-                    options: {
-                        transport: 'XHR',
-                        ...(overrides?.options || {}),
-                    },
-                    retriesPerformedSoFar: undefined,
-                    retryQueue: {
-                        enqueue: () => {},
-                    } as Partial<RequestData['retryQueue']> as RequestData['retryQueue'],
-                    onResponse: checkForLimiting,
-                    ...overrides,
-                }
-            }
-
-            // ignore TS complaining about us cramming a fake in here
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            assignableWindow.XMLHttpRequest = jest.fn(() => mockXHR) as unknown as XMLHttpRequest
+            transport = 'XHR'
         })
-
-        test('performs the request with default params', () => {
+        it('performs the request with default params', () => {
             request(
-                createRequestData({
-                    retriesPerformedSoFar: 0,
-                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
                 })
             )
-            expect(mockXHR.open).toHaveBeenCalledWith(
+            expect(mockedXHR.open).toHaveBeenCalledWith(
                 'GET',
-                'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
+                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
                 true
             )
         })
 
-        test('it adds the retry count to the URL', () => {
-            const retryCount = Math.floor(Math.random() * 100) + 1 // make sure it is never 0
-            request(
-                createRequestData({
-                    retriesPerformedSoFar: retryCount,
-                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
-                })
-            )
-            expect(mockXHR.open).toHaveBeenCalledWith(
-                'GET',
-                `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278&retry_count=${retryCount}`,
-                true
-            )
-        })
-
-        it('calls the on response handler', async () => {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            // noinspection JSConstantReassignment
-            mockXHR.status = 200
-            request(createRequestData())
-            mockXHR.onreadystatechange?.({} as Event)
-            expect(checkForLimiting).toHaveBeenCalledWith({
-                statusCode: mockXHR.status,
-                responseText: mockXHR.responseText,
+        it('calls the on callback handler when successful', async () => {
+            mockedXHR.status = 200
+            request(createRequest())
+            mockedXHR.onreadystatechange?.({} as Event)
+            expect(mockCallback).toHaveBeenCalledWith({
+                statusCode: 200,
+                json: 'something here',
+                text: '"something here"',
             })
         })
 
-        describe('when the requests fail', () => {
-            it('does not error if the configured onError is not a function', () => {
-                expect(() => {
-                    request(
-                        createRequestData({
-                            onError: 'not a function' as unknown as RequestData['onError'],
-                        })
-                    )
-                    mockXHR.onreadystatechange?.({} as Event)
-                }).not.toThrow()
-            })
-
-            it('calls the injected XHR error handler', () => {
-                //cannot use an auto-mock from jest as the code checks if onError is a Function
-                let requestFromError: MinimalHTTPResponse | undefined
-                request(
-                    createRequestData({
-                        onError: (req) => {
-                            requestFromError = req
-                        },
-                    })
-                )
-                mockXHR.onreadystatechange?.({} as Event)
-                expect(requestFromError).toHaveProperty('statusCode', 502)
-            })
-
-            it('calls the on response handler - regardless of status', () => {
-                // a bunch of comments to suppress a warning
-                // we shouldn't really be able to assign to status but JS is weird
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                // noinspection JSConstantReassignment
-                mockXHR.status = Math.floor(Math.random() * 100)
-                request(createRequestData())
-                mockXHR.onreadystatechange?.({} as Event)
-                expect(checkForLimiting).toHaveBeenCalledWith({
-                    statusCode: mockXHR.status,
-                    responseText: mockXHR.responseText,
-                })
+        it('calls the callback even if json parsing fails', () => {
+            //cannot use an auto-mock from jest as the code checks if onError is a Function
+            request(createRequest())
+            mockedXHR.status = 502
+            mockedXHR.responseText = '{wat'
+            mockedXHR.onreadystatechange?.({} as Event)
+            expect(mockCallback).toHaveBeenCalledWith({
+                statusCode: 502,
+                json: undefined,
+                text: '{wat',
             })
         })
     })
 
     describe('fetch', () => {
-        let createRequestData: (overrides?: Partial<RequestData>) => RequestData
-        let checkForLimiting: RequestData['onResponse']
-
         beforeEach(() => {
-            checkForLimiting = jest.fn()
-            createRequestData = (overrides?: Partial<RequestData>) => {
-                return {
-                    url: 'https://any.posthog-instance.com?ver=1.23.45',
-                    data: {},
-                    headers: {},
-                    callback: () => {},
-                    retriesPerformedSoFar: undefined,
-                    options: {
-                        transport: 'fetch',
-                        ...(overrides?.options || {}),
-                    },
-
-                    retryQueue: {
-                        enqueue: () => {},
-                    } as Partial<RequestData['retryQueue']> as RequestData['retryQueue'],
-                    onResponse: checkForLimiting,
-                    ...overrides,
-                }
-            }
-
+            transport = 'fetch'
             mockedFetch.mockImplementation(() => {
                 return Promise.resolve({
                     status: 200,
-                    json: () => Promise.resolve({}),
-                    text: () => Promise.resolve(''),
+                    text: () => Promise.resolve('{ "a": 1 }'),
                 }) as any
             })
         })
 
-        test('it performs the request with default params', () => {
-            request(
-                createRequestData({
-                    retriesPerformedSoFar: 0,
-                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
-                })
-            )
+        it('performs the request with default params', () => {
+            request(createRequest())
 
-            expect(mockedFetch).toHaveBeenCalledWith(
-                `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278`,
-                {
-                    body: null,
-                    headers: new Headers(),
-                    keepalive: false,
-                    method: 'GET',
-                }
-            )
+            expect(mockedFetch).toHaveBeenCalledWith(`https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`, {
+                body: null,
+                headers: new Headers(),
+                keepalive: false,
+                method: 'GET',
+            })
         })
 
-        test('it adds the retry count to the URL', () => {
-            const retryCount = Math.floor(Math.random() * 100) + 1 // make sure it is never 0
-            request(
-                createRequestData({
-                    retriesPerformedSoFar: retryCount,
-                    url: 'https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278',
-                })
-            )
-            expect(mockedFetch).toHaveBeenCalledWith(
-                `https://any.posthog-instance.com/?ver=1.23.45&ip=7&_=1698404857278&retry_count=${retryCount}`,
-                {
-                    body: null,
-                    headers: new Headers(),
-                    keepalive: false,
-                    method: 'GET',
-                }
-            )
-        })
-
-        it('calls the on response handler', async () => {
-            request(createRequestData())
+        it('calls the callback handler when successful', async () => {
+            request(createRequest())
             await flushPromises()
-            expect(checkForLimiting).toHaveBeenCalledWith({
+
+            expect(mockedFetch).toHaveBeenCalledTimes(1)
+            expect(mockCallback).toHaveBeenCalledWith({
                 statusCode: 200,
-                responseText: '',
+                json: { a: 1 },
+                text: '{ "a": 1 }',
             })
         })
 
-        describe('when the requests fail', () => {
-            beforeEach(() => {
-                mockedFetch.mockImplementation(
-                    () =>
-                        Promise.resolve({
-                            status: 502,
-                            text: () => Promise.resolve('oh no!'),
-                        }) as any
-                )
-            })
+        it('calls the callback even if json parsing fails', async () => {
+            mockedFetch.mockImplementation(
+                () =>
+                    Promise.resolve({
+                        status: 502,
+                        text: () => Promise.resolve('oh no!'),
+                    }) as any
+            )
 
-            it('does not error if the configured onError is not a function', () => {
-                expect(() => {
-                    request(
-                        createRequestData({
-                            onError: 'not a function' as unknown as RequestData['onError'],
-                        })
-                    )
-                }).not.toThrow()
-            })
+            request(createRequest())
+            await flushPromises()
 
-            it('calls the injected XHR error handler', async () => {
-                //cannot use an auto-mock from jest as the code checks if onError is a Function
-                let requestFromError: MinimalHTTPResponse | undefined
-                request(
-                    createRequestData({
-                        onError: (req) => {
-                            requestFromError = req
-                        },
-                    })
-                )
-                await flushPromises()
+            //cannot use an auto-mock from jest as the code checks if onError is a Function
+            expect(mockedFetch).toHaveBeenCalledTimes(1)
 
-                expect(requestFromError).toHaveProperty('statusCode', 502)
-            })
-
-            it('calls the on response handler - regardless of status', async () => {
-                request(createRequestData())
-                await flushPromises()
-                expect(checkForLimiting).toHaveBeenCalledWith({
-                    statusCode: 502,
-                    responseText: 'oh no!',
-                })
+            expect(mockCallback).toHaveBeenCalledWith({
+                statusCode: 502,
+                json: undefined,
+                text: 'oh no!',
             })
         })
     })
 
     describe('adding query params to posthog API calls', () => {
-        let posthogURL: string
-        let parameterOptions: { ip?: boolean }
+        const posthogURL = 'https://any.posthog-instance.com/my-url'
 
-        posthogURL = 'https://any.posthog-instance.com'
-
-        it('adds library version', () => {
-            const alteredURL = addParamsToURL(
-                posthogURL,
-                {},
-                {
-                    ip: true,
-                }
-            )
-            // eslint-disable-next-line compat/compat
-            expect(new URL(alteredURL).search).toContain('&ver=1.23.45')
-        })
-        it('adds i as 1 when IP in config', () => {
-            const alteredURL = addParamsToURL(
-                posthogURL,
-                {},
-                {
-                    ip: true,
-                }
-            )
-            // eslint-disable-next-line compat/compat
-            expect(new URL(alteredURL).search).toContain('ip=1')
-        })
-        it('adds i as 0 when IP not in config', () => {
-            parameterOptions = {}
-            const alteredURL = addParamsToURL(posthogURL, {}, parameterOptions)
-            // eslint-disable-next-line compat/compat
-            expect(new URL(alteredURL).search).toContain('ip=0')
-        })
-        it('adds timestamp', () => {
-            const alteredURL = addParamsToURL(
-                posthogURL,
-                {},
-                {
-                    ip: true,
-                }
-            )
-            // eslint-disable-next-line compat/compat
-            expect(new URL(alteredURL).search).toMatch(/_=\d+/)
-        })
-        it('does not add a query parameter if it already exists in the URL', () => {
-            posthogURL = 'https://test.com/'
-            const whenItShouldAddParam = addParamsToURL(
-                posthogURL,
-                {},
-                {
-                    ip: true,
-                }
-            )
-            expect(whenItShouldAddParam).toContain('ver=1.23.45')
-
-            posthogURL = 'https://test.com/decide/?ver=2'
-            const whenItShouldNotAddParam = addParamsToURL(
-                posthogURL,
-                {},
-                {
-                    ip: true,
-                }
-            )
-            expect(whenItShouldNotAddParam).not.toContain('ver=1.23.45')
-            expect(whenItShouldNotAddParam).toContain('ver=2')
+        it('extends params in a url', () => {
+            const newUrl = extendURLParams(posthogURL, {
+                a: true,
+                b: 1,
+                c: 'encoded string 😘',
+            })
+            expect(newUrl).toEqual(posthogURL + '?a=true&b=1&c=encoded%20string%20%F0%9F%98%98')
         })
 
-        it('does not add the i query parameter if it already exists in the URL', () => {
-            posthogURL = 'https://test.com/'
-            expect(
-                addParamsToURL(
-                    'https://test.com/',
-                    {},
-                    {
-                        ip: true,
-                    }
-                )
-            ).toContain('ip=1')
+        it('does not modify existing query parameters', () => {
+            const newUrl = extendURLParams(posthogURL + '?a=false', {
+                a: true,
+                b: 1,
+                c: 'encoded string 😘',
+            })
+            expect(newUrl).toEqual(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98')
+        })
 
-            expect(
-                addParamsToURL(
-                    'https://test.com/',
-                    {},
-                    {
-                        ip: false,
-                    }
-                )
-            ).toContain('ip=0')
-
-            expect(addParamsToURL('https://test.com/', {}, {})).toContain('ip=0')
-
-            const whenItShouldNotAddParam = addParamsToURL(
-                'https://test.com/decide/?ip=7',
-                {},
-                {
-                    ip: true,
-                }
-            )
-            expect(whenItShouldNotAddParam).not.toContain('ip=1')
-            expect(whenItShouldNotAddParam).toContain('ip=7')
+        it('does not re-encode existing params', () => {
+            const newUrl = extendURLParams(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98', {})
+            expect(newUrl).toEqual(posthogURL + '?a=false&b=1&c=encoded%20string%20%F0%9F%98%98')
         })
     })
 
-    describe('using property based testing to identify edge cases in encodePostData', () => {
-        it('can use many combinations of typed arrays and options to detect if the method generates undefined', () => {
-            assert(
-                property(uint8Array(), boolean(), boolean(), (data, blob, sendBeacon) => {
-                    const encodedData = encodePostData(data, { blob, sendBeacon, method: 'POST' })
-                    return !_isUndefined(encodedData)
-                }),
-                { numRuns: 1000, verbose: VerbosityLevel.VeryVerbose }
-            )
-        })
-
-        it('does not return undefined when blob and send beacon are false and the input is an empty uint8array', () => {
-            const encodedData = encodePostData(new Uint8Array([]), { method: 'POST' })
-            expect(typeof encodedData).toBe('string')
-            expect(encodedData).toBe('data=')
-        })
-    })
-
-    describe('encodePostData()', () => {
-        let data: Uint8Array | PostData
-        let options: Partial<XHROptions>
-
+    describe('body encoding', () => {
         beforeEach(() => {
-            data = { data: 'content' }
-            options = { method: 'POST' }
-
-            // let the spy return things that don't technically ,atch the signature
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            jest.spyOn(global, 'Blob').mockImplementation((...args) => ['Blob', ...args])
+            transport = 'XHR'
         })
 
-        type TestType = [string, Uint8Array | PostData, Partial<XHROptions>, string | BlobPart | null]
-        test.each<TestType>([
-            ['handles objects', { data: 'content' }, { method: 'POST' }, 'data=content'],
-            // JS can pass unexpected types - force the shape here
-            ['handles arrays', ['foo', 'bar'] as unknown as Uint8Array, { method: 'POST' }, 'data=foo%2Cbar'],
-            [
-                'handles data with compression',
-                { data: 'content', compression: Compression.GZipJS },
-                { method: 'POST' },
-                'data=content&compression=gzip-js',
-            ],
-            [
-                'handles string buffer as a blob',
-                { buffer: 'buffer' },
-                { method: 'POST', blob: true },
-                [
-                    'Blob',
-                    ['buffer'],
-                    {
-                        type: 'text/plain',
-                    },
-                ] as unknown as BlobPart, // the mock sends more info than the real Blob
-            ],
-            [
-                'handles sendBeacon',
-                { data: 'content' },
-                { method: 'POST', sendBeacon: true },
-                [
-                    'Blob',
-                    ['data=content'],
-                    {
-                        type: 'application/x-www-form-urlencoded',
-                    },
-                ] as unknown as BlobPart, // the mock sends more info than the real Blob,
-            ],
-            [
-                'handles sendBeacon when data is not a typed array and blob is also true',
-                { data: 'content' },
-                { method: 'POST', sendBeacon: true, blob: true },
-                [
-                    'Blob',
-                    ['data=content'],
-                    {
-                        type: 'application/x-www-form-urlencoded',
-                    },
-                ] as unknown as BlobPart, // the mock sends more info than the real Blob
-            ],
-            [
-                'handles sendBeacon when data is a typed array and blob is also true',
-                new Uint8Array([1, 2, 3, 4]),
-                { method: 'POST', sendBeacon: true, blob: true },
-                [
-                    'Blob',
-                    // TODO in the snapshot versions of this test the content was converted to an empty array
-                    // should it still be a Uint8Array?
-                    [new Uint8Array([1, 2, 3, 4])],
-                    {
-                        type: 'text/plain',
-                    },
-                ] as unknown as BlobPart, // the mock sends more info than the real Blob,,
-            ],
-        ])('handles %s', (_, data, options, expected) => {
-            expect(encodePostData(data, options)).toEqual(expected)
+        it('should encode data to a string', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    data: { data: 'content' },
+                })
+            )
+            expect(mockedXHR.send).toHaveBeenCalledWith('data=%7B%22data%22%3A%22content%22%7D')
+            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/x-www-form-urlencoded')
         })
 
-        it('handles GET requests', () => {
-            options = { method: 'GET' }
+        it('should base64 compress data if set', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    compression: Compression.Base64,
+                    data: { data: 'content' },
+                })
+            )
+            expect(mockedXHR.send).toHaveBeenCalledWith('data=eyJkYXRhIjoiY29udGVudCJ9')
+            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/x-www-form-urlencoded')
+        })
 
-            expect(encodePostData(data, options)).toEqual(null)
+        it('should gzip compress data if set', async () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    compression: Compression.GZipJS,
+                    data: { data: 'contents' },
+                })
+            )
+            expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+            expect(mockedXHR.send.mock.calls[0][0]).toBeInstanceOf(Blob)
+            // Decode and check the blob content
+
+            const res = await new Promise((resolve) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(reader.result)
+                reader.readAsText(mockedXHR.send.mock.calls[0][0])
+            })
+
+            expect(res).toMatchInlineSnapshot(`"�      �VJI,IT�RJ��+I�+)V� ]�   "`)
+
+            expect(mockedXHR.setRequestHeader).not.toHaveBeenCalledWith(
+                'Content-Type',
+                'application/x-www-form-urlencoded'
+            )
         })
     })
 })
