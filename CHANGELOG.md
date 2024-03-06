@@ -1,3 +1,9 @@
+## 1.111.1 - 2024-03-06
+
+- chore: Removed jsc callbacks (#1052)
+- fix: posthog path to ignore (#1054)
+- chore: add some privacy examples to the copy autocapture demo (#1053)
+
 ## 1.111.0 - 2024-03-05
 
 - feat: copy and cut autocapture (#1047)
