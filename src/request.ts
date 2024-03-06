@@ -148,7 +148,6 @@ const _fetch = (options: RequestOptions) => {
         body,
     })
         .then((response) => {
-            // Report to the callback handlers
             return response.text().then((responseText) => {
                 const res: RequestResponse = {
                     statusCode: response.status,
