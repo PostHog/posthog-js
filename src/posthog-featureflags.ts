@@ -21,7 +21,6 @@ import {
 
 import { _isArray } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { request } from './request'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
