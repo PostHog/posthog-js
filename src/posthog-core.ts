@@ -4,6 +4,7 @@ import {
     _each,
     _eachArray,
     _extend,
+    _includes,
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
@@ -551,9 +552,9 @@ export class PostHog {
     _afterDecideResponse(response: DecideResponse) {
         this.compression = undefined
         if (response.supportedCompression && !this.config.disable_compression) {
-            this.compression = response['supportedCompression'].includes(Compression.GZipJS)
+            this.compression = _includes(response['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
-                : response['supportedCompression'].includes(Compression.Base64)
+                : _includes(response['supportedCompression'], Compression.Base64)
                 ? Compression.Base64
                 : undefined
         }
