@@ -77,7 +77,6 @@ describe('RequestQueue', () => {
         queue.unload()
 
         expect(sendRequest).toHaveBeenCalledTimes(3)
-        console.log(jest.mocked(sendRequest).mock.calls)
         expect(sendRequest).toHaveBeenNthCalledWith(1, {
             url: '/e',
             data: [

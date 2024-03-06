@@ -25,7 +25,7 @@ describe('loaded() with flags', () => {
         requestRouter: new RequestRouter({ config: given.config }),
         _start_queue_if_opted_in: jest.fn(),
         persistence: new PostHogPersistence(given.config),
-        _send_request: jest.fn(({ callback }) => callback?.({ status: 200 })),
+        _send_request: jest.fn(({ callback }) => callback?.({ status: 200, json: {} })),
     }))
     given('config', () => ({ loaded: jest.fn(), persistence: 'memory', api_host: 'https://app.posthog.com' }))
 
@@ -44,7 +44,7 @@ describe('loaded() with flags', () => {
         given('overrides', () => ({
             config: given.config,
             capture: jest.fn(),
-            _send_request: jest.fn(({ callback }) => setTimeout(() => callback?.({ status: 200 }), 1000)),
+            _send_request: jest.fn(({ callback }) => setTimeout(() => callback?.({ status: 200, json: {} }), 1000)),
             _start_queue_if_opted_in: jest.fn(),
             persistence: new PostHogPersistence(given.config),
             requestRouter: new RequestRouter({ config: given.config }),
