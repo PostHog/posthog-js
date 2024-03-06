@@ -19,11 +19,19 @@ describe('request-router', () => {
         ['https://us.posthog.com', 'ui', 'https://us.posthog.com'],
         ['https://us.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
         ['https://us.posthog.com', 'api', 'https://us.i.posthog.com'],
+        ['https://us.i.posthog.com', 'api', 'https://us.i.posthog.com'],
+        ['https://us.i.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
+        ['https://us-assets.i.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
+        ['https://us-assets.i.posthog.com', 'api', 'https://us.i.posthog.com'],
 
         // EU domain
         ['https://eu.posthog.com', 'ui', 'https://eu.posthog.com'],
         ['https://eu.posthog.com', 'assets', 'https://eu-assets.i.posthog.com'],
         ['https://eu.posthog.com', 'api', 'https://eu.i.posthog.com'],
+        ['https://eu.i.posthog.com', 'api', 'https://eu.i.posthog.com'],
+        ['https://eu.i.posthog.com', 'assets', 'https://eu-assets.i.posthog.com'],
+        ['https://eu-assets.i.posthog.com', 'assets', 'https://eu-assets.i.posthog.com'],
+        ['https://eu-assets.i.posthog.com', 'api', 'https://eu.i.posthog.com'],
 
         // custom domain
         ['https://my-custom-domain.com', 'ui', 'https://my-custom-domain.com'],
