@@ -7,7 +7,6 @@ import {
     EarlyAccessFeatureResponse,
     Properties,
     JsonType,
-    RequestCallback,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
