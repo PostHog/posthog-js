@@ -7,9 +7,8 @@ import { logger } from './utils/logger'
 import { fetch, document, window, XMLHttpRequest } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
-export const SUPPORTS_XHR = !!(XMLHttpRequest && 'withCredentials' in new XMLHttpRequest())
 // eslint-disable-next-line compat/compat
-export const SUPPORTS_REQUEST = SUPPORTS_XHR || !!fetch
+export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestOptions) => {
@@ -35,7 +34,7 @@ export const request = (_options: RequestOptions) => {
         return _fetch(options)
     }
 
-    if (SUPPORTS_XHR || !document) {
+    if (XMLHttpRequest || !document) {
         return xhr(options)
     }
 
