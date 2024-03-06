@@ -20,7 +20,7 @@ jobs:
                 node-version: '18'
                 cache: 'pnpm'
             - run: pnpm install
-            - run: pnpm test
+            - run: pnpm test:unit
 
     integration:
         name: Cypress
