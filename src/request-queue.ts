@@ -1,7 +1,7 @@
 import { QueuedRequestOptions } from './types'
 import { _each } from './utils'
 
-import { _isUndefined } from './utils/type-utils'
+import { _isArray, _isUndefined } from './utils/type-utils'
 
 export class RequestQueue {
     // We start in a paused state and only start flushing when enabled by the parent
@@ -54,15 +54,14 @@ export class RequestQueue {
                 const requests = this.formatQueue()
                 for (const key in requests) {
                     const req = requests[key]
-                    // const now = new Date().getTime()
+                    const now = new Date().getTime()
 
-                    // if (req.data) {
-                    //     _each(req.data, (_, dataKey) => {
-                    //         // TODO: WWhat is this doing?
-                    //         // req.data[dataKey]['offset'] = Math.abs(req.data[dataKey]['timestamp'] - now)
-                    //         // delete req.data[dataKey]['timestamp']
-                    //     })
-                    // }
+                    if (req.data && _isArray(req.data)) {
+                        _each(req.data, (data) => {
+                            data['offset'] = Math.abs(data['timestamp'] - now)
+                            delete data['timestamp']
+                        })
+                    }
                     this.sendRequest(req)
                 }
                 this.queue = []
