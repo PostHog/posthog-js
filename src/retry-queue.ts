@@ -67,6 +67,7 @@ export class RetryQueue {
                     this.enqueue({
                         ...options,
                     })
+                    return
                 }
 
                 options.callback?.(response)
