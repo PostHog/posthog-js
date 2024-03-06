@@ -7,7 +7,6 @@ import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './con
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window, document, assignableWindow } from './utils/globals'
-import { request } from './request'
 
 export class Decide {
     instance: PostHog
@@ -34,7 +33,7 @@ export class Decide {
                 undefined,
         }
 
-        request({
+        this.instance._send_request({
             method: 'POST',
             url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             data,

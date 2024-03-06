@@ -1,24 +1,23 @@
 import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
-import { _base64Encode } from '../utils'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 
 const expectDecodedSendRequest = (send_request, data) => {
     const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
 
-    const decoded = JSON.parse(atob(lastCall[1].data))
+    const decoded = lastCall[0].data
     // Helper to give us more accurate error messages
     expect(decoded).toEqual(data)
 
-    expect(given.posthog._send_request).toHaveBeenCalledWith(
-        'https://test.com/decide/?v=3',
-        {
-            data: _base64Encode(JSON.stringify(data)),
-            verbose: true,
-        },
-        { method: 'POST', callback: expect.any(Function), noRetries: true }
-    )
+    expect(given.posthog._send_request).toHaveBeenCalledWith({
+        url: 'https://test.com/decide/?v=3',
+        data,
+        method: 'POST',
+        callback: expect.any(Function),
+        compression: 'base64',
+        timeout: undefined,
+    })
 }
 
 describe('Decide', () => {
@@ -33,9 +32,7 @@ describe('Decide', () => {
         _addCaptureHook: jest.fn(),
         _afterDecideResponse: jest.fn(),
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
-        _send_request: jest
-            .fn()
-            .mockImplementation((url, params, { callback }) => callback?.({ config: given.decideResponse })),
+        _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: given.decideResponse })),
         toolbar: {
             maybeLoadToolbar: jest.fn(),
             afterDecideResponse: jest.fn(),

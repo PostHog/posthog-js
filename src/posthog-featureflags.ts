@@ -189,7 +189,7 @@ export class PostHogFeatureFlags {
             disable_flags: this.instance.config.advanced_disable_feature_flags || undefined,
         }
 
-        request({
+        this.instance._send_request({
             method: 'POST',
             url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             data: json_data,
@@ -361,7 +361,7 @@ export class PostHogFeatureFlags {
         const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
 
         if (!existing_early_access_features || force_reload) {
-            request({
+            this.instance._send_request({
                 transport: 'XHR',
                 url: this.instance.requestRouter.endpointFor(
                     'api',

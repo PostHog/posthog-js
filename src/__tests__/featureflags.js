@@ -26,7 +26,7 @@ describe('featureflags', () => {
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+        _send_request: jest.fn().mockImplementation(({ callback }) => callback(given.decideResponse)),
         reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
     }))
 

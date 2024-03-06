@@ -65,11 +65,9 @@ describe('surveys', () => {
             register: (props: Properties) => instance.persistence?.register(props),
             unregister: (key: string) => instance.persistence?.unregister(key),
             get_property: (key: string) => instance.persistence?.props[key],
-            _send_request: jest.fn().mockImplementation((_url, _data, _headers, callback) => callback(surveysResponse)),
+            _send_request: jest.fn().mockImplementation(({ callback }) => callback(surveysResponse)),
             featureFlags: {
-                _send_request: jest
-                    .fn()
-                    .mockImplementation((_url, _data, _headers, callback) => callback(decideResponse)),
+                _send_request: jest.fn().mockImplementation(({ callback }) => callback(decideResponse)),
                 isFeatureEnabled: jest
                     .fn()
                     .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
