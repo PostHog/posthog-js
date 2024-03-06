@@ -4,13 +4,6 @@
 import { extendURLParams, request } from '../request'
 import { Compression, RequestOptions } from '../types'
 
-jest.mock('../utils/request-utils', () => ({
-    ...jest.requireActual('../utils/request-utils'),
-    SUPPORTS_XHR: true,
-    SUPPORTS_FETCH: true,
-    SUPPORTS_REQUEST: true,
-}))
-
 jest.mock('../utils/globals', () => ({
     ...jest.requireActual('../utils/globals'),
     fetch: jest.fn(),
