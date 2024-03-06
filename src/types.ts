@@ -64,7 +64,7 @@ export interface AutocaptureConfig {
 
 export interface PostHogConfig {
     api_host: string
-    /** @deprecated - This porperty is no longer supported */
+    /** @deprecated - This property is no longer supported */
     api_method?: string
     api_transport?: 'XHR' | 'fetch'
     ui_host: string | null
