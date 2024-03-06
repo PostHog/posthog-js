@@ -300,7 +300,7 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
-    compression?: Compression
+    compression?: Compression = Compression.Base64 // Upgrades to gzip if decide response supports it
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: QueuedRequestOptions[]
     __autocapture: boolean | AutocaptureConfig | undefined
