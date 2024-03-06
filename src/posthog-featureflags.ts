@@ -195,16 +195,19 @@ export class PostHogFeatureFlags {
             compression: Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
             callback: (response) => {
+                this.setReloadingPaused(false)
+
                 if (response.statusCode !== 200) {
                     return // or error out??
                 }
                 // reset anon_distinct_id after at least a single request with it
                 // makes it through
                 this.$anon_distinct_id = undefined
-                this.receivedFeatureFlags(response.json as DecideResponse)
+                if (response.json) {
+                    this.receivedFeatureFlags(response.json)
+                }
 
                 // :TRICKY: Reload - start another request if queued!
-                this.setReloadingPaused(false)
                 this._startReloadTimer()
             },
         })

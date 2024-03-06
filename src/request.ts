@@ -116,13 +116,11 @@ const xhr = (options: RequestOptions) => {
                 statusCode: req.status,
                 text: req.responseText,
             }
-            // onResponse?.(minimalResponseSummary)
             if (req.status === 200) {
                 try {
                     response.json = JSON.parse(req.responseText)
                 } catch (e) {
-                    logger.error(e)
-                    return
+                    // logger.error(e)
                 }
             }
 

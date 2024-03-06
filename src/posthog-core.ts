@@ -664,6 +664,8 @@ export class PostHog {
                 if (response.statusCode >= 400) {
                     this.config.on_request_error?.(response)
                 }
+
+                options.callback?.(response)
             },
         })
     }

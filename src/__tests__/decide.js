@@ -157,7 +157,7 @@ describe('Decide', () => {
         })
 
         it('Make sure receivedFeatureFlags is not called if the decide response fails', () => {
-            given('decideResponse', () => ({ status: 0 }))
+            given('decideResponse', () => undefined)
             window.POSTHOG_DEBUG = true
             console.error = jest.fn()
 

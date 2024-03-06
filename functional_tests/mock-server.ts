@@ -1,8 +1,10 @@
 // An MSW server that handles requests to https://app.posthog.com/e/ and stores
 
-import { rest } from 'msw'
+import { ResponseComposition, rest } from 'msw'
 import { setupServer } from 'msw/lib/node'
 import assert from 'assert'
+import { RestContext } from 'msw'
+import { RestRequest } from 'msw'
 
 // the request bodies in a store that we can inspect within tests.
 const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/decide/': any[] } = {
@@ -11,27 +13,39 @@ const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/decide/': any[] } =
     '/decide/': [],
 }
 
-const handleRequest = (group: string) => (req: any, res: any, ctx: any) => {
-    console.log('handleRequest', group, req.url.href, req.body)
+const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
     const body = req.body
     // type guard that body is a string
     if (typeof body !== 'string') {
         assert(false, 'body is not a string')
     }
 
-    const data = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
+    let data
+
+    try {
+        const b64Encoded = req.url.href.includes('compression=base64')
+        if (b64Encoded) {
+            data = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
+        } else {
+            data = JSON.parse(decodeURIComponent(body.split('=')[1]))
+        }
+    } catch (e) {
+        return res(ctx.status(500))
+    }
+
     capturedRequests[group] = [...(capturedRequests[group] || []), data]
-    return res(ctx.status(200))
+
+    return res(ctx.json({}))
 }
 
 const server = setupServer(
-    rest.post('http://localhost/e/', (req: any, res: any, ctx: any) => {
+    rest.post('http://localhost/e/', (req, res, ctx) => {
         return handleRequest('/e/')(req, res, ctx)
     }),
-    rest.post('http://localhost/engage/', (req: any, res: any, ctx: any) => {
+    rest.post('http://localhost/engage/', (req, res, ctx) => {
         return handleRequest('/engage/')(req, res, ctx)
     }),
-    rest.post('http://localhost/decide/', (req: any, res: any, ctx: any) => {
+    rest.post('http://localhost/decide/', (req, res, ctx) => {
         return handleRequest('/decide/')(req, res, ctx)
     })
 )

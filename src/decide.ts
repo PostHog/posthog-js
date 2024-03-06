@@ -39,17 +39,16 @@ export class Decide {
             data,
             compression: Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
-            callback: (response) =>
-                response.json ? this.parseDecideResponse(response.json as DecideResponse) : undefined,
+            callback: (response) => this.parseDecideResponse(response.json as DecideResponse | undefined),
         })
     }
 
-    parseDecideResponse(response: DecideResponse): void {
+    parseDecideResponse(response?: DecideResponse): void {
         this.instance.featureFlags.setReloadingPaused(false)
         // :TRICKY: Reload - start another request if queued!
         this.instance.featureFlags._startReloadTimer()
 
-        if (response?.status === 0) {
+        if (!response) {
             logger.error('Failed to fetch feature flags from PostHog.')
             return
         }

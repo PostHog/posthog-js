@@ -244,7 +244,6 @@ export interface CaptureOptions {
 export type FlagVariant = { flag: string; variant: string }
 
 export interface DecideResponse {
-    status: number
     supportedCompression: Compression[]
     config: {
         enable_collect_everything: boolean
