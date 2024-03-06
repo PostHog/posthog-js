@@ -1,5 +1,5 @@
 import { RequestQueue } from '../request-queue'
-import { CaptureOptions, Properties, QueuedRequestOptions } from '../types'
+import { QueuedRequestOptions } from '../types'
 
 const EPOCH = 1_600_000_000
 
@@ -11,8 +11,7 @@ describe('RequestQueue', () => {
         sendRequest = jest.fn()
         queue = new RequestQueue(sendRequest)
         jest.useFakeTimers()
-
-        jest.setSystemTime(EPOCH)
+        jest.setSystemTime(EPOCH - 3000) // Running the timers will add 3 seconds
         jest.spyOn(console, 'warn').mockImplementation(() => {})
     })
 
