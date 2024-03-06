@@ -65,9 +65,13 @@ describe('surveys', () => {
             register: (props: Properties) => instance.persistence?.register(props),
             unregister: (key: string) => instance.persistence?.unregister(key),
             get_property: (key: string) => instance.persistence?.props[key],
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback(surveysResponse)),
+            _send_request: jest
+                .fn()
+                .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
             featureFlags: {
-                _send_request: jest.fn().mockImplementation(({ callback }) => callback(decideResponse)),
+                _send_request: jest
+                    .fn()
+                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
                 isFeatureEnabled: jest
                     .fn()
                     .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
@@ -99,12 +103,12 @@ describe('surveys', () => {
         surveys.getSurveys((data) => {
             expect(data).toEqual(firstSurveys)
         })
-        expect(instance._send_request).toHaveBeenCalledWith(
-            'https://us.i.posthog.com/api/surveys/?token=testtoken',
-            {},
-            { method: 'GET' },
-            expect.any(Function)
-        )
+        expect(instance._send_request).toHaveBeenCalledWith({
+            url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
+            method: 'GET',
+            transport: 'XHR',
+            callback: expect.any(Function),
+        })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
         expect(instance.persistence?.props.$surveys).toEqual(firstSurveys)
 
@@ -120,12 +124,12 @@ describe('surveys', () => {
         surveys.getSurveys((data) => {
             expect(data).toEqual(firstSurveys)
         })
-        expect(instance._send_request).toHaveBeenCalledWith(
-            'https://us.i.posthog.com/api/surveys/?token=testtoken',
-            {},
-            { method: 'GET' },
-            expect.any(Function)
-        )
+        expect(instance._send_request).toHaveBeenCalledWith({
+            url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
+            method: 'GET',
+            transport: 'XHR',
+            callback: expect.any(Function),
+        })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
         expect(instance.persistence?.props.$surveys).toEqual(firstSurveys)
 

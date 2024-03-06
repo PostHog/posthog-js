@@ -29,7 +29,7 @@ export class PostHogSurveys {
                 method: 'GET',
                 transport: 'XHR',
                 callback: (response) => {
-                    if (!response.json) {
+                    if (response.statusCode !== 200 || !response.json) {
                         return callback([])
                     }
                     const surveys = response.json.surveys || []
