@@ -28,10 +28,7 @@ describe('posthog core', () => {
     describe('capture()', () => {
         given('eventName', () => '$event')
 
-        given(
-            'subject',
-            () => () => given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
-        )
+        given('subject', () => () => given.lib.capture(given.eventName, given.eventProperties, given.options))
 
         given('config', () => ({
             api_host: 'https://app.posthog.com',
@@ -79,6 +76,7 @@ describe('posthog core', () => {
 
         it('adds system time to events', () => {
             const captureData = given.subject()
+            console.log(captureData)
             expect(captureData).toHaveProperty('timestamp')
             // timer is fixed at 2020-01-01
             expect(captureData.timestamp).toEqual(baseUTCDateTime)
@@ -262,9 +260,9 @@ describe('posthog core', () => {
         it('sends payloads to /e/ by default', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://us.i.posthog.com/e/',
-                expect.any(Object),
-                expect.any(Object)
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/e/',
+                })
             )
         })
 
@@ -273,18 +271,18 @@ describe('posthog core', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
 
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://us.i.posthog.com/i/v0/e/',
-                expect.any(Object),
-                expect.any(Object)
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/i/v0/e/',
+                })
             )
         })
 
         it('sends payloads to overriden endpoint if given', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/s/',
-                expect.any(Object),
-                expect.any(Object)
+                expect.objectContaining({
+                    url: 'https://app.posthog.com/s/',
+                })
             )
         })
 
@@ -292,9 +290,9 @@ describe('posthog core', () => {
             given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
             given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/s/',
-                expect.any(Object),
-                expect.any(Object)
+                expect.objectContaining({
+                    url: 'https://app.posthog.com/s/',
+                })
             )
         })
     })
@@ -303,27 +301,25 @@ describe('posthog core', () => {
         given('subject', () => () => given.lib._afterDecideResponse(given.decideResponse))
 
         it('enables compression from decide response', () => {
-            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['gzip-js', 'base64'] }))
             given.subject()
 
-            expect(given.lib.compression['gzip']).toBe(true)
-            expect(given.lib.compression['lz64']).toBe(true)
+            expect(given.lib.compression).toEqual('gzip-js')
         })
 
         it('enables compression from decide response when only one received', () => {
-            given('decideResponse', () => ({ supportedCompression: ['lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['base64'] }))
             given.subject()
 
-            expect(given.lib.compression).not.toHaveProperty('gzip')
-            expect(given.lib.compression['lz64']).toBe(true)
+            expect(given.lib.compression).toEqual('base64')
         })
 
         it('does not enable compression from decide response if compression is disabled', () => {
             given('config', () => ({ disable_compression: true, persistence: 'memory' }))
-            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['gzip-js', 'base64'] }))
             given.subject()
 
-            expect(given.lib.compression).toEqual({})
+            expect(given.lib.compression).toEqual(undefined)
         })
 
         it('defaults to /e if no endpoint is given', () => {

@@ -553,7 +553,7 @@ export class PostHog {
         if (response.supportedCompression && !this.config.disable_compression) {
             this.compression = response['supportedCompression'].includes(Compression.GZipJS)
                 ? Compression.GZipJS
-                : response['supportedCompression'].includes(Compression.GZipJS)
+                : response['supportedCompression'].includes(Compression.Base64)
                 ? Compression.Base64
                 : undefined
         }
@@ -620,6 +620,13 @@ export class PostHog {
     }
 
     _handle_unload(): void {
+        if (!this.config.request_batching) {
+            if (this.config.capture_pageview && this.config.capture_pageleave) {
+                this.capture('$pageleave', null, { transport: 'sendBeacon' })
+            }
+            return
+        }
+
         if (this.config.capture_pageview && this.config.capture_pageleave) {
             this.capture('$pageleave')
         }
@@ -810,18 +817,16 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
-        if (options) {
-            if (event_name === '$identify') {
-                data['$set'] = options['$set']
-                data['$set_once'] = options['$set_once']
-            }
+        if (event_name === '$identify') {
+            data['$set'] = options?.['$set']
+            data['$set_once'] = options?.['$set_once']
+        }
 
-            data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
-            data.timestamp = options.timestamp || new Date()
-            if (!_isUndefined(options.timestamp)) {
-                data.properties['$event_time_override_provided'] = true
-                data.properties['$event_time_override_system_time'] = new Date()
-            }
+        data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
+        data.timestamp = options?.timestamp || new Date()
+        if (!_isUndefined(options?.timestamp)) {
+            data.properties['$event_time_override_provided'] = true
+            data.properties['$event_time_override_system_time'] = new Date()
         }
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
