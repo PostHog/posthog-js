@@ -290,7 +290,7 @@ describe('Event capture', () => {
                 cy.intercept('POST', '**/e/*', async (request) => {
                     expect(request.headers['content-type']).to.eq('text/plain')
                     const captures = await getGzipEncodedPayload(request)
-                    expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event2'])
+                    expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event'])
                 }).as('capture-assertion')
 
                 cy.get('[data-cy-custom-event-button]').click()
