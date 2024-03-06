@@ -91,7 +91,6 @@ let posthog_main: Record<string, PostHog> & {
 
 // some globals for comparisons
 const __NOOP = () => {}
-const __NOOPTIONS = {}
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -834,8 +833,6 @@ export class PostHog {
 
         logger.info('send', data)
 
-        const has_unique_traits = options !== __NOOPTIONS
-
         const requestOptions: QueuedRequestOptions = {
             method: 'POST',
             url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
@@ -844,7 +841,7 @@ export class PostHog {
             batchKey: options?._batchKey,
         }
 
-        if (this.config.request_batching && (!has_unique_traits || options?._batchKey) && !options.send_instantly) {
+        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
             this._requestQueue.enqueue(requestOptions)
         } else {
             this._send_retriable_request(requestOptions)

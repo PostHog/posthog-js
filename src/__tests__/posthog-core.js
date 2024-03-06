@@ -539,29 +539,6 @@ describe('posthog core', () => {
         })
     })
 
-    describe('__compress_and_send_json_request', () => {
-        given(
-            'subject',
-            () => () => given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
-        )
-
-        given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
-
-        given('overrides', () => ({
-            compression: {},
-            _send_request: jest.fn(),
-            config: {},
-        }))
-
-        it('handles base64 compression', () => {
-            given('compression', () => ({}))
-
-            given.subject()
-
-            expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
-        })
-    })
-
     describe('bootstrapping feature flags', () => {
         given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 
@@ -803,7 +780,7 @@ describe('posthog core', () => {
             expect(given.lib.__loaded_recorder_version).toMatch(/^2\./) // start with 2.?.?
         })
 
-        it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
+        it('does not load autocapture, feature flags, toolbar, session recording', () => {
             given('overrides', () => ({
                 sessionRecording: {
                     afterDecideResponse: jest.fn(),
@@ -837,9 +814,6 @@ describe('posthog core', () => {
 
             // Session recording
             expect(given.lib.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
-
-            // Compression
-            expect(given.lib['compression']).toEqual({})
         })
 
         describe('device id behavior', () => {
@@ -1017,9 +991,9 @@ describe('posthog core', () => {
 
                 expect(given.captureQueue).toHaveBeenCalledTimes(1)
 
-                const [, eventPayload] = given.captureQueue.mock.calls[0]
-                expect(eventPayload.event).toEqual('some_event')
-                expect(eventPayload.properties.$groups).toEqual({
+                const eventPayload = given.captureQueue.mock.calls[0][0]
+                expect(eventPayload.data.event).toEqual('some_event')
+                expect(eventPayload.data.properties.$groups).toEqual({
                     organization: 'org::5',
                     instance: 'app.posthog.com',
                 })
