@@ -4,7 +4,7 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { _formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, document, window } from './utils/globals'
+import { fetch, document, window, XMLHttpRequest } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 export const SUPPORTS_XHR = !!(XMLHttpRequest && 'withCredentials' in new XMLHttpRequest())
@@ -91,7 +91,7 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
 }
 
 const xhr = (options: RequestOptions) => {
-    const req = new XMLHttpRequest()
+    const req = new XMLHttpRequest!()
     req.open(options.method || 'GET', options.url, true)
     const body = encodePostData(options)
 
