@@ -575,7 +575,6 @@ describe('Autocapture system', () => {
 
         it('should add the custom property when an element matching any of the event selectors is clicked', () => {
             lib = makePostHog({
-                _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
@@ -752,7 +751,6 @@ describe('Autocapture system', () => {
 
         it('should not capture events when config returns false, when an element matching any of the event selectors is clicked', () => {
             lib = makePostHog({
-                _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
@@ -792,7 +790,6 @@ describe('Autocapture system', () => {
 
         it('should not capture events when config returns true but server setting is disabled', () => {
             lib = makePostHog({
-                _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',

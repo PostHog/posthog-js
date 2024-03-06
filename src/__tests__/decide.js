@@ -33,7 +33,6 @@ describe('Decide', () => {
         capture: jest.fn(),
         _addCaptureHook: jest.fn(),
         _afterDecideResponse: jest.fn(),
-        _prepare_callback: jest.fn().mockImplementation((callback) => callback),
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
         _send_request: jest
             .fn()
