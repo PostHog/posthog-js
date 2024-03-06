@@ -14,9 +14,10 @@ jest.mock('../utils/request-utils', () => ({
 jest.mock('../utils/globals', () => ({
     ...jest.requireActual('../utils/globals'),
     fetch: jest.fn(),
+    XMLHttpRequest: jest.fn(),
 }))
 
-import { assignableWindow, fetch } from '../utils/globals'
+import { fetch, XMLHttpRequest } from '../utils/globals'
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
@@ -27,7 +28,8 @@ const flushPromises = async () => {
 }
 
 describe('request', () => {
-    let mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
+    const mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
+    const mockedXMLHttpRequest: jest.MockedFunction<any> = XMLHttpRequest as jest.MockedFunction<any>
     const mockedXHR = {
         open: jest.fn(),
         setRequestHeader: jest.fn(),
@@ -45,12 +47,9 @@ describe('request', () => {
     let transport: RequestOptions['transport']
 
     beforeEach(() => {
-        mockedFetch = fetch as jest.MockedFunction<any>
         mockedXHR.open.mockClear()
-        // ignore TS complaining about us cramming a fake in here
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        assignableWindow.XMLHttpRequest = jest.fn(() => mockedXHR) as unknown as XMLHttpRequest
+        mockedXMLHttpRequest.mockImplementation(() => mockedXHR)
+
         jest.useFakeTimers()
         jest.setSystemTime(now)
 
