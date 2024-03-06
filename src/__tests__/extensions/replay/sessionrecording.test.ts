@@ -89,7 +89,7 @@ describe('SessionRecording', () => {
     let config: PostHogConfig
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
-    let onFeatureFlagsCallback: ((flags: string[]) => void) | null
+    let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
 
     beforeEach(() => {
         assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
@@ -223,14 +223,14 @@ describe('SessionRecording', () => {
     describe('startRecordingIfEnabled', () => {
         beforeEach(() => {
             // need to cast as any to mock private methods
-            jest.spyOn(sessionRecording as any, 'startCaptureAndTrySendingQueuedSnapshots')
+            jest.spyOn(sessionRecording as any, '_startCapture')
             jest.spyOn(sessionRecording, 'stopRecording')
             jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
         })
 
-        it('call startCaptureAndTrySendingQueuedSnapshots if its enabled', () => {
+        it('call _startCapture if its enabled', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect((sessionRecording as any).startCaptureAndTrySendingQueuedSnapshots).toHaveBeenCalled()
+            expect((sessionRecording as any)._startCapture).toHaveBeenCalled()
         })
 
         it('emits an options event', () => {
@@ -754,13 +754,13 @@ describe('SessionRecording', () => {
             )
         })
 
-        it('loads script after `startCaptureAndTrySendingQueuedSnapshots` if not previously loaded', () => {
+        it('loads script after `_startCapture` if not previously loaded', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false })
 
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).not.toHaveBeenCalled()
 
-            sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+            sessionRecording['_startCapture']()
 
             expect(loadScript).toHaveBeenCalled()
         })
@@ -769,7 +769,7 @@ describe('SessionRecording', () => {
             posthog.config.disable_session_recording = true
 
             sessionRecording.startRecordingIfEnabled()
-            sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+            sessionRecording['_startCapture']()
 
             expect(loadScript).not.toHaveBeenCalled()
         })
@@ -831,7 +831,7 @@ describe('SessionRecording', () => {
                         sessionRecording: { endpoint: '/s/' },
                     })
                 )
-                sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+                sessionRecording['_startCapture']()
             })
 
             it('sends a full snapshot if there is a new session/window id and the event is not type FullSnapshot or Meta', () => {
@@ -894,7 +894,7 @@ describe('SessionRecording', () => {
                     expect(mockCallback).not.toHaveBeenCalled()
 
                     sessionRecording.startRecordingIfEnabled()
-                    sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+                    sessionRecording['_startCapture']()
 
                     expect(mockCallback).toHaveBeenCalledTimes(1)
                 })
@@ -966,7 +966,7 @@ describe('SessionRecording', () => {
                     posthog.sessionManager = sessionManager
 
                     sessionRecording.startRecordingIfEnabled()
-                    sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+                    sessionRecording['_startCapture']()
                 })
 
                 it('takes a full snapshot for the first _emit', () => {
@@ -1385,11 +1385,36 @@ describe('SessionRecording', () => {
 
             expect(onFeatureFlagsCallback).not.toBeNull()
 
-            onFeatureFlagsCallback?.(['the-flag-key'])
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
             expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
             expect(sessionRecording['status']).toEqual('active')
 
-            onFeatureFlagsCallback?.(['different', 'keys'])
+            onFeatureFlagsCallback?.(['different', 'keys'], { different: true, keys: true })
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+        })
+
+        it('can handle linked flags with variants', () => {
+            expect(sessionRecording['_linkedFlag']).toEqual(null)
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', linkedFlag: { flag: 'the-flag-key', variant: 'test-a' } },
+                })
+            )
+
+            expect(sessionRecording['_linkedFlag']).toEqual({ flag: 'the-flag-key', variant: 'test-a' })
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'test-a' })
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
+            expect(sessionRecording['status']).toEqual('active')
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
             expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
             expect(sessionRecording['status']).toEqual('buffering')
         })

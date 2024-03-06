@@ -15,10 +15,16 @@ jest.mock('../gdpr-utils', () => ({
 jest.mock('../decide')
 
 describe('posthog core', () => {
+    const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
+
     given('lib', () => {
         const posthog = _posthog.init('testtoken', given.config, uuidv7())
         posthog.debug()
         return Object.assign(posthog, given.overrides)
+    })
+
+    beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(baseUTCDateTime)
     })
 
     afterEach(() => {
@@ -76,6 +82,22 @@ describe('posthog core', () => {
         it('adds a UUID to each message', () => {
             const captureData = given.subject()
             expect(captureData).toHaveProperty('uuid')
+        })
+
+        it('adds system time to events', () => {
+            const captureData = given.subject()
+            expect(captureData).toHaveProperty('timestamp')
+            // timer is fixed at 2020-01-01
+            expect(captureData.timestamp).toEqual(baseUTCDateTime)
+        })
+
+        it('captures when time is overriden by caller', () => {
+            given.options = { timestamp: new Date(2020, 0, 2, 12, 34) }
+            const captureData = given.subject()
+            expect(captureData).toHaveProperty('timestamp')
+            expect(captureData.timestamp).toEqual(new Date(2020, 0, 2, 12, 34))
+            expect(captureData.properties['$event_time_override_provided']).toEqual(true)
+            expect(captureData.properties['$event_time_override_system_time']).toEqual(baseUTCDateTime)
         })
 
         it('handles recursive objects', () => {

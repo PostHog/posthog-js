@@ -34,7 +34,6 @@ import {
     EarlyAccessFeatureCallback,
     GDPROptions,
     isFeatureEnabledOptions,
-    JSC,
     JsonType,
     OptInOutCapturingOptions,
     PostHogConfig,
@@ -160,7 +159,6 @@ export const defaultConfig = (): PostHogConfig => ({
     _onCapture: __NOOP,
     capture_performance: undefined,
     name: 'posthog',
-    callback_fn: 'posthog._jsc',
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
@@ -208,7 +206,6 @@ export class PostHog {
 
     _triggered_notifs: any
     compression: Partial<Record<Compression, boolean>>
-    _jsc: JSC
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
     __autocapture: boolean | AutocaptureConfig | undefined
@@ -236,7 +233,6 @@ export class PostHog {
         this.__loaded = false
         this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
-        this._jsc = function () {} as JSC
         this.analyticsDefaultEndpoint = '/e/'
         this.elementsChainAsString = false
 
@@ -331,11 +327,8 @@ export class PostHog {
             _extend({}, defaultConfig(), config, {
                 name: name,
                 token: token,
-                callback_fn: (name === PRIMARY_INSTANCE_NAME ? name : PRIMARY_INSTANCE_NAME + '.' + name) + '._jsc',
             })
         )
-
-        this._jsc = function () {} as JSC
 
         // Check if recorder.js is already loaded
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -548,40 +541,6 @@ export class PostHog {
         this.__request_queue = []
 
         this._start_queue_if_opted_in()
-    }
-
-    /**
-     * _prepare_callback() should be called by callers of _send_request for use
-     * as the callback argument.
-     *
-     * If there is no callback, this returns null.
-     * If we are going to make XHR/XDR requests, this returns a function.
-     * If we are going to use script tags, this returns a string to use as the
-     * callback GET param.
-     */
-    // TODO: get rid of the "| string"
-    _prepare_callback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
-        if (_isUndefined(callback)) {
-            return null
-        }
-
-        if (SUPPORTS_REQUEST) {
-            return function (response) {
-                callback(response, data)
-            }
-        }
-
-        // if the user gives us a callback, we store as a random
-        // property on this instances jsc function and update our
-        // callback string to reflect that.
-        const jsc = this._jsc
-        const randomized_cb = '' + Math.floor(Math.random() * 100000000)
-        const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
-        jsc[randomized_cb] = function (response: any) {
-            delete jsc[randomized_cb]
-            callback(response, data)
-        }
-        return callback_string
     }
 
     _handle_unload(): void {
@@ -838,6 +797,10 @@ export class PostHog {
 
         data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
         data.timestamp = options.timestamp || new Date()
+        if (!_isUndefined(options.timestamp)) {
+            data.properties['$event_time_override_provided'] = true
+            data.properties['$event_time_override_system_time'] = new Date()
+        }
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
         // This doesn't handle $set_once, because posthog-people doesn't either

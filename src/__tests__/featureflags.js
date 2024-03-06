@@ -19,7 +19,6 @@ describe('featureflags', () => {
         config,
         get_distinct_id: () => 'blah id',
         getGroups: () => {},
-        _prepare_callback: (callback) => callback,
         persistence: new PostHogPersistence(config),
         requestRouter: new RequestRouter({ config }),
         register: (props) => given.instance.persistence.register(props),

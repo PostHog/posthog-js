@@ -59,9 +59,9 @@ export interface AutocaptureConfig {
      * E.g. ['aria-label'] or [data-attr-pii]
      */
     element_attribute_ignorelist?: string[]
-}
 
-export type UUIDVersion = 'og' | 'v7'
+    capture_copied_text?: boolean
+}
 
 export interface PostHogConfig {
     api_host: string
@@ -128,7 +128,6 @@ export interface PostHogConfig {
     advanced_disable_toolbar_metrics: boolean
     get_device_id: (uuid: string) => string
     name: string
-    callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
@@ -240,6 +239,8 @@ export interface RequestData extends QueuedRequestData {
     onResponse?: (req: MinimalHTTPResponse) => void
 }
 
+export type FlagVariant = { flag: string; variant: string }
+
 export interface DecideResponse {
     status: number
     supportedCompression: Compression[]
@@ -274,7 +275,7 @@ export interface DecideResponse {
         canvasFps?: number | null
         // the API returns a decimal between 0 and 1 as a string
         canvasQuality?: string | null
-        linkedFlag?: string | null
+        linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     }
     surveys?: boolean
@@ -355,11 +356,6 @@ export interface PostData {
     buffer?: BlobPart
     compression?: Compression
     data?: string
-}
-
-export interface JSC {
-    (): void
-    [key: string]: (response: any) => void
 }
 
 export type SnippetArrayItem = [method: string, ...args: any[]]

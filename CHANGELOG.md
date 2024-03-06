@@ -1,3 +1,20 @@
+## 1.111.1 - 2024-03-06
+
+- chore: Removed jsc callbacks (#1052)
+- fix: posthog path to ignore (#1054)
+- chore: add some privacy examples to the copy autocapture demo (#1053)
+
+## 1.111.0 - 2024-03-05
+
+- feat: copy and cut autocapture (#1047)
+- fix: timezones are fun (#1050)
+
+## 1.110.0 - 2024-02-28
+
+- feat: allow linked flag variants to control recording (#1040)
+- feat: reecord when timestamp is overriden by caller (#1033)
+- chore: deprecate property_blacklist in favor of property_denylist (#1044)
+
 ## 1.109.0 - 2024-02-27
 
 - feat: improve user agent detection (#1038)
