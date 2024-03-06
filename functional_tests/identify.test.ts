@@ -6,7 +6,7 @@ import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance
 import { logger } from '../src/utils/logger'
 jest.mock('../src/utils/logger')
 
-describe('FunctiontalTests / Identify', () => {
+describe('FunctionalTests / Identify', () => {
     test('identify sends a identify event', async () => {
         const token = v4()
         const posthog = await createPosthogInstance(token)

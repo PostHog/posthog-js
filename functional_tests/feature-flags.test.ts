@@ -4,7 +4,7 @@ import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance
 import { waitFor } from '@testing-library/dom'
 import { getRequests, resetRequests } from './mock-server'
 
-describe('FunctiontalTests / Feature Flags', () => {
+describe('FunctionalTests / Feature Flags', () => {
     test('person properties set in identify() with new distinct_id are sent to decide', async () => {
         const token = v4()
         const posthog = await createPosthogInstance(token, { advanced_disable_decide: false })
