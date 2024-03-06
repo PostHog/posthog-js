@@ -17,8 +17,6 @@ export const request = (_options: RequestOptions) => {
     options.timeout = options.timeout || 60000
 
     options.url = extendURLParams(options.url, {
-        // TODO: Move the ip to the right place
-        // ip: parameterOptions['ip'] ? 1 : 0,
         _: new Date().getTime().toString(),
         ver: Config.LIB_VERSION,
         compression: options.compression,
