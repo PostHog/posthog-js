@@ -1,7 +1,7 @@
 /* eslint-disable compat/compat */
 /// <reference lib="dom" />
 
-import { addParamsToURL, encodePostData, request } from '../send-request'
+import { addParamsToURL, encodePostData, request } from '../request'
 import { assert, boolean, property, uint8Array, VerbosityLevel } from 'fast-check'
 import { Compression, PostData, XHROptions, RequestData, MinimalHTTPResponse } from '../types'
 
@@ -27,7 +27,7 @@ jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
 const flushPromises = () => new Promise((r) => setTimeout(r, 0))
 
-describe('send-request', () => {
+describe('request', () => {
     describe('xhr', () => {
         let mockXHR: XMLHttpRequest
         let createRequestData: (overrides?: Partial<RequestData>) => RequestData

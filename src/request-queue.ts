@@ -54,10 +54,12 @@ export class RequestQueue {
                 const requests = this.formatQueue()
                 for (const key in requests) {
                     const req = requests[key]
+                    // const now = new Date().getTime()
+
                     // if (req.data) {
                     //     _each(req.data, (_, dataKey) => {
                     //         // TODO: WWhat is this doing?
-                    //         // req.data[dataKey]['offset'] = Math.abs(req.data[dataKey]['timestamp'] - this.getTime())
+                    //         // req.data[dataKey]['offset'] = Math.abs(req.data[dataKey]['timestamp'] - now)
                     //         // delete req.data[dataKey]['timestamp']
                     //     })
                     // }

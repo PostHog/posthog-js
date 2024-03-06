@@ -28,7 +28,7 @@ export function pickNextRetryDelay(retriesPerformedSoFar: number): number {
 }
 
 interface RetryQueueElement {
-    retryAt: Date
+    retryAt: number
     requestOptions: RetriableRequestOptions
 }
 
@@ -66,7 +66,6 @@ export class RetryQueue {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode > 500)) {
                     this.enqueue({
                         ...options,
-                        retriesPerformedSoFar: (retriesPerformedSoFar || 0) + 1,
                     })
                 }
 
@@ -80,8 +79,11 @@ export class RetryQueue {
         if (retriesPerformedSoFar >= 10) {
             return
         }
+
+        requestOptions.retriesPerformedSoFar = retriesPerformedSoFar + 1
+
         const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)
-        const retryAt = new Date(Date.now() + msToNextRetry)
+        const retryAt = Date.now() + msToNextRetry
 
         this.queue.push({ retryAt, requestOptions })
 
@@ -108,11 +110,19 @@ export class RetryQueue {
     }
 
     private flush(): void {
-        // using Date.now to make tests easier, as recommended here https://codewithhugo.com/mocking-the-current-date-in-jest-tests/
-        const now = new Date(Date.now())
-        const toFlush = this.queue.filter(({ retryAt }) => retryAt < now)
+        const now = Date.now()
+        const notToFlush: RetryQueueElement[] = []
+        const toFlush = this.queue.filter((item) => {
+            if (item.retryAt < now) {
+                return true
+            }
+            notToFlush.push(item)
+            return false
+        })
+
+        this.queue = notToFlush
+
         if (toFlush.length > 0) {
-            this.queue = this.queue.filter(({ retryAt }) => retryAt >= now)
             for (const { requestOptions } of toFlush) {
                 this.retriableRequest(requestOptions)
             }
