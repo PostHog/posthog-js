@@ -281,7 +281,6 @@ describe('Event capture', () => {
                 cy.wait('@capture').should(async ({ request }) => {
                     expect(request.url).to.match(urlWithVersion)
 
-                    // TODO: Currently there is a race condition with choosing compression type...
                     const data = await getPayload(request)
                     expect(data['event']).to.equal('$pageview')
                 })
