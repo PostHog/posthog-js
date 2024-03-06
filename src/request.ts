@@ -64,7 +64,6 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
         return null
     }
 
-    // :TRICKY: This returns an UInt8Array. We don't encode this to a string - returning a blob will do this for us.
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
         return new Blob([gzipData], { type: 'text/plain' })
@@ -128,11 +127,6 @@ const xhr = (options: RequestOptions) => {
 }
 
 const _fetch = (options: RequestOptions) => {
-    if (!fetch) {
-        // NOTE: This is just for type checking
-        return
-    }
-
     const body = encodePostData(options)
 
     // eslint-disable-next-line compat/compat
@@ -147,7 +141,7 @@ const _fetch = (options: RequestOptions) => {
 
     const url = options.url
 
-    fetch(url, {
+    fetch!(url, {
         method: options?.method || 'GET',
         headers,
         keepalive: options.method === 'POST',
