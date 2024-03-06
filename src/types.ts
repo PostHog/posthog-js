@@ -12,7 +12,6 @@ export interface CaptureResult {
     $set_once?: Properties
     timestamp?: Date
 }
-export type CaptureCallback = (response: any, data: any) => void
 
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
 export type DomAutocaptureEvents = 'click' | 'change' | 'submit'
@@ -159,7 +158,7 @@ export interface OptInOutCapturingOptions {
     secure_cookie: boolean
 }
 
-export interface isFeatureEnabledOptions {
+export interface IsFeatureEnabledOptions {
     send_event: boolean
 }
 
@@ -294,11 +293,6 @@ export interface AutoCaptureCustomProperty {
     name: string
     css_selector: string
     event_selectors: string[]
-}
-
-export interface CompressionData {
-    data: string
-    compression?: Compression
 }
 
 export interface GDPROptions {

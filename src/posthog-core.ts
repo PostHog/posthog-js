@@ -32,7 +32,7 @@ import {
     DecideResponse,
     EarlyAccessFeatureCallback,
     GDPROptions,
-    isFeatureEnabledOptions,
+    IsFeatureEnabledOptions,
     JsonType,
     OptInOutCapturingOptions,
     PostHogConfig,
@@ -1122,7 +1122,7 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key: string, options?: isFeatureEnabledOptions): boolean | undefined {
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
         return this.featureFlags.isFeatureEnabled(key, options)
     }
 
