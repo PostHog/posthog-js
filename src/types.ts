@@ -286,7 +286,11 @@ export interface DecideResponse {
     siteApps: { id: number; url: string }[]
 }
 
-export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
+export type FeatureFlagsCallback = (
+    flags: string[],
+    variants: Record<string, string | boolean>,
+    errorsLoading?: boolean
+) => void
 
 // TODO: delete custom_properties after changeless typescript refactor
 export interface AutoCaptureCustomProperty {

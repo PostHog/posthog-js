@@ -26,13 +26,16 @@ describe('featureflags', () => {
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest
-            .fn()
-            .mockImplementation(({ callback }) => callback({ statusCode: 200, json: given.decideResponse })),
+        _send_request: jest.fn().mockImplementation(({ callback }) => callback(given.decideResponsePayload)),
         reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
     }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
+
+    given('decideResponsePayload', () => ({
+        statusCode: 200,
+        json: given.decideResponse,
+    }))
 
     beforeEach(() => {
         jest.spyOn(given.instance, 'capture').mockReturnValue()
@@ -226,11 +229,13 @@ describe('featureflags', () => {
             var called = false
             let _flags = []
             let _variants = {}
+            let _error = undefined
 
-            given.featureFlags.onFeatureFlags((flags, variants) => {
+            given.featureFlags.onFeatureFlags((flags, variants, errors) => {
                 called = true
                 _flags = flags
                 _variants = variants
+                _error = errors
             })
             expect(called).toEqual(false)
 
@@ -239,6 +244,7 @@ describe('featureflags', () => {
 
             jest.runAllTimers()
             expect(called).toEqual(true)
+            expect(_error).toEqual(false)
             expect(_flags).toEqual(['first', 'second'])
             expect(_variants).toEqual({
                 first: 'variant-1',
@@ -365,8 +371,11 @@ describe('featureflags', () => {
 
             expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
 
-            given('decideResponse', () => ({
-                earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
+            given('decideResponsePayload', () => ({
+                statusCode: 200,
+                json: {
+                    earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
+                },
             }))
 
             // request again, should call _send_request because we're forcing a reload
@@ -749,6 +758,116 @@ describe('featureflags', () => {
             })
         })
     })
+
+    describe('when decide times out or errors out', () => {
+        given('decideResponsePayload', () => ({
+            statusCode: 500,
+            text: 'Internal Server Error',
+        }))
+
+        it('should not change the existing flags', () => {
+            given.instance.persistence.register({
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'random-feature': 'xatu',
+                },
+            })
+
+            given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'beta-feature': true,
+                'random-feature': 'xatu',
+            })
+        })
+
+        it('should call onFeatureFlags even when decide errors out', () => {
+            var called = false
+            let _flags = []
+            let _variants = {}
+            let _errors = undefined
+
+            given.instance.persistence.register({
+                $enabled_feature_flags: {},
+            })
+
+            given.featureFlags.onFeatureFlags((flags, variants, errors) => {
+                called = true
+                _flags = flags
+                _variants = variants
+                _errors = errors
+            })
+            expect(called).toEqual(false)
+
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+            expect(_errors).toEqual(true)
+            expect(_flags).toEqual([])
+            expect(_variants).toEqual({})
+        })
+
+        it('should call onFeatureFlags with existing flags', () => {
+            var called = false
+            let _flags = []
+            let _variants = {}
+            let _errors = undefined
+
+            given.featureFlags.onFeatureFlags((flags, variants, errors) => {
+                called = true
+                _flags = flags
+                _variants = variants
+                _errors = errors
+            })
+            expect(called).toEqual(false)
+
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+            expect(_errors).toEqual(true)
+            expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+            expect(_variants).toEqual({
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            })
+        })
+
+        it('should call onFeatureFlags with existing flags on timeouts', () => {
+            given('decideResponsePayload', () => ({
+                statusCode: 0,
+                text: '',
+            }))
+
+            var called = false
+            let _flags = []
+            let _variants = {}
+            let _errors = undefined
+
+            given.featureFlags.onFeatureFlags((flags, variants, errors) => {
+                called = true
+                _flags = flags
+                _variants = variants
+                _errors = errors
+            })
+            expect(called).toEqual(false)
+
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+            expect(_errors).toEqual(true)
+            expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+            expect(_variants).toEqual({
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            })
+        })
+    })
 })
 
 describe('parseFeatureFlagDecideResponse', () => {
@@ -796,7 +915,7 @@ describe('parseFeatureFlagDecideResponse', () => {
     })
 
     it('doesnt remove existing feature flags when no flags are returned', () => {
-        given('decideResponse', () => ({ status: 0 }))
+        given('decideResponse', () => ({}))
         given.subject()
 
         expect(given.persistence.register).not.toHaveBeenCalled()
