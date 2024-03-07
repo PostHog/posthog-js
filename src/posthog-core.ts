@@ -791,7 +791,7 @@ export class PostHog {
             return
         }
 
-        if (this.rateLimiter.isCaptureRateLimited()) {
+        if (this.rateLimiter.isCaptureClientSideRateLimited()) {
             logger.critical('This capture call is ignored due to client rate limiting.')
             return
         }

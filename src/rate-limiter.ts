@@ -26,7 +26,7 @@ export class RateLimiter {
         )
     }
 
-    public isCaptureRateLimited(checkOnly = false): boolean {
+    public isCaptureClientSideRateLimited(checkOnly = false): boolean {
         // This is primarily to prevent runaway loops from flooding capture with millions of events for a single user.
         // It's as much for our protection as theirs.
         const now = new Date().getTime()

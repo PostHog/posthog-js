@@ -67,7 +67,7 @@ describe('posthog core', () => {
             __captureHooks: [],
             rateLimiter: {
                 isServerRateLimited: () => false,
-                isCaptureRateLimited: () => false,
+                isCaptureClientSideRateLimited: () => false,
             },
         }))
 
