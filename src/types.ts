@@ -289,7 +289,9 @@ export interface DecideResponse {
 export type FeatureFlagsCallback = (
     flags: string[],
     variants: Record<string, string | boolean>,
-    errorsLoading?: boolean
+    context?: {
+        errorsLoading?: boolean
+    }
 ) => void
 
 // TODO: delete custom_properties after changeless typescript refactor

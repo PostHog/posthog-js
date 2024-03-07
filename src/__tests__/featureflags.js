@@ -235,7 +235,7 @@ describe('featureflags', () => {
                 called = true
                 _flags = flags
                 _variants = variants
-                _error = errors
+                _error = errors?.errorsLoading
             })
             expect(called).toEqual(false)
 
@@ -796,7 +796,7 @@ describe('featureflags', () => {
                 called = true
                 _flags = flags
                 _variants = variants
-                _errors = errors
+                _errors = errors?.errorsLoading
             })
             expect(called).toEqual(false)
 
@@ -819,7 +819,7 @@ describe('featureflags', () => {
                 called = true
                 _flags = flags
                 _variants = variants
-                _errors = errors
+                _errors = errors?.errorsLoading
             })
             expect(called).toEqual(false)
 
@@ -851,7 +851,7 @@ describe('featureflags', () => {
                 called = true
                 _flags = flags
                 _variants = variants
-                _errors = errors
+                _errors = errors?.errorsLoading
             })
             expect(called).toEqual(false)
 

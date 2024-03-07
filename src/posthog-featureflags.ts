@@ -412,7 +412,7 @@ export class PostHogFeatureFlags {
 
     _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
-        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants, errorsLoading))
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants, { errorsLoading }))
     }
 
     /**
