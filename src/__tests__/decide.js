@@ -151,19 +151,19 @@ describe('Decide', () => {
 
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse)
+            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
             expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
         })
 
-        it('Make sure receivedFeatureFlags is not called if the decide response fails', () => {
+        it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
             given('decideResponse', () => undefined)
             window.POSTHOG_DEBUG = true
             console.error = jest.fn()
 
             given.subject()
 
-            expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
+            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, true)
             expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
         })
 

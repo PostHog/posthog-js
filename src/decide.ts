@@ -48,7 +48,16 @@ export class Decide {
         // :TRICKY: Reload - start another request if queued!
         this.instance.featureFlags._startReloadTimer()
 
-        if (!response) {
+        const errorsLoading = !response
+
+        if (
+            !this.instance.config.advanced_disable_feature_flags_on_first_load &&
+            !this.instance.config.advanced_disable_feature_flags
+        ) {
+            this.instance.featureFlags.receivedFeatureFlags(response ?? {}, errorsLoading)
+        }
+
+        if (errorsLoading) {
             logger.error('Failed to fetch feature flags from PostHog.')
             return
         }
@@ -64,13 +73,6 @@ export class Decide {
         this.instance.sessionRecording?.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
         this.instance._afterDecideResponse(response)
-
-        if (
-            !this.instance.config.advanced_disable_feature_flags_on_first_load &&
-            !this.instance.config.advanced_disable_feature_flags
-        ) {
-            this.instance.featureFlags.receivedFeatureFlags(response)
-        }
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
