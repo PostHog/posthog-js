@@ -860,13 +860,9 @@ export class SessionRecording {
     private _captureSnapshot(properties: Properties) {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
-            method: 'POST',
             _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
-            _metrics: {
-                rrweb_full_snapshot: properties.$snapshot_data.type === FULL_SNAPSHOT_EVENT_TYPE,
-            },
         })
     }
 }

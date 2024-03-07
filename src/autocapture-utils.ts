@@ -33,6 +33,25 @@ export function getClassNames(el: Element): string[] {
     return splitClassString(className)
 }
 
+export function makeSafeText(s: string | null | undefined): string | null {
+    if (_isNullish(s)) {
+        return null
+    }
+
+    return (
+        _trim(s)
+            // scrub potentially sensitive values
+            .split(/(\s+)/)
+            .filter(shouldCaptureValue)
+            .join('')
+            // normalize whitespace
+            .replace(/[\r\n]/g, ' ')
+            .replace(/[ ]+/g, ' ')
+            // truncate
+            .substring(0, 255)
+    )
+}
+
 /*
  * Get the direct text content of an element, protecting against sensitive data collection.
  * Concats textContent of each of the element's text node children; this avoids potential
@@ -48,16 +67,7 @@ export function getSafeText(el: Element): string {
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         _each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += _trim(child.textContent)
-                    // scrub potentially sensitive values
-                    .split(/(\s+)/)
-                    .filter(shouldCaptureValue)
-                    .join('')
-                    // normalize whitespace
-                    .replace(/[\r\n]/g, ' ')
-                    .replace(/[ ]+/g, ' ')
-                    // truncate
-                    .substring(0, 255)
+                elText += makeSafeText(child.textContent) ?? ''
             }
         })
     }
@@ -175,12 +185,16 @@ function getParentElement(curEl: Element): Element | false {
  * @param {Element} el - element to check
  * @param {Event} event - event to check
  * @param {Object} autocaptureConfig - autocapture config
+ * @param {boolean} captureOnAnyElement - whether to capture on any element, clipboard autocapture doesn't restrict to "clickable" elements
+ * @param {string[]} allowedEventTypes - event types to capture, normally just 'click', but some autocapture types react to different events, some elements have fixed events (e.g., form has "submit")
  * @returns {boolean} whether the event should be captured
  */
 export function shouldCaptureDomEvent(
     el: Element,
     event: Event,
-    autocaptureConfig: AutocaptureConfig | undefined = undefined
+    autocaptureConfig: AutocaptureConfig | undefined = undefined,
+    captureOnAnyElement?: boolean,
+    allowedEventTypes?: string[]
 ): boolean {
     if (!window || !el || isTag(el, 'html') || !isElementNode(el)) {
         return false
@@ -214,7 +228,7 @@ export function shouldCaptureDomEvent(
         }
         parentNode = getParentElement(curEl)
         if (!parentNode) break
-        if (autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
+        if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
         } else {
             const compStyles = window.getComputedStyle(parentNode)
@@ -245,16 +259,15 @@ export function shouldCaptureDomEvent(
         case 'html':
             return false
         case 'form':
-            return event.type === 'submit'
+            return (allowedEventTypes || ['submit']).indexOf(event.type) >= 0
         case 'input':
-            return event.type === 'change' || event.type === 'click'
         case 'select':
         case 'textarea':
-            return event.type === 'change' || event.type === 'click'
+            return (allowedEventTypes || ['change', 'click']).indexOf(event.type) >= 0
         default:
-            if (parentIsUsefulElement) return event.type === 'click'
+            if (parentIsUsefulElement) return (allowedEventTypes || ['click']).indexOf(event.type) >= 0
             return (
-                event.type === 'click' &&
+                (allowedEventTypes || ['click']).indexOf(event.type) >= 0 &&
                 (autocaptureCompatibleElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true')
             )
     }

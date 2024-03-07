@@ -29,10 +29,7 @@ describe('posthog core', () => {
     describe('capture()', () => {
         given('eventName', () => '$event')
 
-        given(
-            'subject',
-            () => () => given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
-        )
+        given('subject', () => () => given.lib.capture(given.eventName, given.eventProperties, given.options))
 
         given('config', () => ({
             api_host: 'https://app.posthog.com',
@@ -81,6 +78,7 @@ describe('posthog core', () => {
 
         it('adds system time to events', () => {
             const captureData = given.subject()
+            console.log(captureData)
             expect(captureData).toHaveProperty('timestamp')
             // timer is fixed at 2020-01-01
             expect(captureData.timestamp).toEqual(baseUTCDateTime)
@@ -264,10 +262,9 @@ describe('posthog core', () => {
         it('sends payloads to /e/ by default', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://us.i.posthog.com/e/',
-                expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/e/',
+                })
             )
         })
 
@@ -276,20 +273,18 @@ describe('posthog core', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
 
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://us.i.posthog.com/i/v0/e/',
-                expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/i/v0/e/',
+                })
             )
         })
 
         it('sends payloads to overriden endpoint if given', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/s/',
-                expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.objectContaining({
+                    url: 'https://app.posthog.com/s/',
+                })
             )
         })
 
@@ -297,10 +292,9 @@ describe('posthog core', () => {
             given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
             given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/s/',
-                expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.objectContaining({
+                    url: 'https://app.posthog.com/s/',
+                })
             )
         })
     })
@@ -309,27 +303,25 @@ describe('posthog core', () => {
         given('subject', () => () => given.lib._afterDecideResponse(given.decideResponse))
 
         it('enables compression from decide response', () => {
-            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['gzip-js', 'base64'] }))
             given.subject()
 
-            expect(given.lib.compression['gzip']).toBe(true)
-            expect(given.lib.compression['lz64']).toBe(true)
+            expect(given.lib.compression).toEqual('gzip-js')
         })
 
         it('enables compression from decide response when only one received', () => {
-            given('decideResponse', () => ({ supportedCompression: ['lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['base64'] }))
             given.subject()
 
-            expect(given.lib.compression).not.toHaveProperty('gzip')
-            expect(given.lib.compression['lz64']).toBe(true)
+            expect(given.lib.compression).toEqual('base64')
         })
 
         it('does not enable compression from decide response if compression is disabled', () => {
             given('config', () => ({ disable_compression: true, persistence: 'memory' }))
-            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['gzip-js', 'base64'] }))
             given.subject()
 
-            expect(given.lib.compression).toEqual({})
+            expect(given.lib.compression).toEqual(undefined)
         })
 
         it('defaults to /e if no endpoint is given', () => {
@@ -542,29 +534,6 @@ describe('posthog core', () => {
 
                 expect(given.overrides.capture).not.toHaveBeenCalled()
             })
-        })
-    })
-
-    describe('__compress_and_send_json_request', () => {
-        given(
-            'subject',
-            () => () => given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
-        )
-
-        given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
-
-        given('overrides', () => ({
-            compression: {},
-            _send_request: jest.fn(),
-            config: {},
-        }))
-
-        it('handles base64 compression', () => {
-            given('compression', () => ({}))
-
-            given.subject()
-
-            expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
         })
     })
 
@@ -809,7 +778,7 @@ describe('posthog core', () => {
             expect(given.lib.__loaded_recorder_version).toMatch(/^2\./) // start with 2.?.?
         })
 
-        it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
+        it('does not load autocapture, feature flags, toolbar, session recording', () => {
             given('overrides', () => ({
                 sessionRecording: {
                     afterDecideResponse: jest.fn(),
@@ -843,9 +812,6 @@ describe('posthog core', () => {
 
             // Session recording
             expect(given.lib.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
-
-            // Compression
-            expect(given.lib['compression']).toEqual({})
         })
 
         describe('device id behavior', () => {
@@ -1023,9 +989,9 @@ describe('posthog core', () => {
 
                 expect(given.captureQueue).toHaveBeenCalledTimes(1)
 
-                const [, eventPayload] = given.captureQueue.mock.calls[0]
-                expect(eventPayload.event).toEqual('some_event')
-                expect(eventPayload.properties.$groups).toEqual({
+                const eventPayload = given.captureQueue.mock.calls[0][0]
+                expect(eventPayload.data.event).toEqual('some_event')
+                expect(eventPayload.data.properties.$groups).toEqual({
                     organization: 'org::5',
                     instance: 'app.posthog.com',
                 })

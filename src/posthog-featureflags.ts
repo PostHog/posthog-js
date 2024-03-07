@@ -1,4 +1,4 @@
-import { _base64Encode, _entries, _extend } from './utils'
+import { _entries, _extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
     DecideResponse,
@@ -7,7 +7,7 @@ import {
     EarlyAccessFeatureResponse,
     Properties,
     JsonType,
-    RequestCallback,
+    Compression,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -178,7 +178,7 @@ export class PostHogFeatureFlags {
         const token = this.instance.config.token
         const personProperties = this.instance.get_property(STORED_PERSON_PROPERTIES_KEY)
         const groupProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY)
-        const json_data = JSON.stringify({
+        const json_data = {
             token: token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
@@ -186,24 +186,31 @@ export class PostHogFeatureFlags {
             person_properties: personProperties,
             group_properties: groupProperties,
             disable_flags: this.instance.config.advanced_disable_feature_flags || undefined,
-        })
+        }
 
-        const encoded_data = _base64Encode(json_data)
-        this.instance._send_request(
-            this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
-            { data: encoded_data },
-            { method: 'POST' },
-            this.instance._prepare_callback((response) => {
+        this.instance._send_request({
+            method: 'POST',
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            data: json_data,
+            compression: Compression.Base64,
+            timeout: this.instance.config.feature_flag_request_timeout_ms,
+            callback: (response) => {
+                this.setReloadingPaused(false)
+
+                if (response.statusCode !== 200) {
+                    return // or error out??
+                }
                 // reset anon_distinct_id after at least a single request with it
                 // makes it through
                 this.$anon_distinct_id = undefined
-                this.receivedFeatureFlags(response as DecideResponse)
+                if (response.json) {
+                    this.receivedFeatureFlags(response.json)
+                }
 
                 // :TRICKY: Reload - start another request if queued!
-                this.setReloadingPaused(false)
                 this._startReloadTimer()
-            }) as RequestCallback
-        )
+            },
+        })
     }
 
     /*
@@ -356,19 +363,22 @@ export class PostHogFeatureFlags {
         const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
 
         if (!existing_early_access_features || force_reload) {
-            this.instance._send_request(
-                this.instance.requestRouter.endpointFor(
+            this.instance._send_request({
+                transport: 'XHR',
+                url: this.instance.requestRouter.endpointFor(
                     'api',
                     `/api/early_access_features/?token=${this.instance.config.token}`
                 ),
-                {},
-                { method: 'GET' },
-                (response) => {
-                    const earlyAccessFeatures = (response as EarlyAccessFeatureResponse).earlyAccessFeatures
+                method: 'GET',
+                callback: (response) => {
+                    if (!response.json) {
+                        return
+                    }
+                    const earlyAccessFeatures = (response.json as EarlyAccessFeatureResponse).earlyAccessFeatures
                     this.instance.persistence?.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
                     return callback(earlyAccessFeatures)
-                }
-            )
+                },
+            })
         } else {
             return callback(existing_early_access_features)
         }

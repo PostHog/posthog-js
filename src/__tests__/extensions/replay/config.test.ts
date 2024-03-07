@@ -150,7 +150,14 @@ describe('config', () => {
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/i/vo/e/',
+                        name: 'https://app.posthog.com/i/v0/e/',
+                    },
+                    undefined,
+                ],
+                [
+                    {
+                        // even an imaginary future world of rust session replay capture
+                        name: 'https://app.posthog.com/i/v0/s/',
                     },
                     undefined,
                 ],

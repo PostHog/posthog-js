@@ -1,128 +1,131 @@
 import { RequestQueue } from '../request-queue'
-import { CaptureOptions, Properties, XHROptions } from '../types'
+import { QueuedRequestOptions } from '../types'
 
 const EPOCH = 1_600_000_000
 
 describe('RequestQueue', () => {
-    let handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void
+    let sendRequest: (options: QueuedRequestOptions) => void
     let queue: RequestQueue
 
     beforeEach(() => {
-        handlePollRequest = jest.fn()
-        queue = new RequestQueue(handlePollRequest)
+        sendRequest = jest.fn()
+        queue = new RequestQueue(sendRequest)
         jest.useFakeTimers()
-
-        jest.spyOn(queue, 'getTime').mockReturnValue(EPOCH)
+        jest.setSystemTime(EPOCH - 3000) // Running the timers will add 3 seconds
         jest.spyOn(console, 'warn').mockImplementation(() => {})
     })
 
     it('handles poll after enqueueing requests', () => {
-        queue.enqueue('/e', { event: 'foo', timestamp: EPOCH - 3000 }, { transport: 'XHR' })
-        queue.enqueue('/identify', { event: '$identify', timestamp: EPOCH - 2000 }, {})
-        queue.enqueue('/e', { event: 'bar', timestamp: EPOCH - 1000 }, {})
-        queue.enqueue('/e', { event: 'zeta', timestamp: EPOCH }, {
-            _batchKey: 'sessionRecording',
-        } as CaptureOptions as XHROptions)
+        queue.enqueue({
+            data: { event: 'foo', timestamp: EPOCH - 3000 },
+            transport: 'XHR',
+            url: '/e',
+        })
+        queue.enqueue({
+            data: { event: '$identify', timestamp: EPOCH - 2000 },
+            url: '/identify',
+        })
+        queue.enqueue({
+            data: { event: 'bar', timestamp: EPOCH - 1000 },
+            url: '/e',
+        })
+        queue.enqueue({
+            data: { event: 'zeta', timestamp: EPOCH },
+            url: '/e',
+            batchKey: 'sessionRecording',
+        })
 
-        queue.poll()
+        queue.enable()
 
-        expect(handlePollRequest).toHaveBeenCalledTimes(0)
+        expect(sendRequest).toHaveBeenCalledTimes(0)
 
         jest.runOnlyPendingTimers()
 
-        expect(handlePollRequest).toHaveBeenCalledTimes(3)
-        expect(jest.mocked(handlePollRequest).mock.calls).toEqual([
+        expect(sendRequest).toHaveBeenCalledTimes(3)
+        expect(jest.mocked(sendRequest).mock.calls).toEqual([
             [
-                '/e',
-                [
-                    { event: 'foo', offset: 3000 },
-                    { event: 'bar', offset: 1000 },
-                ],
-                { transport: 'XHR' },
-            ],
-            ['/identify', [{ event: '$identify', offset: 2000 }], {}],
-            [
-                '/e',
-                [{ event: 'zeta', offset: 0 }],
                 {
-                    _batchKey: 'sessionRecording',
+                    url: '/e',
+                    data: [
+                        { event: 'foo', offset: 3000 },
+                        { event: 'bar', offset: 1000 },
+                    ],
+                    transport: 'XHR',
+                },
+            ],
+            [
+                {
+                    url: '/identify',
+                    data: [{ event: '$identify', offset: 2000 }],
+                },
+            ],
+            [
+                {
+                    url: '/e',
+                    data: [{ event: 'zeta', offset: 0 }],
+                    batchKey: 'sessionRecording',
                 },
             ],
         ])
     })
 
-    it('clears polling flag after 4 empty iterations', () => {
-        queue.enqueue('/e', { event: 'foo', timestamp: EPOCH - 3000 }, {})
-
-        for (let i = 0; i < 5; i++) {
-            queue.poll()
-            jest.runOnlyPendingTimers()
-
-            expect(queue.isPolling).toEqual(true)
-        }
-
-        queue.poll()
-        jest.runOnlyPendingTimers()
-
-        expect(queue.isPolling).toEqual(false)
-    })
-
     it('handles unload', () => {
-        queue.enqueue('/s', { recording_payload: 'example' }, {})
-        queue.enqueue('/e', { event: 'foo', timestamp: 1_610_000_000 }, {})
-        queue.enqueue('/identify', { event: '$identify', timestamp: 1_620_000_000 }, {})
-        queue.enqueue('/e', { event: 'bar', timestamp: 1_630_000_000 }, {})
-
+        queue.enqueue({ url: '/s', data: { recording_payload: 'example' } })
+        queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 } })
+        queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: 1_620_000_000 } })
+        queue.enqueue({ url: '/e', data: { event: 'bar', timestamp: 1_630_000_000 } })
         queue.unload()
 
-        expect(handlePollRequest).toHaveBeenCalledTimes(3)
-        expect(handlePollRequest).toHaveBeenNthCalledWith(
-            1,
-            '/e',
-            [
+        expect(sendRequest).toHaveBeenCalledTimes(3)
+        expect(sendRequest).toHaveBeenNthCalledWith(1, {
+            url: '/e',
+            data: [
                 { event: 'foo', timestamp: 1_610_000_000 },
                 { event: 'bar', timestamp: 1_630_000_000 },
             ],
-            { transport: 'sendBeacon' }
-        )
-        expect(handlePollRequest).toHaveBeenNthCalledWith(2, '/s', [{ recording_payload: 'example' }], {
             transport: 'sendBeacon',
         })
-        expect(handlePollRequest).toHaveBeenNthCalledWith(
-            3,
-            '/identify',
-            [{ event: '$identify', timestamp: 1_620_000_000 }],
-            { transport: 'sendBeacon' }
-        )
+
+        expect(sendRequest).toHaveBeenNthCalledWith(2, {
+            url: '/s',
+            data: [{ recording_payload: 'example' }],
+            transport: 'sendBeacon',
+        })
+        expect(sendRequest).toHaveBeenNthCalledWith(3, {
+            url: '/identify',
+            data: [{ event: '$identify', timestamp: 1_620_000_000 }],
+            transport: 'sendBeacon',
+        })
     })
 
     it('handles unload with batchKeys', () => {
-        queue.enqueue('/e', { event: 'foo', timestamp: 1_610_000_000 }, { transport: 'XHR' })
-        queue.enqueue('/identify', { event: '$identify', timestamp: 1_620_000_000 }, {})
-        queue.enqueue('/e', { event: 'bar', timestamp: 1_630_000_000 }, {})
-        queue.enqueue('/e', { event: 'zeta', timestamp: 1_640_000_000 }, {
-            _batchKey: 'sessionRecording',
-        } as CaptureOptions as XHROptions)
+        queue.enqueue({ url: '/e', data: { event: 'foo', timestamp: 1_610_000_000 }, transport: 'XHR' })
+        queue.enqueue({ url: '/identify', data: { event: '$identify', timestamp: 1_620_000_000 } })
+        queue.enqueue({ url: '/e', data: { event: 'bar', timestamp: 1_630_000_000 } })
+        queue.enqueue({ url: '/e', data: { event: 'zeta', timestamp: 1_640_000_000 }, batchKey: 'sessionRecording' })
 
         queue.unload()
 
-        expect(handlePollRequest).toHaveBeenCalledTimes(3)
-        expect(handlePollRequest).toHaveBeenCalledWith(
-            '/e',
-            [
-                { event: 'foo', timestamp: 1_610_000_000 },
-                { event: 'bar', timestamp: 1_630_000_000 },
+        expect(sendRequest).toHaveBeenCalledTimes(3)
+
+        expect(sendRequest).toHaveBeenNthCalledWith(1, {
+            data: [
+                { event: 'foo', timestamp: 1610000000 },
+                { event: 'bar', timestamp: 1630000000 },
             ],
-            { transport: 'sendBeacon' }
-        )
-        expect(handlePollRequest).toHaveBeenCalledWith(
-            '/identify',
-            [{ event: '$identify', timestamp: 1_620_000_000 }],
-            { transport: 'sendBeacon' }
-        )
-        expect(handlePollRequest).toHaveBeenCalledWith('/e', [{ event: 'zeta', timestamp: 1_640_000_000 }], {
-            _batchKey: 'sessionRecording',
             transport: 'sendBeacon',
+            url: '/e',
+        })
+        expect(sendRequest).toHaveBeenNthCalledWith(2, {
+            batchKey: 'sessionRecording',
+            data: [{ event: 'zeta', timestamp: 1640000000 }],
+            transport: 'sendBeacon',
+            url: '/e',
+        })
+        expect(sendRequest).toHaveBeenNthCalledWith(3, {
+            data: [{ event: '$identify', timestamp: 1620000000 }],
+            transport: 'sendBeacon',
+            url: '/identify',
         })
     })
 })

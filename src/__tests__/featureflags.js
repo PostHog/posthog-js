@@ -19,7 +19,6 @@ describe('featureflags', () => {
         config,
         get_distinct_id: () => 'blah id',
         getGroups: () => {},
-        _prepare_callback: (callback) => callback,
         persistence: new PostHogPersistence(config),
         requestRouter: new RequestRouter({ config }),
         register: (props) => given.instance.persistence.register(props),
@@ -27,7 +26,9 @@ describe('featureflags', () => {
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+        _send_request: jest
+            .fn()
+            .mockImplementation(({ callback }) => callback({ statusCode: 200, json: given.decideResponse })),
         reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
     }))
 
@@ -328,12 +329,12 @@ describe('featureflags', () => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
 
-            expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
-                {},
-                { method: 'GET' },
-                expect.any(Function)
-            )
+            expect(given.instance._send_request).toHaveBeenCalledWith({
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
+                method: 'GET',
+                transport: 'XHR',
+                callback: expect.any(Function),
+            })
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
@@ -354,12 +355,12 @@ describe('featureflags', () => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
 
-            expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
-                {},
-                { method: 'GET' },
-                expect.any(Function)
-            )
+            expect(given.instance._send_request).toHaveBeenCalledWith({
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
+                method: 'GET',
+                callback: expect.any(Function),
+                transport: 'XHR',
+            })
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
@@ -442,9 +443,7 @@ describe('featureflags', () => {
             given.featureFlags.reloadFeatureFlags()
             jest.runAllTimers()
             // check the request sent person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {
@@ -474,9 +473,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent $anon_distinct_id
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
@@ -496,9 +493,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent $anon_distinct_id
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
@@ -509,9 +504,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request didn't send $anon_distinct_id the second time around
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[1][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[1][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 // $anon_distinct_id: "rando_id"
@@ -521,9 +514,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request didn't send $anon_distinct_id the second time around
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[2][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[2][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 // $anon_distinct_id: "rando_id"
@@ -541,9 +532,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: { a: 'b', c: 'd' },
@@ -609,9 +598,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: { a: 'b', c: 'e', x: 'y' },
@@ -646,9 +633,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request did not send person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
             })
@@ -670,9 +655,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 group_properties: { orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } },

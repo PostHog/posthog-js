@@ -68,12 +68,12 @@ const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetwor
     return data
 }
 
-const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/vo/e/']
+const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/']
 // want to ignore posthog paths when capturing requests, or we can get trapped in a loop
 // because calls to PostHog would be reported using a call to PostHog which would be reported....
 const ignorePostHogPaths = (data: CapturedNetworkRequest): CapturedNetworkRequest | undefined => {
     const url = convertToURL(data.name)
-    if (url && url.pathname && POSTHOG_PATHS_TO_IGNORE.includes(url.pathname)) {
+    if (url && url.pathname && POSTHOG_PATHS_TO_IGNORE.some((path) => url.pathname.indexOf(path) === 0)) {
         return undefined
     }
     return data

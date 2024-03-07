@@ -1,304 +1,212 @@
 /* eslint-disable compat/compat */
 
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
-import * as SendRequest from '../send-request'
-import { RateLimiter } from '../rate-limiter'
-import { SESSION_RECORDING_BATCH_KEY } from '../extensions/replay/sessionrecording'
 import { assignableWindow } from '../utils/globals'
-import { CaptureOptions } from '../types'
-
-const EPOCH = 1_600_000_000
-const defaultRequestOptions: CaptureOptions = {
-    method: 'POST',
-    transport: 'XHR',
-}
 
 describe('RetryQueue', () => {
-    const onRequestError = jest.fn().mockImplementation(console.error)
-    const mockPostHog = { config: {} } as any
-    const rateLimiter = new RateLimiter(mockPostHog)
+    const mockPosthog = {
+        _send_request: jest.fn(),
+    }
     let retryQueue: RetryQueue
-
-    const xhrMockClass = () => ({
-        open: jest.fn(),
-        send: jest.fn(),
-        setRequestHeader: jest.fn(),
-        status: 418,
-    })
+    let retryQueuePrivate: any
+    let now = Date.now()
 
     beforeEach(() => {
-        retryQueue = new RetryQueue(onRequestError, rateLimiter)
-        assignableWindow.XMLHttpRequest = jest.fn().mockImplementation(xhrMockClass)
-        assignableWindow.navigator.sendBeacon = jest.fn()
+        retryQueue = new RetryQueue(mockPosthog as any)
+        retryQueuePrivate = retryQueue as any
 
         jest.useFakeTimers()
-        jest.spyOn(retryQueue, 'getTime').mockReturnValue(EPOCH)
+        jest.setSystemTime(now)
         jest.spyOn(assignableWindow.console, 'warn').mockImplementation()
-        rateLimiter.serverLimits = {}
     })
 
-    const fastForwardTimeAndRunTimer = () => {
-        jest.spyOn(global.Date, 'now').mockImplementationOnce(() => new Date().getTime() + 3500)
+    const fastForwardTimeAndRunTimer = (time = 3500) => {
+        now += time
+        jest.setSystemTime(now)
         jest.runOnlyPendingTimers()
     }
 
     const enqueueRequests = () => {
-        retryQueue.enqueue({
-            url: '/e',
-            data: { event: 'foo', timestamp: EPOCH - 3000 },
-            options: defaultRequestOptions,
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            // Force a retry
+            callback?.({ statusCode: 502 })
         })
-        retryQueue.enqueue({
+
+        retryQueue.retriableRequest({
             url: '/e',
-            data: { event: 'bar', timestamp: EPOCH - 2000 },
-            options: defaultRequestOptions,
+            data: { event: 'foo', timestamp: now - 3000 },
         })
-        retryQueue.enqueue({
+        retryQueue.retriableRequest({
             url: '/e',
-            data: { event: 'baz', timestamp: EPOCH - 1000 },
-            options: defaultRequestOptions,
+            data: { event: 'bar', timestamp: now - 2000 },
         })
-        retryQueue.enqueue({
+        retryQueue.retriableRequest({
             url: '/e',
-            data: { event: 'fizz', timestamp: EPOCH },
-            options: defaultRequestOptions,
+            data: { event: 'baz', timestamp: now - 1000 },
         })
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'fizz', timestamp: now },
+        })
+
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 200 })
+        })
+
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        mockPosthog._send_request.mockClear()
     }
 
     it('processes retry requests', () => {
         enqueueRequests()
 
-        expect(retryQueue.queue.length).toEqual(4)
-
-        expect(retryQueue.queue).toEqual([
+        expect(retryQueuePrivate.queue.length).toEqual(4)
+        expect(retryQueuePrivate.queue).toEqual([
             {
-                requestData: {
+                requestOptions: {
                     url: '/e',
-                    data: { event: 'foo', timestamp: EPOCH - 3000 },
-                    options: defaultRequestOptions,
+                    data: { event: 'foo', timestamp: now - 3000 },
+                    retriesPerformedSoFar: 1,
                 },
-                retryAt: expect.any(Date),
+                retryAt: expect.any(Number),
             },
             {
-                requestData: {
+                requestOptions: {
                     url: '/e',
-                    data: { event: 'bar', timestamp: EPOCH - 2000 },
-                    options: defaultRequestOptions,
+                    data: { event: 'bar', timestamp: now - 2000 },
+                    retriesPerformedSoFar: 1,
                 },
-                retryAt: expect.any(Date),
+                retryAt: expect.any(Number),
             },
             {
-                requestData: {
+                requestOptions: {
                     url: '/e',
-                    data: { event: 'baz', timestamp: EPOCH - 1000 },
-                    options: defaultRequestOptions,
+                    data: { event: 'baz', timestamp: now - 1000 },
+                    retriesPerformedSoFar: 1,
                 },
-                retryAt: expect.any(Date),
+                retryAt: expect.any(Number),
             },
             {
-                requestData: {
+                requestOptions: {
                     url: '/e',
-                    data: { event: 'fizz', timestamp: EPOCH },
-                    options: defaultRequestOptions,
+                    data: { event: 'fizz', timestamp: now },
+                    retriesPerformedSoFar: 1,
                 },
-                retryAt: expect.any(Date),
+                retryAt: expect.any(Number),
             },
         ])
 
-        expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(0)
-
-        fastForwardTimeAndRunTimer()
+        // Fast forward enough time to clear the jitter
+        fastForwardTimeAndRunTimer(3500)
 
         // clears queue
-        expect(retryQueue.queue.length).toEqual(0)
-
-        expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(4)
-        expect(onRequestError).toHaveBeenCalledTimes(0)
+        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        // Check the retry count is added
+        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+        ])
     })
 
-    it('does not process event retry requests when events are rate limited', () => {
-        rateLimiter.serverLimits = {
-            events: new Date().getTime() + 10_000,
-        }
+    it('adds the retry_count to the url', () => {
+        enqueueRequests()
+        fastForwardTimeAndRunTimer(3500)
 
-        retryQueue.enqueue({
-            url: '/e',
-            data: { event: 'baz', timestamp: EPOCH - 1000 },
-            options: defaultRequestOptions,
-        })
-        retryQueue.enqueue({
-            url: '/e',
-            data: { event: 'baz', timestamp: EPOCH - 500 },
-            options: defaultRequestOptions,
-        })
-        retryQueue.enqueue({
-            url: '/s',
-            data: { event: 'fizz', timestamp: EPOCH },
-            options: { ...defaultRequestOptions, _batchKey: SESSION_RECORDING_BATCH_KEY },
-        })
-
-        expect(retryQueue.queue.length).toEqual(3)
-        expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(0)
-
-        fastForwardTimeAndRunTimer()
-
-        // clears queue
-        expect(retryQueue.queue.length).toEqual(0)
-        expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(1)
-        expect(onRequestError).toHaveBeenCalledTimes(0)
-    })
-
-    it('does not process recording retry requests when they are rate limited', () => {
-        rateLimiter.serverLimits = {
-            [SESSION_RECORDING_BATCH_KEY]: new Date().getTime() + 10_000,
-        }
-
-        retryQueue.enqueue({
-            url: '/e',
-            data: { event: 'baz', timestamp: EPOCH - 1000 },
-            options: defaultRequestOptions,
-        })
-        retryQueue.enqueue({
-            url: '/e',
-            data: { event: 'baz', timestamp: EPOCH - 500 },
-            options: defaultRequestOptions,
-        })
-        retryQueue.enqueue({
-            url: '/s',
-            data: { event: 'fizz', timestamp: EPOCH },
-            options: { ...defaultRequestOptions, _batchKey: SESSION_RECORDING_BATCH_KEY },
-        })
-
-        expect(retryQueue.queue.length).toEqual(3)
-        expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(0)
-
-        fastForwardTimeAndRunTimer()
-
-        // clears queue
-        expect(retryQueue.queue.length).toEqual(0)
-        expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(2)
-        expect(onRequestError).toHaveBeenCalledTimes(0)
+        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+            '/e?retry_count=1',
+        ])
     })
 
     it('tries to send requests via beacon on unload', () => {
         enqueueRequests()
 
-        retryQueue.poll()
         retryQueue.unload()
 
-        expect(retryQueue.queue.length).toEqual(0)
-        expect(assignableWindow.navigator.sendBeacon).toHaveBeenCalledTimes(4)
-    })
-
-    it('does not try to send requests via beacon on unload when rate limited', () => {
-        rateLimiter.serverLimits = {
-            events: new Date().getTime() + 10_000,
-        }
-        enqueueRequests()
-
-        retryQueue.unload()
-
-        expect(retryQueue.queue.length).toEqual(0)
-        expect(assignableWindow.navigator.sendBeacon).toHaveBeenCalledTimes(0)
-    })
-
-    it('when you flush the queue onError is passed to xhr', () => {
-        const xhrSpy = jest.spyOn(SendRequest, 'request')
-        enqueueRequests()
-        retryQueue.flush()
-        fastForwardTimeAndRunTimer()
-        expect(xhrSpy).toHaveBeenCalledWith(expect.objectContaining({ onError: onRequestError }))
-    })
-
-    it('enqueues requests when offline and flushes immediately when online again', () => {
-        retryQueue.areWeOnline = false
-        expect(retryQueue.areWeOnline).toEqual(false)
-
-        enqueueRequests()
-
-        fastForwardTimeAndRunTimer()
-
-        // requests aren't attempted when we're offline
-        expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(0)
-        // doesn't log that it is offline from the retry queue
-        expect(onRequestError).toHaveBeenCalledTimes(0)
-
-        // queue stays the same
-        expect(retryQueue.queue.length).toEqual(4)
-
-        retryQueue._handleWeAreNowOnline()
-
-        expect(retryQueue.areWeOnline).toEqual(true)
-        expect(retryQueue.queue.length).toEqual(0)
-
-        expect(assignableWindow.XMLHttpRequest).toHaveBeenCalledTimes(4)
-    })
-
-    it('retries using an exponential backoff mechanism', () => {
-        const fixedDate = new Date('2021-05-31T00:00:00')
-        jest.spyOn(global.Date, 'now').mockImplementation(() => fixedDate.getTime())
-
-        retryQueue.enqueue({
-            url: '/e',
-            data: { event: '1retry', timestamp: EPOCH },
-            options: defaultRequestOptions,
-            retriesPerformedSoFar: 1,
-        })
-
-        retryQueue.enqueue({
-            url: '/e',
-            data: { event: '5retries', timestamp: EPOCH },
-            options: defaultRequestOptions,
-            retriesPerformedSoFar: 5,
-        })
-
-        retryQueue.enqueue({
-            url: '/e',
-            data: { event: '9retries', timestamp: EPOCH },
-            options: defaultRequestOptions,
-            retriesPerformedSoFar: 9,
-        })
-
-        expect(retryQueue.queue).toEqual([
-            {
-                requestData: {
-                    url: '/e',
-                    data: { event: '1retry', timestamp: EPOCH },
-                    options: defaultRequestOptions,
-                    retriesPerformedSoFar: 1,
-                },
-                retryAt: expect.any(Date),
-            },
-            {
-                requestData: {
-                    url: '/e',
-                    data: { event: '5retries', timestamp: EPOCH },
-                    options: defaultRequestOptions,
-                    retriesPerformedSoFar: 5,
-                },
-                retryAt: expect.any(Date),
-            },
-            {
-                requestData: {
-                    url: '/e',
-                    data: { event: '9retries', timestamp: EPOCH },
-                    options: defaultRequestOptions,
-                    retriesPerformedSoFar: 9,
-                },
-                retryAt: expect.any(Date),
-            },
+        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+        expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.transport)).toEqual([
+            'sendBeacon',
+            'sendBeacon',
+            'sendBeacon',
+            'sendBeacon',
         ])
     })
 
+    it('enqueues requests when offline and flushes immediately when online again', () => {
+        retryQueuePrivate.areWeOnline = false
+        expect(retryQueuePrivate.areWeOnline).toEqual(false)
+
+        enqueueRequests()
+        fastForwardTimeAndRunTimer()
+
+        // requests aren't attempted when we're offline
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(0)
+
+        // queue stays the same
+        expect(retryQueuePrivate.queue.length).toEqual(4)
+
+        window.dispatchEvent(new Event('online'))
+
+        expect(retryQueuePrivate.areWeOnline).toEqual(true)
+        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
+    })
+
     it('does not enqueue a request after 10 retries', () => {
-        retryQueue.enqueue({
+        retryQueue.retriableRequest({
             url: '/e',
-            data: { event: 'maxretries', timestamp: EPOCH },
-            options: defaultRequestOptions,
+            data: { event: 'maxretries', timestamp: now },
             retriesPerformedSoFar: 10,
         })
 
-        expect(retryQueue.queue.length).toEqual(0)
+        expect(retryQueuePrivate.queue.length).toEqual(0)
+    })
+
+    it('only calls the callback when successful', () => {
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 500 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+        })
+
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 200, text: 'it worked!' })
+        })
+
+        fastForwardTimeAndRunTimer()
+
+        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(cb).toHaveBeenCalledTimes(1)
+        expect(cb).toHaveBeenCalledWith({ statusCode: 200, text: 'it worked!' })
+    })
+
+    it('only calls the callback when retries are exhausted', () => {
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 500 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+            retriesPerformedSoFar: 10,
+        })
+
+        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(cb).toHaveBeenCalledTimes(1)
+        expect(cb).toHaveBeenCalledWith({ statusCode: 500 })
     })
 
     describe('backoff calculation', () => {

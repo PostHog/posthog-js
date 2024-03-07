@@ -573,11 +573,9 @@ describe('SessionRecording', () => {
                     $window_id: 'windowId',
                 },
                 {
-                    method: 'POST',
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _metrics: expect.anything(),
                 }
             )
         })
@@ -610,11 +608,9 @@ describe('SessionRecording', () => {
                     ],
                 },
                 {
-                    method: 'POST',
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _metrics: expect.anything(),
                 }
             )
         })
@@ -694,11 +690,9 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 59,
                 },
                 {
-                    method: 'POST',
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _metrics: expect.anything(),
                 }
             )
 
@@ -1355,10 +1349,8 @@ describe('SessionRecording', () => {
                 },
                 {
                     _batchKey: 'recordings',
-                    _metrics: { rrweb_full_snapshot: false },
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
-                    method: 'POST',
                 }
             )
             expect(sessionRecording['buffer']).toEqual({

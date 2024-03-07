@@ -21,16 +21,22 @@ export class PostHogSurveys {
     getSurveys(callback: SurveyCallback, forceReload = false) {
         const existingSurveys = this.instance.get_property(SURVEYS)
         if (!existingSurveys || forceReload) {
-            this.instance._send_request(
-                this.instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this.instance.config.token}`),
-                {},
-                { method: 'GET' },
-                (response) => {
-                    const surveys = response.surveys || []
+            this.instance._send_request({
+                url: this.instance.requestRouter.endpointFor(
+                    'api',
+                    `/api/surveys/?token=${this.instance.config.token}`
+                ),
+                method: 'GET',
+                transport: 'XHR',
+                callback: (response) => {
+                    if (response.statusCode !== 200 || !response.json) {
+                        return callback([])
+                    }
+                    const surveys = response.json.surveys || []
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
                     return callback(surveys)
-                }
-            )
+                },
+            })
         } else {
             return callback(existingSurveys)
         }
