@@ -117,6 +117,7 @@ describe('request', () => {
                 headers: new Headers(),
                 keepalive: false,
                 method: 'GET',
+                signal: expect.any(AbortSignal),
             })
         })
 

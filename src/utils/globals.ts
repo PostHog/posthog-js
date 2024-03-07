@@ -23,6 +23,7 @@ export const location = global?.location
 export const fetch = global?.fetch
 export const XMLHttpRequest =
     global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
+export const AbortController = global?.AbortController
 export const userAgent = navigator?.userAgent
 export const assignableWindow: Window & typeof globalThis & Record<string, any> = win ?? ({} as any)
 

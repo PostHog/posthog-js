@@ -4,7 +4,7 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { _formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, document, window, XMLHttpRequest } from './utils/globals'
+import { fetch, document, window, XMLHttpRequest, AbortController } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
@@ -140,12 +140,22 @@ const _fetch = (options: RequestOptions) => {
     }
 
     const url = options.url
+    let aborter: { signal: any; timeout: number } | null = null
+
+    if (AbortController) {
+        const controller = new AbortController()
+        aborter = {
+            signal: controller.signal,
+            timeout: setTimeout(() => controller.abort(), options.timeout),
+        }
+    }
 
     fetch!(url, {
         method: options?.method || 'GET',
         headers,
         keepalive: options.method === 'POST',
         body,
+        signal: aborter?.signal,
     })
         .then((response) => {
             return response.text().then((responseText) => {
@@ -169,6 +179,7 @@ const _fetch = (options: RequestOptions) => {
             logger.error(error)
             options.callback?.({ statusCode: 0, text: error })
         })
+        .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
 
     return
 }
