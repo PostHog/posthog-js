@@ -654,6 +654,7 @@ export class PostHog {
         options.url = extendURLParams(options.url, {
             // Whether to detect ip info or not
             ip: this.config.ip ? 1 : 0,
+            // TODO: Add client side rate limiting info here?
         })
         options.headers = this.config.request_headers
 
