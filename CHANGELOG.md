@@ -1,3 +1,7 @@
+## 1.111.3 - 2024-03-07
+
+- chore: Rework SDK initialisation (#1023)
+
 ## 1.111.2 - 2024-03-06
 
 - feat: Ensure ingestion domains follow the same logic. (#1049)
