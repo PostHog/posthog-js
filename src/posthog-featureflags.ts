@@ -44,37 +44,39 @@ export const parseFeatureFlagDecideResponse = (
 ) => {
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
-    if (flags) {
-        // using the v1 api
-        if (_isArray(flags)) {
-            const $enabled_feature_flags: Record<string, boolean> = {}
-            if (flags) {
-                for (let i = 0; i < flags.length; i++) {
-                    $enabled_feature_flags[flags[i]] = true
-                }
-            }
-            persistence &&
-                persistence.register({
-                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
-                    [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
-                })
-        } else {
-            // using the v2+ api
-            let newFeatureFlags = flags
-            let newFeatureFlagPayloads = flagPayloads
-            if (response.errorsWhileComputingFlags) {
-                // if not all flags were computed, we upsert flags instead of replacing them
-                newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-                newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
-            }
-            persistence &&
-                persistence.register({
-                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
-                    [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
-                    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
-                })
-        }
+    if (!flags) {
+        return
     }
+    // using the v1 api
+    if (_isArray(flags)) {
+        const $enabled_feature_flags: Record<string, boolean> = {}
+        if (flags) {
+            for (let i = 0; i < flags.length; i++) {
+                $enabled_feature_flags[flags[i]] = true
+            }
+        }
+        persistence &&
+            persistence.register({
+                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
+                [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+            })
+        return
+    }
+
+    // using the v2+ api
+    let newFeatureFlags = flags
+    let newFeatureFlagPayloads = flagPayloads
+    if (response.errorsWhileComputingFlags) {
+        // if not all flags were computed, we upsert flags instead of replacing them
+        newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
+        newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+    }
+    persistence &&
+        persistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
+            [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
+        })
 }
 
 export class PostHogFeatureFlags {
