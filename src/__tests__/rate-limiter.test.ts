@@ -18,7 +18,7 @@ describe('Rate Limiter', () => {
 
     beforeEach(() => {
         jest.useFakeTimers()
-        jest.spyOn(window.console, 'error').mockImplementation()
+        jest.spyOn(window!.console, 'error').mockImplementation()
 
         const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
         systemTime = baseUTCDateTime.getTime()
