@@ -125,10 +125,10 @@ const limitPayloadSize = (
     }
 }
 
-const forbiddenText = ['password']
+const payloadContentDenyList = ['password']
 
 function scrubPayloads(capturedRequest: CapturedNetworkRequest) {
-    forbiddenText.forEach((text) => {
+    payloadContentDenyList.forEach((text) => {
         if (capturedRequest.requestBody?.length && capturedRequest.requestBody?.indexOf(text) !== -1) {
             capturedRequest.requestBody = '[SessionReplay] Request body contained password'
         }
