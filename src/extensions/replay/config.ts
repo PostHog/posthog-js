@@ -4,7 +4,6 @@ import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 import { shouldCaptureValue } from '../../autocapture-utils'
 import { LOGGER_PREFIX } from './sessionrecording'
-import { _each } from '../../utils'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
     initiatorTypes: [
@@ -79,7 +78,7 @@ const PAYLOAD_CONTENT_DENY_LIST = [
 
 // we always remove headers on the deny list because we never want to capture this sensitive data
 const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
-    _each(Object.keys(data.requestHeaders ?? {}), (header) => {
+    Object.keys(data.requestHeaders ?? {}).forEach((header) => {
         if (HEADER_DENY_LIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
     })
     return data
@@ -151,7 +150,7 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     if (!shouldCaptureValue(scrubbed, false)) {
         scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted'
     }
-    _each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
+    PAYLOAD_CONTENT_DENY_LIST.forEach((text) => {
         if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
             scrubbed = LOGGER_PREFIX + ' ' + label + ' body might contain: ' + text
         }
