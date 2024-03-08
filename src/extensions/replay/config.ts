@@ -1,5 +1,5 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../types'
-import { _isFunction, _isNullish, _isString } from '../../utils/type-utils'
+import { _isFunction, _isNullish, _isString, _isUndefined } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 import { shouldCaptureValue } from '../../autocapture-utils'
@@ -160,7 +160,11 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     return scrubbed
 }
 
-function scrubPayloads(capturedRequest: CapturedNetworkRequest) {
+function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): CapturedNetworkRequest | undefined {
+    if (_isUndefined(capturedRequest)) {
+        return undefined
+    }
+
     capturedRequest.requestBody = scrubPayload(capturedRequest.requestBody, 'Request')
     capturedRequest.responseBody = scrubPayload(capturedRequest.responseBody, 'Response')
 
@@ -186,7 +190,7 @@ export const buildNetworkRequestOptions = (
     const payloadLimiter = limitPayloadSize(config)
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
-        payloadLimiter(ignorePostHogPaths(scrubPayloads(removeAuthorizationHeader(d))))
+        scrubPayloads(payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d))))
 
     const hasDeprecatedMaskFunction = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
 
