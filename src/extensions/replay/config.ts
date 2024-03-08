@@ -130,11 +130,11 @@ const payloadContentDenyList = ['password']
 function scrubPayloads(capturedRequest: CapturedNetworkRequest) {
     payloadContentDenyList.forEach((text) => {
         if (capturedRequest.requestBody?.length && capturedRequest.requestBody?.indexOf(text) !== -1) {
-            capturedRequest.requestBody = '[SessionReplay] Request body contained password'
+            capturedRequest.requestBody = '[SessionReplay] Request body contained: ' + text
         }
 
         if (capturedRequest.responseBody?.length && capturedRequest.responseBody?.indexOf(text) !== -1) {
-            capturedRequest.responseBody = '[SessionReplay] Response body contained password'
+            capturedRequest.responseBody = '[SessionReplay] Response body contained: ' + text
         }
     })
     return capturedRequest
