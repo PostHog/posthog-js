@@ -573,6 +573,7 @@ export class PostHog {
             ip: this.config.ip ? 1 : 0,
         })
         options.headers = this.config.request_headers
+        options.compression = options.compression === 'best-available' ? this.compression : options.compression
 
         request({
             ...options,
@@ -762,7 +763,7 @@ export class PostHog {
             method: 'POST',
             url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
             data,
-            compression: this.compression,
+            compression: 'best-available',
             batchKey: options?._batchKey,
         }
 
