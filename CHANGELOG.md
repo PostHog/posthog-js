@@ -1,3 +1,8 @@
+## 1.112.0 - 2024-03-08
+
+- feat: Refactor request logic (#1055)
+- feat: Add more ad ids (#1057)
+
 ## 1.111.3 - 2024-03-07
 
 - chore: Rework SDK initialisation (#1023)
