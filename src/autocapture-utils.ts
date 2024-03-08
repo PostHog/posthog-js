@@ -42,7 +42,7 @@ export function makeSafeText(s: string | null | undefined): string | null {
         _trim(s)
             // scrub potentially sensitive values
             .split(/(\s+)/)
-            .filter(shouldCaptureValue)
+            .filter((s) => shouldCaptureValue(s))
             .join('')
             // normalize whitespace
             .replace(/[\r\n]/g, ' ')
