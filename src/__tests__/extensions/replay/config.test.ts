@@ -121,7 +121,7 @@ describe('config', () => {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
-                    requestBody: '[SessionReplay] Request body too large to record (1000001 bytes)',
+                    requestBody: '[SessionRecording] Request body too large to record (1000001 bytes)',
                 })
             })
 
@@ -141,7 +141,7 @@ describe('config', () => {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
-                    responseBody: '[SessionReplay] Response body too large to record (1000001 bytes)',
+                    responseBody: '[SessionRecording] Response body too large to record (1000001 bytes)',
                 })
             })
 
@@ -177,7 +177,7 @@ describe('config', () => {
                     requestHeaders: {
                         'content-type': 'application/json',
                     },
-                    requestBody: '[SessionReplay] Request body too large to record (1000001 bytes)',
+                    requestBody: '[SessionRecording] Request body too large to record (1000001 bytes)',
                 })
             })
         })
@@ -245,8 +245,8 @@ describe('config', () => {
                 requestHeaders: {
                     'content-type': 'application/json',
                 },
-                requestBody: '[SessionReplay] Request body might contain: password',
-                responseBody: '[SessionReplay] Response body might contain: password',
+                requestBody: '[SessionRecording] Request body might contain: password',
+                responseBody: '[SessionRecording] Response body might contain: password',
             })
         })
 
@@ -277,8 +277,8 @@ describe('config', () => {
                 requestHeaders: {
                     'content-type': 'edited',
                 },
-                requestBody: '[SessionReplay] Request body might contain: password',
-                responseBody: '[SessionReplay] Response body might contain: password',
+                requestBody: '[SessionRecording] Request body might contain: password',
+                responseBody: '[SessionRecording] Response body might contain: password',
             })
         })
 
@@ -315,8 +315,8 @@ describe('config', () => {
                 requestHeaders: {
                     'content-type': 'application/json',
                 },
-                requestBody: '[SessionReplay] Request body redacted',
-                responseBody: '[SessionReplay] Response body redacted',
+                requestBody: '[SessionRecording] Request body redacted',
+                responseBody: '[SessionRecording] Response body redacted',
             })
         })
     })

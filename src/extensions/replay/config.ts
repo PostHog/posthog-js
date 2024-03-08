@@ -141,21 +141,21 @@ const limitPayloadSize = (
     }
 }
 
-function scrubPayload(
-    requestBody: string | null | undefined,
-    label: 'Request' | 'Response'
-): string | null | undefined {
-    let scrubbed = requestBody
-    if (scrubbed) {
-        if (!shouldCaptureValue(scrubbed, false)) {
-            scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted'
-        }
-        PAYLOAD_CONTENT_DENY_LIST.forEach((text) => {
-            if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
-                scrubbed = LOGGER_PREFIX + ' ' + label + ' body might contain: ' + text
-            }
-        })
+function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Response'): string | null | undefined {
+    if (_isNullish(payload)) {
+        return payload
     }
+    let scrubbed = payload
+
+    if (!shouldCaptureValue(scrubbed, false)) {
+        scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted'
+    }
+    PAYLOAD_CONTENT_DENY_LIST.forEach((text) => {
+        if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
+            scrubbed = LOGGER_PREFIX + ' ' + label + ' body might contain: ' + text
+        }
+    })
+
     return scrubbed
 }
 
