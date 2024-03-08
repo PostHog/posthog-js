@@ -45,18 +45,6 @@ describe('config', () => {
                 })
             })
 
-            it('should cope with no headers when even if no other config is set', () => {
-                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
-                const cleaned = networkOptions.maskRequestFn!({
-                    name: 'something',
-                    requestHeaders: undefined,
-                })
-                expect(cleaned).toEqual({
-                    name: 'something',
-                    requestHeaders: undefined,
-                })
-            })
-
             it('should remove the Authorization header from requests even when a mask request fn is set', () => {
                 const posthogConfig = defaultConfig()
                 posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
@@ -82,6 +70,71 @@ describe('config', () => {
                     requestHeaders: {
                         'content-type': 'edited',
                     },
+                })
+            })
+
+            it('should redact password when no masking config is set', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        Authorization: 'Bearer 123',
+                        'content-type': 'application/json',
+                    },
+                    requestBody: 'some body with password',
+                    responseBody: 'some body with password',
+                })
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'application/json',
+                    },
+                    requestBody: '[SessionReplay] Request body contained password',
+                    responseBody: '[SessionReplay] Response body contained password',
+                })
+            })
+
+            it('should redact password even when a mask request fn is set', () => {
+                const posthogConfig = defaultConfig()
+                posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
+                    return {
+                        ...data,
+                        requestHeaders: {
+                            ...(data.requestHeaders ? data.requestHeaders : {}),
+                            'content-type': 'edited',
+                        },
+                    }
+                }
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: {
+                        Authorization: 'Bearer 123',
+                        'content-type': 'application/json',
+                    },
+                    requestBody: 'some body with password',
+                    responseBody: 'some body with password',
+                })
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: {
+                        'content-type': 'edited',
+                    },
+                    requestBody: '[SessionReplay] Request body contained password',
+                    responseBody: '[SessionReplay] Response body contained password',
+                })
+            })
+
+            it('should cope with no headers when even if no other config is set', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                const cleaned = networkOptions.maskRequestFn!({
+                    name: 'something',
+                    requestHeaders: undefined,
+                })
+                expect(cleaned).toEqual({
+                    name: 'something',
+                    requestHeaders: undefined,
                 })
             })
 

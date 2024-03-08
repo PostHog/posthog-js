@@ -125,6 +125,21 @@ const limitPayloadSize = (
     }
 }
 
+const forbiddenText = ['password']
+
+function scrubPayloads(capturedRequest: CapturedNetworkRequest) {
+    forbiddenText.forEach((text) => {
+        if (capturedRequest.requestBody?.length && capturedRequest.requestBody?.indexOf(text) !== -1) {
+            capturedRequest.requestBody = '[SessionReplay] Request body contained password'
+        }
+
+        if (capturedRequest.responseBody?.length && capturedRequest.responseBody?.indexOf(text) !== -1) {
+            capturedRequest.responseBody = '[SessionReplay] Response body contained password'
+        }
+    })
+    return capturedRequest
+}
+
 /**
  *  whether a maskRequestFn is provided or not,
  *  we ensure that we remove the denied header from requests
@@ -144,7 +159,7 @@ export const buildNetworkRequestOptions = (
     const payloadLimiter = limitPayloadSize(config)
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
-        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d)))
+        payloadLimiter(ignorePostHogPaths(scrubPayloads(removeAuthorizationHeader(d))))
 
     const hasDeprecatedMaskFunction = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
 
