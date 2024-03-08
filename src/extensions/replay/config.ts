@@ -3,8 +3,9 @@ import { _isFunction, _isNullish, _isString, _isUndefined } from '../../utils/ty
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 import { shouldCaptureValue } from '../../autocapture-utils'
-import { LOGGER_PREFIX } from './sessionrecording'
 import { _each } from '../../utils'
+
+const LOGGER_PREFIX = '[SessionRecording]'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
     initiatorTypes: [
