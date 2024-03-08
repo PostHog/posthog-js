@@ -340,13 +340,28 @@ export function isSensitiveElement(el: Element): boolean {
     return false
 }
 
+// Define the core pattern for matching credit card numbers
+const coreCCPattern = `(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11})`
+// Create the Anchored version of the regex by adding '^' at the start and '$' at the end
+const anchoredCCRegex = new RegExp(`^(?:${coreCCPattern})$`)
+// The Unanchored version is essentially the core pattern, usable as is for partial matches
+const unanchoredCCRegex = new RegExp(coreCCPattern)
+
+// Define the core pattern for matching SSNs with optional dashes
+const coreSSNPattern = `\\d{3}-?\\d{2}-?\\d{4}`
+// Create the Anchored version of the regex by adding '^' at the start and '$' at the end
+const anchoredSSNRegex = new RegExp(`^(${coreSSNPattern})$`)
+// The Unanchored version is essentially the core pattern itself, usable for partial matches
+const unanchoredSSNRegex = new RegExp(`(${coreSSNPattern})`)
+
 /*
- * Check whether a string value should be "captured" or if it may contain sentitive data
+ * Check whether a string value should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
  * @param {string} value - string value to check
+ * @param {boolean} anchorRegexes - whether to anchor the regexes to the start and end of the string
  * @returns {boolean} whether the element should be captured
  */
-export function shouldCaptureValue(value: string): boolean {
+export function shouldCaptureValue(value: string, anchorRegexes = true): boolean {
     if (_isNullish(value)) {
         return false
     }
@@ -356,14 +371,13 @@ export function shouldCaptureValue(value: string): boolean {
 
         // check to see if input value looks like a credit card number
         // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
-        const ccRegex =
-            /^(?:(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11}))$/
+        const ccRegex = anchorRegexes ? anchoredCCRegex : unanchoredCCRegex
         if (ccRegex.test((value || '').replace(/[- ]/g, ''))) {
             return false
         }
 
         // check to see if input value looks like a social security number
-        const ssnRegex = /(^\d{3}-?\d{2}-?\d{4}$)/
+        const ssnRegex = anchorRegexes ? anchoredSSNRegex : unanchoredSSNRegex
         if (ssnRegex.test(value)) {
             return false
         }

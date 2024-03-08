@@ -2,6 +2,7 @@ import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../
 import { _isFunction, _isNullish, _isString } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
+import { shouldCaptureValue } from '../../autocapture-utils'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
     initiatorTypes: [
@@ -128,15 +129,27 @@ const limitPayloadSize = (
 const payloadContentDenyList = ['password']
 
 function scrubPayloads(capturedRequest: CapturedNetworkRequest) {
-    payloadContentDenyList.forEach((text) => {
-        if (capturedRequest.requestBody?.length && capturedRequest.requestBody?.indexOf(text) !== -1) {
-            capturedRequest.requestBody = '[SessionReplay] Request body contained: ' + text
+    if (capturedRequest.requestBody) {
+        if (!shouldCaptureValue(capturedRequest.requestBody, false)) {
+            capturedRequest.requestBody = '[SessionReplay] Request body redacted'
         }
+        payloadContentDenyList.forEach((text) => {
+            if (capturedRequest.requestBody?.length && capturedRequest.requestBody?.indexOf(text) !== -1) {
+                capturedRequest.requestBody = '[SessionReplay] Request body might contain: ' + text
+            }
+        })
+    }
+    if (capturedRequest.responseBody) {
+        if (!shouldCaptureValue(capturedRequest.responseBody, false)) {
+            capturedRequest.responseBody = '[SessionReplay] Response body redacted'
+        }
+        payloadContentDenyList.forEach((text) => {
+            if (capturedRequest.responseBody?.length && capturedRequest.responseBody?.indexOf(text) !== -1) {
+                capturedRequest.responseBody = '[SessionReplay] Response body might contain: ' + text
+            }
+        })
+    }
 
-        if (capturedRequest.responseBody?.length && capturedRequest.responseBody?.indexOf(text) !== -1) {
-            capturedRequest.responseBody = '[SessionReplay] Response body contained: ' + text
-        }
-    })
     return capturedRequest
 }
 
