@@ -61,6 +61,7 @@ export declare type recordOptions<T> = {
     plugins?: RecordPlugin[]
     mousemoveWait?: number
     keepIframeSrcFn?: KeepIframeSrcFn
+    root?: HTMLElement
     // errorHandler?: ErrorHandler
 }
 

@@ -492,6 +492,7 @@ export class SessionRecording {
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            root: window?.document.body,
         }
         // We switched from loading all of rrweb to just the record part, but
         // keep backwards compatibility if someone hasn't upgraded PostHog
