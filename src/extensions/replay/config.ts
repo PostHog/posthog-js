@@ -45,7 +45,7 @@ export const defaultNetworkOptions: NetworkRecordOptions = {
     payloadSizeLimitBytes: 1000000,
 }
 
-const HEADER_DENYLIST = [
+const HEADER_DENY_LIST = [
     'authorization',
     'x-forwarded-for',
     'authorization',
@@ -61,10 +61,24 @@ const HEADER_DENYLIST = [
     'x-xsrf-token',
 ]
 
+const PAYLOAD_CONTENT_DENY_LIST = [
+    'password',
+    'secret',
+    'passwd',
+    'api_key',
+    'apikey',
+    'auth',
+    'credentials',
+    'mysql_pwd',
+    'privatekey',
+    'private_key',
+    'tokenconst',
+]
+
 // we always remove headers on the deny list because we never want to capture this sensitive data
 const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
     Object.keys(data.requestHeaders ?? {}).forEach((header) => {
-        if (HEADER_DENYLIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
+        if (HEADER_DENY_LIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
     })
     return data
 }
@@ -126,14 +140,12 @@ const limitPayloadSize = (
     }
 }
 
-const payloadContentDenyList = ['password']
-
 function scrubPayloads(capturedRequest: CapturedNetworkRequest) {
     if (capturedRequest.requestBody) {
         if (!shouldCaptureValue(capturedRequest.requestBody, false)) {
             capturedRequest.requestBody = '[SessionReplay] Request body redacted'
         }
-        payloadContentDenyList.forEach((text) => {
+        PAYLOAD_CONTENT_DENY_LIST.forEach((text) => {
             if (capturedRequest.requestBody?.length && capturedRequest.requestBody?.indexOf(text) !== -1) {
                 capturedRequest.requestBody = '[SessionReplay] Request body might contain: ' + text
             }
@@ -143,7 +155,7 @@ function scrubPayloads(capturedRequest: CapturedNetworkRequest) {
         if (!shouldCaptureValue(capturedRequest.responseBody, false)) {
             capturedRequest.responseBody = '[SessionReplay] Response body redacted'
         }
-        payloadContentDenyList.forEach((text) => {
+        PAYLOAD_CONTENT_DENY_LIST.forEach((text) => {
             if (capturedRequest.responseBody?.length && capturedRequest.responseBody?.indexOf(text) !== -1) {
                 capturedRequest.responseBody = '[SessionReplay] Response body might contain: ' + text
             }
