@@ -3,6 +3,7 @@ import { _isFunction, _isNullish, _isString } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 import { shouldCaptureValue } from '../../autocapture-utils'
+import { LOGGER_PREFIX } from './sessionrecording'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
     initiatorTypes: [
@@ -98,7 +99,7 @@ function estimateBytes(payload: string): number {
     return new Blob([payload]).size
 }
 
-function redactPayload(
+function enforcePayloadSizeLimit(
     payload: string | null | undefined,
     headers: Record<string, any> | undefined,
     limit: number,
@@ -114,7 +115,7 @@ function redactPayload(
     }
 
     if (requestContentLength > limit) {
-        return `[SessionReplay] ${description} body too large to record (${requestContentLength} bytes)`
+        return LOGGER_PREFIX + ` ${description} body too large to record (${requestContentLength} bytes)`
     }
 
     return payload
@@ -129,38 +130,38 @@ const limitPayloadSize = (
 
     return (data) => {
         if (data?.requestBody) {
-            data.requestBody = redactPayload(data.requestBody, data.requestHeaders, limit, 'Request')
+            data.requestBody = enforcePayloadSizeLimit(data.requestBody, data.requestHeaders, limit, 'Request')
         }
 
         if (data?.responseBody) {
-            data.responseBody = redactPayload(data.responseBody, data.responseHeaders, limit, 'Response')
+            data.responseBody = enforcePayloadSizeLimit(data.responseBody, data.responseHeaders, limit, 'Response')
         }
 
         return data
     }
 }
 
+function scrubPayload(
+    requestBody: string | null | undefined,
+    label: 'Request' | 'Response'
+): string | null | undefined {
+    let scrubbed = requestBody
+    if (scrubbed) {
+        if (!shouldCaptureValue(scrubbed, false)) {
+            scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted'
+        }
+        PAYLOAD_CONTENT_DENY_LIST.forEach((text) => {
+            if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
+                scrubbed = LOGGER_PREFIX + ' ' + label + ' body might contain: ' + text
+            }
+        })
+    }
+    return scrubbed
+}
+
 function scrubPayloads(capturedRequest: CapturedNetworkRequest) {
-    if (capturedRequest.requestBody) {
-        if (!shouldCaptureValue(capturedRequest.requestBody, false)) {
-            capturedRequest.requestBody = '[SessionReplay] Request body redacted'
-        }
-        PAYLOAD_CONTENT_DENY_LIST.forEach((text) => {
-            if (capturedRequest.requestBody?.length && capturedRequest.requestBody?.indexOf(text) !== -1) {
-                capturedRequest.requestBody = '[SessionReplay] Request body might contain: ' + text
-            }
-        })
-    }
-    if (capturedRequest.responseBody) {
-        if (!shouldCaptureValue(capturedRequest.responseBody, false)) {
-            capturedRequest.responseBody = '[SessionReplay] Response body redacted'
-        }
-        PAYLOAD_CONTENT_DENY_LIST.forEach((text) => {
-            if (capturedRequest.responseBody?.length && capturedRequest.responseBody?.indexOf(text) !== -1) {
-                capturedRequest.responseBody = '[SessionReplay] Response body might contain: ' + text
-            }
-        })
-    }
+    capturedRequest.requestBody = scrubPayload(capturedRequest.requestBody, 'Request')
+    capturedRequest.responseBody = scrubPayload(capturedRequest.responseBody, 'Response')
 
     return capturedRequest
 }

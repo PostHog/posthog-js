@@ -109,7 +109,7 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     attempt: 1,
 })
 
-const LOGGER_PREFIX = '[SessionRecording]'
+export const LOGGER_PREFIX = '[SessionRecording]'
 
 export class SessionRecording {
     private instance: PostHog
