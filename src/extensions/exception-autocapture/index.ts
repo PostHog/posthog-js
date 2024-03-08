@@ -138,7 +138,6 @@ export class ExceptionObserver {
      */
     sendExceptionEvent(properties: { [key: string]: any }) {
         this.instance.capture('$exception', properties, {
-            method: 'POST',
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })

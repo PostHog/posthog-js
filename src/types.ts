@@ -1,6 +1,5 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
-import { RetryQueue } from './retry-queue'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -13,7 +12,6 @@ export interface CaptureResult {
     $set_once?: Properties
     timestamp?: Date
 }
-export type CaptureCallback = (response: any, data: any) => void
 
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
 export type DomAutocaptureEvents = 'click' | 'change' | 'submit'
@@ -65,7 +63,8 @@ export interface AutocaptureConfig {
 
 export interface PostHogConfig {
     api_host: string
-    api_method: string
+    /** @deprecated - This property is no longer supported */
+    api_method?: string
     api_transport?: 'XHR' | 'fetch'
     ui_host: string | null
     token: string
@@ -108,7 +107,7 @@ export interface PostHogConfig {
     property_blacklist: string[]
     property_denylist: string[]
     request_headers: { [header_name: string]: string }
-    on_request_error: (error: MinimalHTTPResponse) => void
+    on_request_error?: (error: RequestResponse) => void
     /** @deprecated - use `request_headers` instead  */
     xhr_headers?: { [header_name: string]: string }
     /** @deprecated - use `on_request_error` instead  */
@@ -126,6 +125,7 @@ export interface PostHogConfig {
     advanced_disable_feature_flags: boolean
     advanced_disable_feature_flags_on_first_load: boolean
     advanced_disable_toolbar_metrics: boolean
+    feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
     name: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
@@ -158,7 +158,7 @@ export interface OptInOutCapturingOptions {
     secure_cookie: boolean
 }
 
-export interface isFeatureEnabledOptions {
+export interface IsFeatureEnabledOptions {
     send_event: boolean
 }
 
@@ -193,56 +193,56 @@ export enum Compression {
     Base64 = 'base64',
 }
 
-export interface XHROptions {
+// Request types - these should be kept minimal to what request.ts needs
+
+// Minimal class to allow interop between different request methods (xhr / fetch)
+export interface RequestResponse {
+    statusCode: number
+    text?: string
+    json?: any
+}
+
+export type RequestCallback = (response: RequestResponse) => void
+
+export interface RequestOptions {
+    url: string
+    // Data can be a single object or an array of objects when batched
+    data?: Record<string, any> | Record<string, any>[]
+    headers?: Record<string, any>
     transport?: 'XHR' | 'fetch' | 'sendBeacon'
     method?: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
-    verbose?: boolean
-    blob?: boolean
-    sendBeacon?: boolean
+    callback?: RequestCallback
+    timeout?: number
+    noRetries?: boolean
+    compression?: Compression
 }
 
-export interface CaptureOptions extends XHROptions {
+// Queued request types - the same as a request but with additional queueing information
+
+export interface QueuedRequestOptions extends RequestOptions {
+    batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
+}
+
+// Used explicitly for retriable requests
+export interface RetriableRequestOptions extends QueuedRequestOptions {
+    retriesPerformedSoFar?: number
+}
+
+export interface CaptureOptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
     _url?: string /** Used to override the desired endpoint for the captured event */
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
-    _metrics?: Properties
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     send_instantly?: boolean /** if set skips the batched queue */
+    transport?: RequestOptions['transport'] /** if set, overrides the desired transport method */
     timestamp?: Date
-}
-
-export interface RetryQueueElement {
-    retryAt: Date
-    requestData: QueuedRequestData
-}
-export interface QueuedRequestData {
-    url: string
-    data: Properties
-    options: CaptureOptions
-    headers?: Properties
-    callback?: RequestCallback
-    retriesPerformedSoFar?: number
-}
-
-// Minimal class to allow interop between different request methods (xhr / fetch)
-export interface MinimalHTTPResponse {
-    statusCode: number
-    responseText: string
-}
-
-export interface RequestData extends QueuedRequestData {
-    retryQueue: RetryQueue
-    timeout?: number
-    onError?: (req: MinimalHTTPResponse) => void
-    onResponse?: (req: MinimalHTTPResponse) => void
 }
 
 export type FlagVariant = { flag: string; variant: string }
 
 export interface DecideResponse {
-    status: number
     supportedCompression: Compression[]
     config: {
         enable_collect_everything: boolean
@@ -286,18 +286,19 @@ export interface DecideResponse {
     siteApps: { id: number; url: string }[]
 }
 
-export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
+export type FeatureFlagsCallback = (
+    flags: string[],
+    variants: Record<string, string | boolean>,
+    context?: {
+        errorsLoading?: boolean
+    }
+) => void
 
 // TODO: delete custom_properties after changeless typescript refactor
 export interface AutoCaptureCustomProperty {
     name: string
     css_selector: string
     event_selectors: string[]
-}
-
-export interface CompressionData {
-    data: string
-    compression?: Compression
 }
 
 export interface GDPROptions {
@@ -317,8 +318,6 @@ export interface GDPROptions {
     respectDnt?: boolean
     window?: Window
 }
-
-export type RequestCallback = (response: Record<string, any>, data?: Properties) => void
 
 export interface PersistentStore {
     is_supported: () => boolean
@@ -350,12 +349,6 @@ export interface ToolbarParams {
     userEmail?: string
     dataAttributes?: string[]
     featureFlags?: Record<string, string | boolean>
-}
-
-export interface PostData {
-    buffer?: BlobPart
-    compression?: Compression
-    data?: string
 }
 
 export type SnippetArrayItem = [method: string, ...args: any[]]

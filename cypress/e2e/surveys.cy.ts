@@ -1,5 +1,5 @@
 /// <reference types="cypress" />
-import { getBase64EncodedPayload } from '../support/compression'
+import { getPayload } from '../support/compression'
 import 'cypress-localstorage-commands'
 
 function onPageLoad(options = {}) {
@@ -261,7 +261,7 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey12345').shadow().find('.thank-you-message').should('not.exist')
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
-                const captures = await getBase64EncodedPayload(request)
+                const captures = await getPayload(request)
                 expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey sent'])
                 expect(captures[1].properties['$survey_response']).to.deep.equal(['Product Updates', 'Events'])
                 expect(captures[1].properties).to.contain({
@@ -294,7 +294,7 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey12345').shadow().find('input[type=text]').type('Newsletters')
             cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
             cy.wait('@capture-assertion').then(async ({ request }) => {
-                const captures = await getBase64EncodedPayload(request)
+                const captures = await getPayload(request)
                 expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey sent'])
                 expect(captures[1].properties['$survey_response']).to.deep.equal(['Tutorials', 'Newsletters'])
             })
@@ -322,7 +322,7 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey12345').shadow().find('input[type=text]').type('Product engineer')
             cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
             cy.wait('@capture-assertion').then(async ({ request }) => {
-                const captures = await getBase64EncodedPayload(request)
+                const captures = await getPayload(request)
                 expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey sent'])
                 expect(captures[1].properties['$survey_response']).to.equal('Product engineer')
             })
@@ -558,7 +558,10 @@ describe('Surveys', () => {
             const white = 'rgb(255, 255, 255)'
             cy.visit('./playground/cypress')
             onPageLoad()
-            cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').should('have.css', 'background-color', white)
+            cy.get('.PostHogWidget123')
+                .shadow()
+                .find('.ph-survey-widget-tab')
+                .should('have.css', 'background-color', white)
             cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').should('have.css', 'color', black)
         })
     })
@@ -630,7 +633,7 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
-                const captures = await getBase64EncodedPayload(request)
+                const captures = await getPayload(request)
                 expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey sent'])
                 expect(captures[1].properties).to.contain({
                     $survey_id: '123',
@@ -657,7 +660,7 @@ describe('Surveys', () => {
             onPageLoad()
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
-                const captures = await getBase64EncodedPayload(request)
+                const captures = await getPayload(request)
                 expect(captures[0].event).to.equal('survey shown')
             })
         })
@@ -681,7 +684,7 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
-                const captures = await getBase64EncodedPayload(request)
+                const captures = await getPayload(request)
                 expect(captures.map(({ event }) => event)).to.contain('survey dismissed')
             })
         })

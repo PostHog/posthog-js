@@ -41,7 +41,8 @@ describe('Rate Limiter', () => {
 
     it('sets the events retryAfter on checkForLimiting', () => {
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ quota_limited: ['events'] }),
+            statusCode: 200,
+            text: JSON.stringify({ quota_limited: ['events'] }),
         })
 
         const expectedRetry = new Date().getTime() + 60_000
@@ -50,7 +51,8 @@ describe('Rate Limiter', () => {
 
     it('sets the recordings retryAfter on checkForLimiting', () => {
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ quota_limited: ['recordings'] }),
+            statusCode: 200,
+            text: JSON.stringify({ quota_limited: ['recordings'] }),
         })
 
         const expectedRetry = new Date().getTime() + 60_000
@@ -59,7 +61,8 @@ describe('Rate Limiter', () => {
 
     it('sets multiple retryAfter on checkForLimiting', () => {
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ quota_limited: ['recordings', 'events', 'mystery'] }),
+            statusCode: 200,
+            text: JSON.stringify({ quota_limited: ['recordings', 'events', 'mystery'] }),
         })
 
         const expectedRetry = new Date().getTime() + 60_000
@@ -72,11 +75,13 @@ describe('Rate Limiter', () => {
 
     it('keeps existing batch keys checkForLimiting', () => {
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ quota_limited: ['events'] }),
+            statusCode: 200,
+            text: JSON.stringify({ quota_limited: ['events'] }),
         })
 
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ quota_limited: ['recordings'] }),
+            statusCode: 200,
+            text: JSON.stringify({ quota_limited: ['recordings'] }),
         })
 
         expect(rateLimiter.limits).toStrictEqual({
@@ -87,14 +92,16 @@ describe('Rate Limiter', () => {
 
     it('replaces matching keys', () => {
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ quota_limited: ['events'] }),
+            statusCode: 200,
+            text: JSON.stringify({ quota_limited: ['events'] }),
         })
 
         const firstRetryValue = rateLimiter.limits.events
         jest.advanceTimersByTime(1000)
 
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ quota_limited: ['events'] }),
+            statusCode: 200,
+            text: JSON.stringify({ quota_limited: ['events'] }),
         })
 
         expect(rateLimiter.limits).toStrictEqual({
@@ -104,13 +111,15 @@ describe('Rate Limiter', () => {
 
     it('does not set a limit if no limits are present', () => {
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ quota_limited: [] }),
+            statusCode: 200,
+            text: JSON.stringify({ quota_limited: [] }),
         })
 
         expect(rateLimiter.limits).toStrictEqual({})
 
         rateLimiter.checkForLimiting({
-            responseText: JSON.stringify({ status: 1 }),
+            statusCode: 200,
+            text: JSON.stringify({ status: 1 }),
         })
 
         expect(rateLimiter.limits).toStrictEqual({})
@@ -118,7 +127,8 @@ describe('Rate Limiter', () => {
 
     it('does not log an error when there is an empty body', () => {
         rateLimiter.checkForLimiting({
-            responseText: '',
+            statusCode: 500,
+            text: '',
         })
 
         expect(jest.mocked(logger).error).not.toHaveBeenCalled()

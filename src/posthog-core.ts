@@ -4,6 +4,7 @@ import {
     _each,
     _eachArray,
     _extend,
+    _includes,
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
@@ -20,8 +21,6 @@ import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
-import { compressData, decideCompression } from './compression'
-import { addParamsToURL, encodePostData, request } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { RequestRouter } from './utils/request-router'
@@ -33,17 +32,17 @@ import {
     DecideResponse,
     EarlyAccessFeatureCallback,
     GDPROptions,
-    isFeatureEnabledOptions,
+    IsFeatureEnabledOptions,
     JsonType,
     OptInOutCapturingOptions,
     PostHogConfig,
     Properties,
     Property,
+    QueuedRequestOptions,
     RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
-    XHROptions,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -67,7 +66,7 @@ import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
-import { SUPPORTS_REQUEST } from './utils/request-utils'
+import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -83,7 +82,6 @@ const instances: Record<string, PostHog> = {}
 
 // some globals for comparisons
 const __NOOP = () => {}
-const __NOOPTIONS = {}
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -100,7 +98,6 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
-    api_method: 'POST',
     api_transport: 'XHR',
     ui_host: null,
     token: '',
@@ -150,8 +147,9 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
-    on_request_error: (req) => {
-        const error = 'Bad HTTP status: ' + req.statusCode + ' ' + req.responseText
+    feature_flag_request_timeout_ms: 3000,
+    on_request_error: (res) => {
+        const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
         logger.error(error)
     },
     get_device_id: (uuid) => uuid,
@@ -205,9 +203,9 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
-    compression: Partial<Record<Compression, boolean>>
+    compression?: Compression = Compression.Base64 // Upgrades to gzip if decide response supports it
     __captureHooks: ((eventName: string) => void)[]
-    __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
+    __request_queue: QueuedRequestOptions[]
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
@@ -224,7 +222,6 @@ export class PostHog {
 
     constructor() {
         this.config = defaultConfig()
-        this.compression = {}
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.segmentIntegration = () => createSegmentIntegration(this)
@@ -248,12 +245,12 @@ export class PostHog {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
                 const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(setProps)
-                callback?.({})
+                callback?.({} as any)
             },
             set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
                 const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(undefined, setProps)
-                callback?.({})
+                callback?.({} as any)
             },
         }
     }
@@ -345,8 +342,8 @@ export class PostHog {
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
-        this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
-        this._retryQueue = new RetryQueue(this.config.on_request_error, this.rateLimiter)
+        this._requestQueue = new RequestQueue((req) => this._send_request(req))
+        this._retryQueue = new RetryQueue(this)
         this.__captureHooks = []
         this.__request_queue = []
 
@@ -465,13 +462,13 @@ export class PostHog {
 
     // Private methods
     _afterDecideResponse(response: DecideResponse) {
-        this.compression = {}
+        this.compression = undefined
         if (response.supportedCompression && !this.config.disable_compression) {
-            const compression: Partial<Record<Compression, boolean>> = {}
-            for (const method of response['supportedCompression']) {
-                compression[method] = true
-            }
-            this.compression = compression
+            this.compression = _includes(response['supportedCompression'], Compression.GZipJS)
+                ? Compression.GZipJS
+                : _includes(response['supportedCompression'], Compression.Base64)
+                ? Compression.Base64
+                : undefined
         }
 
         if (response.analytics?.endpoint) {
@@ -526,20 +523,17 @@ export class PostHog {
     _start_queue_if_opted_in(): void {
         if (!this.has_opted_out_capturing()) {
             if (this.config.request_batching) {
-                this._requestQueue?.poll()
+                this._requestQueue?.enable()
             }
         }
     }
 
     _dom_loaded(): void {
         if (!this.has_opted_out_capturing()) {
-            _eachArray(this.__request_queue, (item) => {
-                this._send_request(...item)
-            })
+            _eachArray(this.__request_queue, (item) => this._send_retriable_request(item))
         }
 
         this.__request_queue = []
-
         this._start_queue_if_opted_in()
     }
 
@@ -559,83 +553,46 @@ export class PostHog {
         this._retryQueue?.unload()
     }
 
-    _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
-        const jsonData = JSON.stringify(data)
-        this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
-    }
-
-    __compress_and_send_json_request(
-        url: string,
-        jsonData: string,
-        options: XHROptions,
-        callback?: RequestCallback
-    ): void {
-        const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
-        this._send_request(url, data, _options, callback)
-    }
-
-    _send_request(url: string, data: Record<string, any>, options: CaptureOptions, callback?: RequestCallback): void {
-        if (!this.__loaded || !this._retryQueue) {
-            return
-        }
-        if (this.rateLimiter.isRateLimited(options._batchKey)) {
+    _send_request(options: QueuedRequestOptions): void {
+        if (!this.__loaded) {
             return
         }
 
         if (ENQUEUE_REQUESTS) {
-            this.__request_queue.push([url, data, options, callback])
+            this.__request_queue.push(options)
             return
         }
 
-        const DEFAULT_OPTIONS = {
-            method: this.config.api_method,
-            transport: this.config.api_transport,
-            verbose: this.config.verbose,
+        if (this.rateLimiter.isRateLimited(options.batchKey)) {
+            return
         }
 
-        options = _extend(DEFAULT_OPTIONS, options || {})
-        if (!SUPPORTS_REQUEST) {
-            options.method = 'GET'
-        }
-
-        const useSendBeacon = window && 'sendBeacon' in window.navigator && options.transport === 'sendBeacon'
-        url = addParamsToURL(url, options.urlQueryArgs || {}, {
-            ip: this.config.ip,
+        options.transport = options.transport || this.config.api_transport
+        options.url = extendURLParams(options.url, {
+            // Whether to detect ip info or not
+            ip: this.config.ip ? 1 : 0,
         })
+        options.headers = this.config.request_headers
 
-        if (useSendBeacon) {
-            // beacon documentation https://w3c.github.io/beacon/
-            // beacons format the message and use the type property
-            try {
-                window?.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
-            } catch (e) {
-                // send beacon is a best-effort, fire-and-forget mechanism on page unload,
-                // we don't want to throw errors here
-            }
-        } else if (SUPPORTS_REQUEST || !document) {
-            try {
-                request({
-                    url,
-                    data,
-                    headers: this.config.request_headers,
-                    options,
-                    callback,
-                    retriesPerformedSoFar: 0,
-                    retryQueue: this._retryQueue,
-                    onError: this.config.on_request_error,
-                    onResponse: this.rateLimiter.checkForLimiting,
-                })
-            } catch (e) {
-                logger.error(e)
-            }
+        request({
+            ...options,
+            callback: (response) => {
+                this.rateLimiter.checkForLimiting(response)
+
+                if (response.statusCode >= 400) {
+                    this.config.on_request_error?.(response)
+                }
+
+                options.callback?.(response)
+            },
+        })
+    }
+
+    _send_retriable_request(options: QueuedRequestOptions): void {
+        if (this._retryQueue) {
+            this._retryQueue.retriableRequest(options)
         } else {
-            const script = document.createElement('script')
-            script.type = 'text/javascript'
-            script.async = true
-            script.defer = true
-            script.src = url
-            const s = document.getElementsByTagName('script')[0]
-            s.parentNode?.insertBefore(script, s)
+            this._send_request(options)
         }
     }
 
@@ -739,11 +696,7 @@ export class PostHog {
      * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Date} [options.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
-    capture(
-        event_name: string,
-        properties?: Properties | null,
-        options: CaptureOptions = __NOOPTIONS
-    ): CaptureResult | void {
+    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
@@ -752,12 +705,6 @@ export class PostHog {
 
         if (userOptedOut(this)) {
             return
-        }
-
-        options = options || __NOOPTIONS
-        const transport = options['transport'] // external API, don't minify 'transport' prop
-        if (transport) {
-            options.transport = transport // 'transport' prop name can be minified internally
         }
 
         // typing doesn't prevent interesting data
@@ -791,13 +738,13 @@ export class PostHog {
         }
 
         if (event_name === '$identify') {
-            data['$set'] = options['$set']
-            data['$set_once'] = options['$set_once']
+            data['$set'] = options?.['$set']
+            data['$set_once'] = options?.['$set_once']
         }
 
-        data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
-        data.timestamp = options.timestamp || new Date()
-        if (!_isUndefined(options.timestamp)) {
+        data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
+        data.timestamp = options?.timestamp || new Date()
+        if (!_isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
             data.properties['$event_time_override_system_time'] = new Date()
         }
@@ -810,16 +757,19 @@ export class PostHog {
         }
 
         logger.info('send', data)
-        const jsonData = JSON.stringify(data)
 
-        const url = options._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
+        const requestOptions: QueuedRequestOptions = {
+            method: 'POST',
+            url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
+            data,
+            compression: this.compression,
+            batchKey: options?._batchKey,
+        }
 
-        const has_unique_traits = options !== __NOOPTIONS
-
-        if (this.config.request_batching && (!has_unique_traits || options._batchKey) && !options.send_instantly) {
-            this._requestQueue.enqueue(url, data, options)
+        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
+            this._requestQueue.enqueue(requestOptions)
         } else {
-            this.__compress_and_send_json_request(url, jsonData, options)
+            this._send_retriable_request(requestOptions)
         }
 
         this._invokeCaptureHooks(event_name, data)
@@ -1089,7 +1039,7 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key: string, options?: isFeatureEnabledOptions): boolean | undefined {
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
         return this.featureFlags.isFeatureEnabled(key, options)
     }
 
@@ -1512,10 +1462,7 @@ export class PostHog {
      *     {
      *       // PostHog API host
      *       api_host: 'https://app.posthog.com',
-     *
-     *       // HTTP method for capturing requests
-     *       api_method: 'POST'
-     *
+     *     *
      *       // PostHog web app host, currently only used by the Sentry integration.
      *       // This will only be different from api_host when using a reverse-proxied API host – in that case
      *       // the original web app host needs to be passed here so that links to the web app are still convenient.

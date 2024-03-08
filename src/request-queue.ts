@@ -1,67 +1,31 @@
-import { RequestQueueScaffold } from './base-request-queue'
+import { QueuedRequestOptions } from './types'
 import { _each } from './utils'
-import { Properties, QueuedRequestData, XHROptions } from './types'
 
-import { _isUndefined } from './utils/type-utils'
+import { _isArray, _isUndefined } from './utils/type-utils'
 
-export class RequestQueue extends RequestQueueScaffold {
-    handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void
+export class RequestQueue {
+    // We start in a paused state and only start flushing when enabled by the parent
+    private isPaused: boolean = true
+    private queue: QueuedRequestOptions[] = []
+    private flushTimeout?: number // to become interval for reference to clear later
+    private flushTimeoutMs = 3000
+    private sendRequest: (req: QueuedRequestOptions) => void
 
-    constructor(handlePollRequest: (url: string, data: Properties, options?: XHROptions) => void, pollInterval = 3000) {
-        super(pollInterval)
-        this.handlePollRequest = handlePollRequest
+    constructor(sendRequest: (req: QueuedRequestOptions) => void) {
+        this.sendRequest = sendRequest
     }
 
-    enqueue(url: string, data: Properties, options: XHROptions): void {
-        this._event_queue.push({ url, data, options })
+    enqueue(req: QueuedRequestOptions): void {
+        this.queue.push(req)
 
-        if (!this.isPolling) {
-            this.isPolling = true
-            this.poll()
+        if (!this.flushTimeout) {
+            this.setFlushTimeout()
         }
     }
 
-    poll(): void {
-        clearTimeout(this._poller)
-        this._poller = setTimeout(() => {
-            if (this._event_queue.length > 0) {
-                const requests = this.formatQueue()
-                for (const key in requests) {
-                    const { url, data, options } = requests[key]
-                    _each(data, (_, dataKey) => {
-                        data[dataKey]['offset'] = Math.abs(data[dataKey]['timestamp'] - this.getTime())
-                        delete data[dataKey]['timestamp']
-                    })
-                    this.handlePollRequest(url, data, options)
-                }
-                this._event_queue.length = 0 // flush the _event_queue
-                this._empty_queue_count = 0
-            } else {
-                this._empty_queue_count++
-            }
-
-            /**
-             * _empty_queue_count will increment each time the queue is polled
-             *  and it is empty. To avoid empty polling (user went idle, stepped away from comp)
-             *  we can turn it off with the isPolling flag.
-             *
-             * Polling will be re enabled when the next time PostHogLib.capture is called with
-             *  an event that should be added to the event queue.
-             */
-            if (this._empty_queue_count > 4) {
-                this.isPolling = false
-                this._empty_queue_count = 0
-            }
-            if (this.isPolling) {
-                this.poll()
-            }
-        }, this._pollInterval) as any as number
-    }
-
     unload(): void {
-        clearTimeout(this._poller)
-        const requests = this._event_queue.length > 0 ? this.formatQueue() : {}
-        this._event_queue.length = 0
+        this.clearFlushTimeout()
+        const requests = this.queue.length > 0 ? this.formatQueue() : {}
         const requestValues = Object.values(requests)
 
         // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
@@ -69,32 +33,59 @@ export class RequestQueue extends RequestQueueScaffold {
             ...requestValues.filter((r) => r.url.indexOf('/e') === 0),
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
-        sortedRequests.map(({ url, data, options }) => {
-            this.handlePollRequest(url, data, { ...options, transport: 'sendBeacon' })
+        sortedRequests.map((req) => {
+            this.sendRequest({ ...req, transport: 'sendBeacon' })
         })
     }
 
-    formatQueue(): Record<string, QueuedRequestData> {
-        const requests: Record<string, QueuedRequestData> = {}
-        _each(this._event_queue, (request) => {
-            const { url, data, options } = request
-            const key = (options ? options._batchKey : null) || url
+    enable(): void {
+        this.isPaused = false
+        this.setFlushTimeout()
+    }
+
+    private setFlushTimeout(): void {
+        if (this.isPaused) {
+            return
+        }
+        this.flushTimeout = setTimeout(() => {
+            this.clearFlushTimeout()
+            if (this.queue.length > 0) {
+                const requests = this.formatQueue()
+                for (const key in requests) {
+                    const req = requests[key]
+                    const now = new Date().getTime()
+
+                    if (req.data && _isArray(req.data)) {
+                        _each(req.data, (data) => {
+                            data['offset'] = Math.abs(data['timestamp'] - now)
+                            delete data['timestamp']
+                        })
+                    }
+                    this.sendRequest(req)
+                }
+            }
+        }, this.flushTimeoutMs)
+    }
+
+    private clearFlushTimeout(): void {
+        clearTimeout(this.flushTimeout)
+        this.flushTimeout = undefined
+    }
+
+    private formatQueue(): Record<string, QueuedRequestOptions> {
+        const requests: Record<string, QueuedRequestOptions> = {}
+        _each(this.queue, (request: QueuedRequestOptions) => {
+            const req = request
+            const key = (req ? req.batchKey : null) || req.url
             if (_isUndefined(requests[key])) {
-                requests[key] = { data: [], url, options }
+                // TODO: What about this -it seems to batch data into an array - do we always want that?
+                requests[key] = { ...req, data: [] }
             }
 
-            // :TRICKY: Metrics-only code
-            if (
-                options &&
-                requests[key].options &&
-                requests[key].options._metrics &&
-                !(requests[key].options._metrics as any)['rrweb_full_snapshot']
-            ) {
-                ;(requests[key].options._metrics as any)['rrweb_full_snapshot'] =
-                    options._metrics['rrweb_full_snapshot']
-            }
-            requests[key].data.push(data)
+            requests[key].data?.push(req.data)
         })
+
+        this.queue = []
         return requests
     }
 }

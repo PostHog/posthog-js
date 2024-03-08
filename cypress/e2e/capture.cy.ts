@@ -2,7 +2,7 @@
 // @ts-expect-error - you totally can import the package JSON
 import { version } from '../../package.json'
 
-import { getBase64EncodedPayload, getGzipEncodedPayload } from '../support/compression'
+import { getBase64EncodedPayload, getGzipEncodedPayload, getPayload } from '../support/compression'
 import { start } from '../support/setup'
 
 const urlWithVersion = new RegExp(`&ver=${version}`)
@@ -221,9 +221,8 @@ describe('Event capture', () => {
 
             cy.wait('@capture')
             // @ts-expect-error - TS is wrong that get returns HTMLElement here
-            cy.get('@capture').should(({ request }) => {
-                const captures = getBase64EncodedPayload(request)
-
+            cy.get('@capture').should(async ({ request }) => {
+                const captures = await getPayload(request)
                 expect(captures['event']).to.equal('$pageview')
             })
         })
@@ -274,24 +273,22 @@ describe('Event capture', () => {
 
     describe('decoding the payload', () => {
         describe('gzip-js supported', () => {
-            it('contains the correct payload after an event', () => {
+            it('contains the correct payload after an event', async () => {
                 start({})
+
                 // Pageview will be sent immediately
-                cy.wait('@capture').should(({ request }) => {
-                    expect(request.headers['content-type']).to.eql('application/x-www-form-urlencoded')
 
+                cy.wait('@capture').should(async ({ request }) => {
                     expect(request.url).to.match(urlWithVersion)
-                    const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-                    const captures = JSON.parse(Buffer.from(data, 'base64').toString())
 
-                    expect(captures['event']).to.equal('$pageview')
+                    const data = await getPayload(request)
+                    expect(data['event']).to.equal('$pageview')
                 })
 
                 // the code below is going to trigger an event capture
                 // we want to assert on the request
                 cy.intercept('POST', '**/e/*', async (request) => {
                     expect(request.headers['content-type']).to.eq('text/plain')
-
                     const captures = await getGzipEncodedPayload(request)
                     expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event'])
                 }).as('capture-assertion')

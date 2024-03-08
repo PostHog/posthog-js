@@ -1,7 +1,7 @@
 import { autocapture } from './autocapture'
-import { _base64Encode, loadScript } from './utils'
+import { loadScript } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse } from './types'
+import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 import { _isUndefined } from './utils/type-utils'
@@ -21,7 +21,7 @@ export class Decide {
         /*
         Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
         */
-        const json_data = JSON.stringify({
+        const data = {
             token: this.instance.config.token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
@@ -31,23 +31,33 @@ export class Decide {
                 this.instance.config.advanced_disable_feature_flags ||
                 this.instance.config.advanced_disable_feature_flags_on_first_load ||
                 undefined,
-        })
+        }
 
-        const encoded_data = _base64Encode(json_data)
-        this.instance._send_request(
-            this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
-            { data: encoded_data, verbose: true },
-            { method: 'POST' },
-            (response) => this.parseDecideResponse(response as DecideResponse)
-        )
+        this.instance._send_request({
+            method: 'POST',
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            data,
+            compression: Compression.Base64,
+            timeout: this.instance.config.feature_flag_request_timeout_ms,
+            callback: (response) => this.parseDecideResponse(response.json as DecideResponse | undefined),
+        })
     }
 
-    parseDecideResponse(response: DecideResponse): void {
+    parseDecideResponse(response?: DecideResponse): void {
         this.instance.featureFlags.setReloadingPaused(false)
         // :TRICKY: Reload - start another request if queued!
         this.instance.featureFlags._startReloadTimer()
 
-        if (response?.status === 0) {
+        const errorsLoading = !response
+
+        if (
+            !this.instance.config.advanced_disable_feature_flags_on_first_load &&
+            !this.instance.config.advanced_disable_feature_flags
+        ) {
+            this.instance.featureFlags.receivedFeatureFlags(response ?? {}, errorsLoading)
+        }
+
+        if (errorsLoading) {
             logger.error('Failed to fetch feature flags from PostHog.')
             return
         }
@@ -63,13 +73,6 @@ export class Decide {
         this.instance.sessionRecording?.afterDecideResponse(response)
         autocapture.afterDecideResponse(response, this.instance)
         this.instance._afterDecideResponse(response)
-
-        if (
-            !this.instance.config.advanced_disable_feature_flags_on_first_load &&
-            !this.instance.config.advanced_disable_feature_flags
-        ) {
-            this.instance.featureFlags.receivedFeatureFlags(response)
-        }
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore

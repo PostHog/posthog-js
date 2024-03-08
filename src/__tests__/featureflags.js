@@ -26,11 +26,16 @@ describe('featureflags', () => {
         get_property: (key) => given.instance.persistence.props[key],
         capture: () => {},
         decideEndpointWasHit: given.decideEndpointWasHit,
-        _send_request: jest.fn().mockImplementation((url, data, headers, callback) => callback(given.decideResponse)),
+        _send_request: jest.fn().mockImplementation(({ callback }) => callback(given.decideResponsePayload)),
         reloadFeatureFlags: () => given.featureFlags.reloadFeatureFlags(),
     }))
 
     given('featureFlags', () => new PostHogFeatureFlags(given.instance))
+
+    given('decideResponsePayload', () => ({
+        statusCode: 200,
+        json: given.decideResponse,
+    }))
 
     beforeEach(() => {
         jest.spyOn(given.instance, 'capture').mockReturnValue()
@@ -224,11 +229,13 @@ describe('featureflags', () => {
             var called = false
             let _flags = []
             let _variants = {}
+            let _error = undefined
 
-            given.featureFlags.onFeatureFlags((flags, variants) => {
+            given.featureFlags.onFeatureFlags((flags, variants, errors) => {
                 called = true
                 _flags = flags
                 _variants = variants
+                _error = errors?.errorsLoading
             })
             expect(called).toEqual(false)
 
@@ -237,6 +244,7 @@ describe('featureflags', () => {
 
             jest.runAllTimers()
             expect(called).toEqual(true)
+            expect(_error).toEqual(false)
             expect(_flags).toEqual(['first', 'second'])
             expect(_variants).toEqual({
                 first: 'variant-1',
@@ -327,12 +335,12 @@ describe('featureflags', () => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
 
-            expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
-                {},
-                { method: 'GET' },
-                expect.any(Function)
-            )
+            expect(given.instance._send_request).toHaveBeenCalledWith({
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
+                method: 'GET',
+                transport: 'XHR',
+                callback: expect.any(Function),
+            })
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
@@ -353,18 +361,21 @@ describe('featureflags', () => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
 
-            expect(given.instance._send_request).toHaveBeenCalledWith(
-                'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
-                {},
-                { method: 'GET' },
-                expect.any(Function)
-            )
+            expect(given.instance._send_request).toHaveBeenCalledWith({
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
+                method: 'GET',
+                callback: expect.any(Function),
+                transport: 'XHR',
+            })
             expect(given.instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(given.instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
 
-            given('decideResponse', () => ({
-                earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
+            given('decideResponsePayload', () => ({
+                statusCode: 200,
+                json: {
+                    earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
+                },
             }))
 
             // request again, should call _send_request because we're forcing a reload
@@ -441,9 +452,7 @@ describe('featureflags', () => {
             given.featureFlags.reloadFeatureFlags()
             jest.runAllTimers()
             // check the request sent person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: {
@@ -473,9 +482,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent $anon_distinct_id
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
@@ -495,9 +502,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent $anon_distinct_id
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
@@ -508,9 +513,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request didn't send $anon_distinct_id the second time around
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[1][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[1][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 // $anon_distinct_id: "rando_id"
@@ -520,9 +523,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request didn't send $anon_distinct_id the second time around
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[2][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[2][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 // $anon_distinct_id: "rando_id"
@@ -540,9 +541,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: { a: 'b', c: 'd' },
@@ -608,9 +607,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 person_properties: { a: 'b', c: 'e', x: 'y' },
@@ -645,9 +642,7 @@ describe('featureflags', () => {
             jest.runAllTimers()
 
             // check the request did not send person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
             })
@@ -669,9 +664,7 @@ describe('featureflags', () => {
             })
 
             // check the request sent person properties
-            expect(
-                JSON.parse(Buffer.from(given.instance._send_request.mock.calls[0][1].data, 'base64').toString())
-            ).toEqual({
+            expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 group_properties: { orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } },
@@ -765,6 +758,116 @@ describe('featureflags', () => {
             })
         })
     })
+
+    describe('when decide times out or errors out', () => {
+        given('decideResponsePayload', () => ({
+            statusCode: 500,
+            text: 'Internal Server Error',
+        }))
+
+        it('should not change the existing flags', () => {
+            given.instance.persistence.register({
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'random-feature': 'xatu',
+                },
+            })
+
+            given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(given.featureFlags.getFlagVariants()).toEqual({
+                'beta-feature': true,
+                'random-feature': 'xatu',
+            })
+        })
+
+        it('should call onFeatureFlags even when decide errors out', () => {
+            var called = false
+            let _flags = []
+            let _variants = {}
+            let _errors = undefined
+
+            given.instance.persistence.register({
+                $enabled_feature_flags: {},
+            })
+
+            given.featureFlags.onFeatureFlags((flags, variants, errors) => {
+                called = true
+                _flags = flags
+                _variants = variants
+                _errors = errors?.errorsLoading
+            })
+            expect(called).toEqual(false)
+
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+            expect(_errors).toEqual(true)
+            expect(_flags).toEqual([])
+            expect(_variants).toEqual({})
+        })
+
+        it('should call onFeatureFlags with existing flags', () => {
+            var called = false
+            let _flags = []
+            let _variants = {}
+            let _errors = undefined
+
+            given.featureFlags.onFeatureFlags((flags, variants, errors) => {
+                called = true
+                _flags = flags
+                _variants = variants
+                _errors = errors?.errorsLoading
+            })
+            expect(called).toEqual(false)
+
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+            expect(_errors).toEqual(true)
+            expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+            expect(_variants).toEqual({
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            })
+        })
+
+        it('should call onFeatureFlags with existing flags on timeouts', () => {
+            given('decideResponsePayload', () => ({
+                statusCode: 0,
+                text: '',
+            }))
+
+            var called = false
+            let _flags = []
+            let _variants = {}
+            let _errors = undefined
+
+            given.featureFlags.onFeatureFlags((flags, variants, errors) => {
+                called = true
+                _flags = flags
+                _variants = variants
+                _errors = errors?.errorsLoading
+            })
+            expect(called).toEqual(false)
+
+            given.featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+            expect(called).toEqual(true)
+            expect(_errors).toEqual(true)
+            expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
+            expect(_variants).toEqual({
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            })
+        })
+    })
 })
 
 describe('parseFeatureFlagDecideResponse', () => {
@@ -812,7 +915,7 @@ describe('parseFeatureFlagDecideResponse', () => {
     })
 
     it('doesnt remove existing feature flags when no flags are returned', () => {
-        given('decideResponse', () => ({ status: 0 }))
+        given('decideResponse', () => ({}))
         given.subject()
 
         expect(given.persistence.register).not.toHaveBeenCalled()
