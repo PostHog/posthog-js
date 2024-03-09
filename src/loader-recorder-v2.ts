@@ -42,6 +42,8 @@ export type NetworkData = {
 
 type networkCallback = (data: NetworkData) => void
 
+const _noop = () => {}
+
 const isNavigationTiming = (entry: PerformanceEntry): entry is PerformanceNavigationTiming =>
     entry.entryType === 'navigation'
 const isResourceTiming = (entry: PerformanceEntry): entry is PerformanceResourceTiming => entry.entryType === 'resource'
@@ -60,9 +62,7 @@ export function patch(
 ): () => void {
     try {
         if (!(name in source)) {
-            return () => {
-                //
-            }
+            return _noop
         }
 
         const original = source[name] as () => unknown
@@ -87,9 +87,7 @@ export function patch(
             source[name] = original
         }
     } catch {
-        return () => {
-            //
-        }
+        return _noop
         // This can throw if multiple fill happens on a global object like XMLHttpRequest
         // Fixes https://github.com/getsentry/sentry-javascript/issues/2043
     }
@@ -120,9 +118,9 @@ function filterPerformanceEntries(entries: PerformanceEntryList, options: Networ
 }
 
 /**
- * if recordBody or recordHeaders is true then we don't want to record fetch or xhr here
- * as the wrapped functions will do that. Otherwise, this filter becomes a noop
- * because we do want to record them here
+ * if recordBody or recordHeaders is true then we don't want to record fetch or xhr
+ * in the performance observer as the wrapped functions will do that.
+ * Otherwise, this filter becomes a noop because we do want to record them
  */
 const wrappedInitiatorFilter = (entry: PerformanceEntry | ObservedPerformanceEntry, options: NetworkRecordOptions) =>
     isResourceTiming(entry) && (options.recordBody || options.recordHeaders)
@@ -250,11 +248,9 @@ function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | any | null | 
     return '[SessionReplay] Cannot read body of type ' + toString.call(body)
 }
 
-function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>): listenerHandler {
-    if (!options.initiatorTypes.includes('xmlhttprequest')) {
-        return () => {
-            //
-        }
+function initXhrObserver(cb: networkCallback, win: IWindow, options: NetworkRecordOptions): listenerHandler {
+    if (options.initiatorTypes && !options.initiatorTypes.includes('xmlhttprequest')) {
+        return _noop
     }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
@@ -342,9 +338,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                             const requests = prepareRequest(entry, req.method, xhr?.status, networkRequest)
                             cb({ requests })
                         })
-                        .catch(() => {
-                            //
-                        })
+                        .catch(_noop)
                 })
                 originalOpen.call(xhr, method, url, async, username, password)
             }
@@ -460,15 +454,9 @@ async function _tryReadResponseBody(r: Response): Promise<string> {
     return _tryReadBody(r)
 }
 
-function initFetchObserver(
-    cb: networkCallback,
-    win: IWindow,
-    options: Required<NetworkRecordOptions>
-): listenerHandler {
-    if (!options.initiatorTypes.includes('fetch')) {
-        return () => {
-            //
-        }
+function initFetchObserver(cb: networkCallback, win: IWindow, options: NetworkRecordOptions): listenerHandler {
+    if (options.initiatorTypes && !options.initiatorTypes.includes('fetch')) {
+        return _noop
     }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
@@ -520,9 +508,7 @@ function initFetchObserver(
                         const requests = prepareRequest(entry, req.method, res?.status, networkRequest)
                         cb({ requests })
                     })
-                    .catch(() => {
-                        //
-                    })
+                    .catch(_noop)
             }
         }
     })
@@ -537,9 +523,7 @@ function initNetworkObserver(
     options: NetworkRecordOptions
 ): listenerHandler {
     if (!('performance' in win)) {
-        return () => {
-            //
-        }
+        return _noop
     }
     const networkOptions = (
         options ? Object.assign({}, defaultNetworkOptions, options) : defaultNetworkOptions
@@ -561,8 +545,8 @@ function initNetworkObserver(
     const performanceObserver = initPerformanceObserver(cb, win, networkOptions)
 
     // only wrap fetch and xhr if headers or body are being recorded
-    let xhrObserver: listenerHandler = () => {}
-    let fetchObserver: listenerHandler = () => {}
+    let xhrObserver: listenerHandler = _noop
+    let fetchObserver: listenerHandler = _noop
     if (networkOptions.recordHeaders || networkOptions.recordBody) {
         xhrObserver = initXhrObserver(cb, win, networkOptions)
         fetchObserver = initFetchObserver(cb, win, networkOptions)
