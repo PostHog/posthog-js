@@ -4,29 +4,8 @@ import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
-    initiatorTypes: [
-        'audio',
-        'beacon',
-        'body',
-        'css',
-        'early-hint',
-        'embed',
-        'fetch',
-        'frame',
-        'iframe',
-        'icon',
-        'image',
-        'img',
-        'input',
-        'link',
-        'navigation',
-        'object',
-        'ping',
-        'script',
-        'track',
-        'video',
-        'xmlhttprequest',
-    ],
+    // by default, no initiator types are ignored
+    initiatorTypes: undefined,
     maskRequestFn: (data: CapturedNetworkRequest) => data,
     recordHeaders: false,
     recordBody: false,

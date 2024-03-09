@@ -105,7 +105,7 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
     return undefined
 }
 
-function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>) {
+function initPerformanceObserver(cb: networkCallback, win: IWindow, options: NetworkRecordOptions) {
     // if we are only observing timings then we could have a single observer for all types, with buffer true,
     // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
     // will deal with those.
@@ -118,7 +118,10 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
             .filter(
                 (entry): entry is ObservedPerformanceEntry =>
                     isNavigationTiming(entry) ||
-                    (isResourceTiming(entry) && options.initiatorTypes.includes(entry.initiatorType as InitiatorType))
+                    (isResourceTiming(entry) &&
+                        (options.initiatorTypes || [entry.initiatorType]).includes(
+                            entry.initiatorType as InitiatorType
+                        ))
             )
         cb({
             requests: initialPerformanceEntries.flatMap((entry) =>
@@ -136,14 +139,17 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
                 ? entry.initiatorType !== 'xmlhttprequest' && entry.initiatorType !== 'fetch'
                 : true
 
-        const performanceEntries = entries.getEntries().filter(
-            (entry): entry is ObservedPerformanceEntry =>
-                isNavigationTiming(entry) ||
-                (isResourceTiming(entry) &&
-                    options.initiatorTypes.includes(entry.initiatorType as InitiatorType) &&
-                    // TODO if we are _only_ capturing timing we don't want to filter initiator here
-                    wrappedInitiatorFilter(entry))
-        )
+        const performanceEntries = entries
+            .getEntries()
+            .filter(
+                (entry): entry is ObservedPerformanceEntry =>
+                    isNavigationTiming(entry) ||
+                    (isResourceTiming(entry) &&
+                        (options.initiatorTypes || [entry.initiatorType]).includes(
+                            entry.initiatorType as InitiatorType
+                        ) &&
+                        wrappedInitiatorFilter(entry))
+            )
 
         cb({
             requests: performanceEntries.flatMap((entry) => prepareRequest(entry, undefined, undefined, {})),

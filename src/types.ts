@@ -401,6 +401,11 @@ export type InitiatorType =
     | 'xmlhttprequest'
 
 export type NetworkRecordOptions = {
+    // controls which initiator types are recorded
+    // if not set, all initiator types are recorded
+    // if the array is empty, no initiator types are recorded
+    // if 'xmlhttprequest' is not in the array, no XHR requests will be recorded
+    // if 'fetch' is not in the array, no fetch requests will be recorded
     initiatorTypes?: InitiatorType[]
     maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined
     recordHeaders?: boolean | { request: boolean; response: boolean }
