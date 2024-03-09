@@ -105,6 +105,30 @@ export function findLast<T>(array: Array<T>, predicate: (value: T) => boolean): 
     return undefined
 }
 
+function filterPerformanceEntries(entries: PerformanceEntryList, options: NetworkRecordOptions, isInitial?: boolean) {
+    return entries.filter(
+        (entry): entry is ObservedPerformanceEntry =>
+            isNavigationTiming(entry) ||
+            (isResourceTiming(entry) &&
+            // if initiatorTypes allow list is defined then check it, otherwise allow all
+            (options.initiatorTypes || [entry.initiatorType]).includes(entry.initiatorType as InitiatorType) &&
+            // if not the initial check, then use the wrapped filter check to see if we should record this entry
+            !!isInitial
+                ? true
+                : wrappedInitiatorFilter(entry, options))
+    )
+}
+
+/**
+ * if recordBody or recordHeaders is true then we don't want to record fetch or xhr here
+ * as the wrapped functions will do that. Otherwise, this filter becomes a noop
+ * because we do want to record them here
+ */
+const wrappedInitiatorFilter = (entry: PerformanceEntry | ObservedPerformanceEntry, options: NetworkRecordOptions) =>
+    isResourceTiming(entry) && (options.recordBody || options.recordHeaders)
+        ? entry.initiatorType !== 'xmlhttprequest' && entry.initiatorType !== 'fetch'
+        : true
+
 function initPerformanceObserver(cb: networkCallback, win: IWindow, options: NetworkRecordOptions) {
     // if we are only observing timings then we could have a single observer for all types, with buffer true,
     // but we are going to filter by initiatorType _if we are wrapping fetch and xhr as the wrapped functions
@@ -113,16 +137,7 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Net
     // these are marked `isInitial` so playback can display them differently if needed
     // they will never have method/status/headers/body because they are pre-wrapping that provides that
     if (options.recordInitialRequests) {
-        const initialPerformanceEntries = win.performance
-            .getEntries()
-            .filter(
-                (entry): entry is ObservedPerformanceEntry =>
-                    isNavigationTiming(entry) ||
-                    (isResourceTiming(entry) &&
-                        (options.initiatorTypes || [entry.initiatorType]).includes(
-                            entry.initiatorType as InitiatorType
-                        ))
-            )
+        const initialPerformanceEntries = filterPerformanceEntries(win.performance.getEntries(), options)
         cb({
             requests: initialPerformanceEntries.flatMap((entry) =>
                 prepareRequest(entry, undefined, undefined, {}, true)
@@ -131,25 +146,7 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Net
         })
     }
     const observer = new win.PerformanceObserver((entries) => {
-        // if recordBody or recordHeaders is true then we don't want to record fetch or xhr here
-        // as the wrapped functions will do that. Otherwise, this filter becomes a noop
-        // because we do want to record them here
-        const wrappedInitiatorFilter = (entry: ObservedPerformanceEntry) =>
-            options.recordBody || options.recordHeaders
-                ? entry.initiatorType !== 'xmlhttprequest' && entry.initiatorType !== 'fetch'
-                : true
-
-        const performanceEntries = entries
-            .getEntries()
-            .filter(
-                (entry): entry is ObservedPerformanceEntry =>
-                    isNavigationTiming(entry) ||
-                    (isResourceTiming(entry) &&
-                        (options.initiatorTypes || [entry.initiatorType]).includes(
-                            entry.initiatorType as InitiatorType
-                        ) &&
-                        wrappedInitiatorFilter(entry))
-            )
+        const performanceEntries = filterPerformanceEntries(entries.getEntries(), options)
 
         cb({
             requests: performanceEntries.flatMap((entry) => prepareRequest(entry, undefined, undefined, {})),
