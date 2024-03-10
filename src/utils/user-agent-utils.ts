@@ -88,10 +88,7 @@ const safariCheck = (ua: string, vendor?: string) => (vendor && _includes(vendor
  * The order of the checks are important since many user agents
  * include keywords used in later checks.
  */
-export const detectBrowser = function (user_agent: string, vendor: string | undefined, opera?: any): string {
-    if (opera) {
-        return OPERA
-    }
+export const detectBrowser = function (user_agent: string, vendor: string | undefined): string {
     vendor = vendor || '' // vendor is undefined for at least IE9
 
     if (_includes(user_agent, ' OPR/') && _includes(user_agent, 'Mini')) {
@@ -163,12 +160,8 @@ const versionRegexes: Record<string, RegExp[]> = {
  * `navigator.vendor` is passed in and used to help with detecting certain browsers
  * NB `navigator.vendor` is deprecated and not present in every browser
  */
-export const detectBrowserVersion = function (
-    userAgent: string,
-    vendor: string | undefined,
-    opera: string
-): number | null {
-    const browser = detectBrowser(userAgent, vendor, opera)
+export const detectBrowserVersion = function (userAgent: string, vendor: string | undefined): number | null {
+    const browser = detectBrowser(userAgent, vendor)
     const regexes: RegExp[] | undefined = versionRegexes[browser as keyof typeof versionRegexes]
     if (_isUndefined(regexes)) {
         return null
