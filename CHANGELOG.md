@@ -1,3 +1,7 @@
+## 1.113.1 - 2024-03-11
+
+- fix: clarify redaction message (#1069)
+
 ## 1.113.0 - 2024-03-11
 
 - feat: scrub payloads with forbidden words (#1059)
