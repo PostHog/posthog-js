@@ -64,6 +64,11 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
         return null
     }
 
+    if (transport === 'sendBeacon') {
+        const body = encodeToDataString(data)
+        return new Blob([body], { type: 'application/x-www-form-urlencoded' })
+    }
+
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
         return new Blob([gzipData], { type: 'text/plain' })
@@ -72,11 +77,6 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(JSON.stringify(data))
         return encodeToDataString(b64data)
-    }
-
-    if (transport === 'sendBeacon') {
-        const body = encodeToDataString(data)
-        return new Blob([body], { type: 'application/x-www-form-urlencoded' })
     }
 
     if (method !== 'POST') {
@@ -187,9 +187,14 @@ const _fetch = (options: RequestOptions) => {
 const sendBeacon = (options: RequestOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
+
+    const url = extendURLParams(options.url, {
+        beacon: '1',
+    })
+
     try {
         // eslint-disable-next-line compat/compat
-        window?.navigator?.sendBeacon(options.url, encodePostData(options))
+        window?.navigator?.sendBeacon(url, encodePostData(options))
     } catch (e) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
