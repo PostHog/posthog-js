@@ -1,3 +1,8 @@
+## 1.113.0 - 2024-03-11
+
+- feat: scrub payloads with forbidden words (#1059)
+- chore: remove unused path (#1066)
+
 ## 1.112.1 - 2024-03-11
 
 - Fix compression (#1062)
