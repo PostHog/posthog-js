@@ -135,8 +135,7 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
           .description {
               font-size: 13px;
-              margin-top: 5px;
-              opacity: .60;
+              padding-top: 5px;
               background: ${appearance?.backgroundColor || '#eeeded'};
           }
           .ratings-number {
