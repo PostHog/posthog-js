@@ -64,14 +64,16 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
         return null
     }
 
-    if (transport === 'sendBeacon') {
-        const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : data
-        return new Blob([encodeToDataString(body)], { type: 'application/x-www-form-urlencoded' })
-    }
-
+    // Gzip is always a blob
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
         return new Blob([gzipData], { type: 'text/plain' })
+    }
+
+    // sendBeacon is always a blob but can be base64 encoded internally
+    if (transport === 'sendBeacon') {
+        const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : data
+        return new Blob([encodeToDataString(body)], { type: 'application/x-www-form-urlencoded' })
     }
 
     if (compression === Compression.Base64) {
