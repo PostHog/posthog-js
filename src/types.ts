@@ -222,7 +222,7 @@ export interface RequestOptions {
     callback?: RequestCallback
     timeout?: number
     noRetries?: boolean
-    compression?: Compression
+    compression?: Compression | 'best-available'
 }
 
 // Queued request types - the same as a request but with additional queueing information
@@ -293,7 +293,13 @@ export interface DecideResponse {
     siteApps: { id: number; url: string }[]
 }
 
-export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
+export type FeatureFlagsCallback = (
+    flags: string[],
+    variants: Record<string, string | boolean>,
+    context?: {
+        errorsLoading?: boolean
+    }
+) => void
 
 // TODO: delete custom_properties after changeless typescript refactor
 export interface AutoCaptureCustomProperty {

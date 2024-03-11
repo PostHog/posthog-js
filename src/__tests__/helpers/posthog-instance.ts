@@ -1,12 +1,9 @@
 // The library depends on having the module initialized before it can be used.
 
 import { v4 } from 'uuid'
-import { PostHog, init_as_module } from '../../posthog-core'
+import { PostHog } from '../../posthog-core'
 import 'regenerator-runtime/runtime'
 import { PostHogConfig } from '../../types'
-
-// It sets a global variable that is set and used to initialize subsequent libaries.
-beforeAll(() => init_as_module())
 
 export const createPosthogInstance = async (
     token: string = v4(),
@@ -17,7 +14,6 @@ export const createPosthogInstance = async (
     // written, we first create an instance, then call init on it which then
     // creates another instance.
     const posthog = new PostHog()
-
     // eslint-disable-next-line compat/compat
     return await new Promise<PostHog>((resolve) =>
         posthog.init(
@@ -30,10 +26,11 @@ export const createPosthogInstance = async (
                 ...config,
                 loaded: (p) => {
                     config.loaded?.(p)
+
                     resolve(p)
                 },
             },
-            'test'
+            'test-' + token
         )
     )
 }

@@ -1,6 +1,7 @@
 import { USER_STATE } from '../constants'
-import { PostHog } from '../posthog-core'
+import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
+import { uuidv7 } from '../uuidv7'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
@@ -9,8 +10,7 @@ jest.mock('../gdpr-utils', () => ({
 jest.mock('../decide')
 
 given('lib', () => {
-    const posthog = new PostHog()
-    posthog._init('testtoken', given.config, 'testhog')
+    const posthog = _posthog.init('testtoken', given.config, uuidv7())
     return Object.assign(posthog, given.overrides)
 })
 

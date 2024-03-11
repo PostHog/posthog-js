@@ -1,3 +1,26 @@
+## 1.112.1 - 2024-03-11
+
+- Fix compression (#1062)
+
+## 1.112.0 - 2024-03-08
+
+- feat: Refactor request logic (#1055)
+- feat: Add more ad ids (#1057)
+
+## 1.111.3 - 2024-03-07
+
+- chore: Rework SDK initialisation (#1023)
+
+## 1.111.2 - 2024-03-06
+
+- feat: Ensure ingestion domains follow the same logic. (#1049)
+
+## 1.111.1 - 2024-03-06
+
+- chore: Removed jsc callbacks (#1052)
+- fix: posthog path to ignore (#1054)
+- chore: add some privacy examples to the copy autocapture demo (#1053)
+
 ## 1.111.0 - 2024-03-05
 
 - feat: copy and cut autocapture (#1047)

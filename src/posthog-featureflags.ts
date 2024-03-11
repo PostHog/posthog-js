@@ -44,37 +44,39 @@ export const parseFeatureFlagDecideResponse = (
 ) => {
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
-    if (flags) {
-        // using the v1 api
-        if (_isArray(flags)) {
-            const $enabled_feature_flags: Record<string, boolean> = {}
-            if (flags) {
-                for (let i = 0; i < flags.length; i++) {
-                    $enabled_feature_flags[flags[i]] = true
-                }
-            }
-            persistence &&
-                persistence.register({
-                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
-                    [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
-                })
-        } else {
-            // using the v2+ api
-            let newFeatureFlags = flags
-            let newFeatureFlagPayloads = flagPayloads
-            if (response.errorsWhileComputingFlags) {
-                // if not all flags were computed, we upsert flags instead of replacing them
-                newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-                newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
-            }
-            persistence &&
-                persistence.register({
-                    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
-                    [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
-                    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
-                })
-        }
+    if (!flags) {
+        return
     }
+    // using the v1 api
+    if (_isArray(flags)) {
+        const $enabled_feature_flags: Record<string, boolean> = {}
+        if (flags) {
+            for (let i = 0; i < flags.length; i++) {
+                $enabled_feature_flags[flags[i]] = true
+            }
+        }
+        persistence &&
+            persistence.register({
+                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
+                [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+            })
+        return
+    }
+
+    // using the v2+ api
+    let newFeatureFlags = flags
+    let newFeatureFlagPayloads = flagPayloads
+    if (response.errorsWhileComputingFlags) {
+        // if not all flags were computed, we upsert flags instead of replacing them
+        newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
+        newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+    }
+    persistence &&
+        persistence.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
+            [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
+        })
 }
 
 export class PostHogFeatureFlags {
@@ -197,15 +199,20 @@ export class PostHogFeatureFlags {
             callback: (response) => {
                 this.setReloadingPaused(false)
 
-                if (response.statusCode !== 200) {
-                    return // or error out??
+                let errorsLoading = true
+
+                if (response.statusCode === 200) {
+                    // successful request
+                    // reset anon_distinct_id after at least a single request with it
+                    // makes it through
+                    this.$anon_distinct_id = undefined
+                    errorsLoading = false
                 }
-                // reset anon_distinct_id after at least a single request with it
-                // makes it through
-                this.$anon_distinct_id = undefined
-                if (response.json) {
-                    this.receivedFeatureFlags(response.json)
-                }
+                // :TRICKY: We want to fire the callback even if the request fails
+                // and return existing flags if they exist
+                // This is because we don't want to block clients waiting for flags to load.
+                // It's possible they're waiting for the callback to render the UI, but it never occurs.
+                this.receivedFeatureFlags(response.json ?? {}, errorsLoading)
 
                 // :TRICKY: Reload - start another request if queued!
                 this._startReloadTimer()
@@ -278,7 +285,7 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers = this.featureFlagEventHandlers.filter((h) => h !== handler)
     }
 
-    receivedFeatureFlags(response: Partial<DecideResponse>): void {
+    receivedFeatureFlags(response: Partial<DecideResponse>, errorsLoading?: boolean): void {
         if (!this.instance.persistence) {
             return
         }
@@ -286,7 +293,7 @@ export class PostHogFeatureFlags {
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
-        this._fireFeatureFlagsCallbacks()
+        this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 
     /*
@@ -403,9 +410,9 @@ export class PostHogFeatureFlags {
         }
     }
 
-    _fireFeatureFlagsCallbacks(): void {
+    _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
-        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants))
+        this.featureFlagEventHandlers.forEach((handler) => handler(flags, flagVariants, { errorsLoading }))
     }
 
     /**
