@@ -215,7 +215,7 @@ export interface RequestOptions {
     callback?: RequestCallback
     timeout?: number
     noRetries?: boolean
-    compression?: Compression
+    compression?: Compression | 'best-available'
 }
 
 // Queued request types - the same as a request but with additional queueing information
