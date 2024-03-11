@@ -154,7 +154,7 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     }
     _each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
         if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
-            scrubbed = LOGGER_PREFIX + ' ' + label + ' body might contain: ' + text
+            scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted as might contain: ' + text
         }
     })
 

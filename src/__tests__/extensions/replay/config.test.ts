@@ -245,8 +245,8 @@ describe('config', () => {
                 requestHeaders: {
                     'content-type': 'application/json',
                 },
-                requestBody: '[SessionRecording] Request body might contain: password',
-                responseBody: '[SessionRecording] Response body might contain: password',
+                requestBody: '[SessionRecording] Request body redacted as might contain: password',
+                responseBody: '[SessionRecording] Response body redacted as might contain: password',
             })
         })
 
@@ -277,8 +277,8 @@ describe('config', () => {
                 requestHeaders: {
                     'content-type': 'edited',
                 },
-                requestBody: '[SessionRecording] Request body might contain: password',
-                responseBody: '[SessionRecording] Response body might contain: password',
+                requestBody: '[SessionRecording] Request body redacted as might contain: password',
+                responseBody: '[SessionRecording] Response body redacted as might contain: password',
             })
         })
 
