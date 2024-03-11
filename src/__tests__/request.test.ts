@@ -248,18 +248,52 @@ describe('request', () => {
             transport = 'sendBeacon'
         })
 
-        it("should encode data to a string and send it as a blob if it's a POST request", () => {
+        it("should encode data to a string and send it as a blob if it's a POST request", async () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/',
                     method: 'POST',
-                    data: { data: 'content' },
+                    data: { my: 'content' },
                 })
             )
             expect(mockedSendBeacon).toHaveBeenCalledWith(
                 'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1',
                 expect.any(Blob)
             )
+
+            const blob = mockedSendBeacon.mock.calls[0][1] as Blob
+
+            const reader = new FileReader()
+            const result = await new Promise((resolve) => {
+                reader.onload = () => resolve(reader.result)
+                reader.readAsText(blob)
+            })
+
+            expect(result).toBe('data=%7B%22my%22%3A%22content%22%7D')
+        })
+
+        it('should respect base64 compression', async () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    compression: Compression.Base64,
+                    data: { my: 'content' },
+                })
+            )
+            expect(mockedSendBeacon).toHaveBeenCalledWith(
+                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64&beacon=1',
+                expect.any(Blob)
+            )
+
+            const blob = mockedSendBeacon.mock.calls[0][1] as Blob
+            const reader = new FileReader()
+            const result = await new Promise((resolve) => {
+                reader.onload = () => resolve(reader.result)
+                reader.readAsText(blob)
+            })
+
+            expect(result).toBe('data=%7B%22my%22%3A%22content%22%7D')
         })
     })
 })

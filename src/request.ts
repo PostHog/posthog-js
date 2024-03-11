@@ -4,7 +4,7 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { _formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, document, XMLHttpRequest, AbortController, sendBeacon } from './utils/globals'
+import { fetch, document, XMLHttpRequest, AbortController, navigator } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
@@ -22,7 +22,7 @@ export const request = (_options: RequestOptions) => {
         compression: options.compression,
     })
 
-    if (options.transport === 'sendBeacon' && sendBeacon) {
+    if (options.transport === 'sendBeacon' && navigator?.sendBeacon) {
         return _sendBeacon(options)
     }
 
@@ -65,8 +65,8 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
     }
 
     if (transport === 'sendBeacon') {
-        const body = encodeToDataString(data)
-        return new Blob([body], { type: 'application/x-www-form-urlencoded' })
+        const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : encodeToDataString(data)
+        return new Blob([encodeToDataString(body)], { type: 'application/x-www-form-urlencoded' })
     }
 
     if (compression === Compression.GZipJS) {
@@ -194,8 +194,9 @@ const _sendBeacon = (options: RequestOptions) => {
 
     try {
         // eslint-disable-next-line compat/compat
-        sendBeacon!(url, encodePostData(options))
+        navigator!.sendBeacon!(url, encodePostData(options))
     } catch (e) {
+        console.error('Error sending message with')
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
     }
