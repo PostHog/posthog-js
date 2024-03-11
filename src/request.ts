@@ -4,7 +4,7 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { _formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, document, window, XMLHttpRequest, AbortController } from './utils/globals'
+import { fetch, document, XMLHttpRequest, AbortController, sendBeacon } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
@@ -22,8 +22,8 @@ export const request = (_options: RequestOptions) => {
         compression: options.compression,
     })
 
-    if (options.transport === 'sendBeacon' && window?.navigator?.sendBeacon) {
-        return sendBeacon(options)
+    if (options.transport === 'sendBeacon' && sendBeacon) {
+        return _sendBeacon(options)
     }
 
     // NOTE: Until we are confident with it, we only use fetch if explicitly told so
@@ -184,7 +184,7 @@ const _fetch = (options: RequestOptions) => {
     return
 }
 
-const sendBeacon = (options: RequestOptions) => {
+const _sendBeacon = (options: RequestOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
@@ -194,7 +194,7 @@ const sendBeacon = (options: RequestOptions) => {
 
     try {
         // eslint-disable-next-line compat/compat
-        window?.navigator?.sendBeacon(url, encodePostData(options))
+        sendBeacon!(url, encodePostData(options))
     } catch (e) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here

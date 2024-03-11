@@ -8,9 +8,10 @@ jest.mock('../utils/globals', () => ({
     ...jest.requireActual('../utils/globals'),
     fetch: jest.fn(),
     XMLHttpRequest: jest.fn(),
+    sendBeacon: jest.fn(),
 }))
 
-import { fetch, XMLHttpRequest } from '../utils/globals'
+import { fetch, XMLHttpRequest, sendBeacon } from '../utils/globals'
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
@@ -23,6 +24,7 @@ const flushPromises = async () => {
 describe('request', () => {
     const mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
     const mockedXMLHttpRequest: jest.MockedFunction<any> = XMLHttpRequest as jest.MockedFunction<any>
+    const mockedSendBeacon: jest.MockedFunction<any> = sendBeacon as jest.MockedFunction<any>
     const mockedXHR = {
         open: jest.fn(),
         setRequestHeader: jest.fn(),
@@ -237,6 +239,26 @@ describe('request', () => {
             expect(mockedXHR.setRequestHeader).not.toHaveBeenCalledWith(
                 'Content-Type',
                 'application/x-www-form-urlencoded'
+            )
+        })
+    })
+
+    describe('sendBeacon', () => {
+        beforeEach(() => {
+            transport = 'sendBeacon'
+        })
+
+        it("should encode data to a string and send it as a blob if it's a POST request", () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    data: { data: 'content' },
+                })
+            )
+            expect(mockedSendBeacon).toHaveBeenCalledWith(
+                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1',
+                expect.any(Blob)
             )
         })
     })
