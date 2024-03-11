@@ -1,3 +1,7 @@
+## 1.113.2 - 2024-03-11
+
+- fix: Send beacon request encoding (#1068)
+
 ## 1.113.1 - 2024-03-11
 
 - fix: clarify redaction message (#1069)
