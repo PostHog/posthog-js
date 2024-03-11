@@ -65,7 +65,7 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
     }
 
     if (transport === 'sendBeacon') {
-        const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : encodeToDataString(data)
+        const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : data
         return new Blob([encodeToDataString(body)], { type: 'application/x-www-form-urlencoded' })
     }
 
@@ -196,7 +196,6 @@ const _sendBeacon = (options: RequestOptions) => {
         // eslint-disable-next-line compat/compat
         navigator!.sendBeacon!(url, encodePostData(options))
     } catch (e) {
-        console.error('Error sending message with')
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
     }
