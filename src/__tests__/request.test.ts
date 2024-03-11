@@ -297,5 +297,29 @@ describe('request', () => {
 
             expect(result).toBe('data=eyJteSI6ImNvbnRlbnQifQ%3D%3D')
         })
+
+        it('should respect gzip compression', async () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    compression: Compression.GZipJS,
+                    data: { my: 'content' },
+                })
+            )
+            expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
+                expect.any(Blob)
+            )
+
+            const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+            const reader = new FileReader()
+            const result = await new Promise((resolve) => {
+                reader.onload = () => resolve(reader.result)
+                reader.readAsText(blob)
+            })
+
+            expect(result).toMatchInlineSnapshot(`"�      �VʭT�RJ��+I�+Q� �ԮM   "`)
+        })
     })
 })
