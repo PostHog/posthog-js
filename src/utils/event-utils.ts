@@ -3,7 +3,7 @@ import { _isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
 import { _each, _extend, _strip_empty_properties, _timestamp } from './index'
-import { assignableWindow, document, location, userAgent, window } from './globals'
+import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
@@ -129,7 +129,7 @@ export const _info = {
             _strip_empty_properties({
                 $os: os_name,
                 $os_version: os_version,
-                $browser: _info.browser(userAgent, navigator.vendor, assignableWindow.opera),
+                $browser: _info.browser(userAgent, navigator.vendor),
                 $device: _info.device(userAgent),
                 $device_type: _info.deviceType(userAgent),
             }),
@@ -138,7 +138,7 @@ export const _info = {
                 $host: location?.host,
                 $pathname: location?.pathname,
                 $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor, assignableWindow.opera),
+                $browser_version: _info.browserVersion(userAgent, navigator.vendor),
                 $browser_language: _info.browserLanguage(),
                 $screen_height: window?.screen.height,
                 $screen_width: window?.screen.width,
@@ -162,10 +162,10 @@ export const _info = {
             _strip_empty_properties({
                 $os: os_name,
                 $os_version: os_version,
-                $browser: _info.browser(userAgent, navigator.vendor, assignableWindow.opera),
+                $browser: _info.browser(userAgent, navigator.vendor),
             }),
             {
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor, assignableWindow.opera),
+                $browser_version: _info.browserVersion(userAgent, navigator.vendor),
             }
         )
     },
