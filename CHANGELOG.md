@@ -1,3 +1,7 @@
+## 1.112.1 - 2024-03-11
+
+- Fix compression (#1062)
+
 ## 1.112.0 - 2024-03-08
 
 - feat: Refactor request logic (#1055)
