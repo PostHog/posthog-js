@@ -4,7 +4,7 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { _formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, document, window, XMLHttpRequest, AbortController } from './utils/globals'
+import { fetch, document, XMLHttpRequest, AbortController, navigator } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
@@ -22,8 +22,8 @@ export const request = (_options: RequestOptions) => {
         compression: options.compression,
     })
 
-    if (options.transport === 'sendBeacon' && window?.navigator?.sendBeacon) {
-        return sendBeacon(options)
+    if (options.transport === 'sendBeacon' && navigator?.sendBeacon) {
+        return _sendBeacon(options)
     }
 
     // NOTE: Until we are confident with it, we only use fetch if explicitly told so
@@ -64,19 +64,21 @@ const encodePostData = ({ data, compression, transport, method }: RequestOptions
         return null
     }
 
+    // Gzip is always a blob
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
         return new Blob([gzipData], { type: 'text/plain' })
     }
 
+    // sendBeacon is always a blob but can be base64 encoded internally
+    if (transport === 'sendBeacon') {
+        const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : data
+        return new Blob([encodeToDataString(body)], { type: 'application/x-www-form-urlencoded' })
+    }
+
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(JSON.stringify(data))
         return encodeToDataString(b64data)
-    }
-
-    if (transport === 'sendBeacon') {
-        const body = encodeToDataString(data)
-        return new Blob([body], { type: 'application/x-www-form-urlencoded' })
     }
 
     if (method !== 'POST') {
@@ -184,12 +186,17 @@ const _fetch = (options: RequestOptions) => {
     return
 }
 
-const sendBeacon = (options: RequestOptions) => {
+const _sendBeacon = (options: RequestOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
+
+    const url = extendURLParams(options.url, {
+        beacon: '1',
+    })
+
     try {
         // eslint-disable-next-line compat/compat
-        window?.navigator?.sendBeacon(options.url, encodePostData(options))
+        navigator!.sendBeacon!(url, encodePostData(options))
     } catch (e) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here

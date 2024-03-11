@@ -8,9 +8,12 @@ jest.mock('../utils/globals', () => ({
     ...jest.requireActual('../utils/globals'),
     fetch: jest.fn(),
     XMLHttpRequest: jest.fn(),
+    navigator: {
+        sendBeacon: jest.fn(),
+    },
 }))
 
-import { fetch, XMLHttpRequest } from '../utils/globals'
+import { fetch, XMLHttpRequest, navigator } from '../utils/globals'
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
@@ -23,6 +26,7 @@ const flushPromises = async () => {
 describe('request', () => {
     const mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
     const mockedXMLHttpRequest: jest.MockedFunction<any> = XMLHttpRequest as jest.MockedFunction<any>
+    const mockedNavigator: jest.Mocked<typeof navigator> = navigator as jest.Mocked<typeof navigator>
     const mockedXHR = {
         open: jest.fn(),
         setRequestHeader: jest.fn(),
@@ -238,6 +242,84 @@ describe('request', () => {
                 'Content-Type',
                 'application/x-www-form-urlencoded'
             )
+        })
+    })
+
+    describe('sendBeacon', () => {
+        beforeEach(() => {
+            transport = 'sendBeacon'
+        })
+
+        it("should encode data to a string and send it as a blob if it's a POST request", async () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    data: { my: 'content' },
+                })
+            )
+            expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&beacon=1',
+                expect.any(Blob)
+            )
+
+            const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+
+            const reader = new FileReader()
+            const result = await new Promise((resolve) => {
+                reader.onload = () => resolve(reader.result)
+                reader.readAsText(blob)
+            })
+
+            expect(result).toBe('data=%7B%22my%22%3A%22content%22%7D')
+        })
+
+        it('should respect base64 compression', async () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    compression: Compression.Base64,
+                    data: { my: 'content' },
+                })
+            )
+            expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64&beacon=1',
+                expect.any(Blob)
+            )
+
+            const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+            const reader = new FileReader()
+            const result = await new Promise((resolve) => {
+                reader.onload = () => resolve(reader.result)
+                reader.readAsText(blob)
+            })
+
+            expect(result).toBe('data=eyJteSI6ImNvbnRlbnQifQ%3D%3D')
+        })
+
+        it('should respect gzip compression', async () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    compression: Compression.GZipJS,
+                    data: { my: 'content' },
+                })
+            )
+            expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
+                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=gzip-js&beacon=1',
+                expect.any(Blob)
+            )
+
+            const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+            const reader = new FileReader()
+            const result = await new Promise((resolve) => {
+                reader.onload = () => resolve(reader.result)
+                reader.readAsText(blob)
+            })
+
+            expect(result).toMatchInlineSnapshot(`"�      �VʭT�RJ��+I�+Q� �ԮM   "`)
         })
     })
 })
