@@ -28,23 +28,6 @@ describe('config', () => {
                 expect(networkOptions.recordBody).toBe(false)
             })
 
-            it('should remove the Authorization header from requests even if no other config is set', () => {
-                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
-                const cleaned = networkOptions.maskRequestFn!({
-                    name: 'something',
-                    requestHeaders: {
-                        Authorization: 'Bearer 123',
-                        'content-type': 'application/json',
-                    },
-                })
-                expect(cleaned).toEqual({
-                    name: 'something',
-                    requestHeaders: {
-                        'content-type': 'application/json',
-                    },
-                })
-            })
-
             it('should cope with no headers when even if no other config is set', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({
@@ -54,34 +37,6 @@ describe('config', () => {
                 expect(cleaned).toEqual({
                     name: 'something',
                     requestHeaders: undefined,
-                })
-            })
-
-            it('should remove the Authorization header from requests even when a mask request fn is set', () => {
-                const posthogConfig = defaultConfig()
-                posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
-                    return {
-                        ...data,
-                        requestHeaders: {
-                            ...(data.requestHeaders ? data.requestHeaders : {}),
-                            'content-type': 'edited',
-                        },
-                    }
-                }
-                const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
-
-                const cleaned = networkOptions.maskRequestFn!({
-                    name: 'something',
-                    requestHeaders: {
-                        Authorization: 'Bearer 123',
-                        'content-type': 'application/json',
-                    },
-                })
-                expect(cleaned).toEqual({
-                    name: 'something',
-                    requestHeaders: {
-                        'content-type': 'edited',
-                    },
                 })
             })
 
@@ -104,23 +59,6 @@ describe('config', () => {
                 })
                 expect(cleaned).toEqual({
                     name: 'edited',
-                    requestHeaders: {
-                        'content-type': 'application/json',
-                    },
-                })
-            })
-
-            it('case insensitively removes headers on the deny list', () => {
-                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
-                const cleaned = networkOptions.maskRequestFn!({
-                    name: 'something',
-                    requestHeaders: {
-                        AuThOrIzAtIoN: 'Bearer 123',
-                        'content-type': 'application/json',
-                    },
-                })
-                expect(cleaned).toEqual({
-                    name: 'something',
                     requestHeaders: {
                         'content-type': 'application/json',
                     },
@@ -183,7 +121,7 @@ describe('config', () => {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
-                    requestBody: '[SessionReplay] Request body too large to record (1000001 bytes)',
+                    requestBody: '[SessionRecording] Request body too large to record (1000001 bytes)',
                 })
             })
 
@@ -203,7 +141,7 @@ describe('config', () => {
                         'content-type': 'application/json',
                         'content-length': '1000001',
                     },
-                    responseBody: '[SessionReplay] Response body too large to record (1000001 bytes)',
+                    responseBody: '[SessionRecording] Response body too large to record (1000001 bytes)',
                 })
             })
 
@@ -239,8 +177,146 @@ describe('config', () => {
                     requestHeaders: {
                         'content-type': 'application/json',
                     },
-                    requestBody: '[SessionReplay] Request body too large to record (1000001 bytes)',
+                    requestBody: '[SessionRecording] Request body too large to record (1000001 bytes)',
                 })
+            })
+        })
+    })
+
+    describe('masking/privacy', () => {
+        it('should remove the Authorization header from requests even if no other config is set', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+            })
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    'content-type': 'application/json',
+                },
+            })
+        })
+
+        it('should remove the Authorization header from requests even when a mask request fn is set', () => {
+            const posthogConfig = defaultConfig()
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
+                return {
+                    ...data,
+                    requestHeaders: {
+                        ...(data.requestHeaders ? data.requestHeaders : {}),
+                        'content-type': 'edited',
+                    },
+                }
+            }
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+            })
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    'content-type': 'edited',
+                },
+            })
+        })
+
+        it('should redact password when no masking config is set', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+                requestBody: 'some body with password',
+                responseBody: 'some body with password',
+            })
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    'content-type': 'application/json',
+                },
+                requestBody: '[SessionRecording] Request body might contain: password',
+                responseBody: '[SessionRecording] Response body might contain: password',
+            })
+        })
+
+        it('should redact password even when a mask request fn is set', () => {
+            const posthogConfig = defaultConfig()
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
+                return {
+                    ...data,
+                    requestHeaders: {
+                        ...(data.requestHeaders ? data.requestHeaders : {}),
+                        'content-type': 'edited',
+                    },
+                }
+            }
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+                requestBody: 'some body with password',
+                responseBody: 'some body with password',
+            })
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    'content-type': 'edited',
+                },
+                requestBody: '[SessionRecording] Request body might contain: password',
+                responseBody: '[SessionRecording] Response body might contain: password',
+            })
+        })
+
+        it('case insensitively removes headers on the deny list', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    AuThOrIzAtIoN: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+            })
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    'content-type': 'application/json',
+                },
+            })
+        })
+
+        it('does not capture CC data', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+                requestBody: 'take payment with CC 4242 4242 4242 4242',
+                responseBody: 'take payment with CC 4242 4242 4242 4242',
+            })
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestHeaders: {
+                    'content-type': 'application/json',
+                },
+                requestBody: '[SessionRecording] Request body redacted',
+                responseBody: '[SessionRecording] Response body redacted',
             })
         })
     })

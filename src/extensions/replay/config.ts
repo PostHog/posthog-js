@@ -1,7 +1,11 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../types'
-import { _isFunction, _isNullish, _isString } from '../../utils/type-utils'
+import { _isFunction, _isNullish, _isString, _isUndefined } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
+import { shouldCaptureValue } from '../../autocapture-utils'
+import { _each } from '../../utils'
+
+const LOGGER_PREFIX = '[SessionRecording]'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
     initiatorTypes: [
@@ -44,7 +48,7 @@ export const defaultNetworkOptions: NetworkRecordOptions = {
     payloadSizeLimitBytes: 1000000,
 }
 
-const HEADER_DENYLIST = [
+const HEADER_DENY_LIST = [
     'authorization',
     'x-forwarded-for',
     'authorization',
@@ -60,10 +64,24 @@ const HEADER_DENYLIST = [
     'x-xsrf-token',
 ]
 
+const PAYLOAD_CONTENT_DENY_LIST = [
+    'password',
+    'secret',
+    'passwd',
+    'api_key',
+    'apikey',
+    'auth',
+    'credentials',
+    'mysql_pwd',
+    'privatekey',
+    'private_key',
+    'tokenconst',
+]
+
 // we always remove headers on the deny list because we never want to capture this sensitive data
 const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
-    Object.keys(data.requestHeaders ?? {}).forEach((header) => {
-        if (HEADER_DENYLIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
+    _each(Object.keys(data.requestHeaders ?? {}), (header) => {
+        if (HEADER_DENY_LIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
     })
     return data
 }
@@ -83,7 +101,7 @@ function estimateBytes(payload: string): number {
     return new Blob([payload]).size
 }
 
-function redactPayload(
+function enforcePayloadSizeLimit(
     payload: string | null | undefined,
     headers: Record<string, any> | undefined,
     limit: number,
@@ -99,7 +117,7 @@ function redactPayload(
     }
 
     if (requestContentLength > limit) {
-        return `[SessionReplay] ${description} body too large to record (${requestContentLength} bytes)`
+        return LOGGER_PREFIX + ` ${description} body too large to record (${requestContentLength} bytes)`
     }
 
     return payload
@@ -114,15 +132,44 @@ const limitPayloadSize = (
 
     return (data) => {
         if (data?.requestBody) {
-            data.requestBody = redactPayload(data.requestBody, data.requestHeaders, limit, 'Request')
+            data.requestBody = enforcePayloadSizeLimit(data.requestBody, data.requestHeaders, limit, 'Request')
         }
 
         if (data?.responseBody) {
-            data.responseBody = redactPayload(data.responseBody, data.responseHeaders, limit, 'Response')
+            data.responseBody = enforcePayloadSizeLimit(data.responseBody, data.responseHeaders, limit, 'Response')
         }
 
         return data
     }
+}
+
+function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Response'): string | null | undefined {
+    if (_isNullish(payload)) {
+        return payload
+    }
+    let scrubbed = payload
+
+    if (!shouldCaptureValue(scrubbed, false)) {
+        scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted'
+    }
+    _each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
+        if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
+            scrubbed = LOGGER_PREFIX + ' ' + label + ' body might contain: ' + text
+        }
+    })
+
+    return scrubbed
+}
+
+function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): CapturedNetworkRequest | undefined {
+    if (_isUndefined(capturedRequest)) {
+        return undefined
+    }
+
+    capturedRequest.requestBody = scrubPayload(capturedRequest.requestBody, 'Request')
+    capturedRequest.responseBody = scrubPayload(capturedRequest.responseBody, 'Response')
+
+    return capturedRequest
 }
 
 /**
@@ -144,7 +191,7 @@ export const buildNetworkRequestOptions = (
     const payloadLimiter = limitPayloadSize(config)
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
-        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d)))
+        scrubPayloads(payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d))))
 
     const hasDeprecatedMaskFunction = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
 
