@@ -32,7 +32,7 @@ import {
     _isUndefined,
 } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { assignableWindow, window } from '../../utils/globals'
+import { document, assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { userOptedOut } from '../../gdpr-utils'
@@ -261,6 +261,13 @@ export class SessionRecording {
 
         window?.addEventListener('online', () => {
             this._tryAddCustomEvent('browser online', {})
+        })
+
+        window?.addEventListener('visibilitychange', () => {
+            if (document?.visibilityState) {
+                const label = 'window ' + document.visibilityState
+                this._tryAddCustomEvent(label, {})
+            }
         })
 
         if (!this.instance.sessionManager) {
