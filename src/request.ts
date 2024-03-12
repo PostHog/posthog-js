@@ -10,6 +10,15 @@ import { gzipSync, strToU8 } from 'fflate'
 // eslint-disable-next-line compat/compat
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
 
+const CONTENT_TYPE_PLAIN = 'text/plain'
+const CONTENT_TYPE_JSON = 'application/json'
+const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
+
+type EncodedBody = {
+    contentType: string
+    body: string | BlobPart
+}
+
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestOptions) => {
     // Clone the options so we don't modify the original object
@@ -59,46 +68,45 @@ const encodeToDataString = (data: string | Record<string, any>): string => {
     return 'data=' + encodeURIComponent(typeof data === 'string' ? data : JSON.stringify(data))
 }
 
-const encodePostData = ({ data, compression, transport, method }: RequestOptions): string | BlobPart | null => {
+const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | undefined => {
     if (!data) {
-        return null
+        return
     }
 
-    // Gzip is always a blob
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
-        return new Blob([gzipData], { type: 'text/plain' })
-    }
-
-    // sendBeacon is always a blob but can be base64 encoded internally
-    if (transport === 'sendBeacon') {
-        const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : data
-        return new Blob([encodeToDataString(body)], { type: 'application/x-www-form-urlencoded' })
+        return {
+            contentType: CONTENT_TYPE_PLAIN,
+            body: new Blob([gzipData], { type: CONTENT_TYPE_PLAIN }),
+        }
     }
 
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(JSON.stringify(data))
-        return encodeToDataString(b64data)
+
+        return {
+            contentType: CONTENT_TYPE_FORM,
+            body: encodeToDataString(b64data),
+        }
     }
 
-    if (method !== 'POST') {
-        return null
+    return {
+        contentType: CONTENT_TYPE_JSON,
+        body: JSON.stringify(data),
     }
-
-    return encodeToDataString(data)
 }
 
 const xhr = (options: RequestOptions) => {
     const req = new XMLHttpRequest!()
     req.open(options.method || 'GET', options.url, true)
-    const body = encodePostData(options)
+    const { contentType, body } = encodePostData(options) ?? {}
 
     _each(options.headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
 
-    if (options.method === 'POST' && typeof body === 'string') {
-        req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
+    if (contentType) {
+        req.setRequestHeader('Content-Type', contentType)
     }
 
     if (options.timeout) {
@@ -129,7 +137,7 @@ const xhr = (options: RequestOptions) => {
 }
 
 const _fetch = (options: RequestOptions) => {
-    const body = encodePostData(options)
+    const { contentType, body } = encodePostData(options) ?? {}
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
@@ -137,8 +145,8 @@ const _fetch = (options: RequestOptions) => {
         headers.append(headerName, headerValue)
     })
 
-    if (options.method === 'POST' && typeof body === 'string') {
-        headers.append('Content-Type', 'application/x-www-form-urlencoded')
+    if (contentType) {
+        headers.append('Content-Type', contentType)
     }
 
     const url = options.url
@@ -195,8 +203,10 @@ const _sendBeacon = (options: RequestOptions) => {
     })
 
     try {
-        // eslint-disable-next-line compat/compat
-        navigator!.sendBeacon!(url, encodePostData(options))
+        const { contentType, body } = encodePostData(options) ?? {}
+        // sendBeacon requires a blob so we convert it
+        const sendBeaconBody = typeof body === 'string' ? new Blob([body], { type: contentType }) : body
+        navigator!.sendBeacon!(url, sendBeaconBody)
     } catch (e) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
