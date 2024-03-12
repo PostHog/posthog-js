@@ -258,7 +258,7 @@ describe('request', () => {
                 createRequest({
                     url: 'https://any.posthog-instance.com/',
                     method: 'POST',
-                    data: { my: 'content' },
+                    data: { foo: 'bar' },
                 })
             )
             expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
@@ -274,7 +274,7 @@ describe('request', () => {
                 reader.readAsText(blob)
             })
 
-            expect(result).toBe('data=%7B%22my%22%3A%22content%22%7D')
+            expect(result).toMatchInlineSnapshot(`"{\\"foo\\":\\"bar\\"}"`)
         })
 
         it('should respect base64 compression', async () => {
@@ -283,7 +283,7 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/',
                     method: 'POST',
                     compression: Compression.Base64,
-                    data: { my: 'content' },
+                    data: { foo: 'bar' },
                 })
             )
             expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
@@ -298,7 +298,7 @@ describe('request', () => {
                 reader.readAsText(blob)
             })
 
-            expect(result).toBe('data=eyJteSI6ImNvbnRlbnQifQ%3D%3D')
+            expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
         })
 
         it('should respect gzip compression', async () => {
@@ -307,7 +307,7 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/',
                     method: 'POST',
                     compression: Compression.GZipJS,
-                    data: { my: 'content' },
+                    data: { foo: 'bar' },
                 })
             )
             expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
@@ -322,7 +322,10 @@ describe('request', () => {
                 reader.readAsText(blob)
             })
 
-            expect(result).toMatchInlineSnapshot(`"�      �VʭT�RJ��+I�+Q� �ԮM   "`)
+            expect(result).toMatchInlineSnapshot(`
+                "�      �VJ��W�RJJ,R� ��+�
+                   "
+            `)
         })
     })
 })
