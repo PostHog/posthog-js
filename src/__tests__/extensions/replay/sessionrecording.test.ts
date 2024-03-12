@@ -1623,7 +1623,7 @@ describe('SessionRecording', () => {
 
             _emit(createIncrementalSnapshot({ type: 3 }))
 
-            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$pageview', {
+            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$url_changed', {
                 href: 'https://test.com',
             })
             ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
@@ -1636,7 +1636,7 @@ describe('SessionRecording', () => {
             _emit(createIncrementalSnapshot({ type: 3 }))
 
             // the window href has changed, so we capture another pageview
-            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$pageview', {
+            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$url_changed', {
                 href: 'https://test.com/other',
             })
         })
