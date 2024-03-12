@@ -1,3 +1,9 @@
+## 1.114.0 - 2024-03-12
+
+- feat: report browser visibility state in replay (#1071)
+- fix: typo in deny list (#1073)
+- fix(posthog-js): manually bump patch (#1072)
+
 ## 1.113.4 - 2024-03-12
 
 - fix(posthog-js): manually bump patch (#1072)
