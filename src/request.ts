@@ -67,12 +67,14 @@ const encodePostData = ({
     data,
     compression,
     transport,
-}: RequestOptions): {
-    contentType?: string
-    body: string | BlobPart | null
-} | null => {
+}: RequestOptions):
+    | {
+          contentType: string
+          body: string | BlobPart
+      }
+    | undefined => {
     if (!data) {
-        return null
+        return
     }
 
     // Gzip is always a blob

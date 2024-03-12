@@ -52,7 +52,7 @@ describe('request', () => {
 
         createRequest = (overrides) => ({
             url: 'https://any.posthog-instance.com?ver=1.23.45',
-            data: {},
+            data: undefined,
             headers: {},
             callback: mockCallback,
             transport,
@@ -117,7 +117,7 @@ describe('request', () => {
             request(createRequest())
 
             expect(mockedFetch).toHaveBeenCalledWith(`https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`, {
-                body: null,
+                body: undefined,
                 headers: new Headers(),
                 keepalive: false,
                 method: 'GET',
@@ -192,16 +192,16 @@ describe('request', () => {
             transport = 'XHR'
         })
 
-        it('should encode data to a string', () => {
+        it('should send application/json if no compression is set', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/',
                     method: 'POST',
-                    data: { data: 'content' },
+                    data: { foo: 'bar' },
                 })
             )
-            expect(mockedXHR.send).toHaveBeenCalledWith('data=%7B%22data%22%3A%22content%22%7D')
-            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/x-www-form-urlencoded')
+            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{\\"foo\\":\\"bar\\"}"`)
+            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
         })
 
         it('should base64 compress data if set', () => {
@@ -210,10 +210,10 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/',
                     method: 'POST',
                     compression: Compression.Base64,
-                    data: { data: 'content' },
+                    data: { foo: 'bar' },
                 })
             )
-            expect(mockedXHR.send).toHaveBeenCalledWith('data=eyJkYXRhIjoiY29udGVudCJ9')
+            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/x-www-form-urlencoded')
         })
 
@@ -223,7 +223,7 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/',
                     method: 'POST',
                     compression: Compression.GZipJS,
-                    data: { data: 'contents' },
+                    data: { foo: 'bar' },
                 })
             )
             expect(mockedXHR.send).toHaveBeenCalledTimes(1)
@@ -236,7 +236,10 @@ describe('request', () => {
                 reader.readAsText(mockedXHR.send.mock.calls[0][0])
             })
 
-            expect(res).toMatchInlineSnapshot(`"�      �VJI,IT�RJ��+I�+)V� ]�   "`)
+            expect(res).toMatchInlineSnapshot(`
+                "�      �VJ��W�RJJ,R� ��+�
+                   "
+            `)
 
             expect(mockedXHR.setRequestHeader).not.toHaveBeenCalledWith(
                 'Content-Type',
