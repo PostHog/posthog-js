@@ -203,7 +203,7 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
-    compression?: Compression = Compression.Base64 // Upgrades to gzip if decide response supports it
+    compression?: Compression
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: QueuedRequestOptions[]
     __autocapture: boolean | AutocaptureConfig | undefined
@@ -335,6 +335,8 @@ export class PostHog {
             // @ts-ignore
             this.__loaded_recorder_version = window?.rrweb?.version
         }
+
+        this.compression = config.disable_compression ? undefined : Compression.Base64
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionPersistence =
