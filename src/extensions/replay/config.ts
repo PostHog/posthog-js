@@ -75,7 +75,7 @@ const PAYLOAD_CONTENT_DENY_LIST = [
     'mysql_pwd',
     'privatekey',
     'private_key',
-    'tokenconst',
+    'token',
 ]
 
 // we always remove headers on the deny list because we never want to capture this sensitive data
