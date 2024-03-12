@@ -10,9 +10,9 @@ import { gzipSync, strToU8 } from 'fflate'
 // eslint-disable-next-line compat/compat
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
 
-const CT_PLAIN = 'text/plain'
-const CT_JSON = 'application/json'
-const CT_FORM = 'application/x-www-form-urlencoded'
+const CONTENT_TYPE_PLAIN = 'text/plain'
+const CONTENT_TYPE_JSON = 'application/json'
+const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestOptions) => {
@@ -81,8 +81,8 @@ const encodePostData = ({
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
         return {
-            contentType: CT_PLAIN,
-            body: new Blob([gzipData], { type: CT_PLAIN }),
+            contentType: CONTENT_TYPE_PLAIN,
+            body: new Blob([gzipData], { type: CONTENT_TYPE_PLAIN }),
         }
     }
 
@@ -90,8 +90,8 @@ const encodePostData = ({
     if (transport === 'sendBeacon') {
         const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : data
         return {
-            contentType: CT_FORM,
-            body: new Blob([encodeToDataString(body)], { type: CT_FORM }),
+            contentType: CONTENT_TYPE_FORM,
+            body: new Blob([encodeToDataString(body)], { type: CONTENT_TYPE_FORM }),
         }
     }
 
@@ -99,13 +99,13 @@ const encodePostData = ({
         const b64data = _base64Encode(JSON.stringify(data))
 
         return {
-            contentType: CT_FORM,
+            contentType: CONTENT_TYPE_FORM,
             body: encodeToDataString(b64data),
         }
     }
 
     return {
-        contentType: CT_JSON,
+        contentType: CONTENT_TYPE_JSON,
         body: JSON.stringify(data),
     }
 }
