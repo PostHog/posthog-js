@@ -14,6 +14,11 @@ const CONTENT_TYPE_PLAIN = 'text/plain'
 const CONTENT_TYPE_JSON = 'application/json'
 const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
 
+type EncodedBody = {
+    contentType: string
+    body: string | BlobPart
+}
+
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestOptions) => {
     // Clone the options so we don't modify the original object
@@ -63,35 +68,16 @@ const encodeToDataString = (data: string | Record<string, any>): string => {
     return 'data=' + encodeURIComponent(typeof data === 'string' ? data : JSON.stringify(data))
 }
 
-const encodePostData = ({
-    data,
-    compression,
-    transport,
-}: RequestOptions):
-    | {
-          contentType: string
-          body: string | BlobPart
-      }
-    | undefined => {
+const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | undefined => {
     if (!data) {
         return
     }
 
-    // Gzip is always a blob
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
         return {
             contentType: CONTENT_TYPE_PLAIN,
             body: new Blob([gzipData], { type: CONTENT_TYPE_PLAIN }),
-        }
-    }
-
-    // sendBeacon is always a blob but can be base64 encoded internally
-    if (transport === 'sendBeacon') {
-        const body = compression === Compression.Base64 ? _base64Encode(JSON.stringify(data)) : data
-        return {
-            contentType: CONTENT_TYPE_FORM,
-            body: new Blob([encodeToDataString(body)], { type: CONTENT_TYPE_FORM }),
         }
     }
 
@@ -217,9 +203,10 @@ const _sendBeacon = (options: RequestOptions) => {
     })
 
     try {
-        // eslint-disable-next-line compat/compat
-        const { body } = encodePostData(options) ?? {}
-        navigator!.sendBeacon!(url, body)
+        const { contentType, body } = encodePostData(options) ?? {}
+        // sendBeacon requires a blob so we convert it
+        const sendBeaconBody = typeof body === 'string' ? new Blob([body], { type: contentType }) : body
+        navigator!.sendBeacon!(url, sendBeaconBody)
     } catch (e) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
