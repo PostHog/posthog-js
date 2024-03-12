@@ -551,7 +551,7 @@ function initNetworkObserver(
             }
         })
 
-        if (requests.length > 0 || data.isInitial) {
+        if (requests.length > 0) {
             callback({ ...data, requests })
         }
     }
