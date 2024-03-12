@@ -1,3 +1,7 @@
+## 1.114.1 - 2024-03-12
+
+- fix: Disabled compression and application json (#1074)
+
 ## 1.114.0 - 2024-03-12
 
 - feat: report browser visibility state in replay (#1071)
