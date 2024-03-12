@@ -138,6 +138,10 @@ export class SessionRecording {
 
     private _fullSnapshotTimer?: number
 
+    // if pageview capture is disabled
+    // then we can manually track href changes
+    private _lastHref?: string
+
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
@@ -692,7 +696,10 @@ export class SessionRecording {
             if (!href) {
                 return
             }
+            this._lastHref = href
             rawEvent.data.href = href
+        } else {
+            this._pageViewFallBack()
         }
 
         if (rawEvent.type === EventType.FullSnapshot) {
@@ -731,6 +738,17 @@ export class SessionRecording {
             this._captureSnapshotBuffered(properties)
         } else {
             this.clearBuffer()
+        }
+    }
+
+    private _pageViewFallBack() {
+        if (this.instance.config.capture_pageview || !window) {
+            return
+        }
+        const currentUrl = this._maskUrl(window.location.href)
+        if (this._lastHref !== currentUrl) {
+            this._tryAddCustomEvent('$pageview', { href: currentUrl })
+            this._lastHref = currentUrl
         }
     }
 
