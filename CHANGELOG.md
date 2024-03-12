@@ -1,3 +1,7 @@
+## 1.114.2 - 2024-03-12
+
+- fix: patch rrweb zero width canvas bug (#1075)
+
 ## 1.114.1 - 2024-03-12
 
 - fix: Disabled compression and application json (#1074)
