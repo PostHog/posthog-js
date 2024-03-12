@@ -1,3 +1,8 @@
+## 1.113.4 - 2024-03-12
+
+- fix(posthog-js): manually bump patch (#1072)
+- fix: no empty requests (#1063)
+
 ## 1.113.2 - 2024-03-11
 
 - fix: Send beacon request encoding (#1068)
