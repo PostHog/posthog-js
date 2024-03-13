@@ -26,6 +26,18 @@ export default [
         input: 'src/loader-recorder-v2.ts',
         output: [
             {
+                file: 'dist/recorder.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [...plugins],
+    },
+    {
+        input: 'src/loader-recorder-v2.ts',
+        output: [
+            {
                 file: 'dist/recorder-v2.js',
                 sourcemap: true,
                 format: 'iife',
