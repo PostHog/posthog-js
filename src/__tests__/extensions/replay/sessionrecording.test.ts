@@ -4,6 +4,7 @@ import { loadScript } from '../../../utils'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
@@ -17,13 +18,15 @@ import {
 import { PostHog } from '../../../posthog-core'
 import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import Mock = jest.Mock
 import {
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow } from '../../../utils/globals'
+import { RequestRouter } from '../../../utils/request-router'
+import { customEvent, EventType, eventWithTime, pluginEvent } from '@rrweb/types'
+import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -54,6 +57,24 @@ const createIncrementalSnapshot = (event = {}) => ({
     ...event,
 })
 
+const createCustomSnapshot = (event = {}): customEvent => ({
+    type: EventType.Custom,
+    data: {
+        tag: 'custom',
+        payload: {},
+    },
+    ...event,
+})
+
+const createPluginSnapshot = (event = {}): pluginEvent => ({
+    type: EventType.Plugin,
+    data: {
+        plugin: 'plugin',
+        payload: {},
+    },
+    ...event,
+})
+
 function makeDecideResponse(partialResponse: Partial<DecideResponse>) {
     return partialResponse as unknown as DecideResponse
 }
@@ -68,7 +89,7 @@ describe('SessionRecording', () => {
     let config: PostHogConfig
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
-    let onFeatureFlagsCallback: ((flags: string[]) => void) | null
+    let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
 
     beforeEach(() => {
         assignableWindow.rrwebRecord = jest.fn(({ emit }) => {
@@ -117,6 +138,7 @@ describe('SessionRecording', () => {
                 onFeatureFlagsCallback = cb
             },
             sessionManager: sessionManager,
+            requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: jest.fn(),
         } as unknown as PostHog
 
@@ -201,14 +223,14 @@ describe('SessionRecording', () => {
     describe('startRecordingIfEnabled', () => {
         beforeEach(() => {
             // need to cast as any to mock private methods
-            jest.spyOn(sessionRecording as any, 'startCaptureAndTrySendingQueuedSnapshots')
+            jest.spyOn(sessionRecording as any, '_startCapture')
             jest.spyOn(sessionRecording, 'stopRecording')
             jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
         })
 
-        it('call startCaptureAndTrySendingQueuedSnapshots if its enabled', () => {
+        it('call _startCapture if its enabled', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect((sessionRecording as any).startCaptureAndTrySendingQueuedSnapshots).toHaveBeenCalled()
+            expect((sessionRecording as any)._startCapture).toHaveBeenCalled()
         })
 
         it('emits an options event', () => {
@@ -290,6 +312,22 @@ describe('SessionRecording', () => {
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
 
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(true)
+        })
+
+        it('stores true in persistence if canvas is enabled from the server', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_CANVAS_RECORDING]: undefined })
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', recordCanvas: true, canvasFps: 6, canvasQuality: '0.2' },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_CANVAS_RECORDING)).toEqual({
+                enabled: true,
+                fps: 6,
+                quality: '0.2',
+            })
         })
 
         it('stores false in persistence if recording is not enabled from the server', () => {
@@ -422,16 +460,15 @@ describe('SessionRecording', () => {
 
         describe('canvas', () => {
             it('passes the remote config to rrweb', () => {
-                sessionRecording.startRecordingIfEnabled()
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_CANVAS_RECORDING]: {
+                        enabled: true,
+                        fps: 6,
+                        quality: 0.2,
+                    },
+                })
 
-                sessionRecording.afterDecideResponse(
-                    makeDecideResponse({
-                        sessionRecording: { endpoint: '/s/', recordCanvas: true, canvasFps: 6, canvasQuality: '0.2' },
-                    })
-                )
-                expect(sessionRecording['_recordCanvas']).toStrictEqual(true)
-                expect(sessionRecording['_canvasFps']).toStrictEqual(6)
-                expect(sessionRecording['_canvasQuality']).toStrictEqual(0.2)
+                sessionRecording.startRecordingIfEnabled()
 
                 sessionRecording['_onScriptLoaded']()
                 expect(assignableWindow.rrwebRecord).toHaveBeenCalledWith(
@@ -536,12 +573,9 @@ describe('SessionRecording', () => {
                     $window_id: 'windowId',
                 },
                 {
-                    transport: 'XHR',
-                    method: 'POST',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _metrics: expect.anything(),
                 }
             )
         })
@@ -574,12 +608,9 @@ describe('SessionRecording', () => {
                     ],
                 },
                 {
-                    method: 'POST',
-                    transport: 'XHR',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _metrics: expect.anything(),
                 }
             )
         })
@@ -659,12 +690,9 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 59,
                 },
                 {
-                    method: 'POST',
-                    transport: 'XHR',
-                    endpoint: '/s/',
+                    _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
-                    _metrics: expect.anything(),
                 }
             )
 
@@ -720,13 +748,13 @@ describe('SessionRecording', () => {
             )
         })
 
-        it('loads script after `startCaptureAndTrySendingQueuedSnapshots` if not previously loaded', () => {
+        it('loads script after `_startCapture` if not previously loaded', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false })
 
             sessionRecording.startRecordingIfEnabled()
             expect(loadScript).not.toHaveBeenCalled()
 
-            sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+            sessionRecording['_startCapture']()
 
             expect(loadScript).toHaveBeenCalled()
         })
@@ -735,7 +763,7 @@ describe('SessionRecording', () => {
             posthog.config.disable_session_recording = true
 
             sessionRecording.startRecordingIfEnabled()
-            sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+            sessionRecording['_startCapture']()
 
             expect(loadScript).not.toHaveBeenCalled()
         })
@@ -797,7 +825,7 @@ describe('SessionRecording', () => {
                         sessionRecording: { endpoint: '/s/' },
                     })
                 )
-                sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+                sessionRecording['_startCapture']()
             })
 
             it('sends a full snapshot if there is a new session/window id and the event is not type FullSnapshot or Meta', () => {
@@ -860,7 +888,7 @@ describe('SessionRecording', () => {
                     expect(mockCallback).not.toHaveBeenCalled()
 
                     sessionRecording.startRecordingIfEnabled()
-                    sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+                    sessionRecording['_startCapture']()
 
                     expect(mockCallback).toHaveBeenCalledTimes(1)
                 })
@@ -932,7 +960,7 @@ describe('SessionRecording', () => {
                     posthog.sessionManager = sessionManager
 
                     sessionRecording.startRecordingIfEnabled()
-                    sessionRecording['startCaptureAndTrySendingQueuedSnapshots']()
+                    sessionRecording['_startCapture']()
                 })
 
                 it('takes a full snapshot for the first _emit', () => {
@@ -1103,6 +1131,43 @@ describe('SessionRecording', () => {
             // options will have been emitted
             expect(_addCustomEvent).toHaveBeenCalled()
             _addCustomEvent.mockClear()
+        })
+
+        it('does not emit when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            // a plugin event doesn't count as returning from idle
+            sessionRecording.onRRwebEmit(createPluginSnapshot({}) as unknown as eventWithTime)
+
+            // buffer is still empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+        })
+
+        it('emits custom events even when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+
+            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as unknown as eventWithTime)
+
+            // custom event is buffered
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            payload: {},
+                            tag: 'custom',
+                        },
+                        type: 5,
+                    },
+                ],
+                sessionId: null,
+                size: 47,
+                windowId: null,
+            })
         })
 
         it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
@@ -1284,11 +1349,8 @@ describe('SessionRecording', () => {
                 },
                 {
                     _batchKey: 'recordings',
-                    _metrics: { rrweb_full_snapshot: false },
                     _noTruncate: true,
-                    endpoint: '/s/',
-                    method: 'POST',
-                    transport: 'XHR',
+                    _url: 'https://test.com/s/',
                 }
             )
             expect(sessionRecording['buffer']).toEqual({
@@ -1315,11 +1377,36 @@ describe('SessionRecording', () => {
 
             expect(onFeatureFlagsCallback).not.toBeNull()
 
-            onFeatureFlagsCallback?.(['the-flag-key'])
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
             expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
             expect(sessionRecording['status']).toEqual('active')
 
-            onFeatureFlagsCallback?.(['different', 'keys'])
+            onFeatureFlagsCallback?.(['different', 'keys'], { different: true, keys: true })
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+        })
+
+        it('can handle linked flags with variants', () => {
+            expect(sessionRecording['_linkedFlag']).toEqual(null)
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', linkedFlag: { flag: 'the-flag-key', variant: 'test-a' } },
+                })
+            )
+
+            expect(sessionRecording['_linkedFlag']).toEqual({ flag: 'the-flag-key', variant: 'test-a' })
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'test-a' })
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
+            expect(sessionRecording['status']).toEqual('active')
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
             expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
             expect(sessionRecording['status']).toEqual('buffering')
         })
@@ -1443,6 +1530,66 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording['buffer']?.data.length).toBe(undefined)
+        })
+    })
+
+    describe('when rrweb is not available', () => {
+        beforeEach(() => {
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.startRecordingIfEnabled()
+            expect(loadScript).toHaveBeenCalled()
+
+            // fake that rrweb is not available
+            sessionRecording['rrwebRecord'] = undefined
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
+
+            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+        })
+
+        it('queues events', () => {
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+        })
+
+        it('limits the queue of events', () => {
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+
+            for (let i = 0; i < 100; i++) {
+                sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+            }
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(10)
+        })
+
+        it('processes the queue when rrweb is available again', () => {
+            // fake that rrweb is available again
+            sessionRecording['rrwebRecord'] = assignableWindow.rrwebRecord
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
+            expect(sessionRecording['rrwebRecord']).not.toBeUndefined()
+        })
+    })
+
+    describe('scheduled full snapshots', () => {
+        it('starts out unscheduled', () => {
+            expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
+        })
+
+        it('schedules a snapshot on start', () => {
+            sessionRecording.startRecordingIfEnabled()
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
+        })
+
+        it('reschedules a snapshot, when we take a full snapshot', () => {
+            sessionRecording.startRecordingIfEnabled()
+            const startTimer = sessionRecording['_fullSnapshotTimer']
+
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
+            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(startTimer)
         })
     })
 })

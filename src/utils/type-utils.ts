@@ -38,15 +38,29 @@ export const _isEmptyObject = function (x: unknown): x is Record<string, any> {
 export const _isUndefined = function (x: unknown): x is undefined {
     return x === void 0
 }
+
 export const _isString = function (x: unknown): x is string {
     // eslint-disable-next-line posthog-js/no-direct-string-check
     return toString.call(x) == '[object String]'
+}
+
+export const _isEmptyString = function (x: unknown): boolean {
+    return _isString(x) && x.trim().length === 0
 }
 
 export const _isNull = function (x: unknown): x is null {
     // eslint-disable-next-line posthog-js/no-direct-null-check
     return x === null
 }
+
+/*
+    sometimes you want to check if something is null or undefined
+    that's what this is for
+ */
+export const _isNullish = function (x: unknown): x is null | undefined {
+    return _isUndefined(x) || _isNull(x)
+}
+
 export const _isDate = function (x: unknown): x is Date {
     // eslint-disable-next-line posthog-js/no-direct-date-check
     return toString.call(x) == '[object Date]'
@@ -58,4 +72,19 @@ export const _isNumber = function (x: unknown): x is number {
 export const _isBoolean = function (x: unknown): x is boolean {
     // eslint-disable-next-line posthog-js/no-direct-boolean-check
     return toString.call(x) === '[object Boolean]'
+}
+
+export const _isDocument = (x: unknown): x is Document => {
+    // eslint-disable-next-line posthog-js/no-direct-document-check
+    return x instanceof Document
+}
+
+export const _isFormData = (x: unknown): x is FormData => {
+    // eslint-disable-next-line posthog-js/no-direct-form-data-check
+    return x instanceof FormData
+}
+
+export const _isFile = (x: unknown): x is File => {
+    // eslint-disable-next-line posthog-js/no-direct-file-check
+    return x instanceof File
 }

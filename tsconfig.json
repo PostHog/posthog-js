@@ -1,6 +1,5 @@
 {
     "compilerOptions": {
-        "baseUrl": "./src",
         "outDir": "./lib",
         "target": "ES5",
         "lib": ["dom", "dom.iterable", "esnext"],
@@ -25,5 +24,6 @@
         "jsxFactory": "h",
         "jsxFragmentFactory": "Fragment"
     },
-    "include": ["src/*.ts*"]
+    "include": ["src/*.ts*"],
+    "exclude": ["src/__tests__/**/*.ts*"]
 }

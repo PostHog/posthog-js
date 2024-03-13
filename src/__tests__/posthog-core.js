@@ -1,11 +1,11 @@
-import { init_as_module, PostHog } from '../posthog-core'
+import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
 import { autocapture } from '../autocapture'
 
-import { truth } from './helpers/truth'
 import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
+import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
 
 jest.mock('../gdpr-utils', () => ({
@@ -14,24 +14,32 @@ jest.mock('../gdpr-utils', () => ({
 }))
 jest.mock('../decide')
 
-given('lib', () => {
-    const posthog = new PostHog()
-    posthog._init('testtoken', given.config, 'testhog')
-    posthog.debug()
-    return Object.assign(posthog, given.overrides)
-})
-
 describe('posthog core', () => {
+    const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
+
+    given('lib', () => {
+        const posthog = _posthog.init('testtoken', given.config, uuidv7())
+        posthog.debug()
+        return Object.assign(posthog, given.overrides)
+    })
+
+    beforeEach(() => {
+        jest.useFakeTimers().setSystemTime(baseUTCDateTime)
+    })
+
+    afterEach(() => {
+        jest.useRealTimers()
+        // Make sure there's no cached persistence
+        given.lib.persistence?.clear?.()
+    })
     describe('capture()', () => {
         given('eventName', () => '$event')
 
-        given(
-            'subject',
-            () => () => given.lib.capture(given.eventName, given.eventProperties, given.options, given.callback)
-        )
+        given('subject', () => () => given.lib.capture(given.eventName, given.eventProperties, given.options))
 
         given('config', () => ({
             api_host: 'https://app.posthog.com',
+            property_denylist: [],
             property_blacklist: [],
             _onCapture: jest.fn(),
             get_device_id: jest.fn().mockReturnValue('device-id'),
@@ -39,7 +47,10 @@ describe('posthog core', () => {
 
         given('overrides', () => ({
             __loaded: true,
-            config: given.config,
+            config: {
+                api_host: 'https://app.posthog.com',
+                ...given.config,
+            },
             persistence: {
                 remove_event_timer: jest.fn(),
                 properties: jest.fn(),
@@ -70,6 +81,23 @@ describe('posthog core', () => {
             expect(captureData).toHaveProperty('uuid')
         })
 
+        it('adds system time to events', () => {
+            const captureData = given.subject()
+            console.log(captureData)
+            expect(captureData).toHaveProperty('timestamp')
+            // timer is fixed at 2020-01-01
+            expect(captureData.timestamp).toEqual(baseUTCDateTime)
+        })
+
+        it('captures when time is overriden by caller', () => {
+            given.options = { timestamp: new Date(2020, 0, 2, 12, 34) }
+            const captureData = given.subject()
+            expect(captureData).toHaveProperty('timestamp')
+            expect(captureData.timestamp).toEqual(new Date(2020, 0, 2, 12, 34))
+            expect(captureData.properties['$event_time_override_provided']).toEqual(true)
+            expect(captureData.properties['$event_time_override_system_time']).toEqual(baseUTCDateTime)
+        })
+
         it('handles recursive objects', () => {
             given('eventProperties', () => {
                 const props = {}
@@ -92,6 +120,7 @@ describe('posthog core', () => {
 
         it('calls update_campaign_params and update_referrer_info on sessionPersistence', () => {
             given('config', () => ({
+                property_denylist: [],
                 property_blacklist: [],
                 _onCapture: jest.fn(),
                 store_google: true,
@@ -148,6 +177,7 @@ describe('posthog core', () => {
 
             given('config', () => ({
                 opt_out_useragent_filter: true,
+                property_denylist: [],
                 property_blacklist: [],
                 _onCapture: jest.fn(),
             }))
@@ -169,6 +199,7 @@ describe('posthog core', () => {
         it('truncates long properties', () => {
             given('config', () => ({
                 properties_string_max_length: 1000,
+                property_denylist: [],
                 property_blacklist: [],
                 _onCapture: jest.fn(),
             }))
@@ -182,6 +213,7 @@ describe('posthog core', () => {
         it('keeps long properties if null', () => {
             given('config', () => ({
                 properties_string_max_length: null,
+                property_denylist: [],
                 property_blacklist: [],
                 _onCapture: jest.fn(),
             }))
@@ -216,6 +248,7 @@ describe('posthog core', () => {
 
         it('updates persisted person properties for feature flags if $set is present', () => {
             given('config', () => ({
+                property_denylist: [],
                 property_blacklist: [],
                 _onCapture: jest.fn(),
             }))
@@ -234,10 +267,9 @@ describe('posthog core', () => {
         it('sends payloads to /e/ by default', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/e/',
-                expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/e/',
+                })
             )
         })
 
@@ -246,31 +278,28 @@ describe('posthog core', () => {
             given.lib.capture('event-name', { foo: 'bar', length: 0 })
 
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/i/v0/e/',
-                expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/i/v0/e/',
+                })
             )
         })
 
         it('sends payloads to overriden endpoint if given', () => {
-            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
+            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/s/',
-                expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.objectContaining({
+                    url: 'https://app.posthog.com/s/',
+                })
             )
         })
 
-        it('sends payloads to overriden endpoint, even if alternative endpoint is set', () => {
+        it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             given.lib._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
-            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { endpoint: '/s/' })
+            given.lib.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
             expect(given.lib._send_request).toHaveBeenCalledWith(
-                'https://app.posthog.com/s/',
-                expect.any(Object),
-                expect.any(Object),
-                undefined
+                expect.objectContaining({
+                    url: 'https://app.posthog.com/s/',
+                })
             )
         })
     })
@@ -279,27 +308,25 @@ describe('posthog core', () => {
         given('subject', () => () => given.lib._afterDecideResponse(given.decideResponse))
 
         it('enables compression from decide response', () => {
-            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['gzip-js', 'base64'] }))
             given.subject()
 
-            expect(given.lib.compression['gzip']).toBe(true)
-            expect(given.lib.compression['lz64']).toBe(true)
+            expect(given.lib.compression).toEqual('gzip-js')
         })
 
         it('enables compression from decide response when only one received', () => {
-            given('decideResponse', () => ({ supportedCompression: ['lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['base64'] }))
             given.subject()
 
-            expect(given.lib.compression).not.toHaveProperty('gzip')
-            expect(given.lib.compression['lz64']).toBe(true)
+            expect(given.lib.compression).toEqual('base64')
         })
 
         it('does not enable compression from decide response if compression is disabled', () => {
             given('config', () => ({ disable_compression: true, persistence: 'memory' }))
-            given('decideResponse', () => ({ supportedCompression: ['gzip', 'lz64'] }))
+            given('decideResponse', () => ({ supportedCompression: ['gzip-js', 'base64'] }))
             given.subject()
 
-            expect(given.lib.compression).toEqual({})
+            expect(given.lib.compression).toEqual(undefined)
         })
 
         it('defaults to /e if no endpoint is given', () => {
@@ -358,9 +385,11 @@ describe('posthog core', () => {
 
         given('config', () => ({
             token: 'testtoken',
+            property_denylist: given.property_denylist,
             property_blacklist: given.property_blacklist,
             sanitize_properties: given.sanitize_properties,
         }))
+        given('property_denylist', () => [])
         given('property_blacklist', () => [])
 
         beforeEach(() => {
@@ -379,11 +408,11 @@ describe('posthog core', () => {
             })
         })
 
-        it('respects property_blacklist', () => {
-            given('property_blacklist', () => ['$lib', 'persistent'])
+        it('respects property_denylist and property_blacklist', () => {
+            given('property_denylist', () => ['$lib', 'persistent'])
+            given('property_blacklist', () => ['token'])
 
             expect(given.subject).toEqual({
-                token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
                 $window_id: 'windowId',
@@ -513,32 +542,7 @@ describe('posthog core', () => {
         })
     })
 
-    describe('__compress_and_send_json_request', () => {
-        given(
-            'subject',
-            () => () => given.lib.__compress_and_send_json_request('/e/', given.jsonData, given.options, jest.fn())
-        )
-
-        given('jsonData', () => JSON.stringify({ large_key: new Array(500).join('abc') }))
-
-        given('overrides', () => ({
-            compression: {},
-            _send_request: jest.fn(),
-            config: {},
-        }))
-
-        it('handles base64 compression', () => {
-            given('compression', () => ({}))
-
-            given.subject()
-
-            expect(given.overrides._send_request.mock.calls).toMatchSnapshot()
-        })
-    })
-
     describe('bootstrapping feature flags', () => {
-        given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
-
         given('overrides', () => ({
             _send_request: jest.fn(),
             capture: jest.fn(),
@@ -555,7 +559,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('abcd')
             expect(given.lib.persistence.get_user_state()).toBe('anonymous')
@@ -581,7 +584,6 @@ describe('posthog core', () => {
                 get_device_id: () => 'og-device-id',
             }))
 
-            given.subject()
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('og-device-id')
             expect(given.lib.persistence.get_user_state()).toBe('identified')
@@ -597,7 +599,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             expect(given.lib.get_distinct_id()).not.toBe('abcd')
             expect(given.lib.get_distinct_id()).not.toEqual(undefined)
             expect(given.lib.getFeatureFlag('multivariant')).toBe('variant-1')
@@ -628,7 +629,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             expect(given.lib.getFeatureFlagPayload('multivariant')).toBe('some-payload')
             expect(given.lib.getFeatureFlagPayload('enabled')).toEqual({ another: 'value' })
             expect(given.lib.getFeatureFlagPayload('jsonString')).toEqual({ a: 'payload' })
@@ -643,7 +643,6 @@ describe('posthog core', () => {
                 bootstrap: {},
             }))
 
-            given.subject()
             expect(given.lib.get_distinct_id()).not.toBe('abcd')
             expect(given.lib.get_distinct_id()).not.toEqual(undefined)
             expect(given.lib.getFeatureFlag('multivariant')).toBe(undefined)
@@ -665,7 +664,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             given.lib.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(true)
         })
@@ -679,7 +677,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             given.lib.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(false)
         })
@@ -693,7 +690,6 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
             given.lib.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(false)
         })
@@ -701,7 +697,6 @@ describe('posthog core', () => {
 
     describe('init()', () => {
         jest.spyOn(window, 'window', 'get')
-        given('subject', () => () => given.lib._init('posthog', given.config, 'testhog'))
 
         given('overrides', () => ({
             get_distinct_id: () => given.distinct_id,
@@ -721,7 +716,6 @@ describe('posthog core', () => {
         given('advanced_disable_decide', () => true)
 
         it('can set an xhr error handler', () => {
-            init_as_module()
             const fakeOnXHRError = 'configured error'
             given('subject', () =>
                 given.lib.init(
@@ -736,63 +730,42 @@ describe('posthog core', () => {
         })
 
         it('does not load decide endpoint on advanced_disable_decide', () => {
-            given.subject()
             expect(given.decide).toBe(undefined)
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
         })
 
-        it('sanitizes api_host urls', () => {
-            given('config', () => ({
-                api_host: 'https://example.com/custom/',
-            }))
-            given.subject()
-
-            expect(given.lib.config.api_host).toBe('https://example.com/custom')
-        })
-
         it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
-            given('overrides', () => ({
-                __loaded_recorder_version: undefined,
-            }))
             delete window.rrweb
             window.rrweb = { record: undefined }
             delete window.rrwebRecord
             window.rrwebRecord = undefined
-            given.subject()
             expect(given.lib.__loaded_recorder_version).toEqual(undefined)
         })
 
         it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
-            given('overrides', () => ({
-                __loaded_recorder_version: undefined,
-            }))
             delete window.rrweb
             window.rrweb = { record: 'anything', version: '1.1.3' }
             delete window.rrwebRecord
             window.rrwebRecord = 'is possible'
-            given.subject()
             expect(given.lib.__loaded_recorder_version).toMatch(/^1\./) // start with 1.?.?
         })
 
-        it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
-            given('overrides', () => ({
-                __loaded_recorder_version: undefined,
-            }))
+        it('set __loaded_recorder_version flag to v2 if recording script has been included', () => {
             delete window.rrweb
             window.rrweb = { record: 'anything', version: '2.0.0-alpha.6' }
             delete window.rrwebRecord
             window.rrwebRecord = 'is possible'
-            given.subject()
             expect(given.lib.__loaded_recorder_version).toMatch(/^2\./) // start with 2.?.?
         })
 
-        it('does not load autocapture, feature flags, toolbar, session recording or compression', () => {
+        it('does not load autocapture, feature flags, toolbar, session recording', () => {
             given('overrides', () => ({
                 sessionRecording: {
                     afterDecideResponse: jest.fn(),
                     startRecordingIfEnabled: jest.fn(),
                 },
                 toolbar: {
+                    maybeLoadToolbar: jest.fn(),
                     afterDecideResponse: jest.fn(),
                 },
                 persistence: {
@@ -801,15 +774,11 @@ describe('posthog core', () => {
                 },
             }))
 
-            given.subject()
-
             jest.spyOn(given.lib.toolbar, 'afterDecideResponse').mockImplementation()
             jest.spyOn(given.lib.sessionRecording, 'afterDecideResponse').mockImplementation()
             jest.spyOn(given.lib.persistence, 'register').mockImplementation()
 
             // Autocapture
-            expect(given.lib.__autocapture).toEqual(undefined)
-            expect(autocapture.init).not.toHaveBeenCalled()
             expect(autocapture.afterDecideResponse).not.toHaveBeenCalled()
 
             // Feature flags
@@ -820,32 +789,27 @@ describe('posthog core', () => {
 
             // Session recording
             expect(given.lib.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
-
-            // Compression
-            expect(given.lib['compression']).toEqual({})
         })
 
         describe('device id behavior', () => {
             it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
                 given('distinct_id', () => undefined)
+                given('config', () => ({
+                    get_device_id: (uuid) => uuid,
+                }))
 
-                given.subject()
+                expect(given.lib.persistence.props).toMatchObject({
+                    $device_id: expect.stringMatching(/^[0-9a-f-]+$/),
+                    distinct_id: expect.stringMatching(/^[0-9a-f-]+$/),
+                })
 
-                expect(given.lib.register_once).toHaveBeenCalledWith(
-                    {
-                        $device_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
-                        distinct_id: truth((val) => val.match(/^[0-9a-f-]+$/)),
-                    },
-                    ''
-                )
+                expect(given.lib.persistence.props.$device_id).toEqual(given.lib.persistence.props.distinct_id)
             })
 
             it('does not set distinct_id/$device_id if distinct_id is unset', () => {
                 given('distinct_id', () => 'existing-id')
 
-                given.subject()
-
-                expect(given.lib.register_once).not.toHaveBeenCalled()
+                expect(given.lib.persistence.props.distinct_id).not.toEqual('existing-id')
             })
 
             it('uses config.get_device_id for uuid generation if passed', () => {
@@ -854,15 +818,10 @@ describe('posthog core', () => {
                     get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
                 }))
 
-                given.subject()
-
-                expect(given.lib.register_once).toHaveBeenCalledWith(
-                    {
-                        $device_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
-                        distinct_id: truth((val) => val.match(/^custom-[0-9a-f]+/)),
-                    },
-                    ''
-                )
+                expect(given.lib.persistence.props).toMatchObject({
+                    $device_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
+                    distinct_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
+                })
             })
         })
     })
@@ -886,6 +845,7 @@ describe('posthog core', () => {
         given('config', () => ({
             request_batching: true,
             persistence: 'memory',
+            property_denylist: [],
             property_blacklist: [],
             _onCapture: jest.fn(),
         }))
@@ -979,7 +939,10 @@ describe('posthog core', () => {
         describe('subsequent capture calls', () => {
             given('overrides', () => ({
                 __loaded: true,
-                config: given.config,
+                config: {
+                    api_host: 'https://app.posthog.com',
+                    ...given.config,
+                },
                 persistence: new PostHogPersistence(given.config),
                 sessionPersistence: new PostHogPersistence(given.config),
                 _requestQueue: {
@@ -996,9 +959,9 @@ describe('posthog core', () => {
 
                 expect(given.captureQueue).toHaveBeenCalledTimes(1)
 
-                const [, eventPayload] = given.captureQueue.mock.calls[0]
-                expect(eventPayload.event).toEqual('some_event')
-                expect(eventPayload.properties.$groups).toEqual({
+                const eventPayload = given.captureQueue.mock.calls[0][0]
+                expect(eventPayload.data.event).toEqual('some_event')
+                expect(eventPayload.data.properties.$groups).toEqual({
                     organization: 'org::5',
                     instance: 'app.posthog.com',
                 })
@@ -1117,7 +1080,7 @@ describe('posthog core', () => {
         })
 
         describe('capturing pageviews', () => {
-            it('captures not capture pageview if disabled', () => {
+            it('captures not capture pageview if disabled', async () => {
                 given('config', () => ({
                     capture_pageview: false,
                     loaded: jest.fn(),
@@ -1128,13 +1091,16 @@ describe('posthog core', () => {
                 expect(given.overrides.capture).not.toHaveBeenCalled()
             })
 
-            it('captures pageview if enabled', () => {
+            it('captures pageview if enabled', async () => {
+                jest.useFakeTimers()
                 given('config', () => ({
                     capture_pageview: true,
                     loaded: jest.fn(),
                 }))
 
                 given.subject()
+
+                jest.runOnlyPendingTimers()
 
                 expect(given.overrides.capture).toHaveBeenCalledWith(
                     '$pageview',

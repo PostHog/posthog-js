@@ -7,8 +7,6 @@ import { isPrimitive } from './type-checking'
 import { _isArray, _isObject, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 
-const EXCEPTION_INGESTION_ENDPOINT = '/e/'
-
 export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
     const exceptionObserver = new ExceptionObserver(instance)
     exceptionObserver.afterDecideResponse(response)
@@ -129,7 +127,7 @@ export class ExceptionObserver {
 
         const propertiesToSend = { ...properties, ...errorProperties }
 
-        const posthogHost = this.instance.config.ui_host || this.instance.config.api_host
+        const posthogHost = this.instance.requestRouter.endpointFor('ui')
         errorProperties.$exception_personURL = posthogHost + '/person/' + this.instance.get_distinct_id()
 
         this.sendExceptionEvent(propertiesToSend)
@@ -140,9 +138,6 @@ export class ExceptionObserver {
      */
     sendExceptionEvent(properties: { [key: string]: any }) {
         this.instance.capture('$exception', properties, {
-            transport: 'XHR',
-            method: 'POST',
-            endpoint: EXCEPTION_INGESTION_ENDPOINT,
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })

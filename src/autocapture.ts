@@ -1,19 +1,20 @@
 import { _bind_instance_methods, _each, _extend, _includes, _register_event, _safewrap_instance_methods } from './utils'
 import {
+    autocaptureCompatibleElements,
     getClassNames,
+    getDirectAndNestedSpanText,
+    getElementsChainString,
     getSafeText,
+    isAngularStyleAttr,
+    isDocumentFragment,
     isElementNode,
     isSensitiveElement,
     isTag,
     isTextNode,
+    makeSafeText,
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureValue,
-    autocaptureCompatibleElements,
-    isAngularStyleAttr,
-    isDocumentFragment,
-    getDirectAndNestedSpanText,
-    getElementsChainString,
     splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
@@ -21,9 +22,11 @@ import { AutocaptureConfig, AutoCaptureCustomProperty, DecideResponse, Propertie
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { _isBoolean, _isFunction, _isNull, _isUndefined } from './utils/type-utils'
+import { _isBoolean, _isFunction, _isNull, _isObject, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { window, document } from './utils/globals'
+import { document, window } from './utils/globals'
+
+const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {
@@ -185,7 +188,12 @@ const autocapture = {
         }
     },
 
-    _captureEvent: function (e: Event, instance: PostHog, eventName = '$autocapture'): boolean | void {
+    _captureEvent: function (
+        e: Event,
+        instance: PostHog,
+        eventName = '$autocapture',
+        extraProps?: Properties
+    ): boolean | void {
         /*** Don't mess with this code without running IE8 tests on it ***/
         let target = this._getEventTarget(e)
         if (isTextNode(target)) {
@@ -199,7 +207,21 @@ const autocapture = {
             }
         }
 
-        if (target && shouldCaptureDomEvent(target, e, this.config)) {
+        const isCopyAutocapture = eventName === COPY_AUTOCAPTURE_EVENT
+        if (
+            target &&
+            shouldCaptureDomEvent(
+                target,
+                e,
+                this.config,
+                // mostly this method cares about the target element, but in the case of copy events,
+                // we want some of the work this check does without insisting on the target element's type
+                isCopyAutocapture,
+                // we also don't want to restrict copy checks to clicks,
+                // so we pass that knowledge in here, rather than add the logic inside the check
+                isCopyAutocapture ? ['copy', 'cut'] : undefined
+            )
+        ) {
             const targetElementList = [target]
             let curEl = target
             while (curEl.parentNode && !isTag(curEl, 'body')) {
@@ -273,8 +295,21 @@ const autocapture = {
                       },
                 elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
                 this._getCustomProperties(targetElementList),
-                autocaptureAugmentProperties
+                autocaptureAugmentProperties,
+                extraProps || {}
             )
+
+            if (eventName === COPY_AUTOCAPTURE_EVENT) {
+                // you can't read the data from the clipboard event,
+                // but you can guess that you can read it from the window's current selection
+                const selectedContent = makeSafeText(window?.getSelection()?.toString())
+                const clipType = (e as ClipboardEvent).type || 'clipboard'
+                if (!selectedContent) {
+                    return false
+                }
+                props['$selected_content'] = selectedContent
+                props['$copy_type'] = clipType
+            }
 
             instance.capture(eventName, props)
             return true
@@ -298,9 +333,20 @@ const autocapture = {
             e = e || window?.event
             this._captureEvent(e, instance)
         }
+
+        const copiedTextHandler = (e: Event) => {
+            e = e || window?.event
+            this._captureEvent(e, instance, COPY_AUTOCAPTURE_EVENT)
+        }
+
         _register_event(document, 'submit', handler, false, true)
         _register_event(document, 'change', handler, false, true)
         _register_event(document, 'click', handler, false, true)
+
+        if (_isObject(instance.config.autocapture) && instance.config.autocapture.capture_copied_text) {
+            _register_event(document, 'copy', copiedTextHandler, false, true)
+            _register_event(document, 'cut', copiedTextHandler, false, true)
+        }
     },
 
     _customProperties: [] as AutoCaptureCustomProperty[],

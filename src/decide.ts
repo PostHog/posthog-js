@@ -1,7 +1,7 @@
 import { autocapture } from './autocapture'
-import { _base64Encode, loadScript } from './utils'
+import { loadScript } from './utils'
 import { PostHog } from './posthog-core'
-import { DecideResponse } from './types'
+import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 import { _isUndefined } from './utils/type-utils'
@@ -21,7 +21,7 @@ export class Decide {
         /*
         Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
         */
-        const json_data = JSON.stringify({
+        const data = {
             token: this.instance.config.token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
@@ -31,23 +31,33 @@ export class Decide {
                 this.instance.config.advanced_disable_feature_flags ||
                 this.instance.config.advanced_disable_feature_flags_on_first_load ||
                 undefined,
-        })
+        }
 
-        const encoded_data = _base64Encode(json_data)
-        this.instance._send_request(
-            `${this.instance.config.api_host}/decide/?v=3`,
-            { data: encoded_data, verbose: true },
-            { method: 'POST' },
-            (response) => this.parseDecideResponse(response as DecideResponse)
-        )
+        this.instance._send_request({
+            method: 'POST',
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            data,
+            compression: Compression.Base64,
+            timeout: this.instance.config.feature_flag_request_timeout_ms,
+            callback: (response) => this.parseDecideResponse(response.json as DecideResponse | undefined),
+        })
     }
 
-    parseDecideResponse(response: DecideResponse): void {
+    parseDecideResponse(response?: DecideResponse): void {
         this.instance.featureFlags.setReloadingPaused(false)
         // :TRICKY: Reload - start another request if queued!
         this.instance.featureFlags._startReloadTimer()
 
-        if (response?.status === 0) {
+        const errorsLoading = !response
+
+        if (
+            !this.instance.config.advanced_disable_feature_flags_on_first_load &&
+            !this.instance.config.advanced_disable_feature_flags
+        ) {
+            this.instance.featureFlags.receivedFeatureFlags(response ?? {}, errorsLoading)
+        }
+
+        if (errorsLoading) {
             logger.error('Failed to fetch feature flags from PostHog.')
             return
         }
@@ -64,19 +74,12 @@ export class Decide {
         autocapture.afterDecideResponse(response, this.instance)
         this.instance._afterDecideResponse(response)
 
-        if (
-            !this.instance.config.advanced_disable_feature_flags_on_first_load &&
-            !this.instance.config.advanced_disable_feature_flags
-        ) {
-            this.instance.featureFlags.receivedFeatureFlags(response)
-        }
-
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const surveysGenerator = window?.extendPostHogWithSurveys
 
         if (response['surveys'] && !surveysGenerator) {
-            loadScript(this.instance.config.api_host + `/static/surveys.js`, (err) => {
+            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)
                 }
@@ -95,7 +98,7 @@ export class Decide {
             !!response['autocaptureExceptions'] &&
             _isUndefined(exceptionAutoCaptureAddedToWindow)
         ) {
-            loadScript(this.instance.config.api_host + `/static/exception-autocapture.js`, (err) => {
+            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/exception-autocapture.js'), (err) => {
                 if (err) {
                     return logger.error(`Could not load exception autocapture script`, err)
                 }
@@ -108,12 +111,8 @@ export class Decide {
 
         if (response['siteApps']) {
             if (this.instance.config.opt_in_site_apps) {
-                const apiHost = this.instance.config.api_host
                 for (const { id, url } of response['siteApps']) {
-                    const scriptUrl = [
-                        apiHost,
-                        apiHost[apiHost.length - 1] === '/' && url[0] === '/' ? url.substring(1) : url,
-                    ].join('')
+                    const scriptUrl = this.instance.requestRouter.endpointFor('api', url)
 
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
 

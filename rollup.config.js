@@ -2,7 +2,7 @@ import babel from '@rollup/plugin-babel'
 import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
-import dts from 'rollup-plugin-dts'
+import { dts } from 'rollup-plugin-dts'
 import pkg from './package.json'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
@@ -57,6 +57,17 @@ export default [
                 globals: {
                     preact: 'preact',
                 },
+            },
+        ],
+        plugins: [...plugins],
+    },
+    {
+        input: 'src/loader-surveys-preview.ts',
+        output: [
+            {
+                file: 'dist/surveys-module-previews.js',
+                format: 'es',
+                sourcemap: true,
             },
         ],
         plugins: [...plugins],

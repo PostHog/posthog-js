@@ -23,15 +23,28 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
     'memory',
 ]
 
+const parseName = (config: PostHogConfig): string => {
+    let token = ''
+    if (config['token']) {
+        token = config['token'].replace(/\+/g, 'PL').replace(/\//g, 'SL').replace(/=/g, 'EQ')
+    }
+
+    if (config['persistence_name']) {
+        return 'ph_' + config['persistence_name']
+    } else {
+        return 'ph_' + token + '_posthog'
+    }
+}
+
 /**
  * PostHog Persistence Object
  * @constructor
  */
 export class PostHogPersistence {
+    private config: PostHogConfig
     props: Properties
     storage: PersistentStore
     campaign_params_saved: boolean
-    custom_campaign_params: string[]
     name: string
     disabled: boolean | undefined
     secure: boolean | undefined
@@ -40,24 +53,17 @@ export class PostHogPersistence {
     cross_subdomain: boolean | undefined
 
     constructor(config: PostHogConfig) {
-        // clean chars that aren't accepted by the http spec for cookie values
-        // https://datatracker.ietf.org/doc/html/rfc2616#section-2.2
-        let token = ''
-
-        if (config['token']) {
-            token = config['token'].replace(/\+/g, 'PL').replace(/\//g, 'SL').replace(/=/g, 'EQ')
-        }
-
+        this.config = config
         this.props = {}
         this.campaign_params_saved = false
-        this.custom_campaign_params = config['custom_campaign_params'] || []
+        this.name = parseName(config)
+        this.storage = this.buildStorage(config)
+        this.load()
+        this.update_config(config, config)
+        this.save()
+    }
 
-        if (config['persistence_name']) {
-            this.name = 'ph_' + config['persistence_name']
-        } else {
-            this.name = 'ph_' + token + '_posthog'
-        }
-
+    private buildStorage(config: PostHogConfig) {
         if (
             CASE_INSENSITIVE_PERSISTENCE_TYPES.indexOf(
                 config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
@@ -68,28 +74,28 @@ export class PostHogPersistence {
             )
             config['persistence'] = 'localStorage+cookie'
         }
+
+        let store: PersistentStore
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
         if (storage_type === 'localstorage' && localStore.is_supported()) {
-            this.storage = localStore
+            store = localStore
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
-            this.storage = localPlusCookieStore
+            store = localPlusCookieStore
         } else if (storage_type === 'sessionstorage' && sessionStore.is_supported()) {
-            this.storage = sessionStore
+            store = sessionStore
         } else if (storage_type === 'memory') {
-            this.storage = memoryStore
+            store = memoryStore
         } else if (storage_type === 'cookie') {
-            this.storage = cookieStore
+            store = cookieStore
         } else if (localPlusCookieStore.is_supported()) {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
-            this.storage = localPlusCookieStore
+            store = localPlusCookieStore
         } else {
-            this.storage = cookieStore
+            store = cookieStore
         }
 
-        this.load()
-        this.update_config(config)
-        this.save()
+        return store
     }
 
     properties(): Properties {
@@ -211,7 +217,7 @@ export class PostHogPersistence {
 
     update_campaign_params(): void {
         if (!this.campaign_params_saved) {
-            this.register(_info.campaignParams(this.custom_campaign_params))
+            this.register(_info.campaignParams(this.config.custom_campaign_params))
             this.campaign_params_saved = true
         }
     }
@@ -248,11 +254,24 @@ export class PostHogPersistence {
         return props
     }
 
-    update_config(config: PostHogConfig): void {
+    update_config(config: PostHogConfig, oldConfig: PostHogConfig): void {
         this.default_expiry = this.expire_days = config['cookie_expiration']
         this.set_disabled(config['disable_persistence'])
         this.set_cross_subdomain(config['cross_subdomain_cookie'])
         this.set_secure(config['secure_cookie'])
+
+        if (config.persistence !== oldConfig.persistence) {
+            // If the persistence type has changed, we need to migrate the data.
+            const newStore = this.buildStorage(config)
+            const props = this.props
+
+            // clear the old store
+            this.clear()
+            this.storage = newStore
+            this.props = props
+
+            this.save()
+        }
     }
 
     set_disabled(disabled: boolean): void {

@@ -1,24 +1,23 @@
 import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
-import { _base64Encode } from '../utils'
 import { PostHogPersistence } from '../posthog-persistence'
+import { RequestRouter } from '../utils/request-router'
 
 const expectDecodedSendRequest = (send_request, data) => {
     const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
 
-    const decoded = JSON.parse(atob(lastCall[1].data))
+    const decoded = lastCall[0].data
     // Helper to give us more accurate error messages
     expect(decoded).toEqual(data)
 
-    expect(given.posthog._send_request).toHaveBeenCalledWith(
-        'https://test.com/decide/?v=3',
-        {
-            data: _base64Encode(JSON.stringify(data)),
-            verbose: true,
-        },
-        { method: 'POST' },
-        expect.any(Function)
-    )
+    expect(given.posthog._send_request).toHaveBeenCalledWith({
+        url: 'https://test.com/decide/?v=3',
+        data,
+        method: 'POST',
+        callback: expect.any(Function),
+        compression: 'base64',
+        timeout: undefined,
+    })
 }
 
 describe('Decide', () => {
@@ -32,11 +31,8 @@ describe('Decide', () => {
         capture: jest.fn(),
         _addCaptureHook: jest.fn(),
         _afterDecideResponse: jest.fn(),
-        _prepare_callback: jest.fn().mockImplementation((callback) => callback),
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
-        _send_request: jest
-            .fn()
-            .mockImplementation((url, params, options, callback) => callback({ config: given.decideResponse })),
+        _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: given.decideResponse })),
         toolbar: {
             maybeLoadToolbar: jest.fn(),
             afterDecideResponse: jest.fn(),
@@ -49,6 +45,7 @@ describe('Decide', () => {
             setReloadingPaused: jest.fn(),
             _startReloadTimer: jest.fn(),
         },
+        requestRouter: new RequestRouter({ config: given.config }),
         _hasBootstrappedFeatureFlags: jest.fn(),
         getGroups: () => ({ organization: '5' }),
     }))
@@ -154,19 +151,19 @@ describe('Decide', () => {
 
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse)
+            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
             expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
         })
 
-        it('Make sure receivedFeatureFlags is not called if the decide response fails', () => {
-            given('decideResponse', () => ({ status: 0 }))
+        it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
+            given('decideResponse', () => undefined)
             window.POSTHOG_DEBUG = true
             console.error = jest.fn()
 
             given.subject()
 
-            expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
+            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, true)
             expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
         })
 

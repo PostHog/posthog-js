@@ -1,11 +1,10 @@
-import { RequestQueueScaffold } from './base-request-queue'
-import { encodePostData, xhr } from './send-request'
-import { QueuedRequestData, RetryQueueElement } from './types'
-import { RateLimiter } from './rate-limiter'
+import { RetriableRequestOptions } from './types'
 
-import { _isUndefined } from './utils/type-utils'
+import { _isNumber, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
+import { PostHog } from './posthog-core'
+import { extendURLParams } from './request'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -28,25 +27,27 @@ export function pickNextRetryDelay(retriesPerformedSoFar: number): number {
     return Math.ceil(cappedBackoffTime + jitter)
 }
 
-export class RetryQueue extends RequestQueueScaffold {
-    queue: RetryQueueElement[]
-    isPolling: boolean
-    areWeOnline: boolean
-    onXHRError: (failedRequest: XMLHttpRequest) => void
-    rateLimiter: RateLimiter
+interface RetryQueueElement {
+    retryAt: number
+    requestOptions: RetriableRequestOptions
+}
 
-    constructor(onXHRError: (failedRequest: XMLHttpRequest) => void, rateLimiter: RateLimiter) {
-        super()
-        this.isPolling = false
+export class RetryQueue {
+    private isPolling: boolean = false // flag to continue to recursively poll or not
+    private poller: number | undefined // to become interval for reference to clear later
+    private pollIntervalMs: number = 3000
+    private queue: RetryQueueElement[] = []
+    private areWeOnline: boolean
+
+    constructor(private instance: PostHog) {
         this.queue = []
         this.areWeOnline = true
-        this.onXHRError = onXHRError
-        this.rateLimiter = rateLimiter
 
         if (!_isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
-                this._handleWeAreNowOnline()
+                this.areWeOnline = true
+                this.flush()
             })
             window.addEventListener('offline', () => {
                 this.areWeOnline = false
@@ -54,15 +55,36 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    enqueue(requestData: QueuedRequestData): void {
-        const retriesPerformedSoFar = requestData.retriesPerformedSoFar || 0
-        if (retriesPerformedSoFar >= 10) {
-            return
+    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestOptions): void {
+        if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
+            options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
-        const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)
-        const retryAt = new Date(Date.now() + msToNextRetry)
 
-        this.queue.push({ retryAt, requestData })
+        this.instance._send_request({
+            ...options,
+            callback: (response) => {
+                if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
+                    if ((retriesPerformedSoFar ?? 0) < 10) {
+                        this.enqueue({
+                            ...options,
+                        })
+                        return
+                    }
+                }
+
+                options.callback?.(response)
+            },
+        })
+    }
+
+    private enqueue(requestOptions: RetriableRequestOptions): void {
+        const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
+        requestOptions.retriesPerformedSoFar = retriesPerformedSoFar + 1
+
+        const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)
+        const retryAt = Date.now() + msToNextRetry
+
+        this.queue.push({ retryAt, requestOptions })
 
         let logMessage = `Enqueued failed request for retry in ${msToNextRetry}`
         if (!navigator.onLine) {
@@ -76,46 +98,50 @@ export class RetryQueue extends RequestQueueScaffold {
         }
     }
 
-    poll(): void {
-        this._poller && clearTimeout(this._poller)
-        this._poller = setTimeout(() => {
+    private poll(): void {
+        this.poller && clearTimeout(this.poller)
+        this.poller = setTimeout(() => {
             if (this.areWeOnline && this.queue.length > 0) {
                 this.flush()
             }
             this.poll()
-        }, this._pollInterval) as any as number
+        }, this.pollIntervalMs) as any as number
     }
 
-    flush(): void {
-        // using Date.now to make tests easier, as recommended here https://codewithhugo.com/mocking-the-current-date-in-jest-tests/
-        const now = new Date(Date.now())
-        const toFlush = this.queue.filter(({ retryAt }) => retryAt < now)
+    private flush(): void {
+        const now = Date.now()
+        const notToFlush: RetryQueueElement[] = []
+        const toFlush = this.queue.filter((item) => {
+            if (item.retryAt < now) {
+                return true
+            }
+            notToFlush.push(item)
+            return false
+        })
+
+        this.queue = notToFlush
+
         if (toFlush.length > 0) {
-            this.queue = this.queue.filter(({ retryAt }) => retryAt >= now)
-            for (const { requestData } of toFlush) {
-                this._executeXhrRequest(requestData)
+            for (const { requestOptions } of toFlush) {
+                this.retriableRequest(requestOptions)
             }
         }
     }
 
     unload(): void {
-        if (this._poller) {
-            clearTimeout(this._poller)
-            this._poller = undefined
+        if (this.poller) {
+            clearTimeout(this.poller)
+            this.poller = undefined
         }
 
-        for (const { requestData } of this.queue) {
-            const { url, data, options } = requestData
-
-            if (this.rateLimiter.isRateLimited(options._batchKey)) {
-                logger.warn('[RetryQueue] is quota limited. Dropping request.')
-                continue
-            }
-
+        for (const { requestOptions } of this.queue) {
             try {
                 // we've had send beacon in place for at least 2 years
                 // eslint-disable-next-line compat/compat
-                window?.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
+                this.instance._send_request({
+                    ...requestOptions,
+                    transport: 'sendBeacon',
+                })
             } catch (e) {
                 // Note sendBeacon automatically retries, and after the first retry it will lose reference to contextual `this`.
                 // This means in some cases `this.getConfig` will be undefined.
@@ -123,28 +149,5 @@ export class RetryQueue extends RequestQueueScaffold {
             }
         }
         this.queue = []
-    }
-
-    _executeXhrRequest({ url, data, options, headers, callback, retriesPerformedSoFar }: QueuedRequestData): void {
-        if (this.rateLimiter.isRateLimited(options._batchKey)) {
-            return
-        }
-
-        xhr({
-            url,
-            data: data || {},
-            options: options || {},
-            headers: headers || {},
-            retriesPerformedSoFar: retriesPerformedSoFar || 0,
-            callback,
-            retryQueue: this,
-            onXHRError: this.onXHRError,
-            onResponse: this.rateLimiter.checkForLimiting,
-        })
-    }
-
-    _handleWeAreNowOnline(): void {
-        this.areWeOnline = true
-        this.flush()
     }
 }

@@ -116,21 +116,17 @@ describe(`Autocapture utility functions`, () => {
                 } as unknown as Event)
             ).toBe(true)
         })
-        ;[`input`, `SELECT`, `textarea`].forEach((tagName) => {
-            it(`should capture "change" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(
-                    shouldCaptureDomEvent(document!.createElement(tagName), {
-                        type: `change`,
-                    } as unknown as Event)
-                ).toBe(true)
-            })
+
+        it.each([`input`, `SELECT`, `textarea`])(`should capture "change" events on <%s> elements`, (tagName) => {
+            expect(
+                shouldCaptureDomEvent(document!.createElement(tagName), {
+                    type: `change`,
+                } as unknown as Event)
+            ).toBe(true)
         })
 
-        // [`div`, `sPan`, `A`, `strong`, `table`]
-        ;['a'].forEach((tagName) => {
-            it(`should capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(true)
-            })
+        it.each([`A`, `a`])(`should capture "click" events on <%s> elements`, (tagName) => {
+            expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(true)
         })
 
         it(`should capture "click" events on <button> elements`, () => {
@@ -153,9 +149,110 @@ describe(`Autocapture utility functions`, () => {
         it(`should NOT capture "click" events on <form> elements`, () => {
             expect(shouldCaptureDomEvent(document!.createElement(`form`), makeMouseEvent({}))).toBe(false)
         })
-        ;[`html`].forEach((tagName) => {
-            it(`should NOT capture "click" events on <` + tagName.toLowerCase() + `> elements`, () => {
-                expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
+
+        it.each([`html`, 'body'])(`should NOT capture "click" events on <%s> elements`, (tagName) => {
+            expect(shouldCaptureDomEvent(document!.createElement(tagName), makeMouseEvent({}))).toBe(false)
+        })
+
+        describe('css selector allowlist', () => {
+            function makeSingleBranchOfDomTree(tree: { tag: string; id?: string }[]): Element {
+                let finalElement: Element | null = null
+                for (const { tag, id } of tree) {
+                    const el = document!.createElement(tag)
+                    if (id) {
+                        el.id = id
+                    }
+                    if (finalElement) {
+                        finalElement.appendChild(el)
+                        finalElement = el
+                    } else {
+                        finalElement = el
+                    }
+                }
+                if (!finalElement) {
+                    throw new Error('No elements in tree')
+                }
+                return finalElement
+            }
+
+            it.each([
+                [
+                    'when there is no allowlist',
+                    makeSingleBranchOfDomTree([{ tag: 'div' }, { tag: 'button', id: 'in-allowlist' }, { tag: 'svg' }]),
+                    undefined,
+                    true,
+                ],
+                [
+                    'when there is a parent matching the allow list',
+                    makeSingleBranchOfDomTree([{ tag: 'div' }, { tag: 'button', id: 'in-allowlist' }, { tag: 'svg' }]),
+                    {
+                        css_selector_allowlist: ['[id]'],
+                    },
+                    true,
+                ],
+                [
+                    'when the click target is matching in the allow list',
+                    makeSingleBranchOfDomTree([{ tag: 'div' }, { tag: 'button' }, { tag: 'svg', id: 'in-allowlist' }]),
+                    {
+                        css_selector_allowlist: ['[id]'],
+                    },
+                    true,
+                ],
+                [
+                    'when the parent does not match the allowlist',
+                    makeSingleBranchOfDomTree([
+                        { tag: 'div' },
+                        { tag: 'button', id: '[id=not-the-configured-value]' },
+                        { tag: 'svg' },
+                    ]),
+                    {
+                        // the click was detected on the SVG, but the button is not in the allow list,
+                        // so we should detect the click
+                        css_selector_allowlist: ['in-allowlist'],
+                    },
+                    false,
+                ],
+                [
+                    'when the click target (or its parents) does not match the allowlist',
+                    makeSingleBranchOfDomTree([
+                        { tag: 'div' },
+                        { tag: 'button' },
+                        { tag: 'svg', id: '[id=not-the-configured-value]' },
+                    ]),
+                    {
+                        css_selector_allowlist: ['in-allowlist'],
+                    },
+                    false,
+                ],
+                [
+                    'when combining allow lists',
+                    makeSingleBranchOfDomTree([{ tag: 'div' }, { tag: 'button', id: 'in-allowlist' }, { tag: 'svg' }]),
+                    {
+                        // the tree for the click does have an id
+                        css_selector_allowlist: ['[id]'],
+                        // but we only detect if there is an img in the tree
+                        element_allowlist: ['img'],
+                    },
+                    false,
+                ],
+                [
+                    'combine allow lists - but showing it considers them separately',
+                    makeSingleBranchOfDomTree([
+                        { tag: 'div' },
+                        { tag: 'button', id: 'in-allowlist' },
+                        { tag: 'img' },
+                        { tag: 'svg' },
+                    ]),
+                    {
+                        // the tree for the click does have an id
+                        css_selector_allowlist: ['[id]'],
+                        // and the tree for the click does have an img
+                        element_allowlist: ['img'],
+                    },
+                    true,
+                ],
+            ])('correctly respects the allow list: %s', (_, clickTarget, autoCaptureConfig, shouldCapture) => {
+                expect(shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), autoCaptureConfig)).toBe(shouldCapture)
             })
         })
     })

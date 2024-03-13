@@ -4,12 +4,13 @@ import {
     _each,
     _eachArray,
     _extend,
+    _includes,
     _register_event,
     _safewrap_class,
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { assignableWindow, window } from './utils/globals'
+import { window, assignableWindow } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -20,10 +21,9 @@ import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
-import { compressData, decideCompression } from './compression'
-import { addParamsToURL, encodePostData, xhr } from './send-request'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
+import { RequestRouter } from './utils/request-router'
 import {
     AutocaptureConfig,
     CaptureOptions,
@@ -32,18 +32,17 @@ import {
     DecideResponse,
     EarlyAccessFeatureCallback,
     GDPROptions,
-    isFeatureEnabledOptions,
-    JSC,
+    IsFeatureEnabledOptions,
     JsonType,
     OptInOutCapturingOptions,
     PostHogConfig,
     Properties,
     Property,
+    QueuedRequestOptions,
     RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
-    XHROptions,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
@@ -52,12 +51,22 @@ import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
-import { _isArray, _isEmptyObject, _isFunction, _isObject, _isString, _isUndefined } from './utils/type-utils'
+import {
+    _isArray,
+    _isEmptyObject,
+    _isEmptyString,
+    _isFunction,
+    _isNumber,
+    _isObject,
+    _isString,
+    _isUndefined,
+} from './utils/type-utils'
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
+import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -69,21 +78,10 @@ this.__x === private - only use within the class
 Globals should be all caps
 */
 
-enum InitType {
-    INIT_MODULE = 0,
-    INIT_SNIPPET = 1,
-}
-
-let init_type: InitType
-
-// TODO: the type of this is very loose. Sometimes it's also PostHogLib itself
-let posthog_master: Record<string, PostHog> & {
-    init: (token: string, config: Partial<PostHogConfig>, name: string) => void
-}
+const instances: Record<string, PostHog> = {}
 
 // some globals for comparisons
 const __NOOP = () => {}
-const __NOOPTIONS = {}
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -92,16 +90,14 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
  */
 // http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
 // https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-const USE_XHR = window?.XMLHttpRequest && 'withCredentials' in new XMLHttpRequest()
 
 // IE<10 does not support cross-origin XHR's but script tags
 // with defer won't block window.onload; ENQUEUE_REQUESTS
 // should only be true for Opera<12
-let ENQUEUE_REQUESTS = !USE_XHR && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
+let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://app.posthog.com',
-    api_method: 'POST',
     api_transport: 'XHR',
     ui_host: null,
     token: '',
@@ -134,10 +130,12 @@ export const defaultConfig = (): PostHogConfig => ({
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
+    // Deprecated, use property_denylist instead.
     property_blacklist: [],
+    property_denylist: [],
     respect_dnt: false,
     sanitize_properties: null,
-    xhr_headers: {}, // { header: value, header2: value }
+    request_headers: {}, // { header: value, header2: value }
     inapp_protocol: '//',
     inapp_link_new_window: false,
     request_batching: true,
@@ -149,8 +147,9 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
-    on_xhr_error: (req) => {
-        const error = 'Bad HTTP status: ' + req.status + ' ' + req.statusText
+    feature_flag_request_timeout_ms: 3000,
+    on_request_error: (res) => {
+        const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
         logger.error(error)
     },
     get_device_id: (uuid) => uuid,
@@ -158,98 +157,10 @@ export const defaultConfig = (): PostHogConfig => ({
     _onCapture: __NOOP,
     capture_performance: undefined,
     name: 'posthog',
-    callback_fn: 'posthog._jsc',
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
 })
-
-/**
- * create_phlib(token:string, config:object, name:string)
- *
- * This function is used by the init method of PostHogLib objects
- * as well as the main initializer at the end of the JSLib (that
- * initializes document.posthog as well as any additional instances
- * declared before this file has loaded).
- */
-const create_phlib = function (
-    token: string,
-    config?: Partial<PostHogConfig>,
-    name?: string,
-    createComplete?: (instance: PostHog) => void
-): PostHog {
-    let instance: PostHog
-    const target =
-        name === PRIMARY_INSTANCE_NAME || !posthog_master ? posthog_master : name ? posthog_master[name] : undefined
-    const callbacksHandled = {
-        initComplete: false,
-        syncCode: false,
-    }
-    const handleCallback = (callbackName: keyof typeof callbacksHandled) => (instance: PostHog) => {
-        if (!callbacksHandled[callbackName]) {
-            callbacksHandled[callbackName] = true
-            if (callbacksHandled.initComplete && callbacksHandled.syncCode) {
-                createComplete?.(instance)
-            }
-        }
-    }
-
-    if (target && init_type === InitType.INIT_MODULE) {
-        instance = target as any
-    } else {
-        if (target && !_isArray(target)) {
-            logger.error('You have already initialized ' + name)
-            // TODO: throw something instead?
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            return
-        }
-        instance = new PostHog()
-    }
-
-    instance._init(token, config, name, handleCallback('initComplete'))
-    instance.toolbar.maybeLoadToolbar()
-
-    instance.sessionRecording = new SessionRecording(instance)
-    instance.sessionRecording.startRecordingIfEnabled()
-
-    if (!instance.config.disable_scroll_properties) {
-        instance.pageViewManager.startMeasuringScrollPosition()
-    }
-
-    instance.__autocapture = instance.config.autocapture
-    autocapture._setIsAutocaptureEnabled(instance)
-    if (autocapture._isAutocaptureEnabled) {
-        instance.__autocapture = instance.config.autocapture
-        const num_buckets = 100
-        const num_enabled_buckets = 100
-        if (!autocapture.enabledForProject(instance.config.token, num_buckets, num_enabled_buckets)) {
-            instance.__autocapture = false
-            logger.info('Not in active bucket: disabling Automatic Event Collection.')
-        } else if (!autocapture.isBrowserSupported()) {
-            instance.__autocapture = false
-            logger.info('Disabling Automatic Event Collection because this browser is not supported')
-        } else {
-            autocapture.init(instance)
-        }
-    }
-
-    // if any instance on the page has debug = true, we set the
-    // global debug to be true
-    Config.DEBUG = Config.DEBUG || instance.config.debug
-
-    // if target is not defined, we called init after the lib already
-    // loaded, so there won't be an array of things to execute
-    if (!_isUndefined(target) && _isArray(target)) {
-        // Crunch through the people queue first - we queue this data up &
-        // flush on identify, so it's better to do all these operations first
-        instance._execute_array.call(instance.people, (target as any).people)
-        instance._execute_array(target)
-    }
-
-    handleCallback('syncCode')(instance)
-    return instance
-}
 
 class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
@@ -284,6 +195,7 @@ export class PostHog {
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
+    requestRouter: RequestRouter
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -291,10 +203,9 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
-    compression: Partial<Record<Compression, boolean>>
-    _jsc: JSC
+    compression?: Compression
     __captureHooks: ((eventName: string) => void)[]
-    __request_queue: [url: string, data: Record<string, any>, options: XHROptions, callback?: RequestCallback][]
+    __request_queue: QueuedRequestOptions[]
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
@@ -311,7 +222,6 @@ export class PostHog {
 
     constructor() {
         this.config = defaultConfig()
-        this.compression = {}
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.segmentIntegration = () => createSegmentIntegration(this)
@@ -320,7 +230,6 @@ export class PostHog {
         this.__loaded = false
         this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
-        this._jsc = function () {} as JSC
         this.analyticsDefaultEndpoint = '/e/'
         this.elementsChainAsString = false
 
@@ -329,18 +238,19 @@ export class PostHog {
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
+        this.requestRouter = new RequestRouter(this)
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
                 const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(setProps)
-                callback?.({})
+                callback?.({} as any)
             },
             set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
                 const setProps = _isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(undefined, setProps)
-                callback?.({})
+                callback?.({} as any)
             },
         }
     }
@@ -364,24 +274,18 @@ export class PostHog {
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
     init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
-        if (_isUndefined(name)) {
-            logger.critical('You must name your new library: init(token, config, name)')
-            return
-        }
-        if (name === PRIMARY_INSTANCE_NAME) {
-            logger.critical(
-                'You must initialize the main posthog object right after you include the PostHog js snippet'
-            )
-            return
-        }
+        if (!name || name === PRIMARY_INSTANCE_NAME) {
+            // This means we are initialising the primary instance (i.e. this)
+            return this._init(token, config, name)
+        } else {
+            const namedPosthog = instances[name] ?? new PostHog()
+            namedPosthog._init(token, config, name)
+            instances[name] = namedPosthog
+            // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
+            ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
 
-        const instance: PostHog = create_phlib(token, config, name, (instance: PostHog) => {
-            posthog_master[name] = instance
-            instance._loaded()
-        })
-        posthog_master[name] = instance
-
-        return instance
+            return namedPosthog
+        }
     }
 
     // posthog._init(token:string, config:object, name:string)
@@ -397,43 +301,31 @@ export class PostHog {
     // IE11 compatible. We could use polyfills, which would make the
     // code a bit cleaner, but will add some overhead.
     //
-    _init(
-        token: string,
-        config: Partial<PostHogConfig> = {},
-        name?: string,
-        initComplete?: (instance: PostHog) => void
-    ): void {
+    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog | void {
+        if (_isUndefined(token) || _isEmptyString(token)) {
+            logger.critical(
+                'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
+            )
+            return
+        }
+
+        if (this.__loaded) {
+            logger.warn('You have already initialized PostHog! Re-initialising is a no-op')
+            return
+        }
+
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
 
-        // To avoid using Promises and their helper functions, we instead keep
-        // track of which callbacks have been called, and then call initComplete
-        // when all of them have been called. To add additional async code, add
-        // to `callbacksHandled` and pass updateInitComplete as a callback to
-        // the async code.
-        const callbacksHandled = { segmentRegister: false, syncCode: false }
-        const updateInitComplete = (callbackName: keyof typeof callbacksHandled) => () => {
-            // Update the register of callbacks that have been called, and if
-            // they have all been called, then we are ready to call
-            // initComplete.
-            if (!callbacksHandled[callbackName]) {
-                callbacksHandled[callbackName] = true
-                if (callbacksHandled.segmentRegister && callbacksHandled.syncCode) {
-                    initComplete?.(this)
-                }
-            }
-        }
+        config.request_headers = config.request_headers || config.xhr_headers
 
         this.set_config(
             _extend({}, defaultConfig(), config, {
                 name: name,
                 token: token,
-                callback_fn: (name === PRIMARY_INSTANCE_NAME ? name : PRIMARY_INSTANCE_NAME + '.' + name) + '._jsc',
             })
         )
-
-        this._jsc = function () {} as JSC
 
         // Check if recorder.js is already loaded
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -444,19 +336,49 @@ export class PostHog {
             this.__loaded_recorder_version = window?.rrweb?.version
         }
 
-        this.persistence = new PostHogPersistence(this.config)
+        this.compression = config.disable_compression ? undefined : Compression.Base64
 
-        this._requestQueue = new RequestQueue(this._handle_queued_event.bind(this))
-        this._retryQueue = new RetryQueue(this.config.on_xhr_error, this.rateLimiter)
+        this.persistence = new PostHogPersistence(this.config)
+        this.sessionPersistence =
+            this.config.persistence === 'sessionStorage'
+                ? this.persistence
+                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+
+        this._requestQueue = new RequestQueue((req) => this._send_request(req))
+        this._retryQueue = new RetryQueue(this)
         this.__captureHooks = []
         this.__request_queue = []
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
-        this.sessionPersistence =
-            this.config.persistence === 'sessionStorage'
-                ? this.persistence
-                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+
+        this.sessionRecording = new SessionRecording(this)
+        this.sessionRecording.startRecordingIfEnabled()
+
+        if (!this.config.disable_scroll_properties) {
+            this.pageViewManager.startMeasuringScrollPosition()
+        }
+
+        this.__autocapture = this.config.autocapture
+        autocapture._setIsAutocaptureEnabled(this)
+        if (autocapture._isAutocaptureEnabled) {
+            this.__autocapture = this.config.autocapture
+            const num_buckets = 100
+            const num_enabled_buckets = 100
+            if (!autocapture.enabledForProject(this.config.token, num_buckets, num_enabled_buckets)) {
+                this.__autocapture = false
+                logger.info('Not in active bucket: disabling Automatic Event Collection.')
+            } else if (!autocapture.isBrowserSupported()) {
+                this.__autocapture = false
+                logger.info('Disabling Automatic Event Collection because this browser is not supported')
+            } else {
+                autocapture.init(this)
+            }
+        }
+
+        // if any instance on the page has debug = true, we set the
+        // global debug to be true
+        Config.DEBUG = Config.DEBUG || this.config.debug
 
         this._gdpr_init()
 
@@ -471,10 +393,6 @@ export class PostHog {
                 })
                 this.persistence.set_user_state('identified')
             }
-
-            config.segment.register(this.segmentIntegration()).then(updateInitComplete('segmentRegister'))
-        } else {
-            updateInitComplete('segmentRegister')()
         }
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
@@ -515,6 +433,7 @@ export class PostHog {
             // or the device id if something was already stored
             // in the persitence
             const uuid = this.config.get_device_id(uuidv7())
+
             this.register_once(
                 {
                     distinct_id: uuid,
@@ -529,21 +448,29 @@ export class PostHog {
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
         window?.addEventListener?.('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
 
-        // Make sure that we also call the initComplete callback at the end of
-        // the synchronous code as well.
-        updateInitComplete('syncCode')()
+        this.toolbar.maybeLoadToolbar()
+
+        // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
+        if (config.segment) {
+            config.segment.register(this.segmentIntegration()).then(() => {
+                this._loaded()
+            })
+        } else {
+            this._loaded()
+        }
+
+        return this
     }
 
     // Private methods
-
     _afterDecideResponse(response: DecideResponse) {
-        this.compression = {}
+        this.compression = undefined
         if (response.supportedCompression && !this.config.disable_compression) {
-            const compression: Partial<Record<Compression, boolean>> = {}
-            for (const method of response['supportedCompression']) {
-                compression[method] = true
-            }
-            this.compression = compression
+            this.compression = _includes(response['supportedCompression'], Compression.GZipJS)
+                ? Compression.GZipJS
+                : _includes(response['supportedCompression'], Compression.Base64)
+                ? Compression.Base64
+                : undefined
         }
 
         if (response.analytics?.endpoint) {
@@ -572,10 +499,15 @@ export class PostHog {
 
         this._start_queue_if_opted_in()
 
-        // this happens after so a user can call identify in
-        // the loaded callback
-        if (this.config.capture_pageview && document) {
-            this.capture('$pageview', { title: document.title }, { send_instantly: true })
+        // this happens after "loaded" so a user can call identify or any other things before the pageview fires
+        if (this.config.capture_pageview) {
+            // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
+            // and some clients may rely on it
+            setTimeout(() => {
+                if (document) {
+                    this.capture('$pageview', { title: document.title }, { send_instantly: true })
+                }
+            }, 1)
         }
 
         // Call decide to get what features are enabled and other settings.
@@ -593,55 +525,18 @@ export class PostHog {
     _start_queue_if_opted_in(): void {
         if (!this.has_opted_out_capturing()) {
             if (this.config.request_batching) {
-                this._requestQueue?.poll()
+                this._requestQueue?.enable()
             }
         }
     }
 
     _dom_loaded(): void {
         if (!this.has_opted_out_capturing()) {
-            _eachArray(this.__request_queue, (item) => {
-                this._send_request(...item)
-            })
+            _eachArray(this.__request_queue, (item) => this._send_retriable_request(item))
         }
 
         this.__request_queue = []
-
         this._start_queue_if_opted_in()
-    }
-
-    /**
-     * _prepare_callback() should be called by callers of _send_request for use
-     * as the callback argument.
-     *
-     * If there is no callback, this returns null.
-     * If we are going to make XHR/XDR requests, this returns a function.
-     * If we are going to use script tags, this returns a string to use as the
-     * callback GET param.
-     */
-    // TODO: get rid of the "| string"
-    _prepare_callback(callback?: RequestCallback, data?: Properties): RequestCallback | null | string {
-        if (_isUndefined(callback)) {
-            return null
-        }
-
-        if (USE_XHR) {
-            return function (response) {
-                callback(response, data)
-            }
-        } else {
-            // if the user gives us a callback, we store as a random
-            // property on this instances jsc function and update our
-            // callback string to reflect that.
-            const jsc = this._jsc
-            const randomized_cb = '' + Math.floor(Math.random() * 100000000)
-            const callback_string = this.config.callback_fn + '[' + randomized_cb + ']'
-            jsc[randomized_cb] = function (response: any) {
-                delete jsc[randomized_cb]
-                callback(response, data)
-            }
-            return callback_string
-        }
     }
 
     _handle_unload(): void {
@@ -660,83 +555,47 @@ export class PostHog {
         this._retryQueue?.unload()
     }
 
-    _handle_queued_event(url: string, data: Record<string, any>, options?: XHROptions): void {
-        const jsonData = JSON.stringify(data)
-        this.__compress_and_send_json_request(url, jsonData, options || __NOOPTIONS, __NOOP)
-    }
-
-    __compress_and_send_json_request(
-        url: string,
-        jsonData: string,
-        options: XHROptions,
-        callback?: RequestCallback
-    ): void {
-        const [data, _options] = compressData(decideCompression(this.compression), jsonData, options)
-        this._send_request(url, data, _options, callback)
-    }
-
-    _send_request(url: string, data: Record<string, any>, options: CaptureOptions, callback?: RequestCallback): void {
-        if (!this.__loaded || !this._retryQueue) {
-            return
-        }
-        if (this.rateLimiter.isRateLimited(options._batchKey)) {
+    _send_request(options: QueuedRequestOptions): void {
+        if (!this.__loaded) {
             return
         }
 
         if (ENQUEUE_REQUESTS) {
-            this.__request_queue.push([url, data, options, callback])
+            this.__request_queue.push(options)
             return
         }
 
-        const DEFAULT_OPTIONS = {
-            method: this.config.api_method,
-            transport: this.config.api_transport,
-            verbose: this.config.verbose,
+        if (this.rateLimiter.isRateLimited(options.batchKey)) {
+            return
         }
 
-        options = _extend(DEFAULT_OPTIONS, options || {})
-        if (!USE_XHR) {
-            options.method = 'GET'
-        }
-
-        const useSendBeacon = window && 'sendBeacon' in window.navigator && options.transport === 'sendBeacon'
-        url = addParamsToURL(url, options.urlQueryArgs || {}, {
-            ip: this.config.ip,
+        options.transport = options.transport || this.config.api_transport
+        options.url = extendURLParams(options.url, {
+            // Whether to detect ip info or not
+            ip: this.config.ip ? 1 : 0,
         })
+        options.headers = this.config.request_headers
+        options.compression = options.compression === 'best-available' ? this.compression : options.compression
 
-        if (useSendBeacon) {
-            // beacon documentation https://w3c.github.io/beacon/
-            // beacons format the message and use the type property
-            try {
-                window?.navigator.sendBeacon(url, encodePostData(data, { ...options, sendBeacon: true }))
-            } catch (e) {
-                // send beacon is a best-effort, fire-and-forget mechanism on page unload,
-                // we don't want to throw errors here
-            }
-        } else if (USE_XHR || !document) {
-            try {
-                xhr({
-                    url: url,
-                    data: data,
-                    headers: this.config.xhr_headers,
-                    options: options,
-                    callback,
-                    retriesPerformedSoFar: 0,
-                    retryQueue: this._retryQueue,
-                    onXHRError: this.config.on_xhr_error,
-                    onResponse: this.rateLimiter.checkForLimiting,
-                })
-            } catch (e) {
-                logger.error(e)
-            }
+        request({
+            ...options,
+            callback: (response) => {
+                this.rateLimiter.checkForLimiting(response)
+
+                if (response.statusCode >= 400) {
+                    this.config.on_request_error?.(response)
+                }
+
+                options.callback?.(response)
+            },
+        })
+    }
+
+    _send_retriable_request(options: QueuedRequestOptions): void {
+        if (this._retryQueue) {
+            this._retryQueue.retriableRequest(options)
         } else {
-            const script = document.createElement('script')
-            script.type = 'text/javascript'
-            script.async = true
-            script.defer = true
-            script.src = url
-            const s = document.getElementsByTagName('script')[0]
-            s.parentNode?.insertBefore(script, s)
+            this._send_request(options)
         }
     }
 
@@ -840,11 +699,7 @@ export class PostHog {
      * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Date} [options.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
-    capture(
-        event_name: string,
-        properties?: Properties | null,
-        options: CaptureOptions = __NOOPTIONS
-    ): CaptureResult | void {
+    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
@@ -853,12 +708,6 @@ export class PostHog {
 
         if (userOptedOut(this)) {
             return
-        }
-
-        options = options || __NOOPTIONS
-        const transport = options['transport'] // external API, don't minify 'transport' prop
-        if (transport) {
-            options.transport = transport // 'transport' prop name can be minified internally
         }
 
         // typing doesn't prevent interesting data
@@ -892,12 +741,16 @@ export class PostHog {
         }
 
         if (event_name === '$identify') {
-            data['$set'] = options['$set']
-            data['$set_once'] = options['$set_once']
+            data['$set'] = options?.['$set']
+            data['$set_once'] = options?.['$set_once']
         }
 
-        data = _copyAndTruncateStrings(data, options._noTruncate ? null : this.config.properties_string_max_length)
-        data.timestamp = options.timestamp || new Date()
+        data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
+        data.timestamp = options?.timestamp || new Date()
+        if (!_isUndefined(options?.timestamp)) {
+            data.properties['$event_time_override_provided'] = true
+            data.properties['$event_time_override_system_time'] = new Date()
+        }
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
         // This doesn't handle $set_once, because posthog-people doesn't either
@@ -907,16 +760,19 @@ export class PostHog {
         }
 
         logger.info('send', data)
-        const jsonData = JSON.stringify(data)
 
-        const url = this.config.api_host + (options.endpoint || this.analyticsDefaultEndpoint)
+        const requestOptions: QueuedRequestOptions = {
+            method: 'POST',
+            url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
+            data,
+            compression: 'best-available',
+            batchKey: options?._batchKey,
+        }
 
-        const has_unique_traits = options !== __NOOPTIONS
-
-        if (this.config.request_batching && (!has_unique_traits || options._batchKey) && !options.send_instantly) {
-            this._requestQueue.enqueue(url, data, options)
+        if (this.config.request_batching && (!options || options?._batchKey) && !options?.send_instantly) {
+            this._requestQueue.enqueue(requestOptions)
         } else {
-            this.__compress_and_send_json_request(url, jsonData, options)
+            this._send_retriable_request(requestOptions)
         }
 
         this._invokeCaptureHooks(event_name, data)
@@ -1015,13 +871,20 @@ export class PostHog {
             properties
         )
 
-        const property_blacklist = this.config.property_blacklist
-        if (_isArray(property_blacklist)) {
-            _each(property_blacklist, function (blacklisted_prop) {
-                delete properties[blacklisted_prop]
+        if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
+            // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
+            // TODO: merge this only once, requires refactoring tests
+            const property_denylist = [...this.config.property_blacklist, ...this.config.property_denylist]
+            _each(property_denylist, function (denylisted_prop) {
+                delete properties[denylisted_prop]
             })
         } else {
-            logger.error('Invalid value for property_blacklist config: ' + property_blacklist)
+            logger.error(
+                'Invalid value for property_denylist config: ' +
+                    this.config.property_denylist +
+                    ' or property_blacklist config: ' +
+                    this.config.property_blacklist
+            )
         }
 
         const sanitize_properties = this.config.sanitize_properties
@@ -1179,7 +1042,7 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key: string, options?: isFeatureEnabledOptions): boolean | undefined {
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
         return this.featureFlags.isFeatureEnabled(key, options)
     }
 
@@ -1290,6 +1153,13 @@ export class PostHog {
         if (!this.__loaded || !this.persistence) {
             return logger.uninitializedWarning('posthog.identify')
         }
+        if (_isNumber(new_distinct_id)) {
+            new_distinct_id = (new_distinct_id as number).toString()
+            logger.warn(
+                'The first argument to posthog.identify was a number, but it should be a string. It has been converted to a string.'
+            )
+        }
+
         //if the new_distinct_id has not been set ignore the identify event
         if (!new_distinct_id) {
             logger.error('Unique user id has not been set in posthog.identify')
@@ -1527,9 +1397,8 @@ export class PostHog {
         if (!this.sessionManager) {
             return ''
         }
-        const host = this.config.ui_host || this.config.api_host
         const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        let url = host + '/replay/' + sessionId
+        let url = this.requestRouter.endpointFor('ui', '/replay/' + sessionId)
         if (options?.withTimestamp && sessionStartTimestamp) {
             const LOOK_BACK = options.timestampLookBack ?? 10
             if (!sessionStartTimestamp) {
@@ -1596,10 +1465,7 @@ export class PostHog {
      *     {
      *       // PostHog API host
      *       api_host: 'https://app.posthog.com',
-     *
-     *       // HTTP method for capturing requests
-     *       api_method: 'POST'
-     *
+     *     *
      *       // PostHog web app host, currently only used by the Sentry integration.
      *       // This will only be different from api_host when using a reverse-proxied API host – in that case
      *       // the original web app host needs to be passed here so that links to the web app are still convenient.
@@ -1663,9 +1529,14 @@ export class PostHog {
      *       // name for super properties persistent store
      *       persistence_name: ''
      *
+     *       // deprecated, use property_denylist instead.
      *       // names of properties/superproperties which should never
-     *       // be sent with capture() calls
+     *       // be sent with capture() calls.
      *       property_blacklist: []
+     *
+     *       // names of properties/superproperties which should never
+     *       // be sent with capture() calls.
+     *       property_denylist: []
      *
      *       // if this is true, posthog cookies will be marked as
      *       // secure, meaning they will only be transmitted over https
@@ -1686,7 +1557,7 @@ export class PostHog {
      *
      *       // extra HTTP request headers to set for each API request, in
      *       // the format {'Header-Name': value}
-     *       xhr_headers: {}
+     *       response_headers: {}
      *
      *       // protocol for fetching in-app message resources, e.g.
      *       // 'https://' or 'http://'; defaults to '//' (which defers to the
@@ -1736,15 +1607,11 @@ export class PostHog {
                 this.config.disable_persistence = this.config.disable_cookie
             }
 
-            // We assume the api_host is without a trailing slash in most places throughout the codebase
-            this.config.api_host = this.config.api_host.replace(/\/$/, '')
-
-            // us.posthog.com is only for the web app, so we don't allow that to be used as a capture endpoint
-            if (this.config.api_host === 'https://us.posthog.com') {
-                this.config.api_host = 'https://app.posthog.com'
-            }
-            this.persistence?.update_config(this.config)
-            this.sessionPersistence?.update_config(this.config)
+            this.persistence?.update_config(this.config, oldConfig)
+            this.sessionPersistence =
+                this.config.persistence === 'sessionStorage'
+                    ? this.persistence
+                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
             if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
                 this.config.debug = true
@@ -1754,7 +1621,13 @@ export class PostHog {
             }
 
             if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
-                if (oldConfig.disable_session_recording !== config.disable_session_recording) {
+                const disable_session_recording_has_changed =
+                    oldConfig.disable_session_recording !== config.disable_session_recording
+                // if opting back in, this config might not have changed
+                const try_enable_after_opt_in =
+                    !userOptedOut(this) && !config.disable_session_recording && !this.sessionRecording.started
+
+                if (disable_session_recording_has_changed || try_enable_after_opt_in) {
                     if (config.disable_session_recording) {
                         this.sessionRecording.stopRecording()
                     } else {
@@ -1817,7 +1690,7 @@ export class PostHog {
      * @param {String} property_name The name of the super property you want to retrieve
      */
     get_property(property_name: string): Property | undefined {
-        return this.persistence?.['props'][property_name]
+        return this.persistence?.props[property_name]
     }
 
     /**
@@ -1840,7 +1713,7 @@ export class PostHog {
      * @param {String} property_name The name of the session super property you want to retrieve
      */
     getSessionProperty(property_name: string): Property | undefined {
-        return this.sessionPersistence?.['props'][property_name]
+        return this.sessionPersistence?.props[property_name]
     }
 
     toString(): string {
@@ -2105,59 +1978,6 @@ export class PostHog {
 
 _safewrap_class(PostHog, ['identify'])
 
-const instances: Record<string, PostHog> = {}
-const extend_mp = function () {
-    // add all the sub posthog instances
-    _each(instances, function (instance, name) {
-        if (name !== PRIMARY_INSTANCE_NAME) {
-            posthog_master[name] = instance
-        }
-    })
-}
-
-const override_ph_init_func = function () {
-    // we override the snippets init function to handle the case where a
-    // user initializes the posthog library after the script loads & runs
-    posthog_master['init'] = function (token?: string, config?: Partial<PostHogConfig>, name?: string) {
-        if (name) {
-            // initialize a sub library
-            if (!posthog_master[name]) {
-                posthog_master[name] = instances[name] = create_phlib(
-                    token || '',
-                    config || {},
-                    name,
-                    (instance: PostHog) => {
-                        posthog_master[name] = instances[name] = instance
-                        instance._loaded()
-                    }
-                )
-            }
-            return posthog_master[name]
-        } else {
-            let instance: PostHog = posthog_master as any as PostHog
-
-            if (instances[PRIMARY_INSTANCE_NAME]) {
-                // main posthog lib already initialized
-                instance = instances[PRIMARY_INSTANCE_NAME]
-            } else if (token) {
-                // intialize the main posthog lib
-                instance = create_phlib(token, config || {}, PRIMARY_INSTANCE_NAME, (instance: PostHog) => {
-                    instances[PRIMARY_INSTANCE_NAME] = instance
-                    instance._loaded()
-                })
-                instances[PRIMARY_INSTANCE_NAME] = instance
-            }
-
-            ;(posthog_master as any) = instance
-            if (init_type === InitType.INIT_SNIPPET) {
-                assignableWindow[PRIMARY_INSTANCE_NAME] = posthog_master
-            }
-            extend_mp()
-            return instance
-        }
-    }
-}
-
 const add_dom_loaded_handler = function () {
     // Cross browser DOM Loaded support
     function dom_loaded_handler() {
@@ -2193,43 +2013,68 @@ const add_dom_loaded_handler = function () {
 }
 
 export function init_from_snippet(): void {
-    init_type = InitType.INIT_SNIPPET
-    if (_isUndefined(assignableWindow.posthog)) {
-        assignableWindow.posthog = []
+    const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
+
+    const snippetPostHog = assignableWindow['posthog']
+
+    if (snippetPostHog) {
+        /**
+         * The snippet uses some clever tricks to allow deferred loading of array.js (this code)
+         *
+         * window.posthog is an array which the queue of calls made before the lib is loaded
+         * It has methods attached to it to simulate the posthog object so for instance
+         *
+         * window.posthog.init("TOKEN", {api_host: "foo" })
+         * window.posthog.capture("my-event", {foo: "bar" })
+         *
+         * ... will mean that window.posthog will look like this:
+         * window.posthog == [
+         *  ["my-event", {foo: "bar"}]
+         * ]
+         *
+         * window.posthog[_i] == [
+         *   ["TOKEN", {api_host: "foo" }, "posthog"]
+         * ]
+         *
+         * If a name is given to the init function then the same as above is true but as a sub-property on the object:
+         *
+         * window.posthog.init("TOKEN", {}, "ph2")
+         * window.posthog.ph2.people.set({foo: "bar"})
+         *
+         * window.posthog.ph2 == []
+         * window.posthog.people == [
+         *  ["set", {foo: "bar"}]
+         * ]
+         *
+         */
+
+        // Call all pre-loaded init calls properly
+
+        _each(snippetPostHog['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
+            if (item && _isArray(item)) {
+                const instance = posthogMain.init(item[0], item[1], item[2])
+
+                const instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
+
+                if (instance) {
+                    // Crunch through the people queue first - we queue this data up &
+                    // flush on identify, so it's better to do all these operations first
+                    instance._execute_array.call(instance.people, instanceSnippet.people)
+                    instance._execute_array(instanceSnippet)
+                }
+            }
+        })
     }
-    posthog_master = assignableWindow.posthog
 
-    if (posthog_master['__loaded'] || (posthog_master['config'] && posthog_master['persistence'])) {
-        // lib has already been loaded at least once; we don't want to override the global object this time so bomb early
-        logger.critical('PostHog library has already been downloaded at least once.')
-        return
-    }
-
-    // Load instances of the PostHog Library
-    _each(posthog_master['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
-        if (item && _isArray(item)) {
-            instances[item[2]] = create_phlib(...item)
-        }
-    })
-
-    override_ph_init_func()
-    ;(posthog_master['init'] as any)()
-
-    // Fire loaded events after updating the window's posthog object
-    _each(instances, function (instance) {
-        instance._loaded()
-    })
+    assignableWindow['posthog'] = posthogMain
 
     add_dom_loaded_handler()
 }
 
 export function init_as_module(): PostHog {
-    init_type = InitType.INIT_MODULE
-    ;(posthog_master as any) = new PostHog()
+    const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
-    override_ph_init_func()
-    ;(posthog_master['init'] as any)()
     add_dom_loaded_handler()
 
-    return posthog_master as any
+    return posthogMain
 }

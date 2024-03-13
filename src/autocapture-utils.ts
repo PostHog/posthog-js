@@ -1,7 +1,7 @@
-import { AutocaptureConfig, Properties } from 'types'
+import { AutocaptureConfig, Properties } from './types'
 import { _each, _entries, _includes, _trim } from './utils'
 
-import { _isArray, _isNull, _isString, _isUndefined } from './utils/type-utils'
+import { _isArray, _isNullish, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 
@@ -33,6 +33,25 @@ export function getClassNames(el: Element): string[] {
     return splitClassString(className)
 }
 
+export function makeSafeText(s: string | null | undefined): string | null {
+    if (_isNullish(s)) {
+        return null
+    }
+
+    return (
+        _trim(s)
+            // scrub potentially sensitive values
+            .split(/(\s+)/)
+            .filter((s) => shouldCaptureValue(s))
+            .join('')
+            // normalize whitespace
+            .replace(/[\r\n]/g, ' ')
+            .replace(/[ ]+/g, ' ')
+            // truncate
+            .substring(0, 255)
+    )
+}
+
 /*
  * Get the direct text content of an element, protecting against sensitive data collection.
  * Concats textContent of each of the element's text node children; this avoids potential
@@ -48,16 +67,7 @@ export function getSafeText(el: Element): string {
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
         _each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
-                elText += _trim(child.textContent)
-                    // scrub potentially sensitive values
-                    .split(/(\s+)/)
-                    .filter(shouldCaptureValue)
-                    .join('')
-                    // normalize whitespace
-                    .replace(/[\r\n]/g, ' ')
-                    .replace(/[ ]+/g, ' ')
-                    // truncate
-                    .substring(0, 255)
+                elText += makeSafeText(child.textContent) ?? ''
             }
         })
     }
@@ -70,7 +80,7 @@ export function getSafeText(el: Element): string {
  * @param {Element} el - element to check
  * @returns {boolean} whether el is of the correct nodeType
  */
-export function isElementNode(el: Element | undefined | null): el is HTMLElement {
+export function isElementNode(el: Node | Element | undefined | null): el is Element {
     return !!el && el.nodeType === 1 // Node.ELEMENT_NODE - use integer constant for browser portability
 }
 
@@ -107,18 +117,84 @@ export function isDocumentFragment(el: Element | ParentNode | undefined | null):
 }
 
 export const autocaptureCompatibleElements = ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+
+/*
+ if there is no config, then all elements are allowed
+ if there is a config, and there is an allow list, then only elements in the allow list are allowed
+ assumes that some other code is checking this element's parents
+ */
+function checkIfElementTreePassesElementAllowList(
+    elements: Element[],
+    autocaptureConfig: AutocaptureConfig | undefined
+): boolean {
+    const allowlist = autocaptureConfig?.element_allowlist
+    if (_isUndefined(allowlist)) {
+        // everything is allowed, when there is no allow list
+        return true
+    }
+
+    // check each element in the tree
+    // if any of the elements are in the allow list, then the tree is allowed
+    for (const el of elements) {
+        if (allowlist.some((elementType) => el.tagName.toLowerCase() === elementType)) {
+            return true
+        }
+    }
+
+    // otherwise there is an allow list and this element tree didn't match it
+    return false
+}
+
+/*
+ if there is no config, then all elements are allowed
+ if there is a config, and there is an allow list, then
+ only elements that match the css selector in the allow list are allowed
+ assumes that some other code is checking this element's parents
+ */
+function checkIfElementTreePassesCSSSelectorAllowList(
+    elements: Element[],
+    autocaptureConfig: AutocaptureConfig | undefined
+): boolean {
+    const allowlist = autocaptureConfig?.css_selector_allowlist
+    if (_isUndefined(allowlist)) {
+        // everything is allowed, when there is no allow list
+        return true
+    }
+
+    // check each element in the tree
+    // if any of the elements are in the allow list, then the tree is allowed
+    for (const el of elements) {
+        if (allowlist.some((selector) => el.matches(selector))) {
+            return true
+        }
+    }
+
+    // otherwise there is an allow list and this element tree didn't match it
+    return false
+}
+
+function getParentElement(curEl: Element): Element | false {
+    const parentNode = curEl.parentNode
+    if (!parentNode || !isElementNode(parentNode)) return false
+    return parentNode
+}
+
 /*
  * Check whether a DOM event should be "captured" or if it may contain sentitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
  * @param {Object} autocaptureConfig - autocapture config
+ * @param {boolean} captureOnAnyElement - whether to capture on any element, clipboard autocapture doesn't restrict to "clickable" elements
+ * @param {string[]} allowedEventTypes - event types to capture, normally just 'click', but some autocapture types react to different events, some elements have fixed events (e.g., form has "submit")
  * @returns {boolean} whether the event should be captured
  */
 export function shouldCaptureDomEvent(
     el: Element,
     event: Event,
-    autocaptureConfig: AutocaptureConfig | undefined = undefined
+    autocaptureConfig: AutocaptureConfig | undefined = undefined,
+    captureOnAnyElement?: boolean,
+    allowedEventTypes?: string[]
 ): boolean {
     if (!window || !el || isTag(el, 'html') || !isElementNode(el)) {
         return false
@@ -139,22 +215,8 @@ export function shouldCaptureDomEvent(
         }
     }
 
-    if (autocaptureConfig?.element_allowlist) {
-        const allowlist = autocaptureConfig.element_allowlist
-        if (allowlist && !allowlist.some((elementType) => el.tagName.toLowerCase() === elementType)) {
-            return false
-        }
-    }
-
-    if (autocaptureConfig?.css_selector_allowlist) {
-        const allowlist = autocaptureConfig.css_selector_allowlist
-        if (allowlist && !allowlist.some((selector) => el.matches(selector))) {
-            return false
-        }
-    }
-
     let parentIsUsefulElement = false
-    const targetElementList: Element[] = [el] // TODO: remove this var, it's never queried
+    const targetElementList: Element[] = [el]
     let parentNode: Element | boolean = true
     let curEl: Element = el
     while (curEl.parentNode && !isTag(curEl, 'body')) {
@@ -164,9 +226,9 @@ export function shouldCaptureDomEvent(
             curEl = (curEl.parentNode as any).host
             continue
         }
-        parentNode = (curEl.parentNode as Element) || false
+        parentNode = getParentElement(curEl)
         if (!parentNode) break
-        if (autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
+        if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
         } else {
             const compStyles = window.getComputedStyle(parentNode)
@@ -179,6 +241,14 @@ export function shouldCaptureDomEvent(
         curEl = parentNode
     }
 
+    if (!checkIfElementTreePassesElementAllowList(targetElementList, autocaptureConfig)) {
+        return false
+    }
+
+    if (!checkIfElementTreePassesCSSSelectorAllowList(targetElementList, autocaptureConfig)) {
+        return false
+    }
+
     const compStyles = window.getComputedStyle(el)
     if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer' && event.type === 'click') {
         return true
@@ -189,16 +259,15 @@ export function shouldCaptureDomEvent(
         case 'html':
             return false
         case 'form':
-            return event.type === 'submit'
+            return (allowedEventTypes || ['submit']).indexOf(event.type) >= 0
         case 'input':
-            return event.type === 'change' || event.type === 'click'
         case 'select':
         case 'textarea':
-            return event.type === 'change' || event.type === 'click'
+            return (allowedEventTypes || ['change', 'click']).indexOf(event.type) >= 0
         default:
-            if (parentIsUsefulElement) return event.type === 'click'
+            if (parentIsUsefulElement) return (allowedEventTypes || ['click']).indexOf(event.type) >= 0
             return (
-                event.type === 'click' &&
+                (allowedEventTypes || ['click']).indexOf(event.type) >= 0 &&
                 (autocaptureCompatibleElements.indexOf(tag) > -1 || el.getAttribute('contenteditable') === 'true')
             )
     }
@@ -271,14 +340,29 @@ export function isSensitiveElement(el: Element): boolean {
     return false
 }
 
+// Define the core pattern for matching credit card numbers
+const coreCCPattern = `(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11})`
+// Create the Anchored version of the regex by adding '^' at the start and '$' at the end
+const anchoredCCRegex = new RegExp(`^(?:${coreCCPattern})$`)
+// The Unanchored version is essentially the core pattern, usable as is for partial matches
+const unanchoredCCRegex = new RegExp(coreCCPattern)
+
+// Define the core pattern for matching SSNs with optional dashes
+const coreSSNPattern = `\\d{3}-?\\d{2}-?\\d{4}`
+// Create the Anchored version of the regex by adding '^' at the start and '$' at the end
+const anchoredSSNRegex = new RegExp(`^(${coreSSNPattern})$`)
+// The Unanchored version is essentially the core pattern itself, usable for partial matches
+const unanchoredSSNRegex = new RegExp(`(${coreSSNPattern})`)
+
 /*
- * Check whether a string value should be "captured" or if it may contain sentitive data
+ * Check whether a string value should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
  * @param {string} value - string value to check
+ * @param {boolean} anchorRegexes - whether to anchor the regexes to the start and end of the string
  * @returns {boolean} whether the element should be captured
  */
-export function shouldCaptureValue(value: string): boolean {
-    if (_isNull(value) || _isUndefined(value)) {
+export function shouldCaptureValue(value: string, anchorRegexes = true): boolean {
+    if (_isNullish(value)) {
         return false
     }
 
@@ -287,14 +371,13 @@ export function shouldCaptureValue(value: string): boolean {
 
         // check to see if input value looks like a credit card number
         // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
-        const ccRegex =
-            /^(?:(4[0-9]{12}(?:[0-9]{3})?)|(5[1-5][0-9]{14})|(6(?:011|5[0-9]{2})[0-9]{12})|(3[47][0-9]{13})|(3(?:0[0-5]|[68][0-9])[0-9]{11})|((?:2131|1800|35[0-9]{3})[0-9]{11}))$/
+        const ccRegex = anchorRegexes ? anchoredCCRegex : unanchoredCCRegex
         if (ccRegex.test((value || '').replace(/[- ]/g, ''))) {
             return false
         }
 
         // check to see if input value looks like a social security number
-        const ssnRegex = /(^\d{3}-?\d{2}-?\d{4}$)/
+        const ssnRegex = anchorRegexes ? anchoredSSNRegex : unanchoredSSNRegex
         if (ssnRegex.test(value)) {
             return false
         }

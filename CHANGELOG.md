@@ -1,3 +1,216 @@
+## 1.114.2 - 2024-03-12
+
+- fix: patch rrweb zero width canvas bug (#1075)
+
+## 1.114.1 - 2024-03-12
+
+- fix: Disabled compression and application json (#1074)
+
+## 1.114.0 - 2024-03-12
+
+- feat: report browser visibility state in replay (#1071)
+- fix: typo in deny list (#1073)
+- fix(posthog-js): manually bump patch (#1072)
+
+## 1.113.4 - 2024-03-12
+
+- fix(posthog-js): manually bump patch (#1072)
+- fix: no empty requests (#1063)
+
+## 1.113.2 - 2024-03-11
+
+- fix: Send beacon request encoding (#1068)
+
+## 1.113.1 - 2024-03-11
+
+- fix: clarify redaction message (#1069)
+
+## 1.113.0 - 2024-03-11
+
+- feat: scrub payloads with forbidden words (#1059)
+- chore: remove unused path (#1066)
+
+## 1.112.1 - 2024-03-11
+
+- Fix compression (#1062)
+
+## 1.112.0 - 2024-03-08
+
+- feat: Refactor request logic (#1055)
+- feat: Add more ad ids (#1057)
+
+## 1.111.3 - 2024-03-07
+
+- chore: Rework SDK initialisation (#1023)
+
+## 1.111.2 - 2024-03-06
+
+- feat: Ensure ingestion domains follow the same logic. (#1049)
+
+## 1.111.1 - 2024-03-06
+
+- chore: Removed jsc callbacks (#1052)
+- fix: posthog path to ignore (#1054)
+- chore: add some privacy examples to the copy autocapture demo (#1053)
+
+## 1.111.0 - 2024-03-05
+
+- feat: copy and cut autocapture (#1047)
+- fix: timezones are fun (#1050)
+
+## 1.110.0 - 2024-02-28
+
+- feat: allow linked flag variants to control recording (#1040)
+- feat: reecord when timestamp is overriden by caller (#1033)
+- chore: deprecate property_blacklist in favor of property_denylist (#1044)
+
+## 1.109.0 - 2024-02-27
+
+- feat: improve user agent detection (#1038)
+
+## 1.108.4 - 2024-02-26
+
+- Fix (#1042)
+
+## 1.108.3 - 2024-02-23
+
+- feat: Rollout new ingestion endpoints (#1032)
+
+## 1.108.2 - 2024-02-22
+
+- fix: Path for site apps (#1037)
+
+## 1.108.1 - 2024-02-22
+
+- fix(surveys): fix emoji scale (#1036)
+
+## 1.108.0 - 2024-02-20
+
+- fix(surveys): Render feedback preview (#1030)
+
+## 1.107.0 - 2024-02-20
+
+- feat: Allow changing persistence (#1025)
+
+## 1.106.3 - 2024-02-19
+
+- fix(surveys): survey popover improvements (#1029)
+
+## 1.106.2 - 2024-02-19
+
+- fix: protect against parent is not element (#1027)
+
+## 1.106.1 - 2024-02-19
+
+- fix: body capture handling (#1026)
+- ci: Use GITHUB_OUTPUT envvar instead of set-output command (#958)
+
+## 1.106.0 - 2024-02-15
+
+- feat(surveys): preact surveys components (#964)
+
+## 1.105.9 - 2024-02-14
+
+- fix: empty token should be invalid (#1022)
+
+## 1.105.8 - 2024-02-13
+
+- feat: Simplify to just -api and -assets (#1018)
+- fix: for want of a v the war was lost (#1017)
+
+## 1.105.7 - 2024-02-11
+
+- fix: allow custom events when idle (#1013)
+- chore: no need to account for performance raw (#1012)
+- chore: add test case for ahrefs bot (#1011)
+- chore: really really write changelog to release (#1008)
+
+## 1.105.6 - 2024-02-08
+
+- feat: save posthog config at start of session recording (#1005)
+- chore: test stopping and starting (#1009)
+
+## 1.105.5 - 2024-02-08
+
+- feat: account for persistence for canvas recording (#1006)
+- chore: improve template to account for backwards compatibility (#1007)
+
+## 1.105.4 - 2024-02-07
+
+- feat: Add dynamic routing of ingestion endpoints (#986)
+- Update CHANGELOG.md (#1004)
+
+## 1.105.3 - 2024-02-07
+
+identical to 1.105.1 - bug in CI scripts
+
+## 1.105.2 - 2024-02-07
+
+identical to 1.105.1 - bug in CI scripts
+
+## 1.105.1 - 2024-02-07
+
+- fix: autocapture allowlist should consider the tree (#1000)
+- chore: move posthog test instance helper (#999)
+- chore: nit pick log message (#997)
+- chore: copy most recent changelog entry when creating a release (#995)
+
+## 1.105.0 - 2024-02-06
+
+- fix: Add warning and conversion for number distinct_id (#993)
+- fix: Remove `baseUrl` from TypeScript compiler options (#996)
+
+## 1.104.4 - 2024-02-02
+
+- fix: very defensive body redaction (#988)
+- fix: less eager timeout (#989)
+
+## 1.104.3 - 2024-02-01
+
+- feat: Fetch without window (#985)
+
+## 1.104.2 - 2024-01-31
+
+- fix: no throwing when reading the body (#984)
+
+## 1.104.1 - 2024-01-31
+
+- chore: make rate limiter error less scary (#983)
+
+## 1.104.0 - 2024-01-31
+
+- feat: Fetch support (#898)
+- chore: Swap to main (#979)
+
+## 1.103.2 - 2024-01-31
+
+- fix: safer body processing (#980)
+
+## 1.103.1 - 2024-01-28
+
+- feat: safer rrweb events and regular full snapshots (#973)
+- chore: update rollup (#974)
+- chore: re-enable bundle checker now main and branches both use pnpm (#972)
+
+## 1.103.0 - 2024-01-26
+
+- feat: pnpm patch rrweb (#971)
+- chore: convert to pnpm (#970)
+
+## 1.102.1 - 2024-01-25
+
+- chore: add debug logging for session id/recording (#969)
+
+## 1.102.0 - 2024-01-24
+
+- feat: send custom event when network status changes (#965)
+- fix: integration test opting out (#959)
+
+## 1.101.0 - 2024-01-22
+
+- feat: canvas recording support (#946)
+- refactor(surveys): Use Preact instead of vanilla JS (#963)
+
 ## 1.100.0 - 2024-01-15
 
 - Enable scroll stats by default (#962)

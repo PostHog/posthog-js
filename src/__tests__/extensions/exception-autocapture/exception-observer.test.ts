@@ -3,6 +3,7 @@ import { PostHog } from '../../../posthog-core'
 import { DecideResponse, PostHogConfig } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
 import { window } from '../../../utils/globals'
+import { RequestRouter } from '../../../utils/request-router'
 
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
@@ -17,6 +18,7 @@ describe('Exception Observer', () => {
             config: mockConfig,
             get_distinct_id: jest.fn(() => 'mock-distinct-id'),
             capture: mockCapture,
+            requestRouter: new RequestRouter({ config: mockConfig } as any),
         }
         exceptionObserver = new ExceptionObserver(mockPostHogInstance as PostHog)
     })

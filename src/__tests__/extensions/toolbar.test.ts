@@ -3,6 +3,7 @@ import { _isString, _isUndefined } from '../../utils/type-utils'
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig, ToolbarParams } from '../../types'
 import { assignableWindow, window } from '../../utils/globals'
+import { RequestRouter } from '../../utils/request-router'
 
 jest.mock('../../utils', () => ({
     ...jest.requireActual('../../utils'),
@@ -25,6 +26,8 @@ describe('Toolbar', () => {
                 api_host: 'http://api.example.com',
                 token: 'test_token',
             } as unknown as PostHogConfig,
+            requestRouter: new RequestRouter(instance),
+
             set_config: jest.fn(),
         } as unknown as PostHog
         toolbar = new Toolbar(instance)

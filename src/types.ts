@@ -1,6 +1,5 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
-import { RetryQueue } from './retry-queue'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -13,7 +12,6 @@ export interface CaptureResult {
     $set_once?: Properties
     timestamp?: Date
 }
-export type CaptureCallback = (response: any, data: any) => void
 
 export type AutocaptureCompatibleElement = 'a' | 'button' | 'form' | 'input' | 'select' | 'textarea' | 'label'
 export type DomAutocaptureEvents = 'click' | 'change' | 'submit'
@@ -37,12 +35,20 @@ export interface AutocaptureConfig {
     /**
      * List of DOM elements to allow autocapture on
      * e.g. ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * if the allowlist has button then we allow the capture when the button or the svg is the click target
+     * but not if either of the divs are detected as the click target
      */
     element_allowlist?: AutocaptureCompatibleElement[]
 
     /**
      * List of CSS selectors to allow autocapture on
      * e.g. ['[ph-capture]']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * and allow list config `['[id]']`
+     * we will capture the click if the click-target or its parents has any id
      */
     css_selector_allowlist?: string[]
 
@@ -51,14 +57,15 @@ export interface AutocaptureConfig {
      * E.g. ['aria-label'] or [data-attr-pii]
      */
     element_attribute_ignorelist?: string[]
-}
 
-export type UUIDVersion = 'og' | 'v7'
+    capture_copied_text?: boolean
+}
 
 export interface PostHogConfig {
     api_host: string
-    api_method: string
-    api_transport: string
+    /** @deprecated - This property is no longer supported */
+    api_method?: string
+    api_transport?: 'XHR' | 'fetch'
     ui_host: string | null
     token: string
     autocapture: boolean | AutocaptureConfig
@@ -96,9 +103,15 @@ export interface PostHogConfig {
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean
     respect_dnt: boolean
+    /** @deprecated - use `property_denylist` instead  */
     property_blacklist: string[]
-    xhr_headers: { [header_name: string]: string }
-    on_xhr_error: (failedRequest: XMLHttpRequest) => void
+    property_denylist: string[]
+    request_headers: { [header_name: string]: string }
+    on_request_error?: (error: RequestResponse) => void
+    /** @deprecated - use `request_headers` instead  */
+    xhr_headers?: { [header_name: string]: string }
+    /** @deprecated - use `on_request_error` instead  */
+    on_xhr_error?: (failedRequest: XMLHttpRequest) => void
     inapp_protocol: string
     inapp_link_new_window: boolean
     request_batching: boolean
@@ -112,9 +125,9 @@ export interface PostHogConfig {
     advanced_disable_feature_flags: boolean
     advanced_disable_feature_flags_on_first_load: boolean
     advanced_disable_toolbar_metrics: boolean
+    feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
     name: string
-    callback_fn: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
@@ -145,7 +158,7 @@ export interface OptInOutCapturingOptions {
     secure_cookie: boolean
 }
 
-export interface isFeatureEnabledOptions {
+export interface IsFeatureEnabledOptions {
     send_event: boolean
 }
 
@@ -181,48 +194,56 @@ export enum Compression {
     Base64 = 'base64',
 }
 
-export interface XHROptions {
-    transport?: 'XHR' | 'sendBeacon'
+// Request types - these should be kept minimal to what request.ts needs
+
+// Minimal class to allow interop between different request methods (xhr / fetch)
+export interface RequestResponse {
+    statusCode: number
+    text?: string
+    json?: any
+}
+
+export type RequestCallback = (response: RequestResponse) => void
+
+export interface RequestOptions {
+    url: string
+    // Data can be a single object or an array of objects when batched
+    data?: Record<string, any> | Record<string, any>[]
+    headers?: Record<string, any>
+    transport?: 'XHR' | 'fetch' | 'sendBeacon'
     method?: 'POST' | 'GET'
     urlQueryArgs?: { compression: Compression }
-    verbose?: boolean
-    blob?: boolean
-    sendBeacon?: boolean
-}
-
-export interface CaptureOptions extends XHROptions {
-    $set?: Properties /** used with $identify */
-    $set_once?: Properties /** used with $identify */
-    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
-    _metrics?: Properties
-    _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
-    endpoint?: string /** defaults to '/e/' */
-    send_instantly?: boolean /** if set skips the batched queue */
-    timestamp?: Date
-}
-
-export interface RetryQueueElement {
-    retryAt: Date
-    requestData: QueuedRequestData
-}
-export interface QueuedRequestData {
-    url: string
-    data: Properties
-    options: CaptureOptions
-    headers?: Properties
     callback?: RequestCallback
+    timeout?: number
+    noRetries?: boolean
+    compression?: Compression | 'best-available'
+}
+
+// Queued request types - the same as a request but with additional queueing information
+
+export interface QueuedRequestOptions extends RequestOptions {
+    batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
+}
+
+// Used explicitly for retriable requests
+export interface RetriableRequestOptions extends QueuedRequestOptions {
     retriesPerformedSoFar?: number
 }
 
-export interface XHRParams extends QueuedRequestData {
-    retryQueue: RetryQueue
-    onXHRError: (req: XMLHttpRequest) => void
-    timeout?: number
-    onResponse?: (req: XMLHttpRequest) => void
+export interface CaptureOptions {
+    $set?: Properties /** used with $identify */
+    $set_once?: Properties /** used with $identify */
+    _url?: string /** Used to override the desired endpoint for the captured event */
+    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
+    _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
+    send_instantly?: boolean /** if set skips the batched queue */
+    transport?: RequestOptions['transport'] /** if set, overrides the desired transport method */
+    timestamp?: Date
 }
 
+export type FlagVariant = { flag: string; variant: string }
+
 export interface DecideResponse {
-    status: number
     supportedCompression: Compression[]
     config: {
         enable_collect_everything: boolean
@@ -255,7 +276,7 @@ export interface DecideResponse {
         canvasFps?: number | null
         // the API returns a decimal between 0 and 1 as a string
         canvasQuality?: string | null
-        linkedFlag?: string | null
+        linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
     }
     surveys?: boolean
@@ -266,18 +287,19 @@ export interface DecideResponse {
     siteApps: { id: number; url: string }[]
 }
 
-export type FeatureFlagsCallback = (flags: string[], variants: Record<string, string | boolean>) => void
+export type FeatureFlagsCallback = (
+    flags: string[],
+    variants: Record<string, string | boolean>,
+    context?: {
+        errorsLoading?: boolean
+    }
+) => void
 
 // TODO: delete custom_properties after changeless typescript refactor
 export interface AutoCaptureCustomProperty {
     name: string
     css_selector: string
     event_selectors: string[]
-}
-
-export interface CompressionData {
-    data: string
-    compression?: Compression
 }
 
 export interface GDPROptions {
@@ -297,8 +319,6 @@ export interface GDPROptions {
     respectDnt?: boolean
     window?: Window
 }
-
-export type RequestCallback = (response: Record<string, any>, data?: Properties) => void
 
 export interface PersistentStore {
     is_supported: () => boolean
@@ -332,17 +352,6 @@ export interface ToolbarParams {
     featureFlags?: Record<string, string | boolean>
 }
 
-export interface PostData {
-    buffer?: BlobPart
-    compression?: Compression
-    data?: string
-}
-
-export interface JSC {
-    (): void
-    [key: string]: (response: any) => void
-}
-
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
 export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
@@ -364,22 +373,6 @@ export interface EarlyAccessFeatureResponse {
 }
 
 export type Headers = Record<string, string>
-
-export type Body =
-    | string
-    | Document
-    | Blob
-    | ArrayBufferView
-    | ArrayBuffer
-    | FormData
-    // rrweb uses URLSearchParams and ReadableStream<Uint8Array>
-    // as part of the union for this type
-    // because they don't support IE11
-    // but, we do 🫠
-    // what's going to happen here in IE11?
-    | URLSearchParams
-    | ReadableStream<Uint8Array>
-    | null
 
 /* for rrweb/network@1
  ** when that is released as part of rrweb this can be removed
@@ -447,9 +440,9 @@ export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     startTime?: number
     endTime?: number
     requestHeaders?: Headers
-    requestBody?: Body
+    requestBody?: string | null
     responseHeaders?: Headers
-    responseBody?: Body
+    responseBody?: string | null
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
 }

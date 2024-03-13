@@ -1,13 +1,20 @@
-import { _getQueryParam, _HTTPBuildQuery, _isUrlMatchingRegex } from '../utils/request-utils'
+import { _getQueryParam, _formDataToQuery, _isUrlMatchingRegex } from '../utils/request-utils'
 
 describe('request utils', () => {
     describe('_HTTPBuildQuery', () => {
+        const exampleFormData = new FormData()
+        exampleFormData.append('x', 'y')
+        exampleFormData.append('a', 'b')
+        exampleFormData.append('undefined', 'c')
+        exampleFormData.append('undefined', undefined)
         test.each([
             ['builds query string', { x: 'y', a: 'b' }, 'x=y&a=b'],
             ['skips undefined values', { x: 'y', a: undefined }, 'x=y'],
             ['skips undefined keys', { x: 'y', a: 'b', undefined: 'c' }, 'x=y&a=b'],
+            ['handles empty form data', new FormData(), ''],
+            ['handles form data', exampleFormData, 'x=y&a=b'],
         ])('%s', (_name, formData, expected) => {
-            expect(_HTTPBuildQuery(formData)).toEqual(expected)
+            expect(_formDataToQuery(formData)).toEqual(expected)
         })
     })
 

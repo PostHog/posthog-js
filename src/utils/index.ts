@@ -2,11 +2,12 @@ import { Breaker, EventHandler, Properties } from '../types'
 import {
     _isArray,
     _isDate,
+    _isFormData,
     _isFunction,
     _isNull,
+    _isNullish,
     _isObject,
     _isString,
-    _isUndefined,
     hasOwnProperty,
 } from './type-utils'
 import { logger } from './logger'
@@ -52,11 +53,19 @@ export function _eachArray<E = any>(
  * @param {Object=} thisArg
  */
 export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
-    if (_isNull(obj) || _isUndefined(obj)) {
+    if (_isNullish(obj)) {
         return
     }
     if (_isArray(obj)) {
         return _eachArray(obj, iterator, thisArg)
+    }
+    if (_isFormData(obj)) {
+        for (const pair of obj.entries()) {
+            if (iterator.call(thisArg, pair[1], pair[0]) === breaker) {
+                return
+            }
+        }
+        return
     }
     for (const key in obj) {
         if (hasOwnProperty.call(obj, key)) {
@@ -254,16 +263,11 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
     return internalDeepCircularCopy(value)
 }
 
-const LONG_STRINGS_ALLOW_LIST = ['$performance_raw']
-
 export function _copyAndTruncateStrings<T extends Record<string, any> = Record<string, any>>(
     object: T,
     maxStringLength: number | null
 ): T {
-    return deepCircularCopy(object, (value: any, key) => {
-        if (key && LONG_STRINGS_ALLOW_LIST.indexOf(key as string) > -1) {
-            return value
-        }
+    return deepCircularCopy(object, (value: any) => {
         if (_isString(value) && !_isNull(maxStringLength)) {
             return (value as string).slice(0, maxStringLength)
         }

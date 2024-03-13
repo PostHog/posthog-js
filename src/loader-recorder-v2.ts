@@ -18,10 +18,22 @@ import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugin
 // copying here so that we can use it before rrweb adopt it
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from './types'
-import { _isArray, _isBoolean, _isFunction, _isNull, _isUndefined } from './utils/type-utils'
+import {
+    _isArray,
+    _isBoolean,
+    _isDocument,
+    _isFormData,
+    _isFunction,
+    _isNull,
+    _isNullish,
+    _isObject,
+    _isString,
+    _isUndefined,
+} from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { defaultNetworkOptions } from './extensions/replay/config'
+import { _formDataToQuery } from './utils/request-utils'
 
 export type NetworkData = {
     requests: CapturedNetworkRequest[]
@@ -163,6 +175,7 @@ function shouldRecordBody(
         const contentType = contentTypeHeader && headers[contentTypeHeader]
         return contentTypes.some((ct) => contentType?.includes(ct))
     }
+
     if (!recordBody) return false
     if (_isBoolean(recordBody)) return true
     if (_isArray(recordBody)) return matchesContentType(recordBody)
@@ -199,6 +212,41 @@ async function getRequestPerformanceEntry(
     return performanceEntry
 }
 
+/**
+ * According to MDN https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/response
+ * xhr response is typed as any but can be an ArrayBuffer, a Blob, a Document, a JavaScript object,
+ * or a string, depending on the value of XMLHttpRequest.responseType, that contains the response entity body.
+ *
+ * XHR request body is Document | XMLHttpRequestBodyInit | null | undefined
+ */
+function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | any | null | undefined): string | null {
+    if (_isNullish(body)) {
+        return null
+    }
+
+    if (_isString(body)) {
+        return body
+    }
+
+    if (_isDocument(body)) {
+        return body.textContent
+    }
+
+    if (_isFormData(body)) {
+        return _formDataToQuery(body)
+    }
+
+    if (_isObject(body)) {
+        try {
+            return JSON.stringify(body)
+        } catch (e) {
+            return '[SessionReplay] Failed to stringify response object'
+        }
+    }
+
+    return '[SessionReplay] Cannot read body of type ' + toString.call(body)
+}
+
 function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<NetworkRecordOptions>): listenerHandler {
     if (!options.initiatorTypes.includes('xmlhttprequest')) {
         return () => {
@@ -211,7 +259,6 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
     const restorePatch = patch(
         win.XMLHttpRequest.prototype,
         'open',
-        // TODO how should this be typed?
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         (originalOpen: typeof XMLHttpRequest.prototype.open) => {
@@ -233,6 +280,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 const networkRequest: Partial<CapturedNetworkRequest> = {}
                 let after: number | undefined
                 let before: number | undefined
+
                 const requestHeaders: Headers = {}
                 const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
                 xhr.setRequestHeader = (header: string, value: string) => {
@@ -242,18 +290,20 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 if (recordRequestHeaders) {
                     networkRequest.requestHeaders = requestHeaders
                 }
+
                 const originalSend = xhr.send.bind(xhr)
                 xhr.send = (body) => {
                     if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
                         if (_isUndefined(body) || _isNull(body)) {
                             networkRequest.requestBody = null
                         } else {
-                            networkRequest.requestBody = body
+                            networkRequest.requestBody = _tryReadXHRBody(body)
                         }
                     }
                     after = win.performance.now()
                     return originalSend(body)
                 }
+
                 xhr.addEventListener('readystatechange', () => {
                     if (xhr.readyState !== xhr.DONE) {
                         return
@@ -274,11 +324,11 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                         networkRequest.responseHeaders = responseHeaders
                     }
                     if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                        if (_isUndefined(xhr.response) || _isNull(xhr.response)) {
+                        if (_isNullish(xhr.response)) {
                             networkRequest.responseBody = null
                         } else {
                             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                            networkRequest.responseBody = xhr.response
+                            networkRequest.responseBody = _tryReadXHRBody(xhr.response)
                         }
                     }
                     getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
@@ -365,6 +415,48 @@ function prepareRequest(
     return requests
 }
 
+const contentTypePrefixDenyList = ['video/', 'audio/']
+
+function _checkForCannotReadResponseBody(r: Response): string | null {
+    if (r.headers.get('Transfer-Encoding') === 'chunked') {
+        return 'Chunked Transfer-Encoding is not supported'
+    }
+
+    // `get` and `has` are case-insensitive
+    // but return the header value with the casing that was supplied
+    const contentType = r.headers.get('Content-Type')?.toLowerCase()
+    const contentTypeIsDenied = contentTypePrefixDenyList.some((prefix) => contentType?.startsWith(prefix))
+    if (contentType && contentTypeIsDenied) {
+        return `Content-Type ${contentType} is not supported`
+    }
+
+    return null
+}
+
+function _tryReadBody(r: Request | Response): Promise<string> {
+    // there are now already multiple places where we're using Promise...
+    // eslint-disable-next-line compat/compat
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read body'), 500)
+        r.clone()
+            .text()
+            .then(
+                (txt) => resolve(txt),
+                (reason) => reject(reason)
+            )
+            .finally(() => clearTimeout(timeout))
+    })
+}
+
+async function _tryReadResponseBody(r: Response): Promise<string> {
+    const cannotReadBodyReason: string | null = _checkForCannotReadResponseBody(r)
+    if (!_isNull(cannotReadBodyReason)) {
+        return Promise.resolve(cannotReadBodyReason)
+    }
+
+    return _tryReadBody(r)
+}
+
 function initFetchObserver(
     cb: networkCallback,
     win: IWindow,
@@ -377,7 +469,6 @@ function initFetchObserver(
     }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
-    // TODO how should this be typed?
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
@@ -398,15 +489,13 @@ function initFetchObserver(
                     networkRequest.requestHeaders = requestHeaders
                 }
                 if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
-                    if (_isUndefined(req.body) || _isNull(req.body)) {
-                        networkRequest.requestBody = null
-                    } else {
-                        networkRequest.requestBody = req.body
-                    }
+                    networkRequest.requestBody = await _tryReadBody(req)
                 }
+
                 after = win.performance.now()
                 res = await originalFetch(req)
                 before = win.performance.now()
+
                 const responseHeaders: Headers = {}
                 res.headers.forEach((value, header) => {
                     responseHeaders[header] = value
@@ -415,18 +504,9 @@ function initFetchObserver(
                     networkRequest.responseHeaders = responseHeaders
                 }
                 if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                    let body: string | undefined
-                    try {
-                        body = await res.clone().text()
-                    } catch {
-                        //
-                    }
-                    if (_isUndefined(res.body) || _isNull(res.body)) {
-                        networkRequest.responseBody = null
-                    } else {
-                        networkRequest.responseBody = body
-                    }
+                    networkRequest.responseBody = await _tryReadResponseBody(res)
                 }
+
                 return res
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, after, before)
@@ -471,7 +551,7 @@ function initNetworkObserver(
             }
         })
 
-        if (requests.length > 0 || data.isInitial) {
+        if (requests.length > 0) {
             callback({ ...data, requests })
         }
     }

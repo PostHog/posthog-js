@@ -11,6 +11,7 @@ import { window } from '../utils/globals'
 
 describe(`Module-based loader in Node env`, () => {
     beforeEach(() => {
+        jest.useFakeTimers()
         jest.spyOn(posthog, '_send_request').mockReturnValue()
         jest.spyOn(window!.console, 'log').mockImplementation()
     })
@@ -28,6 +29,8 @@ describe(`Module-based loader in Node env`, () => {
                 loaded = true
             },
         })
+
+        jest.runOnlyPendingTimers()
 
         sinon.assert.calledOnce(posthog.capture as sinon.SinonSpy<any>)
         const captureArgs = (posthog.capture as sinon.SinonSpy<any>).args[0]

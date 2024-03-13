@@ -10,6 +10,14 @@ import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { window } from '../utils/globals'
 
+// JS DOM doesn't have ClipboardEvent, so we need to mock it
+// see https://github.com/jsdom/jsdom/issues/1568
+class MockClipboardEvent extends Event implements ClipboardEvent {
+    clipboardData: DataTransfer | null = null
+    type: 'copy' | 'cut' | 'paste' = 'copy'
+}
+window!.ClipboardEvent = MockClipboardEvent
+
 const triggerMouseEvent = function (node: Node, eventType: string) {
     node.dispatchEvent(
         new MouseEvent(eventType, {
@@ -34,6 +42,22 @@ function makePostHog(ph: Partial<PostHog>): PostHog {
 
 export function makeMouseEvent(partialEvent: Partial<MouseEvent>) {
     return { type: 'click', ...partialEvent } as unknown as MouseEvent
+}
+
+export function makeCopyEvent(partialEvent: Partial<ClipboardEvent>) {
+    return { type: 'copy', ...partialEvent } as unknown as ClipboardEvent
+}
+
+export function makeCutEvent(partialEvent: Partial<ClipboardEvent>) {
+    return { type: 'cut', ...partialEvent } as unknown as ClipboardEvent
+}
+
+function setWindowTextSelection(s: string): void {
+    window!.getSelection = () => {
+        return {
+            toString: () => s,
+        } as Selection
+    }
 }
 
 describe('Autocapture system', () => {
@@ -551,7 +575,6 @@ describe('Autocapture system', () => {
 
         it('should add the custom property when an element matching any of the event selectors is clicked', () => {
             lib = makePostHog({
-                _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
@@ -622,6 +645,86 @@ describe('Autocapture system', () => {
             ])
         })
 
+        describe('clipboard autocapture', () => {
+            let elTarget: HTMLDivElement
+
+            beforeEach(() => {
+                autocapture.init(lib)
+
+                elTarget = document.createElement('div')
+                elTarget.innerText = 'test'
+                const elParent = document.createElement('div')
+                elParent.appendChild(elTarget)
+            })
+
+            it('should capture copy', () => {
+                const fakeEvent = makeCopyEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
+
+                setWindowTextSelection('copy this test')
+
+                autocapture._captureEvent(fakeEvent, lib, '$copy_autocapture')
+
+                const spyArgs = (lib.capture as sinon.SinonSpy).args
+                expect(spyArgs.length).toBe(1)
+                expect(spyArgs[0][0]).toEqual('$copy_autocapture')
+                expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'copy this test')
+                expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'copy')
+            })
+
+            it('should capture cut', () => {
+                const fakeEvent = makeCutEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
+
+                setWindowTextSelection('cut this test')
+
+                autocapture._captureEvent(fakeEvent, lib, '$copy_autocapture')
+
+                const spyArgs = (lib.capture as sinon.SinonSpy).args
+                expect(spyArgs.length).toBe(1)
+                expect(spyArgs[0][0]).toEqual('$copy_autocapture')
+                expect(spyArgs[0][1]).toHaveProperty('$selected_content', 'cut this test')
+                expect(spyArgs[0][1]).toHaveProperty('$copy_type', 'cut')
+            })
+
+            it('ignores empty selection', () => {
+                const fakeEvent = makeCopyEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
+
+                setWindowTextSelection('')
+
+                autocapture._captureEvent(fakeEvent, lib, '$copy_autocapture')
+
+                const spyArgs = (lib.capture as sinon.SinonSpy).args
+                expect(spyArgs.length).toBe(0)
+            })
+
+            it('runs selection through the safe text before capture', () => {
+                const fakeEvent = makeCopyEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
+
+                // oh no, a social security number!
+                setWindowTextSelection('123-45-6789')
+
+                autocapture._captureEvent(fakeEvent, lib, '$copy_autocapture')
+
+                const spyArgs = (lib.capture as sinon.SinonSpy).args
+                expect(spyArgs.length).toBe(0)
+            })
+        })
+
         it('should capture augment properties', () => {
             autocapture.init(lib)
 
@@ -648,7 +751,6 @@ describe('Autocapture system', () => {
 
         it('should not capture events when config returns false, when an element matching any of the event selectors is clicked', () => {
             lib = makePostHog({
-                _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
@@ -688,7 +790,6 @@ describe('Autocapture system', () => {
 
         it('should not capture events when config returns true but server setting is disabled', () => {
             lib = makePostHog({
-                _prepare_callback: sandbox.spy((callback) => callback),
                 config: {
                     api_host: 'https://test.com',
                     token: 'testtoken',
