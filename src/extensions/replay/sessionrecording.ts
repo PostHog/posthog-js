@@ -693,10 +693,10 @@ export class SessionRecording {
 
         if (rawEvent.type === EventType.Meta) {
             const href = this._maskUrl(rawEvent.data.href)
+            this._lastHref = href
             if (!href) {
                 return
             }
-            this._lastHref = href
             rawEvent.data.href = href
         } else {
             this._pageViewFallBack()
