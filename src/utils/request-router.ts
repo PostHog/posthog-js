@@ -44,7 +44,7 @@ export class RequestRouter {
     }
 
     isUsingProxy(): boolean {
-        return this.apiHost !== defaultConfig().api_host
+        return this.instance.config.api_host != null && this.instance.config.api_host !== defaultConfig().api_host
     }
 
     endpointFor(target: RequestRouterTarget, path: string = ''): string {
