@@ -422,14 +422,18 @@ export class SessionRecording {
         this.sessionManager.checkAndGetSessionAndWindowId()
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
-        // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
-        // recorder.js from cdn since it hasn't been loaded.
-        if (this.instance.__loaded_recorder_version !== 'v2') {
+        // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
+
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        this.rrwebRecord = window?.rrweb?.record
+
+        if (!this.rrwebRecord) {
             loadScript(
-                this.instance.requestRouter.endpointFor('assets', `/static/recorder-v2.js?v=${Config.LIB_VERSION}`),
+                this.instance.requestRouter.endpointFor('assets', `/static/recorder.js?v=${Config.LIB_VERSION}`),
                 (err) => {
                     if (err) {
-                        return logger.error(LOGGER_PREFIX + ` could not load recorder-v2.js`, err)
+                        return logger.error(LOGGER_PREFIX + ` could not load recorder.js`, err)
                     }
 
                     this._onScriptLoaded()
@@ -550,7 +554,7 @@ export class SessionRecording {
         // keep backwards compatibility if someone hasn't upgraded PostHog
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
-        this.rrwebRecord = window.rrweb ? window.rrweb.record : window.rrwebRecord
+        this.rrwebRecord = window?.rrweb?.record
 
         // only allows user to set our allow-listed options
         const userSessionRecordingOptions = this.instance.config.session_recording

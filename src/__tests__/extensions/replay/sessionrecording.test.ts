@@ -693,20 +693,14 @@ describe('SessionRecording', () => {
         it('loads recording v2 script from right place', () => {
             sessionRecording.startRecordingIfEnabled()
 
-            expect(loadScript).toHaveBeenCalledWith(
-                'https://test.com/static/recorder-v2.js?v=v0.0.1',
-                expect.anything()
-            )
+            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js?v=v0.0.1', expect.anything())
         })
 
         it('load correct recording version if there is a cached mismatch', () => {
             posthog.__loaded_recorder_version = 'v1'
             sessionRecording.startRecordingIfEnabled()
 
-            expect(loadScript).toHaveBeenCalledWith(
-                'https://test.com/static/recorder-v2.js?v=v0.0.1',
-                expect.anything()
-            )
+            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js?v=v0.0.1', expect.anything())
         })
 
         it('loads script after `_startCapture` if not previously loaded', () => {

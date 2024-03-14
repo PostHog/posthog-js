@@ -24,7 +24,6 @@ beforeEach(() => {
 
     cy.readFile('dist/recorder.js').then((body) => {
         cy.intercept('**/static/recorder.js*', { body }).as('recorder')
-        cy.intercept('**/static/recorder-v2.js*', { body }).as('recorder')
     })
 
     cy.readFile('dist/surveys.js').then((body) => {
