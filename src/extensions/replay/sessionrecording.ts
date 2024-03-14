@@ -124,7 +124,6 @@ export class SessionRecording {
     private _captureStarted: boolean
     private stopRrweb: listenerHandler | undefined
     private receivedDecide: boolean
-    private rrwebRecord: rrwebRecord | undefined
     private isIdle = false
 
     private _linkedFlagSeen: boolean = false
@@ -139,6 +138,10 @@ export class SessionRecording {
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
+
+    private get rrwebRecord(): rrwebRecord | undefined {
+        return assignableWindow?.rrweb?.record
+    }
 
     public get started(): boolean {
         // TODO could we use status instead of _captureStarted?
@@ -424,10 +427,6 @@ export class SessionRecording {
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
 
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        this.rrwebRecord = window?.rrweb?.record
-
         if (!this.rrwebRecord) {
             loadScript(
                 this.instance.requestRouter.endpointFor('assets', `/static/recorder.js?v=${Config.LIB_VERSION}`),
@@ -550,11 +549,6 @@ export class SessionRecording {
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
         }
-        // We switched from loading all of rrweb to just the record part, but
-        // keep backwards compatibility if someone hasn't upgraded PostHog
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        this.rrwebRecord = window?.rrweb?.record
 
         // only allows user to set our allow-listed options
         const userSessionRecordingOptions = this.instance.config.session_recording
