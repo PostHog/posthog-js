@@ -184,13 +184,6 @@ export interface SessionRecordingOptions {
     // our settings here only support a subset of those proposed for rrweb's network capture plugin
     recordHeaders?: boolean
     recordBody?: boolean
-    /**
-     * if capture_pageview is false, recordings will have no URL information associated
-     * if you want to disable page view capture _for events_ but allow URL capture for recordings
-     * you can set forceCapturePageview to true and capture_pageview to false
-     * we still apply the `maskNetworkRequestFn` to the URL before capture
-     */
-    forceCapturePageview?: boolean
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
