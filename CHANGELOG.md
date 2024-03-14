@@ -1,3 +1,8 @@
+## 1.115.0 - 2024-03-14
+
+- feat: track recording URL without pageview capture (#1076)
+- fix: return typing of global functions (#1081)
+
 ## 1.114.2 - 2024-03-12
 
 - fix: patch rrweb zero width canvas bug (#1075)
