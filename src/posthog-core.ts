@@ -813,6 +813,8 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
+        properties['$using_proxy'] = this.requestRouter.isUsingProxy()
+
         if (
             this.sessionPropsManager &&
             this.config.__preview_send_client_session_params &&
