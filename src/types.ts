@@ -184,6 +184,13 @@ export interface SessionRecordingOptions {
     // our settings here only support a subset of those proposed for rrweb's network capture plugin
     recordHeaders?: boolean
     recordBody?: boolean
+    /**
+     * This callback is fired when network capture has started,
+     * it can be used for example to send API calls you want to ensure
+     * are captured by PostHog that could otherwise fire on page load
+     * _before_ PostHog is ready to capture them
+     */
+    onNetworkCaptureReady?: () => void
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
@@ -406,13 +413,25 @@ export type NetworkRecordOptions = {
     recordHeaders?: boolean | { request: boolean; response: boolean }
     recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
     recordInitialRequests?: boolean
-    // whether to record PerformanceEntry events for network requests
+    /**
+     * whether to record PerformanceEntry events for network requests
+     */
     recordPerformance?: boolean
-    // the PerformanceObserver will only observe these entry types
+    /**
+     * the PerformanceObserver will only observe these entry types
+     */
     performanceEntryTypeToObserve: string[]
-    // the maximum size of the request/response body to record
-    // NB this will be at most 1MB even if set larger
+    /**
+     * the maximum size of the request/response body to record
+     * NB this will be at most 1MB even if set larger
+     */
     payloadSizeLimitBytes: number
+    /**
+     * function called when network capture has started,
+     * if payload capture is enabled
+     * fetch and xhr will be wrapped at this point
+     */
+    onNetworkCaptureReady?: () => void
 }
 
 /** @deprecated - use CapturedNetworkRequest instead  */

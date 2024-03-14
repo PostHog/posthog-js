@@ -9,24 +9,36 @@ Cypress.on('window:before:load', (win) => {
 })
 
 beforeEach(() => {
-    cy.intercept('POST', '**/decide/*').as('decide')
-    cy.intercept('POST', '**/e/*').as('capture')
-    cy.intercept('POST', '**/ses/*').as('session-recording')
-    cy.intercept('GET', '**/surveys/*').as('surveys')
+    cy.intercept('POST', '/decide/*').as('decide')
+    cy.intercept('POST', '/e/*', { status: 1 }).as('capture')
+    cy.intercept('POST', '/ses/*', { status: 1 }).as('session-recording')
+    cy.intercept('GET', '/surveys/*').as('surveys')
 
     cy.readFile('dist/array.full.js').then((body) => {
-        cy.intercept('**/static/array.full.js', { body })
+        cy.intercept('/static/array.full.js', { body })
+    })
+
+    cy.readFile('dist/array.full.js.map').then((body) => {
+        cy.intercept('/static/array.full.js.map', { body })
     })
 
     cy.readFile('dist/array.js').then((body) => {
-        cy.intercept('**/static/array.js', { body })
+        cy.intercept('/static/array.js', { body })
     })
 
-    cy.readFile('dist/recorder.js').then((body) => {
-        cy.intercept('**/static/recorder.js*', { body }).as('recorder')
+    cy.readFile('dist/array.js.map').then((body) => {
+        cy.intercept('/static/array.js.map', { body })
+    })
+
+    cy.readFile('dist/recorder-v2.js').then((body) => {
+        cy.intercept('/static/recorder.js', { body }).as('recorder')
+    })
+
+    cy.readFile('dist/recorder-v2.js.map').then((body) => {
+        cy.intercept('/static/recorder.js.map', { body })
     })
 
     cy.readFile('dist/surveys.js').then((body) => {
-        cy.intercept('**/static/surveys.js*', { body })
+        cy.intercept('/static/surveys.js*', { body })
     })
 })

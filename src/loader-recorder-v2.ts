@@ -78,6 +78,10 @@ export function patch(
                     enumerable: false,
                     value: original,
                 },
+                __posthog_wrapped: {
+                    enumerable: false,
+                    value: true,
+                },
             })
         }
 
@@ -563,6 +567,10 @@ function initNetworkObserver(
     if (networkOptions.recordHeaders || networkOptions.recordBody) {
         xhrObserver = initXhrObserver(cb, win, networkOptions)
         fetchObserver = initFetchObserver(cb, win, networkOptions)
+    }
+
+    if (_isFunction(options.onNetworkCaptureReady)) {
+        options.onNetworkCaptureReady()
     }
 
     return () => {

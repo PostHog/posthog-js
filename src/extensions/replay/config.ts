@@ -182,7 +182,10 @@ export const buildNetworkRequestOptions = (
     instanceConfig: PostHogConfig,
     remoteNetworkOptions: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
 ): NetworkRecordOptions => {
-    const config = instanceConfig.session_recording as NetworkRecordOptions
+    const config: NetworkRecordOptions = {
+        payloadSizeLimitBytes: defaultNetworkOptions.payloadSizeLimitBytes,
+        performanceEntryTypeToObserve: [...defaultNetworkOptions.performanceEntryTypeToObserve],
+    }
     // client can always disable despite remote options
     const canRecordHeaders = config.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
     const canRecordBody = config.recordBody === false ? false : remoteNetworkOptions.recordBody
@@ -231,5 +234,6 @@ export const buildNetworkRequestOptions = (
         recordBody: canRecordBody,
         recordPerformance: canRecordPerformance,
         recordInitialRequests: canRecordPerformance,
+        onNetworkCaptureReady: instanceConfig.session_recording.onNetworkCaptureReady || (() => {}),
     }
 }

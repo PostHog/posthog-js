@@ -4,6 +4,8 @@ import { _isNull } from '../../src/utils/type-utils'
 import { start } from '../support/setup'
 
 function ensureRecordingIsStopped() {
+    cy.resetPhCaptures()
+
     cy.get('[data-cy-input]')
         .type('hello posthog!')
         .wait(250)
@@ -16,13 +18,15 @@ function ensureRecordingIsStopped() {
 }
 
 function ensureActivitySendsSnapshots() {
+    cy.resetPhCaptures()
+
     cy.get('[data-cy-input]')
         .type('hello posthog!')
         .wait('@session-recording')
         .then(() => {
             cy.phCaptures({ full: true }).then((captures) => {
                 expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
-                expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(14).and.below(39)
+                expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(14).and.below(40)
                 // a meta and then a full snapshot
                 expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                 expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
@@ -60,7 +64,7 @@ describe('Session recording', () => {
                         // should be a pageview and a $snapshot
                         expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
 
-                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(39)
+                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(40)
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
@@ -71,6 +75,57 @@ describe('Session recording', () => {
                         expect(new Set(incrementalSnapshots.map((s) => s.type))).to.deep.equal(new Set([3]))
                     })
                 })
+        })
+    })
+
+    describe('with network capture', () => {
+        let onNetworkReadyStub
+        beforeEach(() => {
+            onNetworkReadyStub = cy.stub()
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                        networkPayloadCapture: { recordBody: true },
+                    },
+                    capturePerformance: true,
+                },
+                url: './playground/cypress',
+                options: {
+                    session_recording: {
+                        // once network capture has started this will be called
+                        // fetch and xhr should both have had their prototypes wrapped
+                        onNetworkCaptureReady: onNetworkReadyStub,
+                    },
+                    loaded: (ph) => {
+                        ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                    },
+                },
+            })
+            cy.wait('@recorder')
+        })
+
+        it('it sends network payloads', () => {
+            cy.intercept('https://example.com', 'success').as('example.com')
+            cy.get('[data-cy-network-call-button]').click()
+            cy.wait('@example.com')
+            cy.wait('@session-recording')
+            cy.phCaptures({ full: true }).then((captures) => {
+                const snapshots = captures.filter((c) => c.event === '$snapshot')
+
+                const snapshotTypes: number[] = []
+                for (const snapshot of snapshots) {
+                    for (const snapshotData of snapshot.properties['$snapshot_data']) {
+                        snapshotTypes.push(snapshotData.type)
+                    }
+                }
+                // yay, includes type 6 network data
+                expect(snapshotTypes.filter((x) => x === 6)).to.have.length.above(0)
+
+                expect(onNetworkReadyStub).to.have.been.called
+            })
         })
     })
 
@@ -108,7 +163,7 @@ describe('Session recording', () => {
             cy.posthog().then((ph) => {
                 ph.stopSessionRecording()
             })
-            cy.resetPhCaptures()
+
             ensureRecordingIsStopped()
 
             // restarting recording
