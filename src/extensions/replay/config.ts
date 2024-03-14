@@ -187,9 +187,12 @@ export const buildNetworkRequestOptions = (
         performanceEntryTypeToObserve: [...defaultNetworkOptions.performanceEntryTypeToObserve],
     }
     // client can always disable despite remote options
-    const canRecordHeaders = config.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
-    const canRecordBody = config.recordBody === false ? false : remoteNetworkOptions.recordBody
-    const canRecordPerformance = config.recordPerformance === false ? false : remoteNetworkOptions.recordPerformance
+    const canRecordHeaders =
+        instanceConfig.session_recording.recordHeaders === false ? false : remoteNetworkOptions.recordHeaders
+    const canRecordBody =
+        instanceConfig.session_recording.recordBody === false ? false : remoteNetworkOptions.recordBody
+    const canRecordPerformance =
+        instanceConfig.capture_performance === false ? false : remoteNetworkOptions.recordPerformance
 
     const payloadLimiter = limitPayloadSize(config)
 
