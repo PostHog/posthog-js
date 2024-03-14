@@ -31,7 +31,7 @@ beforeEach(() => {
     })
 
     cy.readFile('dist/recorder-v2.js').then((body) => {
-        cy.intercept('/static/recorder.js', { body }).as('recorder')
+        cy.intercept('/static/recorder.js*', { body }).as('recorder')
     })
 
     cy.readFile('dist/recorder-v2.js.map').then((body) => {
