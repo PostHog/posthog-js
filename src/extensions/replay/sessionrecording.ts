@@ -522,13 +522,16 @@ export class SessionRecording {
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
-            logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e)
-            this.queuedRRWebEvents.length < 10 &&
+            if (this.queuedRRWebEvents.length < 10) {
                 this.queuedRRWebEvents.push({
                     enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
                     attempt: queuedRRWebEvent.attempt++,
                     rrwebMethod: queuedRRWebEvent.rrwebMethod,
                 })
+            } else {
+                logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e, queuedRRWebEvent)
+            }
+
             return false
         }
     }
@@ -742,7 +745,11 @@ export class SessionRecording {
     }
 
     private _pageViewFallBack() {
-        if (this.instance.config.capture_pageview || !window) {
+        if (
+            this.instance.config.capture_pageview ||
+            !window ||
+            !this.instance.config.session_recording.forceCapturePageview
+        ) {
             return
         }
         const currentUrl = this._maskUrl(window.location.href)

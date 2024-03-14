@@ -1618,6 +1618,37 @@ describe('SessionRecording', () => {
             expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
         })
 
+        it('does not captures pageview on non-meta event', () => {
+            fakeNavigateTo('https://test.com')
+
+            _emit(createIncrementalSnapshot({ type: 3 }))
+
+            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+            ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
+
+            fakeNavigateTo('https://test.com/other')
+            _emit(createIncrementalSnapshot({ type: 3 }))
+            // the window href has changed, even so we don't capture another pageview
+            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('when pageview capture is disabled and replay pageview capture is enabled', () => {
+        beforeEach(() => {
+            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
+            posthog.config.capture_pageview = false
+            posthog.config.session_recording.forceCapturePageview = true
+            sessionRecording.startRecordingIfEnabled()
+            // clear the spy calls
+            ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
+        })
+
+        it('does not capture pageview on meta event', () => {
+            _emit(createIncrementalSnapshot({ type: META_EVENT_TYPE }))
+
+            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+        })
+
         it('captures pageview as expected on non-meta event', () => {
             fakeNavigateTo('https://test.com')
 
