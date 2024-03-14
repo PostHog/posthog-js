@@ -136,7 +136,7 @@ export class SessionRecording {
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
 
-    private _fullSnapshotTimer?: number
+    private _fullSnapshotTimer?: ReturnType<typeof setInterval>
 
     // if pageview capture is disabled
     // then we can manually track href changes

@@ -7,7 +7,7 @@ export class RequestQueue {
     // We start in a paused state and only start flushing when enabled by the parent
     private isPaused: boolean = true
     private queue: QueuedRequestOptions[] = []
-    private flushTimeout?: number // to become interval for reference to clear later
+    private flushTimeout?: ReturnType<typeof setTimeout>
     private flushTimeoutMs = 3000
     private sendRequest: (req: QueuedRequestOptions) => void
 
