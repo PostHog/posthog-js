@@ -4,6 +4,8 @@ import { _isNull } from '../../src/utils/type-utils'
 import { start } from '../support/setup'
 
 function ensureRecordingIsStopped() {
+    cy.resetPhCaptures()
+
     cy.get('[data-cy-input]')
         .type('hello posthog!')
         .wait(250)
@@ -16,6 +18,8 @@ function ensureRecordingIsStopped() {
 }
 
 function ensureActivitySendsSnapshots() {
+    cy.resetPhCaptures()
+
     cy.get('[data-cy-input]')
         .type('hello posthog!')
         .wait('@session-recording')
