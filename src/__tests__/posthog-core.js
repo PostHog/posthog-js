@@ -405,7 +405,6 @@ describe('posthog core', () => {
                 persistent: 'prop',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
-                $using_proxy: false,
             })
         })
 
@@ -418,7 +417,6 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
-                $using_proxy: false,
             })
         })
 
@@ -441,7 +439,6 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $window_id: 'windowId',
                 token: 'testtoken',
-                $using_proxy: false,
             })
         })
 

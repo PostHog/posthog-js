@@ -1,4 +1,3 @@
-import { defaultConfig } from '../../posthog-core'
 import { RequestRouter, RequestRouterTarget } from '../../utils/request-router'
 
 describe('request-router', () => {
@@ -75,17 +74,5 @@ describe('request-router', () => {
 
         mockPostHog.config.api_host = 'https://eu.posthog.com'
         expect(router.endpointFor('api')).toEqual('https://eu.i.posthog.com')
-    })
-
-    it('should check this api_host for a proxy', () => {
-        const mockPostHog = { config: {} }
-        const router = new RequestRouter(mockPostHog as any)
-        expect(router.isUsingProxy()).toEqual(false)
-
-        mockPostHog.config['api_host'] = defaultConfig().api_host
-        expect(router.isUsingProxy()).toEqual(false)
-
-        mockPostHog.config['api_host'] = 'https://z.example.com'
-        expect(router.isUsingProxy()).toEqual(true)
     })
 })

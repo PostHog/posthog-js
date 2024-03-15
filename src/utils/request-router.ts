@@ -1,4 +1,4 @@
-import { PostHog, defaultConfig } from '../posthog-core'
+import { PostHog } from '../posthog-core'
 
 /**
  * The request router helps simplify the logic to determine which endpoints should be called for which things
@@ -41,10 +41,6 @@ export class RequestRouter {
             }
         }
         return this._regionCache[this.apiHost]
-    }
-
-    isUsingProxy(): boolean {
-        return this.instance.config.api_host != null && this.instance.config.api_host !== defaultConfig().api_host
     }
 
     endpointFor(target: RequestRouterTarget, path: string = ''): string {
