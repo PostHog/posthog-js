@@ -18,12 +18,12 @@ beforeEach(() => {
         cy.intercept('/static/array.full.js', { body })
     })
 
-    cy.readFile('dist/array.full.js.map').then((body) => {
-        cy.intercept('/static/array.full.js.map', { body })
-    })
-
     cy.readFile('dist/array.js').then((body) => {
         cy.intercept('/static/array.js', { body })
+    })
+
+    cy.readFile('dist/array.full.js.map').then((body) => {
+        cy.intercept('/static/array.full.js.map', { body })
     })
 
     cy.readFile('dist/array.js.map').then((body) => {
@@ -37,7 +37,6 @@ beforeEach(() => {
 
     cy.readFile('dist/recorder.js.map').then((body) => {
         cy.intercept('/static/recorder.js.map', { body })
-        cy.intercept('/static/recorder-v2.js.map', { body })
     })
 
     cy.readFile('dist/surveys.js').then((body) => {
