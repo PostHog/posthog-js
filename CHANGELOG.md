@@ -1,3 +1,8 @@
+## 1.115.2 - 2024-03-15
+
+- fix: canvas recording patches (#1082)
+- chore: remove cypress log noise (#1086)
+
 ## 1.115.1 - 2024-03-15
 
 - chore: remove v1 rrweb loading (#1078)
