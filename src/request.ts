@@ -150,7 +150,7 @@ const _fetch = (options: RequestOptions) => {
     }
 
     const url = options.url
-    let aborter: { signal: any; timeout: number } | null = null
+    let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
 
     if (AbortController) {
         const controller = new AbortController()

@@ -134,7 +134,11 @@ export class SessionRecording {
     private _sampleRate: number | null = null
     private _minimumDuration: number | null = null
 
-    private _fullSnapshotTimer?: number
+    private _fullSnapshotTimer?: ReturnType<typeof setInterval>
+
+    // if pageview capture is disabled
+    // then we can manually track href changes
+    private _lastHref?: string
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -426,7 +430,6 @@ export class SessionRecording {
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
-
         if (!this.rrwebRecord) {
             loadScript(
                 this.instance.requestRouter.endpointFor('assets', `/static/recorder.js?v=${Config.LIB_VERSION}`),
@@ -511,13 +514,16 @@ export class SessionRecording {
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
-            logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e)
-            this.queuedRRWebEvents.length < 10 &&
+            if (this.queuedRRWebEvents.length < 10) {
                 this.queuedRRWebEvents.push({
                     enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
                     attempt: queuedRRWebEvent.attempt++,
                     rrwebMethod: queuedRRWebEvent.rrwebMethod,
                 })
+            } else {
+                logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e, queuedRRWebEvent)
+            }
+
             return false
         }
     }
@@ -677,10 +683,13 @@ export class SessionRecording {
 
         if (rawEvent.type === EventType.Meta) {
             const href = this._maskUrl(rawEvent.data.href)
+            this._lastHref = href
             if (!href) {
                 return
             }
             rawEvent.data.href = href
+        } else {
+            this._pageViewFallBack()
         }
 
         if (rawEvent.type === EventType.FullSnapshot) {
@@ -719,6 +728,17 @@ export class SessionRecording {
             this._captureSnapshotBuffered(properties)
         } else {
             this.clearBuffer()
+        }
+    }
+
+    private _pageViewFallBack() {
+        if (this.instance.config.capture_pageview || !window) {
+            return
+        }
+        const currentUrl = this._maskUrl(window.location.href)
+        if (this._lastHref !== currentUrl) {
+            this._tryAddCustomEvent('$url_changed', { href: currentUrl })
+            this._lastHref = currentUrl
         }
     }
 
