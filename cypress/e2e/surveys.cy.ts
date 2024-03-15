@@ -45,7 +45,7 @@ describe('Surveys', () => {
     }
 
     beforeEach(() => {
-        cy.intercept('POST', '**/decide/*', {
+        cy.intercept('POST', '/decide/*', {
             config: { enable_collect_everything: false },
             editorParams: {},
             surveys: true,
@@ -55,7 +55,7 @@ describe('Surveys', () => {
 
     describe('Core display logic', () => {
         it('shows the same survey to user if they do not dismiss or respond to it', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -76,7 +76,7 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
         })
         it('does not show the same survey to user if they have dismissed it before', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -102,7 +102,7 @@ describe('Surveys', () => {
         })
 
         it('does not show the same survey to user if they responded to it before', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -129,7 +129,7 @@ describe('Surveys', () => {
         })
 
         it('does not show a survey to user if user has already seen any survey in the wait period', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -156,7 +156,7 @@ describe('Surveys', () => {
         })
 
         it('does not allow user to submit non optional survey questions if they have not responded to it', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -180,7 +180,7 @@ describe('Surveys', () => {
 
     describe('Survey question types', () => {
         it('shows and submits a basic survey', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -207,7 +207,7 @@ describe('Surveys', () => {
         })
 
         it('rating questions that are on the 10 scale start at 0', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '1234',
@@ -229,7 +229,7 @@ describe('Surveys', () => {
         })
 
         it('multiple question surveys', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '12345',
@@ -241,7 +241,7 @@ describe('Surveys', () => {
                     },
                 ],
             }).as('surveys')
-            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            cy.intercept('POST', '/e/*').as('capture-assertion')
             cy.visit('./playground/cypress')
             onPageLoad()
             cy.get('.PostHogSurvey12345').shadow().find('.survey-form').should('be.visible')
@@ -273,7 +273,7 @@ describe('Surveys', () => {
         })
 
         it('multiple choice questions with open choice', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '12345',
@@ -285,7 +285,7 @@ describe('Surveys', () => {
                 ],
             }).as('surveys')
             cy.visit('./playground/cypress')
-            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            cy.intercept('POST', '/e/*').as('capture-assertion')
             onPageLoad()
             cy.wait('@capture-assertion')
             cy.get('.PostHogSurvey12345').shadow().find('.survey-form').should('be.visible')
@@ -301,7 +301,7 @@ describe('Surveys', () => {
         })
 
         it('single choice question with open choice', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '12345',
@@ -314,7 +314,7 @@ describe('Surveys', () => {
                 ],
             }).as('surveys')
             cy.visit('./playground/cypress')
-            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            cy.intercept('POST', '/e/*').as('capture-assertion')
             onPageLoad()
             cy.wait('@capture-assertion')
             cy.get('.PostHogSurvey12345').shadow().find('.survey-form').should('be.visible')
@@ -331,7 +331,7 @@ describe('Surveys', () => {
 
     describe('Survey customization', () => {
         it('automatically sets text color based on background color', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -368,7 +368,7 @@ describe('Surveys', () => {
         })
 
         it('does not show posthog logo if whiteLabel exists', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -386,7 +386,7 @@ describe('Surveys', () => {
         })
 
         it('allows html customization for question and thank you element description', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -408,7 +408,7 @@ describe('Surveys', () => {
         })
 
         it('allows html customization for thank you message body', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -443,7 +443,7 @@ describe('Surveys', () => {
 
     describe('Feedback widget', () => {
         it('displays feedback tab and submits responses ', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -474,7 +474,7 @@ describe('Surveys', () => {
         })
 
         it('wigetType is custom selector', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -507,7 +507,7 @@ describe('Surveys', () => {
         })
 
         it('displays multiple question surveys and thank you confirmation if enabled', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '12345',
@@ -538,7 +538,7 @@ describe('Surveys', () => {
         })
 
         it('auto contrasts text color for feedback tab', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -568,7 +568,7 @@ describe('Surveys', () => {
 
     describe('Thank you message', () => {
         it('shows confirmation message after submitting', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '1234',
@@ -589,7 +589,7 @@ describe('Surveys', () => {
         })
 
         it('counts down with auto disappear after 5 seconds', () => {
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '1234',
@@ -615,7 +615,7 @@ describe('Surveys', () => {
     describe('Survey response capture', () => {
         it('captures survey sent event', () => {
             cy.visit('./playground/cypress')
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -627,7 +627,7 @@ describe('Surveys', () => {
                     },
                 ],
             }).as('surveys')
-            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            cy.intercept('POST', '/e/*').as('capture-assertion')
             onPageLoad()
             cy.get('.PostHogSurvey123').shadow().find('textarea').type('experiments is awesome!')
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
@@ -644,7 +644,7 @@ describe('Surveys', () => {
 
         it('captures survey shown event', () => {
             cy.visit('./playground/cypress')
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -656,7 +656,7 @@ describe('Surveys', () => {
                     },
                 ],
             }).as('surveys')
-            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            cy.intercept('POST', '/e/*').as('capture-assertion')
             onPageLoad()
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
@@ -667,7 +667,7 @@ describe('Surveys', () => {
 
         it('captures survey dismissed event', () => {
             cy.visit('./playground/cypress')
-            cy.intercept('GET', '**/surveys/*', {
+            cy.intercept('GET', '/surveys/*', {
                 surveys: [
                     {
                         id: '123',
@@ -679,7 +679,7 @@ describe('Surveys', () => {
                     },
                 ],
             }).as('surveys')
-            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            cy.intercept('POST', '/e/*').as('capture-assertion')
             onPageLoad()
             cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
             cy.wait('@capture-assertion')

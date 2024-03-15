@@ -29,7 +29,7 @@ export const start = ({
         ...decideResponseOverrides,
         config: { enable_collect_everything: true, ...decideResponseOverrides.config },
     }
-    cy.intercept('POST', '**/decide/*', decideResponse).as('decide')
+    cy.intercept('POST', '/decide/*', decideResponse).as('decide')
 
     cy.visit(url)
 
