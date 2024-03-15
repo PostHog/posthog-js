@@ -7,7 +7,6 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
-    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import {
@@ -151,7 +150,6 @@ describe('SessionRecording', () => {
         // defaults
         posthog.persistence?.register({
             [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
-            [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2',
             [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false,
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
@@ -200,33 +198,6 @@ describe('SessionRecording', () => {
 
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: true })
             expect(sessionRecording['isConsoleLogCaptureEnabled']).toBe(true)
-        })
-    })
-
-    describe('getRecordingVersion', () => {
-        it('uses client side setting v2 over server side', () => {
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v1' })
-            posthog.config.session_recording.recorderVersion = 'v2'
-            expect(sessionRecording['recordingVersion']).toBe('v2')
-        })
-
-        it('uses client side setting v1 over server side', () => {
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
-            posthog.config.session_recording.recorderVersion = 'v1'
-            expect(sessionRecording['recordingVersion']).toBe('v1')
-        })
-
-        it('uses server side setting if client side setting is not set', () => {
-            posthog.config.session_recording.recorderVersion = undefined
-
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v1' })
-            expect(sessionRecording['recordingVersion']).toBe('v1')
-
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
-            expect(sessionRecording['recordingVersion']).toBe('v2')
-
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: undefined })
-            expect(sessionRecording['recordingVersion']).toBe('v1')
         })
     })
 
@@ -729,16 +700,7 @@ describe('SessionRecording', () => {
             expect(loadScript).not.toHaveBeenCalled()
         })
 
-        it('loads recording v1 script from right place', () => {
-            posthog.config.session_recording.recorderVersion = 'v1'
-
-            sessionRecording.startRecordingIfEnabled()
-
-            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js?v=v0.0.1', expect.anything())
-        })
-
         it('loads recording v2 script from right place', () => {
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             sessionRecording.startRecordingIfEnabled()
 
             expect(loadScript).toHaveBeenCalledWith(
@@ -749,7 +711,6 @@ describe('SessionRecording', () => {
 
         it('load correct recording version if there is a cached mismatch', () => {
             posthog.__loaded_recorder_version = 'v1'
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             sessionRecording.startRecordingIfEnabled()
 
             expect(loadScript).toHaveBeenCalledWith(
