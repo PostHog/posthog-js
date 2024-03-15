@@ -251,7 +251,7 @@ describe('config', () => {
             })
         })
 
-        it('should redact password even when a mask request fn is set', () => {
+        it('mask request fn replaces scrubPayload functionality', () => {
             const posthogConfig = defaultConfig()
             posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
                 return {
