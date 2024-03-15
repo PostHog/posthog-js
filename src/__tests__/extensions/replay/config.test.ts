@@ -1,5 +1,6 @@
 import { defaultConfig } from '../../../posthog-core'
 import { buildNetworkRequestOptions } from '../../../extensions/replay/config'
+import { CapturedNetworkRequest } from '../../../types'
 
 describe('config', () => {
     describe('network request options', () => {
@@ -259,6 +260,7 @@ describe('config', () => {
                         ...(data.requestHeaders ? data.requestHeaders : {}),
                         'content-type': 'edited',
                     },
+                    requestBody: 'the provided function ran',
                 }
             }
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
@@ -269,16 +271,17 @@ describe('config', () => {
                     Authorization: 'Bearer 123',
                     'content-type': 'application/json',
                 },
-                requestBody: 'some body with password',
-                responseBody: 'some body with password',
-            })
+                requestBody: 'the original value',
+                responseBody: 'the original value',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
                     'content-type': 'edited',
                 },
-                requestBody: '[SessionRecording] Request body redacted as might contain: password',
-                responseBody: '[SessionRecording] Response body redacted as might contain: password',
+                requestBody: 'the provided function ran',
+                responseBody: 'the original value',
             })
         })
 
