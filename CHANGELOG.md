@@ -1,3 +1,7 @@
+## 1.115.1 - 2024-03-15
+
+- chore: remove v1 rrweb loading (#1078)
+
 ## 1.115.0 - 2024-03-14
 
 - feat: track recording URL without pageview capture (#1076)

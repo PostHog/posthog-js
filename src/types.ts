@@ -175,7 +175,6 @@ export interface SessionRecordingOptions {
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
-    recorderVersion?: 'v1' | 'v2'
     recordCrossOriginIframes?: boolean
     /** @deprecated - use maskCapturedNetworkRequestFn instead  */
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
@@ -274,7 +273,6 @@ export interface DecideResponse {
     sessionRecording?: {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
-        recorderVersion?: 'v1' | 'v2'
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string | null
         minimumDurationMilliseconds?: number

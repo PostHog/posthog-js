@@ -4,7 +4,6 @@ import {
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
-    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../constants'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
@@ -196,12 +195,6 @@ export class SessionRecording {
             : undefined
     }
 
-    private get recordingVersion() {
-        const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
-        const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
-        return recordingVersion_client_side || recordingVersion_server_side || 'v1'
-    }
-
     // network payload capture config has three parts
     // each can be configured server side or client side
     private get networkPayloadCapture():
@@ -345,7 +338,6 @@ export class SessionRecording {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
-                [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
                 [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: {
                     capturePerformance: response.capturePerformance,
                     ...response.sessionRecording?.networkPayloadCapture,
@@ -433,17 +425,15 @@ export class SessionRecording {
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
         this.sessionManager.checkAndGetSessionAndWindowId()
 
-        const recorderJS = this.recordingVersion === 'v2' ? 'recorder-v2.js' : 'recorder.js'
-
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
-        if (this.instance.__loaded_recorder_version !== this.recordingVersion) {
+        if (this.instance.__loaded_recorder_version !== 'v2') {
             loadScript(
-                this.instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
+                this.instance.requestRouter.endpointFor('assets', `/static/recorder-v2.js?v=${Config.LIB_VERSION}`),
                 (err) => {
                     if (err) {
-                        return logger.error(LOGGER_PREFIX + ` could not load ${recorderJS}`, err)
+                        return logger.error(LOGGER_PREFIX + ` could not load recorder-v2.js`, err)
                     }
 
                     this._onScriptLoaded()
