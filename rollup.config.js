@@ -31,13 +31,8 @@ export default [
                 format: 'iife',
                 name: 'posthog',
             },
-        ],
-        plugins: [...plugins],
-    },
-    {
-        input: 'src/loader-recorder-v2.ts',
-        output: [
             {
+                // Backwards compatibility for older SDK versions
                 file: 'dist/recorder-v2.js',
                 sourcemap: true,
                 format: 'iife',

@@ -4,7 +4,6 @@ import {
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
-    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../constants'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
@@ -138,6 +137,10 @@ export class SessionRecording {
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
 
+    // if pageview capture is disabled
+    // then we can manually track href changes
+    private _lastHref?: string
+
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
@@ -190,12 +193,6 @@ export class SessionRecording {
                   quality: canvasRecording_server_side.quality,
               }
             : undefined
-    }
-
-    private get recordingVersion() {
-        const recordingVersion_server_side = this.instance.get_property(SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE)
-        const recordingVersion_client_side = this.instance.config.session_recording?.recorderVersion
-        return recordingVersion_client_side || recordingVersion_server_side || 'v1'
     }
 
     // network payload capture config has three parts
@@ -341,7 +338,6 @@ export class SessionRecording {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
                 [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
-                [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: response.sessionRecording?.recorderVersion,
                 [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: {
                     capturePerformance: response.capturePerformance,
                     ...response.sessionRecording?.networkPayloadCapture,
@@ -429,17 +425,15 @@ export class SessionRecording {
         // We want to ensure the sessionManager is reset if necessary on load of the recorder
         this.sessionManager.checkAndGetSessionAndWindowId()
 
-        const recorderJS = this.recordingVersion === 'v2' ? 'recorder-v2.js' : 'recorder.js'
-
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported) or matches the requested recorder version, don't load script. Otherwise, remotely import
         // recorder.js from cdn since it hasn't been loaded.
-        if (this.instance.__loaded_recorder_version !== this.recordingVersion) {
+        if (this.instance.__loaded_recorder_version !== 'v2') {
             loadScript(
-                this.instance.requestRouter.endpointFor('assets', `/static/${recorderJS}?v=${Config.LIB_VERSION}`),
+                this.instance.requestRouter.endpointFor('assets', `/static/recorder-v2.js?v=${Config.LIB_VERSION}`),
                 (err) => {
                     if (err) {
-                        return logger.error(LOGGER_PREFIX + ` could not load ${recorderJS}`, err)
+                        return logger.error(LOGGER_PREFIX + ` could not load recorder-v2.js`, err)
                     }
 
                     this._onScriptLoaded()
@@ -518,13 +512,16 @@ export class SessionRecording {
             return true
         } catch (e) {
             // Sometimes a race can occur where the recorder is not fully started yet
-            logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e)
-            this.queuedRRWebEvents.length < 10 &&
+            if (this.queuedRRWebEvents.length < 10) {
                 this.queuedRRWebEvents.push({
                     enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
                     attempt: queuedRRWebEvent.attempt++,
                     rrwebMethod: queuedRRWebEvent.rrwebMethod,
                 })
+            } else {
+                logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e, queuedRRWebEvent)
+            }
+
             return false
         }
     }
@@ -689,10 +686,13 @@ export class SessionRecording {
 
         if (rawEvent.type === EventType.Meta) {
             const href = this._maskUrl(rawEvent.data.href)
+            this._lastHref = href
             if (!href) {
                 return
             }
             rawEvent.data.href = href
+        } else {
+            this._pageViewFallBack()
         }
 
         if (rawEvent.type === EventType.FullSnapshot) {
@@ -731,6 +731,17 @@ export class SessionRecording {
             this._captureSnapshotBuffered(properties)
         } else {
             this.clearBuffer()
+        }
+    }
+
+    private _pageViewFallBack() {
+        if (this.instance.config.capture_pageview || !window) {
+            return
+        }
+        const currentUrl = this._maskUrl(window.location.href)
+        if (this._lastHref !== currentUrl) {
+            this._tryAddCustomEvent('$url_changed', { href: currentUrl })
+            this._lastHref = currentUrl
         }
     }
 
