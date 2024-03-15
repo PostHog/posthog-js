@@ -1,3 +1,7 @@
+## 1.116.0 - 2024-03-15
+
+- fix: allow payload scrubbing override (#1085)
+
 ## 1.115.2 - 2024-03-15
 
 - fix: canvas recording patches (#1082)
