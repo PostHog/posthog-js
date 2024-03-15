@@ -565,9 +565,7 @@ function initNetworkObserver(
         fetchObserver = initFetchObserver(cb, win, networkOptions)
     }
 
-    if (_isFunction(options.onNetworkCaptureReady)) {
-        options.onNetworkCaptureReady()
-    }
+    options.eventEmitter?.emit('network_capture_ready')
 
     return () => {
         performanceObserver()

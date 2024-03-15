@@ -67,6 +67,7 @@ import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { EmitterEvent, SimpleEventEmitter } from './simple-event-emitter'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -220,6 +221,8 @@ export class PostHog {
         set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
     }
 
+    eventEmitter = new SimpleEventEmitter()
+
     constructor() {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
@@ -349,7 +352,7 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionManager = new SessionIdManager(this.config, this.persistence, this.eventEmitter)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
         this.sessionRecording = new SessionRecording(this)
@@ -1090,7 +1093,11 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by useEffect when the component unmounts.
      */
     onSessionId(callback: SessionIdChangedCallback): () => void {
-        return this.sessionManager?.onSessionId(callback) ?? (() => {})
+        return this.eventEmitter.on('session_id_changed', callback)
+    }
+
+    on(event: EmitterEvent, cb: (...args: any[]) => void): () => void {
+        return this.eventEmitter.on(event, cb)
     }
 
     /** Get list of all surveys. */

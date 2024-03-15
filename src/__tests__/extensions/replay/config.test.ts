@@ -1,8 +1,18 @@
 import { defaultConfig } from '../../../posthog-core'
 import { buildNetworkRequestOptions } from '../../../extensions/replay/config'
+import { CapturedNetworkRequest } from '../../../types'
+import { SimpleEventEmitter } from '../../../simple-event-emitter'
 
 describe('config', () => {
     describe('network request options', () => {
+        it('passes event emitter through', () => {
+            expect(buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true }).eventEmitter).toBeUndefined()
+            const eventEmitter = new SimpleEventEmitter()
+            expect(
+                buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true }, eventEmitter).eventEmitter
+            ).toBe(eventEmitter)
+        })
+
         describe('maskRequestFn', () => {
             it('can enable header recording remotely', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true })
@@ -33,7 +43,7 @@ describe('config', () => {
                 const cleaned = networkOptions.maskRequestFn!({
                     name: 'something',
                     requestHeaders: undefined,
-                })
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
                 expect(cleaned).toEqual({
                     name: 'something',
                     requestHeaders: undefined,
@@ -56,7 +66,7 @@ describe('config', () => {
                         Authorization: 'Bearer 123',
                         'content-type': 'application/json',
                     },
-                })
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
                 expect(cleaned).toEqual({
                     name: 'edited',
                     requestHeaders: {
@@ -101,7 +111,7 @@ describe('config', () => {
                 ],
             ])('ignores ingestion paths', (capturedRequest, expected) => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
-                const x = networkOptions.maskRequestFn!(capturedRequest)
+                const x = networkOptions.maskRequestFn!(capturedRequest as CapturedNetworkRequest)
                 expect(x).toEqual(expected)
             })
 
@@ -114,7 +124,7 @@ describe('config', () => {
                         'content-length': '1000001',
                     },
                     requestBody: 'something very large',
-                })
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
                 expect(cleaned).toEqual({
                     name: 'something',
                     requestHeaders: {
@@ -134,7 +144,7 @@ describe('config', () => {
                         'content-length': '1000001',
                     },
                     responseBody: 'something very large',
-                })
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
                 expect(cleaned).toEqual({
                     name: 'something',
                     responseHeaders: {
@@ -153,7 +163,7 @@ describe('config', () => {
                         'content-type': 'application/json',
                     },
                     requestBody: 'some body that has no content length',
-                })
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
                 expect(cleaned).toEqual({
                     name: 'something',
                     requestHeaders: {
@@ -171,7 +181,7 @@ describe('config', () => {
                         'content-type': 'application/json',
                     },
                     requestBody: 'a'.repeat(1000001),
-                })
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
                 expect(cleaned).toEqual({
                     name: 'something',
                     requestHeaders: {
@@ -192,7 +202,7 @@ describe('config', () => {
                     Authorization: 'Bearer 123',
                     'content-type': 'application/json',
                 },
-            })
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
@@ -220,7 +230,7 @@ describe('config', () => {
                     Authorization: 'Bearer 123',
                     'content-type': 'application/json',
                 },
-            })
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
@@ -239,7 +249,7 @@ describe('config', () => {
                 },
                 requestBody: 'some body with password',
                 responseBody: 'some body with password',
-            })
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
@@ -271,7 +281,7 @@ describe('config', () => {
                 },
                 requestBody: 'some body with password',
                 responseBody: 'some body with password',
-            })
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
@@ -290,7 +300,7 @@ describe('config', () => {
                     AuThOrIzAtIoN: 'Bearer 123',
                     'content-type': 'application/json',
                 },
-            })
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
@@ -309,7 +319,7 @@ describe('config', () => {
                 },
                 requestBody: 'take payment with CC 4242 4242 4242 4242',
                 responseBody: 'take payment with CC 4242 4242 4242 4242',
-            })
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {

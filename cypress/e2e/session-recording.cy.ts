@@ -82,6 +82,7 @@ describe('Session recording', () => {
         let onNetworkReadyStub
         beforeEach(() => {
             onNetworkReadyStub = cy.stub()
+
             start({
                 decideResponseOverrides: {
                     config: { enable_collect_everything: false },
@@ -94,16 +95,13 @@ describe('Session recording', () => {
                 },
                 url: './playground/cypress',
                 options: {
-                    session_recording: {
-                        // once network capture has started this will be called
-                        // fetch and xhr should both have had their prototypes wrapped
-                        onNetworkCaptureReady: onNetworkReadyStub,
-                    },
                     loaded: (ph) => {
                         ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
                     },
                 },
             })
+
+            cy.posthog().invoke('on', 'network_capture_ready', onNetworkReadyStub)
             cy.wait('@recorder')
         })
 

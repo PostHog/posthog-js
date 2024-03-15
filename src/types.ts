@@ -1,5 +1,6 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
+import { SimpleEventEmitter } from './simple-event-emitter'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -183,13 +184,6 @@ export interface SessionRecordingOptions {
     // our settings here only support a subset of those proposed for rrweb's network capture plugin
     recordHeaders?: boolean
     recordBody?: boolean
-    /**
-     * This callback is fired when network capture has started,
-     * it can be used for example to send API calls you want to ensure
-     * are captured by PostHog that could otherwise fire on page load
-     * _before_ PostHog is ready to capture them
-     */
-    onNetworkCaptureReady?: () => void
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
@@ -425,11 +419,9 @@ export type NetworkRecordOptions = {
      */
     payloadSizeLimitBytes: number
     /**
-     * function called when network capture has started,
-     * if payload capture is enabled
-     * fetch and xhr will be wrapped at this point
+     * allows emitting events like 'network_capture_ready' when the network capture is ready
      */
-    onNetworkCaptureReady?: () => void
+    eventEmitter?: SimpleEventEmitter
 }
 
 /** @deprecated - use CapturedNetworkRequest instead  */
@@ -462,3 +454,6 @@ export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
 }
+
+const EmitterEvents = ['session_id_changed', 'network_capture_ready', '*'] as const
+export type EmitterEvent = typeof EmitterEvents[number]
