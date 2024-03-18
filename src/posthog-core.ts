@@ -23,7 +23,7 @@ import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
-import { RequestRouter } from './utils/request-router'
+import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import {
     AutocaptureConfig,
     CaptureOptions,
@@ -800,6 +800,10 @@ export class PostHog {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
+        }
+
+        if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
+            properties['$lib_custom_api_host'] = this.config.api_host
         }
 
         if (
