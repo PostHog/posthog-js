@@ -409,6 +409,26 @@ describe('posthog core', () => {
             })
         })
 
+        it('sets $lib_custom_api_host if api_host is not the default', () => {
+            given('config', () => ({
+                api_host: 'https://custom.posthog.com',
+                token: 'testtoken',
+                property_denylist: given.property_denylist,
+                property_blacklist: given.property_blacklist,
+                sanitize_properties: given.sanitize_properties,
+            }))
+            expect(given.subject).toEqual({
+                token: 'testtoken',
+                event: 'prop',
+                $lib: 'web',
+                distinct_id: 'abc',
+                persistent: 'prop',
+                $window_id: 'windowId',
+                $session_id: 'sessionId',
+                $lib_custom_api_host: 'https://custom.posthog.com',
+            })
+        })
+
         it('respects property_denylist and property_blacklist', () => {
             given('property_denylist', () => ['$lib', 'persistent'])
             given('property_blacklist', () => ['token'])
