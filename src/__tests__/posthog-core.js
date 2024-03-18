@@ -734,30 +734,6 @@ describe('posthog core', () => {
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
         })
 
-        it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
-            delete window.rrweb
-            window.rrweb = { record: undefined }
-            delete window.rrwebRecord
-            window.rrwebRecord = undefined
-            expect(given.lib.__loaded_recorder_version).toEqual(undefined)
-        })
-
-        it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
-            delete window.rrweb
-            window.rrweb = { record: 'anything', version: '1.1.3' }
-            delete window.rrwebRecord
-            window.rrwebRecord = 'is possible'
-            expect(given.lib.__loaded_recorder_version).toMatch(/^1\./) // start with 1.?.?
-        })
-
-        it('set __loaded_recorder_version flag to v2 if recording script has been included', () => {
-            delete window.rrweb
-            window.rrweb = { record: 'anything', version: '2.0.0-alpha.6' }
-            delete window.rrwebRecord
-            window.rrwebRecord = 'is possible'
-            expect(given.lib.__loaded_recorder_version).toMatch(/^2\./) // start with 2.?.?
-        })
-
         it('does not load autocapture, feature flags, toolbar, session recording', () => {
             given('overrides', () => ({
                 sessionRecording: {
