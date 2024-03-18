@@ -8,6 +8,7 @@ describe('Rate Limiter', () => {
     let rateLimiter: RateLimiter
     let systemTime: number
     let persistedBucket = {}
+    let mockPostHog: any
 
     const moveTimeForward = (milliseconds: number) => {
         systemTime += milliseconds
@@ -26,7 +27,7 @@ describe('Rate Limiter', () => {
 
         persistedBucket = {}
 
-        const mockPostHog = {
+        mockPostHog = {
             config: {
                 rate_limiting: {
                     events_per_second: 10,
@@ -39,6 +40,7 @@ describe('Rate Limiter', () => {
                     persistedBucket[key] = value
                 }),
             },
+            capture: jest.fn(),
         }
 
         rateLimiter = new RateLimiter(mockPostHog as any)
@@ -111,6 +113,41 @@ describe('Rate Limiter', () => {
             moveTimeForward(1000000)
             expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
             expect(persistedBucket['$capture_rate_limit'].tokens).toEqual(99) // limit - 1
+        })
+
+        it('captures a rate limit event the first time it is rate limited', () => {
+            range(200).forEach(() => {
+                rateLimiter.isCaptureClientSideRateLimited()
+            })
+
+            expect(mockPostHog.capture).toBeCalledTimes(1)
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                '$$js_capture_client_side_rate_limited',
+                {
+                    $js_config_rate_limiting_events_per_second: 10,
+                    $js_config_rate_limiting_events_burst_limit: 100,
+                },
+                {
+                    skip_client_rate_limiting: true,
+                }
+            )
+        })
+
+        it('does not capture a rate limit event if the persisted config was already rate limited', () => {
+            range(200).forEach(() => {
+                rateLimiter.isCaptureClientSideRateLimited()
+            })
+
+            expect(mockPostHog.capture).toBeCalledTimes(1)
+            mockPostHog.capture.mockClear()
+
+            const newRateLimiter = new RateLimiter(mockPostHog as any)
+
+            range(200).forEach(() => {
+                newRateLimiter.isCaptureClientSideRateLimited()
+            })
+
+            expect(mockPostHog.capture).toBeCalledTimes(0)
         })
     })
 

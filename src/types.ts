@@ -243,6 +243,7 @@ export interface CaptureOptions {
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     send_instantly?: boolean /** if set skips the batched queue */
+    skip_client_rate_limiting?: boolean /** if set skips the client side rate limiting */
     transport?: RequestOptions['transport'] /** if set, overrides the desired transport method */
     timestamp?: Date
 }

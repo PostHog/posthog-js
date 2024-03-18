@@ -3,7 +3,8 @@ import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
 import { logger } from './utils/logger'
 
-const oneMinuteInMilliseconds = 60 * 1000
+const ONE_MINUTE_IN_MILLISECONDS = 60 * 1000
+const RATE_LIMIT_EVENT = '$$js_capture_client_side_rate_limited'
 
 interface CaptureResponse {
     quota_limited?: string[]
@@ -15,6 +16,7 @@ export class RateLimiter {
 
     captureEventsPerSecond: number
     captureEventsBurstLimit: number
+    lastEventRateLimited = false
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -24,6 +26,8 @@ export class RateLimiter {
             instance.config.rate_limiting?.events_burst_limit || this.captureEventsPerSecond * 10,
             this.captureEventsPerSecond
         )
+
+        this.lastEventRateLimited = this.isCaptureClientSideRateLimited(true)
     }
 
     public isCaptureClientSideRateLimited(checkOnly = false): boolean {
@@ -48,6 +52,20 @@ export class RateLimiter {
             bucket.tokens = Math.max(0, bucket.tokens - 1)
         }
 
+        if (isRateLimited && !this.lastEventRateLimited && !checkOnly) {
+            this.instance.capture(
+                RATE_LIMIT_EVENT,
+                {
+                    $js_config_rate_limiting_events_per_second: this.captureEventsPerSecond,
+                    $js_config_rate_limiting_events_burst_limit: this.captureEventsBurstLimit,
+                },
+                {
+                    skip_client_rate_limiting: true,
+                }
+            )
+        }
+
+        this.lastEventRateLimited = isRateLimited
         this.instance.persistence?.set_property(CAPTURE_RATE_LIMIT, bucket)
 
         return isRateLimited
@@ -74,7 +92,7 @@ export class RateLimiter {
             const quotaLimitedProducts = response.quota_limited || []
             quotaLimitedProducts.forEach((batchKey) => {
                 logger.info(`[RateLimiter] ${batchKey || 'events'} is quota limited.`)
-                this.serverLimits[batchKey] = new Date().getTime() + oneMinuteInMilliseconds
+                this.serverLimits[batchKey] = new Date().getTime() + ONE_MINUTE_IN_MILLISECONDS
             })
         } catch (e: any) {
             logger.warn(`[RateLimiter] could not rate limit - continuing. Error: "${e?.message}"`, { text })
