@@ -384,6 +384,7 @@ describe('posthog core', () => {
         }))
 
         given('config', () => ({
+            api_host: 'https://app.posthog.com',
             token: 'testtoken',
             property_denylist: given.property_denylist,
             property_blacklist: given.property_blacklist,
