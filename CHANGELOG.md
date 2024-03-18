@@ -1,3 +1,7 @@
+## 1.116.2 - 2024-03-18
+
+- feat: add property so we can check if a client is using a proxy (#1084)
+
 ## 1.116.1 - 2024-03-18
 
 - chore: Remove v2 rrweb checks (#1080)
