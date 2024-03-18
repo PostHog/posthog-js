@@ -1,3 +1,7 @@
+## 1.116.1 - 2024-03-18
+
+- chore: Remove v2 rrweb checks (#1080)
+
 ## 1.116.0 - 2024-03-15
 
 - fix: allow payload scrubbing override (#1085)
