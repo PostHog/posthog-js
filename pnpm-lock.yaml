@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   rrweb@2.0.0-alpha.11:
-    hash: ehkxvj2dnc4d5fb4tq7odeskvu
+    hash: ldhsspyvwscjgedotm5w5frkg4
     path: patches/rrweb@2.0.0-alpha.11.patch
 
 dependencies:
@@ -170,13 +170,10 @@ devDependencies:
     version: 5.12.0(rollup@4.9.6)
   rrweb:
     specifier: 2.0.0-alpha.11
-    version: 2.0.0-alpha.11(patch_hash=ehkxvj2dnc4d5fb4tq7odeskvu)
+    version: 2.0.0-alpha.11(patch_hash=ldhsspyvwscjgedotm5w5frkg4)
   rrweb-snapshot:
     specifier: 2.0.0-alpha.11
     version: 2.0.0-alpha.11
-  rrweb-v1:
-    specifier: npm:rrweb@1.1.3
-    version: /rrweb@1.1.3
   sinon:
     specifier: 9.0.2
     version: 9.0.2
@@ -7946,10 +7943,6 @@ packages:
     resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
     dev: true
 
-  /mitt@1.2.0:
-    resolution: {integrity: sha512-r6lj77KlwqLhIUku9UWYes7KJtsczvolZkzp8hbaDPPaE24OmWl5s539Mytlj22siEQKosZ26qCBgda2PKwoJw==}
-    dev: true
-
   /mitt@3.0.0:
     resolution: {integrity: sha512-7dX2/10ITVyqh4aOSVI9gdape+t9l2/8QxHrFmUXu4EEUpdlxl6RudZUPZoc+zuY2hk1j7XxVroIVIan/pD/SQ==}
     dev: true
@@ -9197,26 +9190,11 @@ packages:
       rrweb-snapshot: 2.0.0-alpha.11
     dev: true
 
-  /rrweb-snapshot@1.1.14:
-    resolution: {integrity: sha512-eP5pirNjP5+GewQfcOQY4uBiDnpqxNRc65yKPW0eSoU1XamDfc4M8oqpXGMyUyvLyxFDB0q0+DChuxxiU2FXBQ==}
-    dev: true
-
   /rrweb-snapshot@2.0.0-alpha.11:
     resolution: {integrity: sha512-N0dzeJA2VhrlSOadkKwCVmV/DuNOwBH+Lhx89hAf9PQK4lCS8AP4AaylhqUdZOYHqwVjqsYel/uZ4hN79vuLhw==}
     dev: true
 
-  /rrweb@1.1.3:
-    resolution: {integrity: sha512-F2qp8LteJLyycsv+lCVJqtVpery63L3U+/ogqMA0da8R7Jx57o6gT+HpjrzdeeGMIBZR7kKNaKyJwDupTTu5KA==}
-    dependencies:
-      '@types/css-font-loading-module': 0.0.7
-      '@xstate/fsm': 1.5.2
-      base64-arraybuffer: 1.0.2
-      fflate: 0.4.8
-      mitt: 1.2.0
-      rrweb-snapshot: 1.1.14
-    dev: true
-
-  /rrweb@2.0.0-alpha.11(patch_hash=ehkxvj2dnc4d5fb4tq7odeskvu):
+  /rrweb@2.0.0-alpha.11(patch_hash=ldhsspyvwscjgedotm5w5frkg4):
     resolution: {integrity: sha512-vJ2gNvF+pUG9C2aaau7iSNqhWBSc4BwtUO4FpegOtDObuH4PIaxNJOlgHz82+WxKr9XPm93ER0LqmNpy0KYdKg==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.11

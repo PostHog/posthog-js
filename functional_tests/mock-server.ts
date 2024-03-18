@@ -2,7 +2,6 @@
 
 import { ResponseComposition, rest } from 'msw'
 import { setupServer } from 'msw/lib/node'
-import assert from 'assert'
 import { RestContext } from 'msw'
 import { RestRequest } from 'msw'
 
@@ -14,26 +13,22 @@ const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/decide/': any[] } =
 }
 
 const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
-    const body = req.body
-    // type guard that body is a string
-    if (typeof body !== 'string') {
-        assert(false, 'body is not a string')
-    }
+    let body = req.body
 
-    let data
-
-    try {
-        const b64Encoded = req.url.href.includes('compression=base64')
-        if (b64Encoded) {
-            data = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
-        } else {
-            data = JSON.parse(decodeURIComponent(body.split('=')[1]))
+    if (typeof body === 'string') {
+        try {
+            const b64Encoded = req.url.href.includes('compression=base64')
+            if (b64Encoded) {
+                body = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
+            } else {
+                body = JSON.parse(decodeURIComponent(body.split('=')[1]))
+            }
+        } catch (e) {
+            return res(ctx.status(500))
         }
-    } catch (e) {
-        return res(ctx.status(500))
     }
 
-    capturedRequests[group] = [...(capturedRequests[group] || []), data]
+    capturedRequests[group] = [...(capturedRequests[group] || []), body]
 
     return res(ctx.json({}))
 }

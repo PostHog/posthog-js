@@ -287,7 +287,7 @@ describe('Event capture', () => {
 
                 // the code below is going to trigger an event capture
                 // we want to assert on the request
-                cy.intercept('POST', '**/e/*', async (request) => {
+                cy.intercept('POST', '/e/*', async (request) => {
                     expect(request.headers['content-type']).to.eq('text/plain')
                     const captures = await getGzipEncodedPayload(request)
                     expect(captures.map(({ event }) => event)).to.deep.equal(['$autocapture', 'custom-event'])

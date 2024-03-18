@@ -1,3 +1,53 @@
+## 1.116.0 - 2024-03-15
+
+- fix: allow payload scrubbing override (#1085)
+
+## 1.115.2 - 2024-03-15
+
+- fix: canvas recording patches (#1082)
+- chore: remove cypress log noise (#1086)
+
+## 1.115.1 - 2024-03-15
+
+- chore: remove v1 rrweb loading (#1078)
+
+## 1.115.0 - 2024-03-14
+
+- feat: track recording URL without pageview capture (#1076)
+- fix: return typing of global functions (#1081)
+
+## 1.114.2 - 2024-03-12
+
+- fix: patch rrweb zero width canvas bug (#1075)
+
+## 1.114.1 - 2024-03-12
+
+- fix: Disabled compression and application json (#1074)
+
+## 1.114.0 - 2024-03-12
+
+- feat: report browser visibility state in replay (#1071)
+- fix: typo in deny list (#1073)
+- fix(posthog-js): manually bump patch (#1072)
+
+## 1.113.4 - 2024-03-12
+
+- fix(posthog-js): manually bump patch (#1072)
+- fix: no empty requests (#1063)
+
+## 1.113.2 - 2024-03-11
+
+- fix: Send beacon request encoding (#1068)
+
+## 1.113.1 - 2024-03-11
+
+- fix: clarify redaction message (#1069)
+
+## 1.113.0 - 2024-03-11
+
+- feat: scrub payloads with forbidden words (#1059)
+- chore: remove unused path (#1066)
+
 ## 1.112.1 - 2024-03-11
 
 - Fix compression (#1062)

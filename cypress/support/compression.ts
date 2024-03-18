@@ -1,10 +1,5 @@
 import { decompressSync, strFromU8 } from 'fflate'
 
-export function getUnencodedPayload(request) {
-    const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
-    return JSON.parse(data)
-}
-
 export function getBase64EncodedPayload(request) {
     const data = decodeURIComponent(request.body.match(/data=(.*)/)[1])
     return JSON.parse(Buffer.from(data, 'base64').toString())
@@ -22,6 +17,6 @@ export async function getPayload(request) {
     } else if (request.url.includes('compression=base64')) {
         return getBase64EncodedPayload(request)
     } else {
-        return getUnencodedPayload(request)
+        return request.body
     }
 }

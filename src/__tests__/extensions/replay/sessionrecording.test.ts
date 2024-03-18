@@ -7,7 +7,6 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
-    SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import {
@@ -23,7 +22,7 @@ import {
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
-import { assignableWindow } from '../../../utils/globals'
+import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { customEvent, EventType, eventWithTime, pluginEvent } from '@rrweb/types'
 import Mock = jest.Mock
@@ -77,6 +76,12 @@ const createPluginSnapshot = (event = {}): pluginEvent => ({
 
 function makeDecideResponse(partialResponse: Partial<DecideResponse>) {
     return partialResponse as unknown as DecideResponse
+}
+
+const originalLocation = window!.location
+function fakeNavigateTo(href: string) {
+    delete (window as any).location
+    window!.location = { href } as Location
 }
 
 describe('SessionRecording', () => {
@@ -145,12 +150,15 @@ describe('SessionRecording', () => {
         // defaults
         posthog.persistence?.register({
             [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
-            [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2',
             [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false,
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
 
         sessionRecording = new SessionRecording(posthog)
+    })
+
+    afterEach(() => {
+        window!.location = originalLocation
     })
 
     describe('isRecordingEnabled', () => {
@@ -190,33 +198,6 @@ describe('SessionRecording', () => {
 
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: true })
             expect(sessionRecording['isConsoleLogCaptureEnabled']).toBe(true)
-        })
-    })
-
-    describe('getRecordingVersion', () => {
-        it('uses client side setting v2 over server side', () => {
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v1' })
-            posthog.config.session_recording.recorderVersion = 'v2'
-            expect(sessionRecording['recordingVersion']).toBe('v2')
-        })
-
-        it('uses client side setting v1 over server side', () => {
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
-            posthog.config.session_recording.recorderVersion = 'v1'
-            expect(sessionRecording['recordingVersion']).toBe('v1')
-        })
-
-        it('uses server side setting if client side setting is not set', () => {
-            posthog.config.session_recording.recorderVersion = undefined
-
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v1' })
-            expect(sessionRecording['recordingVersion']).toBe('v1')
-
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
-            expect(sessionRecording['recordingVersion']).toBe('v2')
-
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: undefined })
-            expect(sessionRecording['recordingVersion']).toBe('v1')
         })
     })
 
@@ -719,16 +700,7 @@ describe('SessionRecording', () => {
             expect(loadScript).not.toHaveBeenCalled()
         })
 
-        it('loads recording v1 script from right place', () => {
-            posthog.config.session_recording.recorderVersion = 'v1'
-
-            sessionRecording.startRecordingIfEnabled()
-
-            expect(loadScript).toHaveBeenCalledWith('https://test.com/static/recorder.js?v=v0.0.1', expect.anything())
-        })
-
         it('loads recording v2 script from right place', () => {
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             sessionRecording.startRecordingIfEnabled()
 
             expect(loadScript).toHaveBeenCalledWith(
@@ -739,7 +711,6 @@ describe('SessionRecording', () => {
 
         it('load correct recording version if there is a cached mismatch', () => {
             posthog.__loaded_recorder_version = 'v1'
-            posthog.persistence?.register({ [SESSION_RECORDING_RECORDER_VERSION_SERVER_SIDE]: 'v2' })
             sessionRecording.startRecordingIfEnabled()
 
             expect(loadScript).toHaveBeenCalledWith(
@@ -1590,6 +1561,61 @@ describe('SessionRecording', () => {
 
             expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
             expect(sessionRecording['_fullSnapshotTimer']).not.toBe(startTimer)
+        })
+    })
+
+    describe('when pageview capture is disabled', () => {
+        beforeEach(() => {
+            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
+            posthog.config.capture_pageview = false
+            sessionRecording.startRecordingIfEnabled()
+            // clear the spy calls
+            ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
+        })
+
+        it('does not capture pageview on meta event', () => {
+            _emit(createIncrementalSnapshot({ type: META_EVENT_TYPE }))
+
+            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+        })
+
+        it('captures pageview as expected on non-meta event', () => {
+            fakeNavigateTo('https://test.com')
+
+            _emit(createIncrementalSnapshot({ type: 3 }))
+
+            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$url_changed', {
+                href: 'https://test.com',
+            })
+            ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
+
+            _emit(createIncrementalSnapshot({ type: 3 }))
+            // the window href has not changed, so we don't capture another pageview
+            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+
+            fakeNavigateTo('https://test.com/other')
+            _emit(createIncrementalSnapshot({ type: 3 }))
+
+            // the window href has changed, so we capture another pageview
+            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$url_changed', {
+                href: 'https://test.com/other',
+            })
+        })
+    })
+
+    describe('when pageview capture is enabled', () => {
+        beforeEach(() => {
+            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
+            posthog.config.capture_pageview = true
+            sessionRecording.startRecordingIfEnabled()
+            // clear the spy calls
+            ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
+        })
+
+        it('does not capture pageview on rrweb events', () => {
+            _emit(createIncrementalSnapshot({ type: 3 }))
+
+            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
         })
     })
 })

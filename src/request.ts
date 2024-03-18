@@ -4,11 +4,20 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { _formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, document, window, XMLHttpRequest, AbortController } from './utils/globals'
+import { fetch, document, XMLHttpRequest, AbortController, navigator } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
+
+const CONTENT_TYPE_PLAIN = 'text/plain'
+const CONTENT_TYPE_JSON = 'application/json'
+const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
+
+type EncodedBody = {
+    contentType: string
+    body: string | BlobPart
+}
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestOptions) => {
@@ -22,8 +31,8 @@ export const request = (_options: RequestOptions) => {
         compression: options.compression,
     })
 
-    if (options.transport === 'sendBeacon' && window?.navigator?.sendBeacon) {
-        return sendBeacon(options)
+    if (options.transport === 'sendBeacon' && navigator?.sendBeacon) {
+        return _sendBeacon(options)
     }
 
     // NOTE: Until we are confident with it, we only use fetch if explicitly told so
@@ -59,44 +68,45 @@ const encodeToDataString = (data: string | Record<string, any>): string => {
     return 'data=' + encodeURIComponent(typeof data === 'string' ? data : JSON.stringify(data))
 }
 
-const encodePostData = ({ data, compression, transport, method }: RequestOptions): string | BlobPart | null => {
+const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | undefined => {
     if (!data) {
-        return null
+        return
     }
 
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
-        return new Blob([gzipData], { type: 'text/plain' })
+        return {
+            contentType: CONTENT_TYPE_PLAIN,
+            body: new Blob([gzipData], { type: CONTENT_TYPE_PLAIN }),
+        }
     }
 
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(JSON.stringify(data))
-        return encodeToDataString(b64data)
+
+        return {
+            contentType: CONTENT_TYPE_FORM,
+            body: encodeToDataString(b64data),
+        }
     }
 
-    if (transport === 'sendBeacon') {
-        const body = encodeToDataString(data)
-        return new Blob([body], { type: 'application/x-www-form-urlencoded' })
+    return {
+        contentType: CONTENT_TYPE_JSON,
+        body: JSON.stringify(data),
     }
-
-    if (method !== 'POST') {
-        return null
-    }
-
-    return encodeToDataString(data)
 }
 
 const xhr = (options: RequestOptions) => {
     const req = new XMLHttpRequest!()
     req.open(options.method || 'GET', options.url, true)
-    const body = encodePostData(options)
+    const { contentType, body } = encodePostData(options) ?? {}
 
     _each(options.headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
 
-    if (options.method === 'POST' && typeof body === 'string') {
-        req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
+    if (contentType) {
+        req.setRequestHeader('Content-Type', contentType)
     }
 
     if (options.timeout) {
@@ -127,7 +137,7 @@ const xhr = (options: RequestOptions) => {
 }
 
 const _fetch = (options: RequestOptions) => {
-    const body = encodePostData(options)
+    const { contentType, body } = encodePostData(options) ?? {}
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
@@ -135,12 +145,12 @@ const _fetch = (options: RequestOptions) => {
         headers.append(headerName, headerValue)
     })
 
-    if (options.method === 'POST' && typeof body === 'string') {
-        headers.append('Content-Type', 'application/x-www-form-urlencoded')
+    if (contentType) {
+        headers.append('Content-Type', contentType)
     }
 
     const url = options.url
-    let aborter: { signal: any; timeout: number } | null = null
+    let aborter: { signal: any; timeout: ReturnType<typeof setTimeout> } | null = null
 
     if (AbortController) {
         const controller = new AbortController()
@@ -184,12 +194,19 @@ const _fetch = (options: RequestOptions) => {
     return
 }
 
-const sendBeacon = (options: RequestOptions) => {
+const _sendBeacon = (options: RequestOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
+
+    const url = extendURLParams(options.url, {
+        beacon: '1',
+    })
+
     try {
-        // eslint-disable-next-line compat/compat
-        window?.navigator?.sendBeacon(options.url, encodePostData(options))
+        const { contentType, body } = encodePostData(options) ?? {}
+        // sendBeacon requires a blob so we convert it
+        const sendBeaconBody = typeof body === 'string' ? new Blob([body], { type: contentType }) : body
+        navigator!.sendBeacon!(url, sendBeaconBody)
     } catch (e) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here

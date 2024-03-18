@@ -17,7 +17,7 @@ export const ArrayProto = Array.prototype
 export const nativeForEach = ArrayProto.forEach
 export const nativeIndexOf = ArrayProto.indexOf
 
-const navigator = global?.navigator
+export const navigator = global?.navigator
 export const document = global?.document
 export const location = global?.location
 export const fetch = global?.fetch

@@ -3,7 +3,7 @@ import { assertWhetherPostHogRequestsWereCalled } from '../support/assertions'
 describe('opting out', () => {
     describe('session recording', () => {
         beforeEach(() => {
-            cy.intercept('POST', '**/decide/*', {
+            cy.intercept('POST', '/decide/*', {
                 config: { enable_collect_everything: false },
                 editorParams: {},
                 featureFlags: ['session-recording-player'],
