@@ -97,6 +97,7 @@ describe('Session recording', () => {
                 options: {
                     loaded: (ph) => {
                         ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                        ph.onSessionReplayReady(onNetworkReadyStub)
                     },
                 },
             })

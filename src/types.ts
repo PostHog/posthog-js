@@ -1,6 +1,5 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
-import { SimpleEventEmitter } from './simple-event-emitter'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -418,10 +417,6 @@ export type NetworkRecordOptions = {
      * NB this will be at most 1MB even if set larger
      */
     payloadSizeLimitBytes: number
-    /**
-     * allows emitting events like 'network_capture_ready' when the network capture is ready
-     */
-    eventEmitter?: SimpleEventEmitter
 }
 
 /** @deprecated - use CapturedNetworkRequest instead  */
@@ -454,6 +449,3 @@ export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
 }
-
-const EmitterEvents = ['session_id_changed', 'network_capture_ready', '*'] as const
-export type EmitterEvent = typeof EmitterEvents[number]

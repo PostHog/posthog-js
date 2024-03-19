@@ -141,6 +141,8 @@ export class SessionRecording {
     // then we can manually track href changes
     private _lastHref?: string
 
+    private _sessionReplayReadyHandlers: (() => void)[] = []
+
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
@@ -273,6 +275,21 @@ export class SessionRecording {
         }
 
         this.buffer = this.clearBuffer()
+    }
+
+    /**
+     * listeners are called once, either once session replay is enabled and running,
+     * or when they are registered if replay is already running
+     * @param callback - the provided callback for the event listener
+     */
+    onSessionReplayReady(callback: () => void) {
+        this._sessionReplayReadyHandlers.push(callback)
+        if (this.started) {
+            callback()
+        }
+        return () => {
+            this._sessionReplayReadyHandlers = this._sessionReplayReadyHandlers.filter((h) => h !== callback)
+        }
     }
 
     startRecordingIfEnabled() {

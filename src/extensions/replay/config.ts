@@ -46,7 +46,6 @@ export const defaultNetworkOptions: NetworkRecordOptions = {
         'resource',
     ],
     payloadSizeLimitBytes: 1000000,
-    eventEmitter: undefined,
 }
 
 const HEADER_DENY_LIST = [
@@ -181,8 +180,7 @@ function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): Cap
  */
 export const buildNetworkRequestOptions = (
     instanceConfig: PostHogConfig,
-    remoteNetworkOptions: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>,
-    eventEmitter?: NetworkRecordOptions['eventEmitter']
+    remoteNetworkOptions: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
 ): NetworkRecordOptions => {
     const config: NetworkRecordOptions = {
         payloadSizeLimitBytes: defaultNetworkOptions.payloadSizeLimitBytes,
@@ -238,7 +236,6 @@ export const buildNetworkRequestOptions = (
         recordHeaders: canRecordHeaders,
         recordBody: canRecordBody,
         recordPerformance: canRecordPerformance,
-        recordInitialRequests: canRecordPerformance,
-        eventEmitter: eventEmitter,
+        recordInitialRequests: canRecordPerformance
     }
 }
