@@ -5,7 +5,6 @@ import { uuidv7 } from '../uuidv7'
 import { PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { assignableWindow } from '../utils/globals'
-import { SimpleEventEmitter } from '../simple-event-emitter'
 
 jest.mock('../uuidv7')
 jest.mock('../storage')
@@ -23,7 +22,7 @@ describe('Session ID manager', () => {
     const subject = (sessionIdManager: SessionIdManager, isReadOnly?: boolean) =>
         sessionIdManager.checkAndGetSessionAndWindowId(isReadOnly, timestamp)
     const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) =>
-        new SessionIdManager(config, phPersistence as PostHogPersistence, new SimpleEventEmitter())
+        new SessionIdManager(config, phPersistence as PostHogPersistence)
 
     const originalDate = Date
 
@@ -273,8 +272,7 @@ describe('Session ID manager', () => {
                 {
                     session_idle_timeout_seconds: timeout,
                 },
-                persistence as PostHogPersistence,
-                new SimpleEventEmitter()
+                persistence as PostHogPersistence
             )
 
         beforeEach(() => {

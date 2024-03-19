@@ -7,7 +7,6 @@ import { window } from './utils/globals'
 
 import { _isArray, _isNumber, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { SimpleEventEmitter } from './simple-event-emitter'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 minutes
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 minute
@@ -27,12 +26,10 @@ export class SessionIdManager {
     private _sessionActivityTimestamp: number | null
     private readonly _sessionTimeoutMs: number
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
-    private _eventEmitter: SimpleEventEmitter
 
     constructor(
         config: Partial<PostHogConfig>,
         persistence: PostHogPersistence,
-        eventEmitter: SimpleEventEmitter,
         sessionIdGenerator?: () => string,
         windowIdGenerator?: () => string
     ) {
@@ -44,7 +41,6 @@ export class SessionIdManager {
         this._sessionActivityTimestamp = null
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
-        this._eventEmitter = eventEmitter
 
         const persistenceName = config['persistence_name'] || config['token']
         let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
@@ -235,7 +231,6 @@ export class SessionIdManager {
         this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
 
         if (valuesChanged) {
-            this._eventEmitter.emit('session_id_changed', sessionId, windowId)
             this._sessionIdChangedHandlers.forEach((handler) => handler(sessionId, windowId))
         }
 

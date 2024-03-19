@@ -25,7 +25,6 @@ import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { customEvent, EventType, eventWithTime, pluginEvent } from '@rrweb/types'
 import Mock = jest.Mock
-import { SimpleEventEmitter } from '../../../simple-event-emitter'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -145,13 +144,7 @@ describe('SessionRecording', () => {
         const postHogPersistence = new PostHogPersistence(config)
         postHogPersistence.clear()
 
-        sessionManager = new SessionIdManager(
-            config,
-            postHogPersistence,
-            new SimpleEventEmitter(),
-            sessionIdGeneratorMock,
-            windowIdGeneratorMock
-        )
+        sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
         posthog = {
             get_property: (property_key: string): Property | undefined => {
@@ -856,11 +849,7 @@ describe('SessionRecording', () => {
                 let mockCallback: Mock<SessionIdChangedCallback>
                 let unsubscribeCallback: () => void
                 beforeEach(() => {
-                    sessionManager = new SessionIdManager(
-                        config,
-                        new PostHogPersistence(config),
-                        new SimpleEventEmitter()
-                    )
+                    sessionManager = new SessionIdManager(config, new PostHogPersistence(config))
                     posthog.sessionManager = sessionManager
 
                     mockCallback = jest.fn()
@@ -937,11 +926,7 @@ describe('SessionRecording', () => {
 
             describe('with a real session id manager', () => {
                 beforeEach(() => {
-                    sessionManager = new SessionIdManager(
-                        config,
-                        new PostHogPersistence(config),
-                        new SimpleEventEmitter()
-                    )
+                    sessionManager = new SessionIdManager(config, new PostHogPersistence(config))
                     posthog.sessionManager = sessionManager
 
                     sessionRecording.startRecordingIfEnabled()

@@ -67,7 +67,6 @@ import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
-import { EmitterEvent, SimpleEventEmitter } from './simple-event-emitter'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -220,8 +219,6 @@ export class PostHog {
         set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
     }
 
-    eventEmitter = new SimpleEventEmitter()
-
     constructor() {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
@@ -341,7 +338,7 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this.config, this.persistence, this.eventEmitter)
+        this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
         this.sessionRecording = new SessionRecording(this)
