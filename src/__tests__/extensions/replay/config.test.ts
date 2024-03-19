@@ -1,18 +1,9 @@
 import { defaultConfig } from '../../../posthog-core'
 import { buildNetworkRequestOptions } from '../../../extensions/replay/config'
 import { CapturedNetworkRequest } from '../../../types'
-import { SimpleEventEmitter } from '../../../simple-event-emitter'
 
 describe('config', () => {
     describe('network request options', () => {
-        it('passes event emitter through', () => {
-            expect(buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true }).eventEmitter).toBeUndefined()
-            const eventEmitter = new SimpleEventEmitter()
-            expect(
-                buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true }, eventEmitter).eventEmitter
-            ).toBe(eventEmitter)
-        })
-
         describe('maskRequestFn', () => {
             it('can enable header recording remotely', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true })
@@ -260,7 +251,7 @@ describe('config', () => {
             })
         })
 
-        it('should redact password even when a mask request fn is set', () => {
+        it('mask request fn replaces scrubPayload functionality', () => {
             const posthogConfig = defaultConfig()
             posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
                 return {
@@ -269,6 +260,7 @@ describe('config', () => {
                         ...(data.requestHeaders ? data.requestHeaders : {}),
                         'content-type': 'edited',
                     },
+                    requestBody: 'the provided function ran',
                 }
             }
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
@@ -279,16 +271,17 @@ describe('config', () => {
                     Authorization: 'Bearer 123',
                     'content-type': 'application/json',
                 },
-                requestBody: 'some body with password',
-                responseBody: 'some body with password',
+                requestBody: 'the original value',
+                responseBody: 'the original value',
             } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
                     'content-type': 'edited',
                 },
-                requestBody: '[SessionRecording] Request body redacted as might contain: password',
-                responseBody: '[SessionRecording] Response body redacted as might contain: password',
+                requestBody: 'the provided function ran',
+                responseBody: 'the original value',
             })
         })
 

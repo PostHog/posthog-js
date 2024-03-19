@@ -1,3 +1,20 @@
+## 1.116.2 - 2024-03-18
+
+- feat: add property so we can check if a client is using a proxy (#1084)
+
+## 1.116.1 - 2024-03-18
+
+- chore: Remove v2 rrweb checks (#1080)
+
+## 1.116.0 - 2024-03-15
+
+- fix: allow payload scrubbing override (#1085)
+
+## 1.115.2 - 2024-03-15
+
+- fix: canvas recording patches (#1082)
+- chore: remove cypress log noise (#1086)
+
 ## 1.115.1 - 2024-03-15
 
 - chore: remove v1 rrweb loading (#1078)

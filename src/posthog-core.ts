@@ -23,7 +23,7 @@ import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
-import { RequestRouter } from './utils/request-router'
+import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import {
     AutocaptureConfig,
     CaptureOptions,
@@ -182,7 +182,6 @@ class DeprecatedWebPerformanceObserver {
  */
 export class PostHog {
     __loaded: boolean
-    __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
     config: PostHogConfig
 
     rateLimiter: RateLimiter
@@ -231,7 +230,6 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
-        this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
         this.analyticsDefaultEndpoint = '/e/'
         this.elementsChainAsString = false
@@ -329,15 +327,6 @@ export class PostHog {
                 token: token,
             })
         )
-
-        // Check if recorder.js is already loaded
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        if (window?.rrweb?.record || window?.rrwebRecord) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            this.__loaded_recorder_version = window?.rrweb?.version
-        }
 
         this.compression = config.disable_compression ? undefined : Compression.Base64
 
@@ -814,6 +803,10 @@ export class PostHog {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
+        }
+
+        if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
+            properties['$lib_custom_api_host'] = this.config.api_host
         }
 
         if (

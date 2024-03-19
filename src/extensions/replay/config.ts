@@ -197,7 +197,7 @@ export const buildNetworkRequestOptions = (
     const payloadLimiter = limitPayloadSize(config)
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
-        scrubPayloads(payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d))))
+        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d)))
 
     const hasDeprecatedMaskFunction = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
 
@@ -224,11 +224,7 @@ export const buildNetworkRequestOptions = (
                   ? instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined
                   : undefined
           }
-        : undefined
-
-    if (!config.maskRequestFn) {
-        config.maskRequestFn = enforcedCleaningFn
-    }
+        : (data) => scrubPayloads(enforcedCleaningFn(data))
 
     return {
         ...defaultNetworkOptions,
@@ -236,6 +232,6 @@ export const buildNetworkRequestOptions = (
         recordHeaders: canRecordHeaders,
         recordBody: canRecordBody,
         recordPerformance: canRecordPerformance,
-        recordInitialRequests: canRecordPerformance
+        recordInitialRequests: canRecordPerformance,
     }
 }
