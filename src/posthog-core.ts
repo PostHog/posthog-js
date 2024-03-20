@@ -273,7 +273,7 @@ export class PostHog {
      */
     init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
         if (!name || name === PRIMARY_INSTANCE_NAME) {
-            // This means we are initialising the primary instance (i.e. this)
+            // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
         } else {
             const namedPosthog = instances[name] ?? new PostHog()
@@ -308,7 +308,7 @@ export class PostHog {
         }
 
         if (this.__loaded) {
-            logger.warn('You have already initialized PostHog! Re-initialising is a no-op')
+            logger.warn('You have already initialized PostHog! Re-initializing is a no-op')
             return this
         }
 
