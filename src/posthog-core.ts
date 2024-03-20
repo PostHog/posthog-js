@@ -273,7 +273,7 @@ export class PostHog {
      */
     init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
         if (!name || name === PRIMARY_INSTANCE_NAME) {
-            // This means we are initialising the primary instance (i.e. this)
+            // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
         } else {
             const namedPosthog = instances[name] ?? new PostHog()
@@ -299,17 +299,17 @@ export class PostHog {
     // IE11 compatible. We could use polyfills, which would make the
     // code a bit cleaner, but will add some overhead.
     //
-    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog | void {
+    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog {
         if (_isUndefined(token) || _isEmptyString(token)) {
             logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
             )
-            return
+            return this
         }
 
         if (this.__loaded) {
-            logger.warn('You have already initialized PostHog! Re-initialising is a no-op')
-            return
+            logger.warn('You have already initialized PostHog! Re-initializing is a no-op')
+            return this
         }
 
         this.__loaded = true
