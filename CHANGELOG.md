@@ -1,3 +1,7 @@
+## 1.116.3 - 2024-03-20
+
+- fix: Return this if already loaded (#1092)
+
 ## 1.116.2 - 2024-03-18
 
 - feat: add property so we can check if a client is using a proxy (#1084)
