@@ -299,12 +299,12 @@ export class PostHog {
     // IE11 compatible. We could use polyfills, which would make the
     // code a bit cleaner, but will add some overhead.
     //
-    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog | void {
+    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog {
         if (_isUndefined(token) || _isEmptyString(token)) {
             logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
             )
-            return
+            return this
         }
 
         if (this.__loaded) {
