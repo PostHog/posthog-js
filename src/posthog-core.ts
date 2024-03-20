@@ -309,7 +309,7 @@ export class PostHog {
 
         if (this.__loaded) {
             logger.warn('You have already initialized PostHog! Re-initialising is a no-op')
-            return
+            return this
         }
 
         this.__loaded = true
