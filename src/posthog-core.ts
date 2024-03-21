@@ -14,7 +14,7 @@ import { window, assignableWindow } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
+import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, USER_STATE } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
@@ -235,7 +235,7 @@ export class PostHog {
         this.toolbar = new Toolbar(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
-        this.rateLimiter = new RateLimiter()
+        this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
 
         // NOTE: See the property definition for deprecation notice
@@ -380,7 +380,7 @@ export class PostHog {
                 this.register({
                     distinct_id: config.segment.user().id(),
                 })
-                this.persistence.set_user_state('identified')
+                this.persistence.set_property(USER_STATE, 'identified')
             }
         }
 
@@ -389,7 +389,7 @@ export class PostHog {
         if (config.bootstrap?.distinctID !== undefined) {
             const uuid = this.config.get_device_id(uuidv7())
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
-            this.persistence.set_user_state(config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
+            this.persistence.set_property(USER_STATE, config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
                 distinct_id: config.bootstrap.distinctID,
                 $device_id: deviceID,
@@ -431,7 +431,7 @@ export class PostHog {
                 ''
             )
             // distinct id == $device_id is a proxy for anonymous user
-            this.persistence.set_user_state('anonymous')
+            this.persistence.set_property(USER_STATE, 'anonymous')
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
@@ -554,7 +554,7 @@ export class PostHog {
             return
         }
 
-        if (this.rateLimiter.isRateLimited(options.batchKey)) {
+        if (this.rateLimiter.isServerRateLimited(options.batchKey)) {
             return
         }
 
@@ -562,6 +562,7 @@ export class PostHog {
         options.url = extendURLParams(options.url, {
             // Whether to detect ip info or not
             ip: this.config.ip ? 1 : 0,
+            // TODO: Add client side rate limiting info here?
         })
         options.headers = this.config.request_headers
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
@@ -696,6 +697,11 @@ export class PostHog {
         }
 
         if (userOptedOut(this)) {
+            return
+        }
+
+        if (!options?.skip_client_rate_limiting && this.rateLimiter.isCaptureClientSideRateLimited()) {
+            logger.critical('This capture call is ignored due to client rate limiting.')
             return
         }
 
@@ -1188,12 +1194,12 @@ export class PostHog {
             this.register({ distinct_id: new_distinct_id })
         }
 
-        const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
+        const isKnownAnonymous = (this.persistence.get_property(USER_STATE) || 'anonymous') === 'anonymous'
 
         // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
-            this.persistence.set_user_state('identified')
+            this.persistence.set_property(USER_STATE, 'identified')
 
             // Update current user properties
             this.setPersonPropertiesForFlags(userPropertiesToSet || {}, false)
@@ -1332,7 +1338,7 @@ export class PostHog {
         const device_id = this.get_property('$device_id')
         this.persistence?.clear()
         this.sessionPersistence?.clear()
-        this.persistence?.set_user_state('anonymous')
+        this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         const uuid = this.config.get_device_id(uuidv7())
         this.register_once(
