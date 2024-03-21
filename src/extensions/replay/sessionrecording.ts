@@ -680,11 +680,7 @@ export class SessionRecording {
             if (canRecordNetwork) {
                 plugins.push(
                     assignableWindow.getRecordNetworkPlugin(
-                        buildNetworkRequestOptions(
-                            this.instance.config,
-                            this.networkPayloadCapture,
-                            this.instance.eventEmitter
-                        )
+                        buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
                     )
                 )
             } else {

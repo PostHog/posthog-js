@@ -1083,11 +1083,7 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by useEffect when the component unmounts.
      */
     onSessionId(callback: SessionIdChangedCallback): () => void {
-        return this.eventEmitter.on('session_id_changed', callback)
-    }
-
-    on(event: EmitterEvent, cb: (...args: any[]) => void): () => void {
-        return this.eventEmitter.on(event, cb)
+        return this.sessionManager?.onSessionId(callback) ?? (() => {})
     }
 
     /*
