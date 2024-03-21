@@ -78,6 +78,10 @@ export function patch(
                     enumerable: false,
                     value: original,
                 },
+                __posthog_wrapped__: {
+                    enumerable: false,
+                    value: true,
+                },
             })
         }
 
@@ -564,8 +568,6 @@ function initNetworkObserver(
         xhrObserver = initXhrObserver(cb, win, networkOptions)
         fetchObserver = initFetchObserver(cb, win, networkOptions)
     }
-
-    options.eventEmitter?.emit('network_capture_ready')
 
     return () => {
         performanceObserver()

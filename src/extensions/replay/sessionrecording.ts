@@ -18,7 +18,7 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
-import { _timestamp, loadScript } from '../../utils'
+import { _each, _timestamp, loadScript } from '../../utils'
 
 import {
     _isBoolean,
@@ -655,6 +655,8 @@ export class SessionRecording {
         this._tryAddCustomEvent('$posthog_config', {
             config: this.instance.config,
         })
+
+        _each(this._sessionReplayReadyHandlers, (handler) => handler())
     }
 
     private _scheduleFullSnapshot(): void {

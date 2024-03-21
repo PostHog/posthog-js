@@ -102,7 +102,6 @@ describe('Session recording', () => {
                 },
             })
 
-            cy.posthog().invoke('on', 'network_capture_ready', onNetworkReadyStub)
             cy.wait('@recorder')
         })
 
