@@ -1107,7 +1107,9 @@ export class PostHog {
      */
     onSessionReplayReady(callback: () => void): () => void {
         if (_isUndefined(this.sessionRecording)) {
-            logger.warn('Session recording is not enabled, onSessionReplayReady will never be called')
+            logger.warn(
+                'onSessionReplayReady should be called after the PostHog instance is initialized. Maybe call it from the loaded callback'
+            )
             return __NOOP
         } else {
             return this.sessionRecording.onSessionReplayReady(callback)
