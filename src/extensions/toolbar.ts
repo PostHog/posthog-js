@@ -169,6 +169,7 @@ export class Toolbar {
             loadScript(toolbarUrl, (err) => {
                 if (err) {
                     logger.error('Failed to load toolbar', err)
+                    this._toolbarScriptLoaded = false
                     return
                 }
                 this._callLoadToolbar(toolbarParams)
