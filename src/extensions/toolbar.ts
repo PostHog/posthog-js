@@ -129,7 +129,7 @@ export class Toolbar {
 
     loadToolbar(params?: ToolbarParams): boolean {
         if (!window || window.localStorage.getItem(LOCALSTORAGE_KEY)) {
-            // If we have a toolbar in localStorage, we don't want to load it again
+            // The toolbar will clear the localStorage key when it's done with it. If it is present that indicates the toolbar is already open and running
             return false
         }
 
