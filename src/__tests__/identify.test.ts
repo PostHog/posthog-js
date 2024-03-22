@@ -1,6 +1,6 @@
-import { v4 } from 'uuid'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { logger } from '../utils/logger'
+import { uuidv7 } from '../uuidv7'
 jest.mock('../utils/logger')
 
 describe('identify', () => {
@@ -10,7 +10,7 @@ describe('identify', () => {
 
     it('should persist the distinct_id', async () => {
         // arrange
-        const token = v4()
+        const token = uuidv7()
         const posthog = await createPosthogInstance(token)
         const distinctId = '123'
 
@@ -25,7 +25,7 @@ describe('identify', () => {
 
     it('should convert a numeric distinct_id to a string', async () => {
         // arrange
-        const token = v4()
+        const token = uuidv7()
         const posthog = await createPosthogInstance(token)
         const distinctIdNum = 123
         const distinctIdString = '123'

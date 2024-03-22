@@ -1,4 +1,3 @@
-import 'regenerator-runtime/runtime'
 import { generateSurveys, renderSurveysPreview, renderFeedbackWidgetPreview } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
