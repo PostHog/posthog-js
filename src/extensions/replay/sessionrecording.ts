@@ -381,16 +381,19 @@ export class SessionRecording {
         }
 
         if (!_isNullish(this._linkedFlag)) {
-            const linkedFlag = _isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag?.flag
-            const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag?.variant
+            const linkedFlag = _isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
+            const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag.variant
             this.instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = _isObject(variants) && linkedFlag in variants
                 const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
                 if (linkedFlagMatches) {
-                    logger.info(LOGGER_PREFIX + ' linked flag matched', {
+                    const payload = {
                         linkedFlag,
                         linkedVariant,
-                    })
+                    }
+                    const tag = 'linked flag matched'
+                    logger.info(LOGGER_PREFIX + ' ' + tag, payload)
+                    this._tryAddCustomEvent(tag, payload)
                 }
                 this._linkedFlagSeen = linkedFlagMatches
             })
