@@ -300,7 +300,12 @@ export class SessionRecording {
     private makeSamplingDecision(sessionId: string): void {
         const sessionIdChanged = this.sessionId !== sessionId
 
-        if (!_isNumber(this._sampleRate)) {
+        // capture the current sample rate,
+        // because it is re-used multiple times
+        // and the bundler won't minimise any of the references
+        const currentSampleRate = this._sampleRate
+
+        if (!_isNumber(currentSampleRate)) {
             this.instance.persistence?.register({
                 [SESSION_RECORDING_IS_SAMPLED]: null,
             })
@@ -317,19 +322,23 @@ export class SessionRecording {
          * Otherwise, we should use the stored decision.
          */
         let shouldSample: boolean
-        if (sessionIdChanged || !_isBoolean(storedIsSampled)) {
+        const makeDecision = sessionIdChanged || !_isBoolean(storedIsSampled)
+        if (makeDecision) {
             const randomNumber = Math.random()
-            shouldSample = randomNumber < this._sampleRate
+            shouldSample = randomNumber < currentSampleRate
         } else {
             shouldSample = storedIsSampled
         }
 
-        if (!shouldSample) {
+        if (!shouldSample && makeDecision) {
             logger.warn(
                 LOGGER_PREFIX +
-                    ` Sample rate (${this._sampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                    ` Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
             )
         }
+        this._tryAddCustomEvent('samplingDecisionMade', {
+            sampleRate: currentSampleRate,
+        })
 
         this.instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
@@ -372,16 +381,19 @@ export class SessionRecording {
         }
 
         if (!_isNullish(this._linkedFlag)) {
-            const linkedFlag = _isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag?.flag
-            const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag?.variant
+            const linkedFlag = _isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
+            const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag.variant
             this.instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = _isObject(variants) && linkedFlag in variants
                 const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
                 if (linkedFlagMatches) {
-                    logger.info(LOGGER_PREFIX + ' linked flag matched', {
+                    const payload = {
                         linkedFlag,
                         linkedVariant,
-                    })
+                    }
+                    const tag = 'linked flag matched'
+                    logger.info(LOGGER_PREFIX + ' ' + tag, payload)
+                    this._tryAddCustomEvent(tag, payload)
                 }
                 this._linkedFlagSeen = linkedFlagMatches
             })
