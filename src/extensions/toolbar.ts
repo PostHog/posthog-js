@@ -11,8 +11,13 @@ const STATE_FROM_WINDOW = window?.location
     ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
     : null
 
+const LOCALSTORAGE_KEY = '_postHogToolbarParams'
+
 export class Toolbar {
     instance: PostHog
+
+    private _toolbarScriptLoaded = false
+
     constructor(instance: PostHog) {
         this.instance = instance
     }
@@ -98,8 +103,8 @@ export class Toolbar {
                     }
                 }
             } else {
-                // get credentials from localStorage from a previous initialzation
-                toolbarParams = JSON.parse(localStorage.getItem('_postHogToolbarParams') || '{}')
+                // get credentials from localStorage from a previous initialization
+                toolbarParams = JSON.parse(localStorage.getItem(LOCALSTORAGE_KEY) || '{}')
                 toolbarParams.source = 'localstorage'
 
                 // delete "add-action" or other intent from toolbarParams, otherwise we'll have the same intent
@@ -118,22 +123,16 @@ export class Toolbar {
         }
     }
 
+    private _callLoadToolbar(params: ToolbarParams) {
+        ;(assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor'])(params, this.instance)
+    }
+
     loadToolbar(params?: ToolbarParams): boolean {
-        if (!window || assignableWindow['_postHogToolbarLoaded']) {
+        if (!window || window.localStorage.getItem(LOCALSTORAGE_KEY)) {
+            // If we have a toolbar in localStorage, we don't want to load it again
             return false
         }
-        // only load the toolbar once, even if there are multiple instances of PostHogLib
-        assignableWindow['_postHogToolbarLoaded'] = true
 
-        // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
-        // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
-        const fiveMinutesInMillis = 5 * 60 * 1000
-        // this ensures that we bust the cache periodically
-        const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
-        const toolbarUrl = this.instance.requestRouter.endpointFor(
-            'assets',
-            `/static/toolbar.js?t=${timestampToNearestFiveMinutes}`
-        )
         const disableToolbarMetrics =
             this.instance.requestRouter.region === 'custom' && this.instance.config.advanced_disable_toolbar_metrics
 
@@ -143,23 +142,41 @@ export class Toolbar {
             apiURL: this.instance.requestRouter.endpointFor('ui'),
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
-
         const { source: _discard, ...paramsToPersist } = toolbarParams // eslint-disable-line
-        window.localStorage.setItem('_postHogToolbarParams', JSON.stringify(paramsToPersist))
+        window.localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(paramsToPersist))
 
-        loadScript(toolbarUrl, (err) => {
-            if (err) {
-                logger.error('Failed to load toolbar', err)
-                return
-            }
-            ;(assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor'])(toolbarParams, this.instance)
-        })
-        // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
-        // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
-        _register_event(window, 'turbolinks:load', () => {
-            assignableWindow['_postHogToolbarLoaded'] = false
-            this.loadToolbar(toolbarParams)
-        })
+        if (this._toolbarScriptLoaded) {
+            this._callLoadToolbar(toolbarParams)
+        } else {
+            // only load the toolbar once, even if there are multiple instances of PostHogLib
+            this._toolbarScriptLoaded = true
+
+            // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
+            // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
+            const fiveMinutesInMillis = 5 * 60 * 1000
+            // this ensures that we bust the cache periodically
+            const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
+            const toolbarUrl = this.instance.requestRouter.endpointFor(
+                'assets',
+                `/static/toolbar.js?t=${timestampToNearestFiveMinutes}`
+            )
+
+            loadScript(toolbarUrl, (err) => {
+                if (err) {
+                    logger.error('Failed to load toolbar', err)
+                    return
+                }
+                this._callLoadToolbar(toolbarParams)
+            })
+
+            // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
+            // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
+            _register_event(window, 'turbolinks:load', () => {
+                this._toolbarScriptLoaded = false
+                this.loadToolbar(toolbarParams)
+            })
+        }
+
         return true
     }
 
