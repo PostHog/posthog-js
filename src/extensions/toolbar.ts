@@ -128,7 +128,7 @@ export class Toolbar {
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
-        if (!window || window.localStorage.getItem(LOCALSTORAGE_KEY)) {
+        if (!window || (window.localStorage.getItem(LOCALSTORAGE_KEY) && this._toolbarScriptLoaded)) {
             // The toolbar will clear the localStorage key when it's done with it. If it is present that indicates the toolbar is already open and running
             return false
         }
@@ -142,8 +142,13 @@ export class Toolbar {
             apiURL: this.instance.requestRouter.endpointFor('ui'),
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
-        const { source: _discard, ...paramsToPersist } = toolbarParams // eslint-disable-line
-        window.localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(paramsToPersist))
+        window.localStorage.setItem(
+            LOCALSTORAGE_KEY,
+            JSON.stringify({
+                ...toolbarParams,
+                source: undefined,
+            })
+        )
 
         if (this._toolbarScriptLoaded) {
             this._callLoadToolbar(toolbarParams)
