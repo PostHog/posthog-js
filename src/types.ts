@@ -404,12 +404,18 @@ export type NetworkRecordOptions = {
     recordHeaders?: boolean | { request: boolean; response: boolean }
     recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
     recordInitialRequests?: boolean
-    // whether to record PerformanceEntry events for network requests
+    /**
+     * whether to record PerformanceEntry events for network requests
+     */
     recordPerformance?: boolean
-    // the PerformanceObserver will only observe these entry types
+    /**
+     * the PerformanceObserver will only observe these entry types
+     */
     performanceEntryTypeToObserve: string[]
-    // the maximum size of the request/response body to record
-    // NB this will be at most 1MB even if set larger
+    /**
+     * the maximum size of the request/response body to record
+     * NB this will be at most 1MB even if set larger
+     */
     payloadSizeLimitBytes: number
 }
 

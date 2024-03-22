@@ -848,7 +848,6 @@ describe('SessionRecording', () => {
             describe('onSessionId Callbacks', () => {
                 let mockCallback: Mock<SessionIdChangedCallback>
                 let unsubscribeCallback: () => void
-
                 beforeEach(() => {
                     sessionManager = new SessionIdManager(config, new PostHogPersistence(config))
                     posthog.sessionManager = sessionManager

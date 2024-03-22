@@ -78,6 +78,10 @@ export function patch(
                     enumerable: false,
                     value: original,
                 },
+                __posthog_wrapped__: {
+                    enumerable: false,
+                    value: true,
+                },
             })
         }
 
