@@ -1086,36 +1086,6 @@ export class PostHog {
         return this.sessionManager?.onSessionId(callback) ?? (() => {})
     }
 
-    /*
-     * Register an event listener that runs when session replay has started.
-     * If it has already started then the listener is called immediately.
-     *
-     * This is not called for each individual recording
-     *
-     * Can be used, for example, to wait for fetch to have been wrapped
-     * before making some API calls it is important to capture in replay
-     *
-     * If network capture is enabled this is not called until network capture has started
-     * and (if it is enabled) fetch/xhr have been wrapped
-     *
-     * ### Usage:
-     *
-     *     posthog.onSessionReplayReady(function() { aPromiseInYourSetupCode.resolve() })
-     *
-     * @param {Function} [callback] The callback function will be called once the replay feature has started.
-     * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by useEffect when the component unmounts.
-     */
-    onSessionReplayReady(callback: () => void): () => void {
-        if (_isUndefined(this.sessionRecording)) {
-            logger.warn(
-                'onSessionReplayReady should be called after the PostHog instance is initialized. Maybe call it from the loaded callback'
-            )
-            return __NOOP
-        } else {
-            return this.sessionRecording.onSessionReplayReady(callback)
-        }
-    }
-
     /** Get list of all surveys. */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getSurveys(callback, forceReload)

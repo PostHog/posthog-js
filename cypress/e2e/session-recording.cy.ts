@@ -79,10 +79,7 @@ describe('Session recording', () => {
     })
 
     describe('with network capture', () => {
-        let onNetworkReadyStub
         beforeEach(() => {
-            onNetworkReadyStub = cy.stub()
-
             start({
                 decideResponseOverrides: {
                     config: { enable_collect_everything: false },
@@ -97,7 +94,6 @@ describe('Session recording', () => {
                 options: {
                     loaded: (ph) => {
                         ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
-                        ph.onSessionReplayReady(onNetworkReadyStub)
                     },
                 },
             })
@@ -121,8 +117,6 @@ describe('Session recording', () => {
                 }
                 // yay, includes type 6 network data
                 expect(snapshotTypes.filter((x) => x === 6)).to.have.length.above(0)
-
-                expect(onNetworkReadyStub).to.have.been.called
             })
         })
     })
