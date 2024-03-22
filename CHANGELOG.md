@@ -1,3 +1,8 @@
+## 1.116.4 - 2024-03-22
+
+- fix: custom event on sampling decision (#1094)
+- feat: signal we have wrapped fetch (#1083)
+
 ## 1.116.3 - 2024-03-20
 
 - fix: Return this if already loaded (#1092)
