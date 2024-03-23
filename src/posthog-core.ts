@@ -78,6 +78,13 @@ this.__x === private - only use within the class
 Globals should be all caps
 */
 
+/* posthog.init is called with `Partial<PostHogConfig>` but we want to ensure that only valid keys are passed
+ * to the config object.
+ * This type ensures that only keys that are valid in the PostHogConfig type are allowed.
+ * it even works for nested types
+ */
+type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> extends never ? T : never) : never
+
 const instances: Record<string, PostHog> = {}
 
 // some globals for comparisons
@@ -271,7 +278,11 @@ export class PostHog {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
+    init(
+        token: string,
+        config?: OnlyValidKeys<Partial<PostHogConfig>, Partial<PostHogConfig>>,
+        name?: string
+    ): PostHog | void {
         if (!name || name === PRIMARY_INSTANCE_NAME) {
             // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
@@ -382,17 +393,6 @@ export class PostHog {
                 })
                 this.persistence.set_user_state('identified')
             }
-        }
-
-        if (
-            !_isUndefined(config.bootstrap) &&
-            _isUndefined(config.bootstrap.distinctID) &&
-            ((config.bootstrap as any).distinctId || (config.bootstrap as any).distinct_id)
-        ) {
-            // distinctId (lowercase d) is a reasonable typo for distinctID
-            // that we have seen in the wild
-            logger.info('bootstrap distinctId is a typo. It should be distinctID (capital D). Copying the value.')
-            config.bootstrap.distinctID = (config.bootstrap as any).distinctId || (config.bootstrap as any).distinct_id
         }
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign

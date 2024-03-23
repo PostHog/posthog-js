@@ -61,6 +61,13 @@ export interface AutocaptureConfig {
     capture_copied_text?: boolean
 }
 
+export interface BootstrapConfig {
+    distinctID?: string
+    isIdentifiedID?: boolean
+    featureFlags?: Record<string, boolean | string>
+    featureFlagPayloads?: Record<string, JsonType>
+}
+
 export interface PostHogConfig {
     api_host: string
     /** @deprecated - This property is no longer supported */
@@ -132,12 +139,7 @@ export interface PostHogConfig {
     capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
-    bootstrap: {
-        distinctID?: string
-        isIdentifiedID?: boolean
-        featureFlags?: Record<string, boolean | string>
-        featureFlagPayloads?: Record<string, JsonType>
-    }
+    bootstrap: BootstrapConfig
     segment?: any
     __preview_send_client_session_params?: boolean
     disable_scroll_properties?: boolean

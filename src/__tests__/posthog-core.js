@@ -7,7 +7,6 @@ import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
-import { createPosthogInstance } from './helpers/posthog-instance'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
@@ -32,35 +31,6 @@ describe('posthog core', () => {
         jest.useRealTimers()
         // Make sure there's no cached persistence
         given.lib.persistence?.clear?.()
-    })
-
-    describe('bootstrap()', () => {
-        it('handles reasonable typo of distinctId', async () => {
-            const ph = await createPosthogInstance(uuidv7(), {
-                advanced_disable_decide: false,
-                // NB typo of `distinctID` as `distinctId` (lower csae `d`)
-                bootstrap: { distinctId: 'anon-id' },
-            })
-            expect(ph.config.bootstrap.distinctID).toEqual('anon-id')
-        })
-
-        it('handles reasonable typo of distinct_id', async () => {
-            const ph = await createPosthogInstance(uuidv7(), {
-                advanced_disable_decide: false,
-                // NB typo of `distinctID` as `distinctId` (lower csae `d`)
-                bootstrap: { distinct_id: 'anon-id' },
-            })
-            expect(ph.config.bootstrap.distinctID).toEqual('anon-id')
-        })
-
-        it('handles reasonable typos without overriding', async () => {
-            const ph = await createPosthogInstance(uuidv7(), {
-                advanced_disable_decide: false,
-                // NB typo of `distinctID` as `distinctId` (lower csae `d`)
-                bootstrap: { distinctId: 'anon-id', distinctID: 'correct-id' },
-            })
-            expect(ph.config.bootstrap.distinctID).toEqual('correct-id')
-        })
     })
 
     describe('capture()', () => {
