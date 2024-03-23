@@ -78,10 +78,13 @@ this.__x === private - only use within the class
 Globals should be all caps
 */
 
-/* posthog.init is called with `Partial<PostHogConfig>` but we want to ensure that only valid keys are passed
- * to the config object.
- * This type ensures that only keys that are valid in the PostHogConfig type are allowed.
- * it even works for nested types
+/* posthog.init is called with `Partial<PostHogConfig>`
+ * and we want to ensure that only valid keys are passed to the config object.
+ * TypeScript does not enforce that the object passed does not have extra keys.
+ * So someone can call with { bootstrap: { distinctId: '123'} }
+ * which is not a valid key. They should have passed distinctID (upper case D).
+ * That's a really tricky mistake to spot.
+ * The OnlyValidKeys type ensures that only keys that are valid in the PostHogConfig type are allowed.
  */
 type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> extends never ? T : never) : never
 
