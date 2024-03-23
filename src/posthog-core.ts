@@ -78,6 +78,16 @@ this.__x === private - only use within the class
 Globals should be all caps
 */
 
+/* posthog.init is called with `Partial<PostHogConfig>`
+ * and we want to ensure that only valid keys are passed to the config object.
+ * TypeScript does not enforce that the object passed does not have extra keys.
+ * So someone can call with { bootstrap: { distinctId: '123'} }
+ * which is not a valid key. They should have passed distinctID (upper case D).
+ * That's a really tricky mistake to spot.
+ * The OnlyValidKeys type ensures that only keys that are valid in the PostHogConfig type are allowed.
+ */
+type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> extends never ? T : never) : never
+
 const instances: Record<string, PostHog> = {}
 
 // some globals for comparisons
@@ -271,7 +281,11 @@ export class PostHog {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
+    init(
+        token: string,
+        config?: OnlyValidKeys<Partial<PostHogConfig>, Partial<PostHogConfig>>,
+        name?: string
+    ): PostHog | void {
         if (!name || name === PRIMARY_INSTANCE_NAME) {
             // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
