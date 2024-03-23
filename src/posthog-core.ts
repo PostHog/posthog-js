@@ -387,12 +387,12 @@ export class PostHog {
         if (
             !_isUndefined(config.bootstrap) &&
             _isUndefined(config.bootstrap.distinctID) &&
-            (config.bootstrap as any).distinctId
+            ((config.bootstrap as any).distinctId || (config.bootstrap as any).distinct_id)
         ) {
             // distinctId (lowercase d) is a reasonable typo for distinctID
             // that we have seen in the wild
-            logger.warn('bootstrap distinctId is a typo. It should be distinctID (capital D). Copying the value.')
-            config.bootstrap.distinctID = (config.bootstrap as any)?.distinctId
+            logger.info('bootstrap distinctId is a typo. It should be distinctID (capital D). Copying the value.')
+            config.bootstrap.distinctID = (config.bootstrap as any).distinctId || (config.bootstrap as any).distinct_id
         }
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign

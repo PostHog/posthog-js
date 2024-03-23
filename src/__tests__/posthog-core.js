@@ -35,7 +35,7 @@ describe('posthog core', () => {
     })
 
     describe('bootstrap()', () => {
-        it('handles reasonable typos', async () => {
+        it('handles reasonable typo of distinctId', async () => {
             const ph = await createPosthogInstance(uuidv7(), {
                 advanced_disable_decide: false,
                 // NB typo of `distinctID` as `distinctId` (lower csae `d`)
@@ -44,7 +44,16 @@ describe('posthog core', () => {
             expect(ph.config.bootstrap.distinctID).toEqual('anon-id')
         })
 
-        it('handles reasonable typos without overidding', async () => {
+        it('handles reasonable typo of distinct_id', async () => {
+            const ph = await createPosthogInstance(uuidv7(), {
+                advanced_disable_decide: false,
+                // NB typo of `distinctID` as `distinctId` (lower csae `d`)
+                bootstrap: { distinct_id: 'anon-id' },
+            })
+            expect(ph.config.bootstrap.distinctID).toEqual('anon-id')
+        })
+
+        it('handles reasonable typos without overriding', async () => {
             const ph = await createPosthogInstance(uuidv7(), {
                 advanced_disable_decide: false,
                 // NB typo of `distinctID` as `distinctId` (lower csae `d`)
