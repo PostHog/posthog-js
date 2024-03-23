@@ -1,3 +1,7 @@
+## 1.116.5 - 2024-03-23
+
+- fix: posthog init should reject invalid config in TypeScript (#1097)
+
 ## 1.116.4 - 2024-03-22
 
 - fix: custom event on sampling decision (#1094)
