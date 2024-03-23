@@ -384,6 +384,17 @@ export class PostHog {
             }
         }
 
+        if (
+            !_isUndefined(config.bootstrap) &&
+            _isUndefined(config.bootstrap.distinctID) &&
+            (config.bootstrap as any).distinctId
+        ) {
+            // distinctId (lowercase d) is a reasonable typo for distinctID
+            // that we have seen in the wild
+            logger.warn('bootstrap distinctId is a typo. It should be distinctID (capital D). Copying the value.')
+            config.bootstrap.distinctID = (config.bootstrap as any)?.distinctId
+        }
+
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
