@@ -32,7 +32,6 @@ describe('posthog core', () => {
         // Make sure there's no cached persistence
         given.lib.persistence?.clear?.()
     })
-
     describe('capture()', () => {
         given('eventName', () => '$event')
 
