@@ -4777,7 +4777,7 @@ packages:
   /endpoint-utils@1.0.2:
     resolution: {integrity: sha512-s5IrlLvx7qVXPOjcxjF00CRBlybiQWOoGCNiIZ/Vin2WeJ3SHtfkWHRsyu7C1+6QAwYXf0ULoweylxUa19Khjg==}
     dependencies:
-      ip: 1.1.5
+      ip: 1.1.9
       pinkie-promise: 1.0.0
     dev: true
 
@@ -6185,8 +6185,8 @@ packages:
       fp-ts: 2.16.2
     dev: true
 
-  /ip@1.1.5:
-    resolution: {integrity: sha512-rBtCAQAJm8A110nbwn6YdveUnuZH3WrC36IwkRXxDnq53JvXA2NVQvB7IHyKomxK1MJ4VDNw3UtFDdXQ+AvLYA==}
+  /ip@1.1.9:
+    resolution: {integrity: sha512-cyRxvOEpNHNtchU3Ln9KC/auJgup87llfQpQ+t5ghoC/UhL16SWzbueiCsdTnWmqAWl7LadfuwhlqmtOaqMHdQ==}
     dev: true
 
   /ipaddr.js@1.9.1:
