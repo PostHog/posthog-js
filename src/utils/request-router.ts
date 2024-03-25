@@ -14,6 +14,8 @@ export enum RequestRouterRegion {
 
 export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 
+const ingestionDomain = 'i.posthog.com'
+
 export class RequestRouter {
     instance: PostHog
     private _regionCache: Record<string, RequestRouterRegion> = {}
@@ -49,14 +51,14 @@ export class RequestRouter {
         }
 
         if (target === 'ui') {
-            return (this.uiHost || this.apiHost) + path
+            return (this.uiHost || this.apiHost.replace(`.${ingestionDomain}`, '.posthog.com')) + path
         }
 
         if (this.region === RequestRouterRegion.CUSTOM) {
             return this.apiHost + path
         }
 
-        const suffix = 'i.posthog.com' + path
+        const suffix = ingestionDomain + path
 
         switch (target) {
             case 'assets':
