@@ -1,3 +1,7 @@
+## 1.116.6 - 2024-03-25
+
+- fix: Reloading toolbar after closing (#1095)
+
 ## 1.116.5 - 2024-03-23
 
 - fix: posthog init should reject invalid config in TypeScript (#1097)
