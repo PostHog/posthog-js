@@ -1405,7 +1405,7 @@ export class PostHog {
             return ''
         }
         const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        let url = this.requestRouter.endpointFor('ui', '/replay/' + sessionId)
+        let url = this.requestRouter.endpointFor('ui', `/project/${this.config.token}/replay/${sessionId}`)
         if (options?.withTimestamp && sessionStartTimestamp) {
             const LOOK_BACK = options.timestampLookBack ?? 10
             if (!sessionStartTimestamp) {

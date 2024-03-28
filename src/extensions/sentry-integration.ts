@@ -64,7 +64,10 @@ export class SentryIntegration implements _SentryIntegration {
                 if (event.level !== 'error' || !_posthog.__loaded) return event
                 if (!event.tags) event.tags = {}
 
-                const personUrl = _posthog.requestRouter.endpointFor('ui', '/person/' + _posthog.get_distinct_id())
+                const personUrl = _posthog.requestRouter.endpointFor(
+                    'ui',
+                    `/project/${_posthog.config.token}/person/${_posthog.get_distinct_id()}`
+                )
                 event.tags['PostHog Person URL'] = personUrl
                 if (_posthog.sessionRecordingStarted()) {
                     event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
