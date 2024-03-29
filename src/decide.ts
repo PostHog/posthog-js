@@ -37,7 +37,7 @@ export class Decide {
             method: 'POST',
             url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             data,
-            compression: Compression.Base64,
+            compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
             callback: (response) => this.parseDecideResponse(response.json as DecideResponse | undefined),
         })
