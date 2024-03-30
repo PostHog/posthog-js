@@ -1,5 +1,32 @@
 import { assertWhetherPostHogRequestsWereCalled } from '../support/assertions'
 
+function pollPhCaptures(event, wait = 200, attempts = 0, maxAttempts = 50) {
+    return cy.phCaptures().then((capturesArray) => {
+        if (capturesArray.some((capture) => capture === event)) {
+            return cy.wrap(true)
+        } else if (attempts < maxAttempts) {
+            // If not found and the max attempts are not reached, wait for a moment and try again
+            return cy.wait(wait).then(() => {
+                return pollPhCaptures(event, wait, attempts + 1, maxAttempts)
+            })
+        } else {
+            // Log the failure to find the value after max attempts
+            throw new Error('Max attempts reached without finding the expected event')
+        }
+    })
+}
+
+function assertThatRecordingStarted() {
+    cy.phCaptures({ full: true }).then((captures) => {
+        expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+
+        expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(2)
+        // a meta and then a full snapshot
+        expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+        expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+    })
+}
+
 describe('opting out', () => {
     describe('session recording', () => {
         beforeEach(() => {
@@ -71,10 +98,7 @@ describe('opting out', () => {
                 })
         })
 
-        // TODO: after opting in the onCapture hook isn't being called
-        //  so we're not able to assert on behaviour anymore
-        // but observing it all works ok
-        it.skip('can start recording after starting opted out', () => {
+        it('can start recording after starting opted out', () => {
             cy.posthogInit({ opt_out_capturing_by_default: true })
 
             assertWhetherPostHogRequestsWereCalled({
@@ -99,24 +123,52 @@ describe('opting out', () => {
 
             cy.resetPhCaptures()
 
-            cy.get('[data-cy-input]')
-                .type('hello posthog!')
-                .wait(200)
-                .then(() => {
-                    cy.phCaptures({ full: true }).then((captures) => {
-                        // should be a pageview and a $snapshot
-                        expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+            cy.get('[data-cy-input]').type('hello posthog!')
 
-                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(38)
-                        // a meta and then a full snapshot
-                        expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
-                        expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-                        // Making a set from the rest should all be 3 - incremental snapshots
-                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(3)
-                        expect(new Set(incrementalSnapshots.map((s) => s.type))).to.deep.equal(new Set([3]))
-                    })
-                })
+            pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
+        })
+
+        it('can override sampling when starting session recording', () => {
+            cy.intercept('POST', '/decide/*', {
+                config: { enable_collect_everything: false },
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            cy.posthogInit({
+                opt_out_capturing_by_default: true,
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.posthog().invoke('startSessionRecording', { sampling: true })
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.resetPhCaptures()
+
+            cy.get('[data-cy-input]').type('hello posthog!')
+
+            pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
         })
     })
 })
