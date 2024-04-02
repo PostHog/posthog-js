@@ -170,6 +170,7 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
+    process_person: 'always',
 })
 
 class DeprecatedWebPerformanceObserver {
