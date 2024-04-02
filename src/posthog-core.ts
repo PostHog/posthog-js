@@ -386,15 +386,31 @@ export class PostHog {
         this._gdpr_init()
 
         if (config.segment) {
-            // Use segments anonymousId instead
-            this.config.get_device_id = () => config.segment.user().anonymousId()
+            // If segment analytics.js 2.0
+            if (config.segment.user() instanceof Promise) {
+                config.segment.user().then((user: any) => {
+                    // Use segments anonymousId instead
+                    this.config.get_device_id = () => user.anonymousId()
 
-            // If a segment user ID exists, set it as the distinct_id
-            if (config.segment.user().id()) {
-                this.register({
-                    distinct_id: config.segment.user().id(),
+                    // If a segment user ID exists, set it as the distinct_id
+                    if (user.id()) {
+                        this.register({
+                            distinct_id: user.id(),
+                        })
+                        this.persistence?.set_user_state('identified')
+                    }
                 })
-                this.persistence.set_user_state('identified')
+            } else {
+                // Use segments anonymousId instead
+                this.config.get_device_id = () => config.segment.user().anonymousId()
+
+                // If a segment user ID exists, set it as the distinct_id
+                if (config.segment.user().id()) {
+                    this.register({
+                        distinct_id: config.segment.user().id(),
+                    })
+                    this.persistence.set_user_state('identified')
+                }
             }
         }
 
