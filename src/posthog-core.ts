@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { window, assignableWindow } from './utils/globals'
+import { window, assignableWindow, location } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -124,7 +124,7 @@ export const defaultConfig = (): PostHogConfig => ({
     save_referrer: true,
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
-    debug: false,
+    debug: (location?.search && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     verbose: false,
     cookie_expiration: 365,
     upgrade: false,
