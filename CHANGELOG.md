@@ -1,3 +1,7 @@
+## 1.116.7 - 2024-04-03
+
+- fix(decide): Respect disable_compression for flags (#1102)
+
 ## 1.116.6 - 2024-03-25
 
 - fix: Reloading toolbar after closing (#1095)
