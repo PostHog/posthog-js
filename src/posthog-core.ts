@@ -904,6 +904,27 @@ export class PostHog {
             properties = sanitize_properties(properties, event_name)
         }
 
+        // add person processing flag as very last step, so it cannot be overridden
+        const process_person =
+            this.config.process_person === 'always' ||
+            (this.config.process_person === 'identified_only' && this.persistence.get_user_state() === 'identified')
+        properties['$process_person'] = process_person
+
+        if (!process_person) {
+            if (properties['$set']) {
+                logger.error(
+                    'Invalid property $set for event where person processing is disabled. This property will not be set.'
+                )
+                delete properties['$set']
+            }
+            if (properties['$set_once']) {
+                logger.error(
+                    'Invalid property $set_once for event where person processing is disabled. This property will not be set.'
+                )
+                delete properties['$set_once']
+            }
+        }
+
         return properties
     }
 
