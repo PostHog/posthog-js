@@ -1256,8 +1256,6 @@ export class PostHog {
     }
 
     /**
-     * Alpha feature: don't use unless you know what you're doing!
-     *
      * Sets group analytics information for subsequent events and reloads feature flags.
      *
      * @param {String} groupType Group type (example: 'organization')
