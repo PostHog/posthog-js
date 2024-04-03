@@ -1,3 +1,7 @@
+## 1.117.0 - 2024-04-03
+
+- feat: Add __posthog_debug query string (#1108)
+
 ## 1.116.7 - 2024-04-03
 
 - fix(decide): Respect disable_compression for flags (#1102)
