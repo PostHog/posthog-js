@@ -904,10 +904,11 @@ export class PostHog {
             properties = sanitize_properties(properties, event_name)
         }
 
-        // add person processing flag as very last step, so it cannot be overridden
-        const process_person =
-            this.config.process_person === 'always' ||
-            (this.config.process_person === 'identified_only' && this.persistence.get_user_state() === 'identified')
+        // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
+        const process_person = !(
+            this.config.process_person === 'never' ||
+            (this.config.process_person === 'identified_only' && this.persistence.get_user_state() === 'anonymous')
+        )
         properties['$process_person'] = process_person
 
         if (!process_person) {
