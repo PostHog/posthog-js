@@ -1,3 +1,7 @@
+## 1.117.2 - 2024-04-03
+
+- feat: measure identified events (#1114)
+
 ## 1.117.1 - 2024-04-03
 
 - fix: block bytespider bot (#1113)
