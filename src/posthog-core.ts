@@ -124,7 +124,7 @@ export const defaultConfig = (): PostHogConfig => ({
     save_referrer: true,
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
-    debug: (location?.search && location.search.indexOf('__posthog_debug=true') !== -1) || false,
+    debug: (location && _isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     verbose: false,
     cookie_expiration: 365,
     upgrade: false,
