@@ -899,6 +899,9 @@ export class PostHog {
             properties = sanitize_properties(properties, event_name)
         }
 
+        // Add as late as possible, so it can't be overridden
+        properties['$is_identified'] = this.persistence.get_user_state() === 'identified'
+
         return properties
     }
 

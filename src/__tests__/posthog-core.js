@@ -60,6 +60,7 @@ describe('posthog core', () => {
                     Object.assign(this.props, properties)
                 },
                 props: {},
+                get_user_state: () => 'anonymous',
             },
             sessionPersistence: {
                 update_search_keyword: jest.fn(),
