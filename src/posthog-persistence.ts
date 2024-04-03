@@ -111,6 +111,9 @@ export class PostHogPersistence {
                 p[k] = v
             }
         })
+
+        p['$is_identified'] = this.get_user_state() === 'identified'
+
         return p
     }
 
