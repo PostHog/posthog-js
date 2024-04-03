@@ -1,3 +1,8 @@
+## 1.117.1 - 2024-04-03
+
+- fix: block bytespider bot (#1113)
+- fix: remove alpha comments from groups (#1111)
+
 ## 1.117.0 - 2024-04-03
 
 - feat: Add __posthog_debug query string (#1108)
