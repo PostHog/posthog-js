@@ -1,3 +1,7 @@
+## 1.118.0 - 2024-04-04
+
+- feat: capture more sentry levels (#1104)
+
 ## 1.117.2 - 2024-04-03
 
 - feat: measure identified events (#1114)
