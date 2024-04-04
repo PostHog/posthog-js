@@ -46,6 +46,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'googleweblight',
     'mediapartners-google',
     'storebot-google',
+    'Bytespider;',
 ]
 
 /**
@@ -58,11 +59,8 @@ export const _isBlockedUA = function (ua: string, customBlockedUserAgents: strin
     const uaLower = ua.toLowerCase()
     return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents || []).some((blockedUA) => {
         const blockedUaLower = blockedUA.toLowerCase()
-        if (uaLower.includes) {
-            return uaLower.includes(blockedUaLower)
-        } else {
-            // IE 11 :/
-            return uaLower.indexOf(blockedUaLower) !== -1
-        }
+
+        // can't use includes because IE 11 :/
+        return uaLower.indexOf(blockedUaLower) !== -1
     })
 }

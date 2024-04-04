@@ -3,7 +3,7 @@ import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 
-const expectDecodedSendRequest = (send_request, data) => {
+const expectDecodedSendRequest = (send_request, data, noCompression) => {
     const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
 
     const decoded = lastCall[0].data
@@ -15,7 +15,7 @@ const expectDecodedSendRequest = (send_request, data) => {
         data,
         method: 'POST',
         callback: expect.any(Function),
-        compression: 'base64',
+        compression: noCompression ? undefined : 'base64',
         timeout: undefined,
     })
 }
@@ -114,6 +114,33 @@ describe('Decide', () => {
                 group_properties: { organization: { orgName: 'orgValue' } },
                 disable_flags: true,
             })
+        })
+
+        it('should disable compression when config is set', () => {
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+                disable_compression: true,
+            }))
+            given.posthog.register({
+                $stored_person_properties: {},
+                $stored_group_properties: {},
+            })
+            given.subject()
+
+            // noCompression is true
+            expectDecodedSendRequest(
+                given.posthog._send_request,
+                {
+                    token: 'testtoken',
+                    distinct_id: 'distinctid',
+                    groups: { organization: '5' },
+                    person_properties: {},
+                    group_properties: {},
+                },
+                true
+            )
         })
 
         it('should send disable flags with decide request when config for advanced_disable_feature_flags_on_first_load is set', () => {

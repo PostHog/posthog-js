@@ -1,3 +1,20 @@
+## 1.117.2 - 2024-04-03
+
+- feat: measure identified events (#1114)
+
+## 1.117.1 - 2024-04-03
+
+- fix: block bytespider bot (#1113)
+- fix: remove alpha comments from groups (#1111)
+
+## 1.117.0 - 2024-04-03
+
+- feat: Add __posthog_debug query string (#1108)
+
+## 1.116.7 - 2024-04-03
+
+- fix(decide): Respect disable_compression for flags (#1102)
+
 ## 1.116.6 - 2024-03-25
 
 - fix: Reloading toolbar after closing (#1095)

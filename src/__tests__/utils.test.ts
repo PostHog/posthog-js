@@ -161,6 +161,9 @@ describe('utils', () => {
             ],
             ['AhrefsSiteAudit (Desktop) - Mozilla/5.0 (compatible; AhrefsSiteAudit/6.1; +http://ahrefs.com/robot/)'],
             ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)'],
+            [
+                'Mozilla/5.0 (Linux; Android 5.0) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36 (compatible; Bytespider; spider-feedback@bytedance.com)',
+            ],
         ])('blocks based on user agent', (botString) => {
             expect(_isBlockedUA(botString, [])).toBe(true)
             expect(_isBlockedUA(botString.toLowerCase(), [])).toBe(true)

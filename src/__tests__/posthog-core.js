@@ -60,6 +60,7 @@ describe('posthog core', () => {
                     Object.assign(this.props, properties)
                 },
                 props: {},
+                get_user_state: () => 'anonymous',
             },
             sessionPersistence: {
                 update_search_keyword: jest.fn(),
@@ -369,7 +370,7 @@ describe('posthog core', () => {
         given('overrides', () => ({
             config: given.config,
             persistence: {
-                properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+                properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
             },
             sessionPersistence: {
@@ -406,6 +407,7 @@ describe('posthog core', () => {
                 persistent: 'prop',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $is_identified: false,
             })
         })
 
@@ -426,11 +428,12 @@ describe('posthog core', () => {
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
                 $lib_custom_api_host: 'https://custom.posthog.com',
+                $is_identified: false,
             })
         })
 
         it('respects property_denylist and property_blacklist', () => {
-            given('property_denylist', () => ['$lib', 'persistent'])
+            given('property_denylist', () => ['$lib', 'persistent', '$is_identified'])
             given('property_blacklist', () => ['token'])
 
             expect(given.subject).toEqual({
