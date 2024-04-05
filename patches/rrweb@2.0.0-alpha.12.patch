@@ -1,5 +1,5 @@
 diff --git a/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js b/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
-index 8746997c9b849ac5c952fdbe0a8dd608d6680a3a..45c0076c7c36c75861cfc4234839ea621514cdff 100644
+index 8746997c9b849ac5c952fdbe0a8dd608d6680a3a..d4a23978d4d6ee5d060c281e1cc8459b2a76885c 100644
 --- a/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
 +++ b/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
 @@ -91,11 +91,21 @@ class CanvasManager {
@@ -47,7 +47,6 @@ index 8746997c9b849ac5c952fdbe0a8dd608d6680a3a..45c0076c7c36c75861cfc4234839ea62
                      }
                  }
 -                const bitmap = yield createImageBitmap(canvas);
--                worker.postMessage({
 +
 +                const width = canvas.clientWidth;
 +                const height = canvas.clientHeight;
@@ -57,7 +56,7 @@ index 8746997c9b849ac5c952fdbe0a8dd608d6680a3a..45c0076c7c36c75861cfc4234839ea62
 +                    resizeHeight: height
 +                })
 +
-+                    worker.postMessage({
+                 worker.postMessage({
                      id,
                      bitmap,
 -                    width: canvas.width,
