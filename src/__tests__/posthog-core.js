@@ -411,6 +411,7 @@ describe('posthog core', () => {
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
                 $is_identified: false,
+                $process_person: true,
             })
         })
 
@@ -432,6 +433,7 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
+                $process_person: true,
             })
         })
 
@@ -483,6 +485,7 @@ describe('posthog core', () => {
             expect(given.subject).toEqual({
                 event_name: given.event_name,
                 token: 'testtoken',
+                $process_person: true,
             })
         })
 
