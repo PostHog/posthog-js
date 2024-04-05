@@ -444,7 +444,15 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $process_person: true,
             })
+        })
+
+        it("can't deny or blacklist $process_person", () => {
+            given('property_denylist', () => ['$process_person'])
+            given('property_blacklist', () => ['$process_person'])
+
+            expect(given.subject['$process_person']).toEqual(true)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
