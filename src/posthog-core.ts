@@ -878,6 +878,10 @@ export class PostHog {
             properties
         )
 
+        properties['$is_identified'] =
+            this.persistence.get_user_state() === 'identified' ||
+            this.sessionPersistence.get_user_state() === 'identified'
+
         if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
             // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
             // TODO: merge this only once, requires refactoring tests
