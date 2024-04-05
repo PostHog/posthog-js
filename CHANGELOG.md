@@ -1,3 +1,8 @@
+## 1.118.1 - 2024-04-05
+
+- Fix nextjs playground version of posthog-js (#1117)
+- Fix $is_identified (#1116)
+
 ## 1.118.0 - 2024-04-04
 
 - feat: capture more sentry levels (#1104)
