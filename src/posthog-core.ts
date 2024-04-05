@@ -879,9 +879,7 @@ export class PostHog {
             properties
         )
 
-        properties['$is_identified'] =
-            this.persistence.get_user_state() === 'identified' ||
-            this.sessionPersistence.get_user_state() === 'identified'
+        properties['$is_identified'] = this._isIdentified()
 
         if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
             // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
@@ -907,7 +905,7 @@ export class PostHog {
         // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
         const process_person = !(
             this.config.process_person === 'never' ||
-            (this.config.process_person === 'identified_only' && this.persistence.get_user_state() === 'anonymous')
+            (this.config.process_person === 'identified_only' && !this._isIdentified())
         )
         properties['$process_person'] = process_person
 
@@ -1754,6 +1752,13 @@ export class PostHog {
             name = PRIMARY_INSTANCE_NAME + '.' + name
         }
         return name
+    }
+
+    _isIdentified(): boolean {
+        return (
+            this.persistence?.get_user_state() === 'identified' ||
+            this.sessionPersistence?.get_user_state() === 'identified'
+        )
     }
 
     // perform some housekeeping around GDPR opt-in/out state
