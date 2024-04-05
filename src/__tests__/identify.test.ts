@@ -60,4 +60,69 @@ describe('identify', () => {
         const eventAfterIdentify = onCapture.mock.calls[2]
         expect(eventAfterIdentify[1].properties.$is_identified).toEqual(true)
     })
+
+    it('it should fail if process_person is set to never', async () => {
+        // arrange
+        const token = uuidv7()
+        const onCapture = jest.fn()
+        const posthog = await createPosthogInstance(token, { _onCapture: onCapture, process_person: 'never' })
+        const distinctId = '123'
+        console.error = jest.fn()
+
+        // act
+        posthog.identify(distinctId)
+
+        // assert
+        expect(jest.mocked(logger).error).toBeCalledTimes(1)
+        expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            'posthog.identify was called, but the process_person configuration is set to "never". This call will be ignored.'
+        )
+        expect(onCapture).toBeCalledTimes(0)
+    })
+
+    it('it should switch events to $person_process=true if process_person is identified_only', async () => {
+        // arrange
+        const token = uuidv7()
+        const onCapture = jest.fn()
+        const posthog = await createPosthogInstance(token, { _onCapture: onCapture, process_person: 'identified_only' })
+        const distinctId = '123'
+        console.error = jest.fn()
+
+        // act
+        posthog.capture('custom event before identify')
+        posthog.identify(distinctId)
+        posthog.capture('custom event after identify')
+        // assert
+        expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        const eventBeforeIdentify = onCapture.mock.calls[0]
+        expect(eventBeforeIdentify[1].properties.$process_person).toEqual(false)
+        const identifyCall = onCapture.mock.calls[1]
+        expect(identifyCall[0]).toEqual('$identify')
+        expect(identifyCall[1].properties.$process_person).toEqual(true)
+        const eventAfterIdentify = onCapture.mock.calls[2]
+        expect(eventAfterIdentify[1].properties.$process_person).toEqual(true)
+    })
+
+    it('it should not change $person_process if process_person is always', async () => {
+        // arrange
+        const token = uuidv7()
+        const onCapture = jest.fn()
+        const posthog = await createPosthogInstance(token, { _onCapture: onCapture, process_person: 'always' })
+        const distinctId = '123'
+        console.error = jest.fn()
+
+        // act
+        posthog.capture('custom event before identify')
+        posthog.identify(distinctId)
+        posthog.capture('custom event after identify')
+        // assert
+        expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        const eventBeforeIdentify = onCapture.mock.calls[0]
+        expect(eventBeforeIdentify[1].properties.$process_person).toEqual(true)
+        const identifyCall = onCapture.mock.calls[1]
+        expect(identifyCall[0]).toEqual('$identify')
+        expect(identifyCall[1].properties.$process_person).toEqual(true)
+        const eventAfterIdentify = onCapture.mock.calls[2]
+        expect(eventAfterIdentify[1].properties.$process_person).toEqual(true)
+    })
 })

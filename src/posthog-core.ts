@@ -1205,6 +1205,13 @@ export class PostHog {
             return
         }
 
+        if (this.config.process_person === 'never') {
+            logger.error(
+                'posthog.identify was called, but the process_person configuration is set to "never". This call will be ignored.'
+            )
+            return
+        }
+
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
