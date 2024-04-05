@@ -68,6 +68,7 @@ describe('posthog core', () => {
                 update_referrer_info: jest.fn(),
                 update_config: jest.fn(),
                 properties: jest.fn(),
+                get_user_state: () => 'anonymous',
             },
             _send_request: jest.fn(),
             compression: {},
@@ -372,9 +373,11 @@ describe('posthog core', () => {
             persistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
+                get_user_state: () => 'anonymous',
             },
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+                get_user_state: () => 'anonymous',
             },
             sessionManager: {
                 checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({

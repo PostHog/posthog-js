@@ -20,7 +20,8 @@
         "test:functional": "jest functional_tests",
         "test-watch": "jest --watch src",
         "cypress": "cypress open",
-        "prepare": "husky install"
+        "prepare": "husky install",
+        "yalc-publish": "yalc publish"
     },
     "main": "dist/module.js",
     "module": "dist/es.js",

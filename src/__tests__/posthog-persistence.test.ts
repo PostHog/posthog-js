@@ -54,7 +54,7 @@ describe('persistence', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
             lib.register({ distinct_id: 'testy', test_prop: 'test_value' })
             lib.set_user_state('identified')
-            expect(lib.properties()).toEqual({ distinct_id: 'testy', test_prop: 'test_value', $is_identified: true })
+            expect(lib.properties()).toEqual({ distinct_id: 'testy', test_prop: 'test_value' })
         })
 
         it(`should only call save if props changes`, () => {
@@ -107,7 +107,6 @@ describe('persistence', () => {
             expect(library.properties()).toEqual({
                 '$feature/flag': 'variant',
                 '$feature/other': true,
-                $is_identified: false,
             })
         })
     })
