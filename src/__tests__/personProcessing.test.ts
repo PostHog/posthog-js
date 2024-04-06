@@ -1,0 +1,180 @@
+import { createPosthogInstance } from './helpers/posthog-instance'
+import { uuidv7 } from '../uuidv7'
+import { logger } from '../utils/logger'
+jest.mock('../utils/logger')
+
+describe('person processing', () => {
+    describe('init', () => {
+        it("should default to 'always' process_person", async () => {
+            // arrange
+            const token = uuidv7()
+
+            // act
+            const posthog = await createPosthogInstance(token, {
+                process_person: undefined,
+            })
+
+            // assert
+            expect(posthog.config.process_person).toEqual('always')
+        })
+        it('should read process_person from init config', async () => {
+            // arrange
+            const token = uuidv7()
+
+            // act
+            const posthog = await createPosthogInstance(token, {
+                process_person: 'never',
+            })
+
+            // assert
+            expect(posthog.config.process_person).toEqual('never')
+        })
+    })
+
+    describe('identify', () => {
+        it('should fail if process_person is set to never', async () => {
+            // arrange
+            const token = uuidv7()
+            const onCapture = jest.fn()
+            const posthog = await createPosthogInstance(token, { _onCapture: onCapture, process_person: 'never' })
+            const distinctId = '123'
+            console.error = jest.fn()
+
+            // act
+            posthog.identify(distinctId)
+
+            // assert
+            expect(jest.mocked(logger).error).toBeCalledTimes(1)
+            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+                'posthog.identify was called, but the process_person configuration is set to "never". This call will be ignored.'
+            )
+            expect(onCapture).toBeCalledTimes(0)
+        })
+
+        it('should switch events to $person_process=true if process_person is identified_only', async () => {
+            // arrange
+            const token = uuidv7()
+            const onCapture = jest.fn()
+            const posthog = await createPosthogInstance(token, {
+                _onCapture: onCapture,
+                process_person: 'identified_only',
+            })
+            const distinctId = '123'
+            console.error = jest.fn()
+
+            // act
+            posthog.capture('custom event before identify')
+            posthog.identify(distinctId)
+            posthog.capture('custom event after identify')
+            // assert
+            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+            const eventBeforeIdentify = onCapture.mock.calls[0]
+            expect(eventBeforeIdentify[1].properties.$process_person).toEqual(false)
+            const identifyCall = onCapture.mock.calls[1]
+            expect(identifyCall[0]).toEqual('$identify')
+            expect(identifyCall[1].properties.$process_person).toEqual(true)
+            const eventAfterIdentify = onCapture.mock.calls[2]
+            expect(eventAfterIdentify[1].properties.$process_person).toEqual(true)
+        })
+
+        it('should not change $person_process if process_person is always', async () => {
+            // arrange
+            const token = uuidv7()
+            const onCapture = jest.fn()
+            const posthog = await createPosthogInstance(token, { _onCapture: onCapture, process_person: 'always' })
+            const distinctId = '123'
+            console.error = jest.fn()
+
+            // act
+            posthog.capture('custom event before identify')
+            posthog.identify(distinctId)
+            posthog.capture('custom event after identify')
+            // assert
+            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+            const eventBeforeIdentify = onCapture.mock.calls[0]
+            expect(eventBeforeIdentify[1].properties.$process_person).toEqual(true)
+            const identifyCall = onCapture.mock.calls[1]
+            expect(identifyCall[0]).toEqual('$identify')
+            expect(identifyCall[1].properties.$process_person).toEqual(true)
+            const eventAfterIdentify = onCapture.mock.calls[2]
+            expect(eventAfterIdentify[1].properties.$process_person).toEqual(true)
+        })
+
+        it('should include initial referrer info in identify event', async () => {
+            // arrange
+            const token = uuidv7()
+            const onCapture = jest.fn()
+            const posthog = await createPosthogInstance(token, {
+                _onCapture: onCapture,
+                process_person: 'identified_only',
+            })
+            const distinctId = '123'
+
+            // act
+            posthog.identify(distinctId)
+
+            // assert
+            const identifyCall = onCapture.mock.calls[0]
+            expect(identifyCall[0]).toEqual('$identify')
+            expect(identifyCall[1].$set_once).toEqual({
+                $initial_referrer: '$direct',
+                $initial_referring_domain: '$direct',
+            })
+        })
+    })
+
+    describe('capture', () => {
+        it('should include initial referrer info iff the event has person processing when in identified_only mode', async () => {
+            // arrange
+            const token = uuidv7()
+            const onCapture = jest.fn()
+            const posthog = await createPosthogInstance(token, {
+                _onCapture: onCapture,
+                process_person: 'identified_only',
+            })
+            const distinctId = '123'
+
+            // act
+            posthog.capture('custom event before identify')
+            posthog.identify(distinctId)
+            posthog.capture('custom event after identify')
+
+            // assert
+            const eventBeforeIdentify = onCapture.mock.calls[0]
+            expect(eventBeforeIdentify[1].$set_once).toBeUndefined()
+            const eventAfterIdentify = onCapture.mock.calls[2]
+            expect(eventAfterIdentify[1].$set_once).toEqual({
+                $initial_referrer: '$direct',
+                $initial_referring_domain: '$direct',
+            })
+        })
+
+        it('should always initial referrer info when in always mode', async () => {
+            // arrange
+            const token = uuidv7()
+            const onCapture = jest.fn()
+            const posthog = await createPosthogInstance(token, {
+                _onCapture: onCapture,
+                process_person: 'always',
+            })
+            const distinctId = '123'
+
+            // act
+            posthog.capture('custom event before identify')
+            posthog.identify(distinctId)
+            posthog.capture('custom event after identify')
+
+            // assert
+            const eventBeforeIdentify = onCapture.mock.calls[0]
+            expect(eventBeforeIdentify[1].$set_once).toEqual({
+                $initial_referrer: '$direct',
+                $initial_referring_domain: '$direct',
+            })
+            const eventAfterIdentify = onCapture.mock.calls[2]
+            expect(eventAfterIdentify[1].$set_once).toEqual({
+                $initial_referrer: '$direct',
+                $initial_referring_domain: '$direct',
+            })
+        })
+    })
+})

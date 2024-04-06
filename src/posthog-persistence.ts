@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { _each, _extend, _include, _strip_empty_properties } from './utils'
+import { _each, _extend, _include, _strip_empty_properties, _strip_leading_dollar } from './utils'
 import { cookieStore, localPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
@@ -231,7 +231,7 @@ export class PostHogPersistence {
         const initialCampaignParams = this.props[INITIAL_CAMPAIGN_PARAMS]
         if (initialCampaignParams) {
             _each(initialCampaignParams, function (v, k) {
-                p['$initial_' + k] = v
+                p['$initial_' + _strip_leading_dollar(k)] = v
             })
         }
         return p
@@ -267,7 +267,7 @@ export class PostHogPersistence {
         const initialReferrerInfo = this.props[INITIAL_REFERRER_INFO]
         if (initialReferrerInfo) {
             _each(initialReferrerInfo, function (v, k) {
-                p['$initial_' + k] = v
+                p['$initial_' + _strip_leading_dollar(k)] = v
             })
         }
         return p

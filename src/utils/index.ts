@@ -223,6 +223,10 @@ export const _strip_empty_properties = function (p: Properties): Properties {
     return ret
 }
 
+export const _strip_leading_dollar = function (s: string): string {
+    return s.replace(/^\$/, '')
+}
+
 /**
  * Deep copies an object.
  * It handles cycles by replacing all references to them with `undefined`

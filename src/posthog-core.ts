@@ -909,26 +909,7 @@ export class PostHog {
         }
 
         // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
-        const process_person = !(
-            this.config.process_person === 'never' ||
-            (this.config.process_person === 'identified_only' && !this._isIdentified())
-        )
-        properties['$process_person'] = process_person
-
-        if (!process_person) {
-            if (properties['$set']) {
-                logger.error(
-                    'Invalid property $set for event where person processing is disabled. This property will not be set.'
-                )
-                delete properties['$set']
-            }
-            if (properties['$set_once']) {
-                logger.error(
-                    'Invalid property $set_once for event where person processing is disabled. This property will not be set.'
-                )
-                delete properties['$set_once']
-            }
-        }
+        properties['$process_person'] = this._hasPersonProcessing()
 
         return properties
     }
@@ -937,7 +918,7 @@ export class PostHog {
         if (!this.sessionPersistence) {
             return dataSetOnce
         }
-        if (!this._isIdentified()) {
+        if (!this._hasPersonProcessing()) {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event
@@ -1791,6 +1772,13 @@ export class PostHog {
         return (
             this.persistence?.get_user_state() === 'identified' ||
             this.sessionPersistence?.get_user_state() === 'identified'
+        )
+    }
+
+    _hasPersonProcessing(): boolean {
+        return !(
+            this.config.process_person === 'never' ||
+            (this.config.process_person === 'identified_only' && !this._isIdentified())
         )
     }
 
