@@ -1,20 +1,4 @@
-import { assertWhetherPostHogRequestsWereCalled } from '../support/assertions'
-
-function pollPhCaptures(event, wait = 200, attempts = 0, maxAttempts = 50) {
-    return cy.phCaptures().then((capturesArray) => {
-        if (capturesArray.some((capture) => capture === event)) {
-            return cy.wrap(true)
-        } else if (attempts < maxAttempts) {
-            // If not found and the max attempts are not reached, wait for a moment and try again
-            return cy.wait(wait).then(() => {
-                return pollPhCaptures(event, wait, attempts + 1, maxAttempts)
-            })
-        } else {
-            // Log the failure to find the value after max attempts
-            throw new Error('Max attempts reached without finding the expected event')
-        }
-    })
-}
+import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
 
 function assertThatRecordingStarted() {
     cy.phCaptures({ full: true }).then((captures) => {

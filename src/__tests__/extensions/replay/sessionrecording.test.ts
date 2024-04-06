@@ -6,6 +6,7 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_SAMPLE_RATE,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import {
@@ -342,7 +343,8 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording['_sampleRate']).toBe(0.7)
+            expect(sessionRecording['sampleRate']).toBe(0.7)
+            expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(0.7)
         })
 
         it('starts session recording, saves setting and endpoint when enabled', () => {
