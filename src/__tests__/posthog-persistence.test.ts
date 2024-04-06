@@ -169,7 +169,7 @@ describe('persistence', () => {
         })
 
         it('should allow swapping between storage methods', () => {
-            const expectedProps = () => ({ distinct_id: 'test', test_prop: 'test_val' })
+            const expectedProps = () => ({ distinct_id: 'test', test_prop: 'test_val', $is_identified: false })
             let config = makePostHogConfig('test', 'localStorage+cookie')
             const lib = new PostHogPersistence(makePostHogConfig('test', 'localStorage+cookie'))
             lib.register(expectedProps())

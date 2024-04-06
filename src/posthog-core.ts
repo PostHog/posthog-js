@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { window, assignableWindow } from './utils/globals'
+import { window, assignableWindow, location } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -124,7 +124,7 @@ export const defaultConfig = (): PostHogConfig => ({
     save_referrer: true,
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
-    debug: false,
+    debug: (location && _isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     verbose: false,
     cookie_expiration: 365,
     upgrade: false,
@@ -880,6 +880,10 @@ export class PostHog {
             properties
         )
 
+        properties['$is_identified'] =
+            this.persistence.get_user_state() === 'identified' ||
+            this.sessionPersistence.get_user_state() === 'identified'
+
         if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
             // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
             // TODO: merge this only once, requires refactoring tests
@@ -1258,8 +1262,6 @@ export class PostHog {
     }
 
     /**
-     * Alpha feature: don't use unless you know what you're doing!
-     *
      * Sets group analytics information for subsequent events and reloads feature flags.
      *
      * @param {String} groupType Group type (example: 'organization')
