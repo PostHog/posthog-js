@@ -3,6 +3,7 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
 } from '../../constants'
@@ -132,7 +133,6 @@ export class SessionRecording {
     private windowId: string | null = null
     private sessionId: string | null = null
     private _linkedFlag: string | FlagVariant | null = null
-    private _minimumDuration: number | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
 
@@ -220,6 +220,11 @@ export class SessionRecording {
     private get sampleRate(): number | null {
         const rate = this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
         return _isNumber(rate) ? rate : null
+    }
+
+    private get minimumDuration(): number | null {
+        const duration = this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
+        return _isNumber(duration) ? duration : null
     }
 
     /**
@@ -355,6 +360,8 @@ export class SessionRecording {
         const receivedSampleRate = response.sessionRecording?.sampleRate
         const parsedSampleRate = _isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
 
+        const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
+
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
@@ -369,17 +376,18 @@ export class SessionRecording {
                     quality: response.sessionRecording?.canvasQuality,
                 },
                 [SESSION_RECORDING_SAMPLE_RATE]: parsedSampleRate,
+                [SESSION_RECORDING_MINIMUM_DURATION]: _isUndefined(receivedMinimumDuration)
+                    ? null
+                    : receivedMinimumDuration,
             })
         }
-
-        const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
-        this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
         if (response.sessionRecording?.endpoint) {
             this._endpoint = response.sessionRecording?.endpoint
         }
+
         this._setupSampling()
 
         if (!_isNullish(this._linkedFlag)) {
@@ -844,7 +852,7 @@ export class SessionRecording {
             this.flushBufferTimer = undefined
         }
 
-        const minimumDuration = this._minimumDuration
+        const minimumDuration = this.minimumDuration
         const sessionDuration = this.sessionDuration
         // if we have old data in the buffer but the session has rotated then the
         // session duration might be negative, in that case we want to flush the buffer

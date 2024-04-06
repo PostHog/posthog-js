@@ -16,6 +16,7 @@ export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording
 export const SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE = '$session_recording_network_payload_capture'
 export const SESSION_RECORDING_CANVAS_RECORDING = '$session_recording_canvas_recording'
 export const SESSION_RECORDING_SAMPLE_RATE = '$replay_sample_rate'
+export const SESSION_RECORDING_MINIMUM_DURATION = '$replay_minimum_duration'
 export const SESSION_ID = '$sesid'
 export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'

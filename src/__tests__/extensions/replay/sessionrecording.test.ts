@@ -1409,7 +1409,7 @@ describe('SessionRecording', () => {
 
         it('starts with an undefined minimum duration', () => {
             sessionRecording.startRecordingIfEnabled()
-            expect(sessionRecording['_minimumDuration']).toBe(null)
+            expect(sessionRecording['minimumDuration']).toBe(null)
         })
 
         it('can set minimum duration from decide response', () => {
@@ -1418,7 +1418,7 @@ describe('SessionRecording', () => {
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
-            expect(sessionRecording['_minimumDuration']).toBe(1500)
+            expect(sessionRecording['minimumDuration']).toBe(1500)
         })
 
         it('does not flush if below the minimum duration', () => {
@@ -1432,7 +1432,7 @@ describe('SessionRecording', () => {
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording['sessionDuration']).toBe(100)
-            expect(sessionRecording['_minimumDuration']).toBe(1500)
+            expect(sessionRecording['minimumDuration']).toBe(1500)
 
             expect(sessionRecording['buffer']?.data.length).toBe(2) // full snapshot and the emitted incremental event
             // call the private method to avoid waiting for the timer
@@ -1457,7 +1457,7 @@ describe('SessionRecording', () => {
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp - 1000 }))
 
             expect(sessionRecording['sessionDuration']).toBe(-1000)
-            expect(sessionRecording['_minimumDuration']).toBe(1500)
+            expect(sessionRecording['minimumDuration']).toBe(1500)
 
             expect(sessionRecording['buffer']?.data.length).toBe(2) // full snapshot and the emitted incremental event
             // call the private method to avoid waiting for the timer
@@ -1477,7 +1477,7 @@ describe('SessionRecording', () => {
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
             expect(sessionRecording['sessionDuration']).toBe(100)
-            expect(sessionRecording['_minimumDuration']).toBe(1500)
+            expect(sessionRecording['minimumDuration']).toBe(1500)
 
             expect(sessionRecording['buffer']?.data.length).toBe(2) // full snapshot and the emitted incremental event
             // call the private method to avoid waiting for the timer
