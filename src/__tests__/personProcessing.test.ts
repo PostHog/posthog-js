@@ -106,7 +106,7 @@ describe('person processing', () => {
             expect(eventAfterIdentify[1].properties.$process_person).toEqual(true)
         })
 
-        it('should include initial referrer info in identify event', async () => {
+        it('should include initial referrer info in identify event if identified_only', async () => {
             // arrange
             const token = uuidv7()
             const onCapture = jest.fn()
@@ -126,6 +126,25 @@ describe('person processing', () => {
                 $initial_referrer: '$direct',
                 $initial_referring_domain: '$direct',
             })
+        })
+
+        it('should not include initial referrer info in identify event if always', async () => {
+            // arrange
+            const token = uuidv7()
+            const onCapture = jest.fn()
+            const posthog = await createPosthogInstance(token, {
+                _onCapture: onCapture,
+                __preview_process_person: 'always',
+            })
+            const distinctId = '123'
+
+            // act
+            posthog.identify(distinctId)
+
+            // assert
+            const identifyCall = onCapture.mock.calls[0]
+            expect(identifyCall[0]).toEqual('$identify')
+            expect(identifyCall[1].$set_once).toEqual({})
         })
     })
 
@@ -155,7 +174,7 @@ describe('person processing', () => {
             })
         })
 
-        it('should always initial referrer info when in always mode', async () => {
+        it('should not add initial referrer to set_once when in always mode', async () => {
             // arrange
             const token = uuidv7()
             const onCapture = jest.fn()
@@ -172,15 +191,9 @@ describe('person processing', () => {
 
             // assert
             const eventBeforeIdentify = onCapture.mock.calls[0]
-            expect(eventBeforeIdentify[1].$set_once).toEqual({
-                $initial_referrer: '$direct',
-                $initial_referring_domain: '$direct',
-            })
+            expect(eventBeforeIdentify[1].$set_once).toEqual(undefined)
             const eventAfterIdentify = onCapture.mock.calls[2]
-            expect(eventAfterIdentify[1].$set_once).toEqual({
-                $initial_referrer: '$direct',
-                $initial_referring_domain: '$direct',
-            })
+            expect(eventAfterIdentify[1].$set_once).toEqual(undefined)
         })
     })
 })

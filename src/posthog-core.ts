@@ -918,7 +918,7 @@ export class PostHog {
         if (!this.sessionPersistence) {
             return dataSetOnce
         }
-        if (!this._hasPersonProcessing()) {
+        if (!this._hasPersonProcessing() || this.config.__preview_process_person !== 'identified_only') {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event
