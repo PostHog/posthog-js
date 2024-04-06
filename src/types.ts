@@ -151,7 +151,7 @@ export interface PostHogConfig {
      * - `process_person: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonyomous to identified. All events (including `$identify`) will be sent with `$process_person: False`.
      * - `process_person: 'identified_only'` - we will only process persons when you call `posthog.identify([distinct_id])`. Anonymous users won't get person profiles.
      */
-    process_person?: 'always' | 'never' | 'identified_only'
+    __preview_process_person?: 'always' | 'never' | 'identified_only'
 }
 
 export interface OptInOutCapturingOptions {

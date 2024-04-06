@@ -11,11 +11,11 @@ describe('person processing', () => {
 
             // act
             const posthog = await createPosthogInstance(token, {
-                process_person: undefined,
+                __preview_process_person: undefined,
             })
 
             // assert
-            expect(posthog.config.process_person).toEqual('always')
+            expect(posthog.config.__preview_process_person).toEqual('always')
         })
         it('should read process_person from init config', async () => {
             // arrange
@@ -23,11 +23,11 @@ describe('person processing', () => {
 
             // act
             const posthog = await createPosthogInstance(token, {
-                process_person: 'never',
+                __preview_process_person: 'never',
             })
 
             // assert
-            expect(posthog.config.process_person).toEqual('never')
+            expect(posthog.config.__preview_process_person).toEqual('never')
         })
     })
 
@@ -36,7 +36,10 @@ describe('person processing', () => {
             // arrange
             const token = uuidv7()
             const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, { _onCapture: onCapture, process_person: 'never' })
+            const posthog = await createPosthogInstance(token, {
+                _onCapture: onCapture,
+                __preview_process_person: 'never',
+            })
             const distinctId = '123'
             console.error = jest.fn()
 
@@ -57,7 +60,7 @@ describe('person processing', () => {
             const onCapture = jest.fn()
             const posthog = await createPosthogInstance(token, {
                 _onCapture: onCapture,
-                process_person: 'identified_only',
+                __preview_process_person: 'identified_only',
             })
             const distinctId = '123'
             console.error = jest.fn()
@@ -81,7 +84,10 @@ describe('person processing', () => {
             // arrange
             const token = uuidv7()
             const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, { _onCapture: onCapture, process_person: 'always' })
+            const posthog = await createPosthogInstance(token, {
+                _onCapture: onCapture,
+                __preview_process_person: 'always',
+            })
             const distinctId = '123'
             console.error = jest.fn()
 
@@ -106,7 +112,7 @@ describe('person processing', () => {
             const onCapture = jest.fn()
             const posthog = await createPosthogInstance(token, {
                 _onCapture: onCapture,
-                process_person: 'identified_only',
+                __preview_process_person: 'identified_only',
             })
             const distinctId = '123'
 
@@ -130,7 +136,7 @@ describe('person processing', () => {
             const onCapture = jest.fn()
             const posthog = await createPosthogInstance(token, {
                 _onCapture: onCapture,
-                process_person: 'identified_only',
+                __preview_process_person: 'identified_only',
             })
             const distinctId = '123'
 
@@ -155,7 +161,7 @@ describe('person processing', () => {
             const onCapture = jest.fn()
             const posthog = await createPosthogInstance(token, {
                 _onCapture: onCapture,
-                process_person: 'always',
+                __preview_process_person: 'always',
             })
             const distinctId = '123'
 

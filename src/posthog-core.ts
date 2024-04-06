@@ -169,7 +169,7 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    process_person: 'always',
+    __preview_process_person: 'always',
 })
 
 class DeprecatedWebPerformanceObserver {
@@ -1212,7 +1212,7 @@ export class PostHog {
             return
         }
 
-        if (this.config.process_person === 'never') {
+        if (this.config.__preview_process_person === 'never') {
             logger.error(
                 'posthog.identify was called, but the process_person configuration is set to "never". This call will be ignored.'
             )
@@ -1777,8 +1777,8 @@ export class PostHog {
 
     _hasPersonProcessing(): boolean {
         return !(
-            this.config.process_person === 'never' ||
-            (this.config.process_person === 'identified_only' && !this._isIdentified())
+            this.config.__preview_process_person === 'never' ||
+            (this.config.__preview_process_person === 'identified_only' && !this._isIdentified())
         )
     }
 
