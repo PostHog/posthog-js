@@ -1,6 +1,6 @@
 import '@/styles/globals.css'
 
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import type { AppProps } from 'next/app'
 import { useRouter } from 'next/router'
 
@@ -15,9 +15,9 @@ if (typeof window !== 'undefined') {
             recordCrossOriginIframes: true,
         },
         debug: true,
-        __preview_send_client_session_params: true,
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
+        process_person: 'identified_only',
     })
 
     window.posthog = posthog

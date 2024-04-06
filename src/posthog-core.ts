@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { window, assignableWindow, location } from './utils/globals'
+import { assignableWindow, document, location, userAgent, window } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -63,7 +63,6 @@ import {
 } from './utils/type-utils'
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
-import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -745,8 +744,19 @@ export class PostHog {
         }
 
         if (event_name === '$identify') {
-            data['$set'] = options?.['$set']
-            data['$set_once'] = options?.['$set_once']
+            const setProperties = options?.['$set']
+            if (setProperties) {
+                data['$set'] = options?.['$set']
+            }
+            const setOnceProperties = this._calculate_set_once_properties(options?.['$set_once'])
+            if (setOnceProperties) {
+                data['$set_once'] = setOnceProperties
+            }
+        } else {
+            const setOnceProperties = this._calculate_set_once_properties()
+            if (setOnceProperties) {
+                data['$set_once'] = this._calculate_set_once_properties()
+            }
         }
 
         data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
@@ -871,13 +881,9 @@ export class PostHog {
         // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
-        properties = _extend(
-            {},
-            _info.properties(),
-            this.persistence.properties(),
-            this.sessionPersistence.properties(),
-            properties
-        )
+        const persistenceProperties = this.persistence.properties()
+        const sessionProperties = this.sessionPersistence.properties()
+        properties = _extend({}, _info.properties(), persistenceProperties, sessionProperties, properties)
 
         properties['$is_identified'] = this._isIdentified()
 
@@ -925,6 +931,26 @@ export class PostHog {
         }
 
         return properties
+    }
+
+    _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
+        if (!this.sessionPersistence) {
+            return dataSetOnce
+        }
+        if (!this._isIdentified()) {
+            return dataSetOnce
+        }
+        // if we're an identified person, send initial params with every event
+        const setOnceProperties = _extend(
+            {},
+            this.sessionPersistence.get_initial_campaign_params(),
+            this.sessionPersistence.get_initial_referrer_info(),
+            dataSetOnce || {}
+        )
+        if (_isEmptyObject(setOnceProperties)) {
+            return undefined
+        }
+        return setOnceProperties
     }
 
     /**
@@ -1236,7 +1262,7 @@ export class PostHog {
 
         const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
 
-        // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
+        // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
             this.persistence.set_user_state('identified')
