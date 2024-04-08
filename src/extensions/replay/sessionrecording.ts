@@ -3,7 +3,9 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
+    SESSION_RECORDING_SAMPLE_RATE,
 } from '../../constants'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
@@ -131,8 +133,6 @@ export class SessionRecording {
     private windowId: string | null = null
     private sessionId: string | null = null
     private _linkedFlag: string | FlagVariant | null = null
-    private _sampleRate: number | null = null
-    private _minimumDuration: number | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
 
@@ -162,11 +162,8 @@ export class SessionRecording {
     }
 
     private get isSampled(): boolean | null {
-        if (_isNumber(this._sampleRate)) {
-            return this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        } else {
-            return null
-        }
+        const currentValue = this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
+        return _isBoolean(currentValue) ? currentValue : null
     }
 
     private get sessionDuration(): number | null {
@@ -218,6 +215,16 @@ export class SessionRecording {
         return headersEnabled || bodyEnabled || performanceEnabled
             ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: performanceEnabled }
             : undefined
+    }
+
+    private get sampleRate(): number | null {
+        const rate = this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
+        return _isNumber(rate) ? rate : null
+    }
+
+    private get minimumDuration(): number | null {
+        const duration = this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
+        return _isNumber(duration) ? duration : null
     }
 
     /**
@@ -276,6 +283,10 @@ export class SessionRecording {
         }
 
         this.buffer = this.clearBuffer()
+
+        // on reload there might be an already sampled session that should be continued before decide response,
+        // so we call this here _and_ in the decide response
+        this._setupSampling()
     }
 
     startRecordingIfEnabled() {
@@ -303,7 +314,7 @@ export class SessionRecording {
         // capture the current sample rate,
         // because it is re-used multiple times
         // and the bundler won't minimise any of the references
-        const currentSampleRate = this._sampleRate
+        const currentSampleRate = this.sampleRate
 
         if (!_isNumber(currentSampleRate)) {
             this.instance.persistence?.register({
@@ -346,6 +357,11 @@ export class SessionRecording {
     }
 
     afterDecideResponse(response: DecideResponse) {
+        const receivedSampleRate = response.sessionRecording?.sampleRate
+        const parsedSampleRate = _isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+
+        const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
+
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
@@ -359,14 +375,12 @@ export class SessionRecording {
                     fps: response.sessionRecording?.canvasFps,
                     quality: response.sessionRecording?.canvasQuality,
                 },
+                [SESSION_RECORDING_SAMPLE_RATE]: parsedSampleRate,
+                [SESSION_RECORDING_MINIMUM_DURATION]: _isUndefined(receivedMinimumDuration)
+                    ? null
+                    : receivedMinimumDuration,
             })
         }
-
-        const receivedSampleRate = response.sessionRecording?.sampleRate
-        this._sampleRate = _isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
-
-        const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
-        this._minimumDuration = _isUndefined(receivedMinimumDuration) ? null : receivedMinimumDuration
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
@@ -374,11 +388,7 @@ export class SessionRecording {
             this._endpoint = response.sessionRecording?.endpoint
         }
 
-        if (_isNumber(this._sampleRate)) {
-            this.sessionManager.onSessionId((sessionId) => {
-                this.makeSamplingDecision(sessionId)
-            })
-        }
+        this._setupSampling()
 
         if (!_isNullish(this._linkedFlag)) {
             const linkedFlag = _isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
@@ -401,6 +411,19 @@ export class SessionRecording {
 
         this.receivedDecide = true
         this.startRecordingIfEnabled()
+    }
+
+    private _samplingSessionListener: (() => void) | null = null
+
+    /**
+     * This might be called more than once so needs to be idempotent
+     */
+    private _setupSampling() {
+        if (_isNumber(this.sampleRate) && _isNull(this._samplingSessionListener)) {
+            this._samplingSessionListener = this.sessionManager.onSessionId((sessionId) => {
+                this.makeSamplingDecision(sessionId)
+            })
+        }
     }
 
     log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
@@ -829,7 +852,7 @@ export class SessionRecording {
             this.flushBufferTimer = undefined
         }
 
-        const minimumDuration = this._minimumDuration
+        const minimumDuration = this.minimumDuration
         const sessionDuration = this.sessionDuration
         // if we have old data in the buffer but the session has rotated then the
         // session duration might be negative, in that case we want to flush the buffer

@@ -14,7 +14,7 @@ import { window, assignableWindow, location } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
+import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, SESSION_RECORDING_IS_SAMPLED } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
@@ -176,12 +176,14 @@ class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
         return this.__forceAllowLocalhost
     }
+
     set _forceAllowLocalhost(value: boolean) {
         logger.error(
             'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
         )
         this.__forceAllowLocalhost = value
     }
+
     private __forceAllowLocalhost: boolean = false
 }
 
@@ -1650,8 +1652,18 @@ export class PostHog {
     /**
      * turns session recording on, and updates the config option
      * disable_session_recording to false
+     * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      */
-    startSessionRecording(): void {
+    startSessionRecording(override: { sampling?: boolean }): void {
+        if (override?.sampling) {
+            // allow the session id check to rotate session id if necessary
+            const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
+            this.persistence?.register({
+                // short-circuits the `makeSamplingDecision` function in the session recording module
+                [SESSION_RECORDING_IS_SAMPLED]: true,
+            })
+            logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
+        }
         this.set_config({ disable_session_recording: false })
     }
 
