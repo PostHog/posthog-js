@@ -61,7 +61,7 @@ describe('posthog core', () => {
                     Object.assign(this.props, properties)
                 },
                 props: {},
-                get_user_state: () => 'anonymous',
+                get_property: () => 'anonymous',
                 get_initial_campaign_params: () => undefined,
                 get_initial_referrer_info: () => undefined,
             },
@@ -71,7 +71,7 @@ describe('posthog core', () => {
                 update_referrer_info: jest.fn(),
                 update_config: jest.fn(),
                 properties: jest.fn(),
-                get_user_state: () => 'anonymous',
+                get_property: () => 'anonymous',
                 get_initial_campaign_params: () => undefined,
                 get_initial_referrer_info: () => undefined,
             },
@@ -379,11 +379,11 @@ describe('posthog core', () => {
             persistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
-                get_user_state: () => 'anonymous',
+                get_property: () => 'anonymous',
             },
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
-                get_user_state: () => 'anonymous',
+                get_property: () => 'anonymous',
             },
             sessionManager: {
                 checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({

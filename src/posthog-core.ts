@@ -14,7 +14,13 @@ import { assignableWindow, document, location, userAgent, window } from './utils
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, SESSION_RECORDING_IS_SAMPLED } from './constants'
+import {
+    ALIAS_ID_KEY,
+    FLAG_CALL_REPORTED,
+    PEOPLE_DISTINCT_ID_KEY,
+    SESSION_RECORDING_IS_SAMPLED,
+    USER_STATE,
+} from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
@@ -1781,8 +1787,8 @@ export class PostHog {
 
     _isIdentified(): boolean {
         return (
-            this.persistence?.get_user_state() === 'identified' ||
-            this.sessionPersistence?.get_user_state() === 'identified'
+            this.persistence?.get_property(USER_STATE) === 'identified' ||
+            this.sessionPersistence?.get_property(USER_STATE) === 'identified'
         )
     }
 
