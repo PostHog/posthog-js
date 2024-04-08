@@ -743,20 +743,13 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
-        if (event_name === '$identify') {
-            const setProperties = options?.['$set']
-            if (setProperties) {
-                data['$set'] = options?.['$set']
-            }
-            const setOnceProperties = this._calculate_set_once_properties(options?.['$set_once'])
-            if (setOnceProperties) {
-                data['$set_once'] = setOnceProperties
-            }
-        } else {
-            const setOnceProperties = this._calculate_set_once_properties()
-            if (setOnceProperties) {
-                data['$set_once'] = this._calculate_set_once_properties()
-            }
+        const setProperties = options?.$set
+        if (setProperties) {
+            data.$set = options?.$set
+        }
+        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once)
+        if (setOnceProperties) {
+            data.$set_once = setOnceProperties
         }
 
         data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
