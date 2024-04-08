@@ -927,12 +927,7 @@ export class PostHog {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event
-        const setOnceProperties = _extend(
-            {},
-            this.sessionPersistence.get_initial_campaign_params(),
-            this.sessionPersistence.get_initial_referrer_info(),
-            dataSetOnce || {}
-        )
+        const setOnceProperties = _extend({}, this.sessionPersistence.get_initial_props(), dataSetOnce || {})
         if (_isEmptyObject(setOnceProperties)) {
             return undefined
         }

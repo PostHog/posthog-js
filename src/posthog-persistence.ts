@@ -226,17 +226,6 @@ export class PostHogPersistence {
         }
     }
 
-    get_initial_campaign_params(): Properties {
-        const p: Properties = {}
-        const initialCampaignParams = this.props[INITIAL_CAMPAIGN_PARAMS]
-        if (initialCampaignParams) {
-            _each(initialCampaignParams, function (v, k) {
-                p['$initial_' + _strip_leading_dollar(k)] = v
-            })
-        }
-        return p
-    }
-
     update_search_keyword(): void {
         this.register(_info.searchInfo())
     }
@@ -262,14 +251,16 @@ export class PostHogPersistence {
         })
     }
 
-    get_initial_referrer_info(): Properties {
+    get_initial_props(): Properties {
         const p: Properties = {}
-        const initialReferrerInfo = this.props[INITIAL_REFERRER_INFO]
-        if (initialReferrerInfo) {
-            _each(initialReferrerInfo, function (v, k) {
-                p['$initial_' + _strip_leading_dollar(k)] = v
-            })
-        }
+        _each([INITIAL_REFERRER_INFO, INITIAL_CAMPAIGN_PARAMS], (key) => {
+            const initialReferrerInfo = this.props[key]
+            if (initialReferrerInfo) {
+                _each(initialReferrerInfo, function (v, k) {
+                    p['$initial_' + _strip_leading_dollar(k)] = v
+                })
+            }
+        })
         return p
     }
 
