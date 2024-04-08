@@ -4,6 +4,19 @@ import { logger } from '../utils/logger'
 jest.mock('../utils/logger')
 
 describe('person processing', () => {
+    const setup = async (processPerson: 'always' | 'identified_only' | 'never' | undefined) => {
+        const token = uuidv7()
+        const onCapture = jest.fn()
+        const posthog = await createPosthogInstance(token, {
+            _onCapture: onCapture,
+            __preview_process_person: processPerson,
+        })
+        const distinctId = '123'
+        console.error = jest.fn()
+
+        return { token, onCapture, posthog, distinctId }
+    }
+
     describe('init', () => {
         it("should default to 'always' process_person", async () => {
             // arrange
@@ -34,14 +47,7 @@ describe('person processing', () => {
     describe('identify', () => {
         it('should fail if process_person is set to never', async () => {
             // arrange
-            const token = uuidv7()
-            const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, {
-                _onCapture: onCapture,
-                __preview_process_person: 'never',
-            })
-            const distinctId = '123'
-            console.error = jest.fn()
+            const { posthog, onCapture, distinctId } = await setup('never')
 
             // act
             posthog.identify(distinctId)
@@ -56,14 +62,7 @@ describe('person processing', () => {
 
         it('should switch events to $person_process=true if process_person is identified_only', async () => {
             // arrange
-            const token = uuidv7()
-            const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, {
-                _onCapture: onCapture,
-                __preview_process_person: 'identified_only',
-            })
-            const distinctId = '123'
-            console.error = jest.fn()
+            const { posthog, onCapture, distinctId } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before identify')
@@ -82,14 +81,7 @@ describe('person processing', () => {
 
         it('should not change $person_process if process_person is always', async () => {
             // arrange
-            const token = uuidv7()
-            const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, {
-                _onCapture: onCapture,
-                __preview_process_person: 'always',
-            })
-            const distinctId = '123'
-            console.error = jest.fn()
+            const { posthog, onCapture, distinctId } = await setup('always')
 
             // act
             posthog.capture('custom event before identify')
@@ -108,13 +100,7 @@ describe('person processing', () => {
 
         it('should include initial referrer info in identify event if identified_only', async () => {
             // arrange
-            const token = uuidv7()
-            const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, {
-                _onCapture: onCapture,
-                __preview_process_person: 'identified_only',
-            })
-            const distinctId = '123'
+            const { posthog, onCapture, distinctId } = await setup('identified_only')
 
             // act
             posthog.identify(distinctId)
@@ -130,13 +116,7 @@ describe('person processing', () => {
 
         it('should not include initial referrer info in identify event if always', async () => {
             // arrange
-            const token = uuidv7()
-            const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, {
-                _onCapture: onCapture,
-                __preview_process_person: 'always',
-            })
-            const distinctId = '123'
+            const { posthog, onCapture, distinctId } = await setup('always')
 
             // act
             posthog.identify(distinctId)
@@ -151,13 +131,7 @@ describe('person processing', () => {
     describe('capture', () => {
         it('should include initial referrer info iff the event has person processing when in identified_only mode', async () => {
             // arrange
-            const token = uuidv7()
-            const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, {
-                _onCapture: onCapture,
-                __preview_process_person: 'identified_only',
-            })
-            const distinctId = '123'
+            const { posthog, onCapture, distinctId } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before identify')
@@ -176,13 +150,7 @@ describe('person processing', () => {
 
         it('should not add initial referrer to set_once when in always mode', async () => {
             // arrange
-            const token = uuidv7()
-            const onCapture = jest.fn()
-            const posthog = await createPosthogInstance(token, {
-                _onCapture: onCapture,
-                __preview_process_person: 'always',
-            })
-            const distinctId = '123'
+            const { posthog, onCapture, distinctId } = await setup('always')
 
             // act
             posthog.capture('custom event before identify')
