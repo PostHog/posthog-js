@@ -1,3 +1,7 @@
+## 1.119.0 - 2024-04-08
+
+- feat: allow override sampling (#1105)
+
 ## 1.118.1 - 2024-04-05
 
 - Fix nextjs playground version of posthog-js (#1117)
