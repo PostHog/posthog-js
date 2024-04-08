@@ -61,6 +61,13 @@ export interface AutocaptureConfig {
     capture_copied_text?: boolean
 }
 
+export interface BootstrapConfig {
+    distinctID?: string
+    isIdentifiedID?: boolean
+    featureFlags?: Record<string, boolean | string>
+    featureFlagPayloads?: Record<string, JsonType>
+}
+
 export interface PostHogConfig {
     api_host: string
     /** @deprecated - This property is no longer supported */
@@ -132,17 +139,20 @@ export interface PostHogConfig {
     capture_performance?: boolean
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
-    bootstrap: {
-        distinctID?: string
-        isIdentifiedID?: boolean
-        featureFlags?: Record<string, boolean | string>
-        featureFlagPayloads?: Record<string, JsonType>
-    }
+    bootstrap: BootstrapConfig
     segment?: any
     __preview_send_client_session_params?: boolean
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
+
+    /** You can control whether events from PostHog-js have person processing enabled with the `process_person` config setting. There are three options:
+     * - `process_person: 'always'` _(default)_ - we will process persons data for all events
+     * - `process_person: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonyomous to identified. All events (including `$identify`) will be sent with `$process_person: False`.
+     * - `process_person: 'identified_only'` - we will only process persons when you call `posthog.identify([distinct_id])`. Anonymous users won't get person profiles.
+     */
+    __preview_process_person?: 'always' | 'never' | 'identified_only'
+
     /** Client side rate limiting */
     rate_limiting?: {
         /** The average number of events per second that should be permitted (defaults to 10) */
@@ -412,12 +422,18 @@ export type NetworkRecordOptions = {
     recordHeaders?: boolean | { request: boolean; response: boolean }
     recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
     recordInitialRequests?: boolean
-    // whether to record PerformanceEntry events for network requests
+    /**
+     * whether to record PerformanceEntry events for network requests
+     */
     recordPerformance?: boolean
-    // the PerformanceObserver will only observe these entry types
+    /**
+     * the PerformanceObserver will only observe these entry types
+     */
     performanceEntryTypeToObserve: string[]
-    // the maximum size of the request/response body to record
-    // NB this will be at most 1MB even if set larger
+    /**
+     * the maximum size of the request/response body to record
+     * NB this will be at most 1MB even if set larger
+     */
     payloadSizeLimitBytes: number
 }
 

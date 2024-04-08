@@ -1,3 +1,70 @@
+## 1.120.0 - 2024-04-08
+
+- feat: Add person processing mode preview (#1109)
+
+## 1.119.2 - 2024-04-08
+
+- chore: upgrade rrweb to 2.0.0-alpha.12 (#1115)
+
+## 1.119.1 - 2024-04-08
+
+- fix: Default api host to us.i.posthog.com (#1087)
+
+## 1.119.0 - 2024-04-08
+
+- feat: allow override sampling (#1105)
+
+## 1.118.1 - 2024-04-05
+
+- Fix nextjs playground version of posthog-js (#1117)
+- Fix $is_identified (#1116)
+
+## 1.118.0 - 2024-04-04
+
+- feat: capture more sentry levels (#1104)
+
+## 1.117.2 - 2024-04-03
+
+- feat: measure identified events (#1114)
+
+## 1.117.1 - 2024-04-03
+
+- fix: block bytespider bot (#1113)
+- fix: remove alpha comments from groups (#1111)
+
+## 1.117.0 - 2024-04-03
+
+- feat: Add __posthog_debug query string (#1108)
+
+## 1.116.7 - 2024-04-03
+
+- fix(decide): Respect disable_compression for flags (#1102)
+
+## 1.116.6 - 2024-03-25
+
+- fix: Reloading toolbar after closing (#1095)
+
+## 1.116.5 - 2024-03-23
+
+- fix: posthog init should reject invalid config in TypeScript (#1097)
+
+## 1.116.4 - 2024-03-22
+
+- fix: custom event on sampling decision (#1094)
+- feat: signal we have wrapped fetch (#1083)
+
+## 1.116.3 - 2024-03-20
+
+- fix: Return this if already loaded (#1092)
+
+## 1.116.2 - 2024-03-18
+
+- feat: add property so we can check if a client is using a proxy (#1084)
+
+## 1.116.1 - 2024-03-18
+
+- chore: Remove v2 rrweb checks (#1080)
+
 ## 1.116.0 - 2024-03-15
 
 - fix: allow payload scrubbing override (#1085)

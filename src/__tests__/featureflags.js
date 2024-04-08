@@ -209,10 +209,12 @@ describe('featureflags', () => {
             },
         }
 
-        expect(given.featureFlags.getFlags()).toEqual(['alpha-feature-2', 'multivariate-flag'])
+        // should return both true and false flags
+        expect(given.featureFlags.getFlags()).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
         expect(given.featureFlags.getFlagVariants()).toEqual({
             'alpha-feature-2': 'as-a-variant',
             'multivariate-flag': 'variant-1',
+            'beta-feature': false,
         })
     })
 
@@ -540,6 +542,9 @@ describe('featureflags', () => {
                 second: true,
             })
 
+            // check right compression is sent
+            expect(given.instance._send_request.mock.calls[0][0].compression).toEqual('base64')
+
             // check the request sent person properties
             expect(given.instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
@@ -584,6 +589,18 @@ describe('featureflags', () => {
 
             // check reload request was not sent
             expect(given.instance._send_request).not.toHaveBeenCalled()
+        })
+
+        it('on providing config disable_compression', () => {
+            given.instance.config = {
+                ...given.instance.config,
+                disable_compression: true,
+            }
+
+            given.featureFlags.reloadFeatureFlags()
+            jest.runAllTimers()
+
+            expect(given.instance._send_request.mock.calls[0][0].compression).toEqual(undefined)
         })
     })
 

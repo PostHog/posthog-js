@@ -2,6 +2,7 @@
 
 import { _isNull } from '../../src/utils/type-utils'
 import { start } from '../support/setup'
+import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
 
 function ensureRecordingIsStopped() {
     cy.resetPhCaptures()
@@ -26,7 +27,7 @@ function ensureActivitySendsSnapshots() {
         .then(() => {
             cy.phCaptures({ full: true }).then((captures) => {
                 expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
-                expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(14).and.below(39)
+                expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(14).and.below(40)
                 // a meta and then a full snapshot
                 expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                 expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
@@ -64,7 +65,7 @@ describe('Session recording', () => {
                         // should be a pageview and a $snapshot
                         expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
 
-                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(39)
+                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(40)
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
@@ -75,6 +76,49 @@ describe('Session recording', () => {
                         expect(new Set(incrementalSnapshots.map((s) => s.type))).to.deep.equal(new Set([3]))
                     })
                 })
+        })
+    })
+
+    describe('with network capture', () => {
+        beforeEach(() => {
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                        networkPayloadCapture: { recordBody: true },
+                    },
+                    capturePerformance: true,
+                },
+                url: './playground/cypress',
+                options: {
+                    loaded: (ph) => {
+                        ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                    },
+                },
+            })
+
+            cy.wait('@recorder')
+        })
+
+        it('it sends network payloads', () => {
+            cy.intercept('https://example.com', 'success').as('example.com')
+            cy.get('[data-cy-network-call-button]').click()
+            cy.wait('@example.com')
+            cy.wait('@session-recording')
+            cy.phCaptures({ full: true }).then((captures) => {
+                const snapshots = captures.filter((c) => c.event === '$snapshot')
+
+                const snapshotTypes: number[] = []
+                for (const snapshot of snapshots) {
+                    for (const snapshotData of snapshot.properties['$snapshot_data']) {
+                        snapshotTypes.push(snapshotData.type)
+                    }
+                }
+                // yay, includes type 6 network data
+                expect(snapshotTypes.filter((x) => x === 6)).to.have.length.above(0)
+            })
         })
     })
 
@@ -112,7 +156,7 @@ describe('Session recording', () => {
             cy.posthog().then((ph) => {
                 ph.stopSessionRecording()
             })
-            cy.resetPhCaptures()
+
             ensureRecordingIsStopped()
 
             // restarting recording
@@ -317,6 +361,106 @@ describe('Session recording', () => {
                         expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
                     })
                 })
+        })
+    })
+
+    describe.only('with sampling', () => {
+        beforeEach(() => {
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                        sampleRate: '0',
+                    },
+                    capturePerformance: true,
+                },
+                url: './playground/cypress',
+            })
+            cy.wait('@recorder')
+        })
+
+        it('does not capture when sampling is set to 0', () => {
+            cy.get('[data-cy-input]').type('hello world! ')
+            cy.wait(500)
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .wait(200) // can't wait on call to session recording, it's not going to happen
+                .then(() => {
+                    cy.phCaptures({ full: true }).then((captures) => {
+                        // should be a pageview and a $snapshot
+                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
+                    })
+                })
+        })
+
+        it.only('can override sampling when starting session recording', () => {
+            cy.intercept('POST', '/decide/*', {
+                config: { enable_collect_everything: false },
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview'])
+            })
+
+            cy.posthog().invoke('startSessionRecording', { sampling: true })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.resetPhCaptures()
+
+            cy.get('[data-cy-input]').type('hello posthog!')
+
+            pollPhCaptures('$snapshot').then(() => {
+                cy.phCaptures({ full: true }).then((captures) => {
+                    expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+                })
+            })
+
+            // sampling override survives a page refresh
+            cy.log('refreshing page')
+            cy.resetPhCaptures()
+            cy.reload(true).then(() => {
+                start({
+                    decideResponseOverrides: {
+                        config: { enable_collect_everything: false },
+                        isAuthenticated: false,
+                        sessionRecording: {
+                            endpoint: '/ses/',
+                            sampleRate: '0',
+                        },
+                        capturePerformance: true,
+                    },
+                    url: './playground/cypress',
+                })
+                cy.wait('@recorder')
+
+                cy.get('[data-cy-input]').type('hello posthog!')
+
+                pollPhCaptures('$snapshot').then(() => {
+                    cy.phCaptures({ full: true }).then((captures) => {
+                        expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
+                    })
+                })
+            })
         })
     })
 })

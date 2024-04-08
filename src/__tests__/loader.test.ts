@@ -5,7 +5,7 @@
  * currently not supported in the browser lib).
  */
 
-import posthog from '../loader-module'
+import posthog, { PostHog } from '../loader-module'
 import sinon from 'sinon'
 import { window } from '../utils/globals'
 
@@ -47,5 +47,23 @@ describe(`Module-based loader in Node env`, () => {
 
     it(`supports capture()`, () => {
         expect(() => posthog.capture(`Pat`)).not.toThrow()
+    })
+
+    it(`always returns posthog from init`, () => {
+        console.error = jest.fn()
+        console.warn = jest.fn()
+        expect(posthog.init(`my-test`, undefined, 'sdk-1')).toBeInstanceOf(PostHog)
+        expect(posthog.init(``, undefined, 'sdk-2')).toBeInstanceOf(PostHog)
+        expect(console.error).toHaveBeenCalledTimes(1)
+        expect(console.error).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
+        )
+        // Already loaded
+        expect(posthog.init(`my-test`, undefined, 'sdk-1')).toBeInstanceOf(PostHog)
+        expect(console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            'You have already initialized PostHog! Re-initializing is a no-op'
+        )
     })
 })

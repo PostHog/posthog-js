@@ -15,6 +15,8 @@ export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
 export const SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE = '$session_recording_network_payload_capture'
 export const SESSION_RECORDING_CANVAS_RECORDING = '$session_recording_canvas_recording'
+export const SESSION_RECORDING_SAMPLE_RATE = '$replay_sample_rate'
+export const SESSION_RECORDING_MINIMUM_DURATION = '$replay_minimum_duration'
 export const SESSION_ID = '$sesid'
 export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
@@ -26,6 +28,8 @@ export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
 export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
+export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
+export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
 
 // These are properties that are reserved and will not be automatically included in events
 export const PERSISTENCE_RESERVED_PROPERTIES = [
@@ -44,4 +48,6 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     FLAG_CALL_REPORTED,
     CLIENT_SESSION_PROPS,
     CAPTURE_RATE_LIMIT,
+    INITIAL_CAMPAIGN_PARAMS,
+    INITIAL_REFERRER_INFO,
 ]

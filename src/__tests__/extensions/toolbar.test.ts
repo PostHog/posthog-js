@@ -35,7 +35,6 @@ describe('Toolbar', () => {
 
     beforeEach(() => {
         assignableWindow.ph_load_toolbar = jest.fn()
-        delete assignableWindow['_postHogToolbarLoaded']
     })
 
     describe('maybeLoadToolbar', () => {
@@ -175,6 +174,13 @@ describe('Toolbar', () => {
         it('should NOT load if previously loaded', () => {
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
             expect(toolbar.loadToolbar(toolbarParams)).toBe(false)
+        })
+
+        it('should load if previously loaded but closed via localstorage', () => {
+            expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
+            expect(toolbar.loadToolbar(toolbarParams)).toBe(false)
+            localStorage.removeItem('_postHogToolbarParams')
+            expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
         })
     })
 

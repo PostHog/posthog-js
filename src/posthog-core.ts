@@ -10,11 +10,11 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { window, assignableWindow } from './utils/globals'
+import { assignableWindow, document, location, userAgent, window } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, USER_STATE } from './constants'
+import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, SESSION_RECORDING_IS_SAMPLED } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
@@ -23,7 +23,7 @@ import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
-import { RequestRouter } from './utils/request-router'
+import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import {
     AutocaptureConfig,
     CaptureOptions,
@@ -63,7 +63,6 @@ import {
 } from './utils/type-utils'
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
-import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -77,6 +76,16 @@ this.__x === private - only use within the class
 
 Globals should be all caps
 */
+
+/* posthog.init is called with `Partial<PostHogConfig>`
+ * and we want to ensure that only valid keys are passed to the config object.
+ * TypeScript does not enforce that the object passed does not have extra keys.
+ * So someone can call with { bootstrap: { distinctId: '123'} }
+ * which is not a valid key. They should have passed distinctID (upper case D).
+ * That's a really tricky mistake to spot.
+ * The OnlyValidKeys type ensures that only keys that are valid in the PostHogConfig type are allowed.
+ */
+type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> extends never ? T : never) : never
 
 const instances: Record<string, PostHog> = {}
 
@@ -97,7 +106,7 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
-    api_host: 'https://app.posthog.com',
+    api_host: 'https://us.i.posthog.com',
     api_transport: 'XHR',
     ui_host: null,
     token: '',
@@ -114,7 +123,7 @@ export const defaultConfig = (): PostHogConfig => ({
     save_referrer: true,
     capture_pageview: true,
     capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
-    debug: false,
+    debug: (location && _isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     verbose: false,
     cookie_expiration: 365,
     upgrade: false,
@@ -160,18 +169,21 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
+    __preview_process_person: 'always',
 })
 
 class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
         return this.__forceAllowLocalhost
     }
+
     set _forceAllowLocalhost(value: boolean) {
         logger.error(
             'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
         )
         this.__forceAllowLocalhost = value
     }
+
     private __forceAllowLocalhost: boolean = false
 }
 
@@ -181,7 +193,6 @@ class DeprecatedWebPerformanceObserver {
  */
 export class PostHog {
     __loaded: boolean
-    __loaded_recorder_version: 'v1' | 'v2' | undefined // flag that keeps track of which version of recorder is loaded
     config: PostHogConfig
 
     rateLimiter: RateLimiter
@@ -228,7 +239,6 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
-        this.__loaded_recorder_version = undefined
         this.__autocapture = undefined
         this.analyticsDefaultEndpoint = '/e/'
         this.elementsChainAsString = false
@@ -273,9 +283,13 @@ export class PostHog {
      * @param {Object} [config]  A dictionary of config options to override. <a href="https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91">See a list of default config options</a>.
      * @param {String} [name]    The name for the new posthog instance that you want created
      */
-    init(token: string, config?: Partial<PostHogConfig>, name?: string): PostHog | void {
+    init(
+        token: string,
+        config?: OnlyValidKeys<Partial<PostHogConfig>, Partial<PostHogConfig>>,
+        name?: string
+    ): PostHog | void {
         if (!name || name === PRIMARY_INSTANCE_NAME) {
-            // This means we are initialising the primary instance (i.e. this)
+            // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
         } else {
             const namedPosthog = instances[name] ?? new PostHog()
@@ -301,17 +315,17 @@ export class PostHog {
     // IE11 compatible. We could use polyfills, which would make the
     // code a bit cleaner, but will add some overhead.
     //
-    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog | void {
+    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog {
         if (_isUndefined(token) || _isEmptyString(token)) {
             logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
             )
-            return
+            return this
         }
 
         if (this.__loaded) {
-            logger.warn('You have already initialized PostHog! Re-initialising is a no-op')
-            return
+            logger.warn('You have already initialized PostHog! Re-initializing is a no-op')
+            return this
         }
 
         this.__loaded = true
@@ -326,15 +340,6 @@ export class PostHog {
                 token: token,
             })
         )
-
-        // Check if recorder.js is already loaded
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        if (window?.rrweb?.record || window?.rrwebRecord) {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            this.__loaded_recorder_version = window?.rrweb?.version
-        }
 
         this.compression = config.disable_compression ? undefined : Compression.Base64
 
@@ -746,9 +751,13 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
-        if (event_name === '$identify') {
-            data['$set'] = options?.['$set']
-            data['$set_once'] = options?.['$set_once']
+        const setProperties = options?.$set
+        if (setProperties) {
+            data.$set = options?.$set
+        }
+        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once)
+        if (setOnceProperties) {
+            data.$set_once = setOnceProperties
         }
 
         data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
@@ -819,6 +828,10 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
+        if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
+            properties['$lib_custom_api_host'] = this.config.api_host
+        }
+
         if (
             this.sessionPropsManager &&
             this.config.__preview_send_client_session_params &&
@@ -877,6 +890,8 @@ export class PostHog {
             properties
         )
 
+        properties['$is_identified'] = this._isIdentified()
+
         if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
             // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
             // TODO: merge this only once, requires refactoring tests
@@ -898,7 +913,26 @@ export class PostHog {
             properties = sanitize_properties(properties, event_name)
         }
 
+        // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
+        properties['$process_person'] = this._hasPersonProcessing()
+
         return properties
+    }
+
+    _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
+        if (
+            !this.sessionPersistence ||
+            !this._hasPersonProcessing() ||
+            this.config.__preview_process_person !== 'identified_only'
+        ) {
+            return dataSetOnce
+        }
+        // if we're an identified person, send initial params with every event
+        const setOnceProperties = _extend({}, this.sessionPersistence.get_initial_props(), dataSetOnce || {})
+        if (_isEmptyObject(setOnceProperties)) {
+            return undefined
+        }
+        return setOnceProperties
     }
 
     /**
@@ -1179,6 +1213,13 @@ export class PostHog {
             return
         }
 
+        if (this.config.__preview_process_person === 'never') {
+            logger.error(
+                'posthog.identify was called, but the process_person configuration is set to "never". This call will be ignored.'
+            )
+            return
+        }
+
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
@@ -1203,7 +1244,7 @@ export class PostHog {
 
         const isKnownAnonymous = (this.persistence.get_property(USER_STATE) || 'anonymous') === 'anonymous'
 
-        // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
+        // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
             this.persistence.set_property(USER_STATE, 'identified')
@@ -1255,8 +1296,6 @@ export class PostHog {
     }
 
     /**
-     * Alpha feature: don't use unless you know what you're doing!
-     *
      * Sets group analytics information for subsequent events and reloads feature flags.
      *
      * @param {String} groupType Group type (example: 'organization')
@@ -1470,12 +1509,12 @@ export class PostHog {
      *
      *     {
      *       // PostHog API host
-     *       api_host: 'https://app.posthog.com',
+     *       api_host: 'https://us.i.posthog.com',
      *     *
      *       // PostHog web app host, currently only used by the Sentry integration.
      *       // This will only be different from api_host when using a reverse-proxied API host – in that case
      *       // the original web app host needs to be passed here so that links to the web app are still convenient.
-     *       ui_host: 'https://app.posthog.com',
+     *       ui_host: 'https://us.posthog.com',
      *
      *       // Automatically capture clicks, form submissions and change events
      *       autocapture: true
@@ -1647,8 +1686,18 @@ export class PostHog {
     /**
      * turns session recording on, and updates the config option
      * disable_session_recording to false
+     * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      */
-    startSessionRecording(): void {
+    startSessionRecording(override: { sampling?: boolean }): void {
+        if (override?.sampling) {
+            // allow the session id check to rotate session id if necessary
+            const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
+            this.persistence?.register({
+                // short-circuits the `makeSamplingDecision` function in the session recording module
+                [SESSION_RECORDING_IS_SAMPLED]: true,
+            })
+            logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
+        }
         this.set_config({ disable_session_recording: false })
     }
 
@@ -1728,6 +1777,20 @@ export class PostHog {
             name = PRIMARY_INSTANCE_NAME + '.' + name
         }
         return name
+    }
+
+    _isIdentified(): boolean {
+        return (
+            this.persistence?.get_user_state() === 'identified' ||
+            this.sessionPersistence?.get_user_state() === 'identified'
+        )
+    }
+
+    _hasPersonProcessing(): boolean {
+        return !(
+            this.config.__preview_process_person === 'never' ||
+            (this.config.__preview_process_person === 'identified_only' && !this._isIdentified())
+        )
     }
 
     // perform some housekeeping around GDPR opt-in/out state

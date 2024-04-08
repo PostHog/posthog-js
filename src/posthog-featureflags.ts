@@ -110,11 +110,7 @@ export class PostHogFeatureFlags {
         const finalFlags = _extend({}, enabledFlags)
         const overriddenKeys = Object.keys(overriddenFlags)
         for (let i = 0; i < overriddenKeys.length; i++) {
-            if (overriddenFlags[overriddenKeys[i]] === false) {
-                delete finalFlags[overriddenKeys[i]]
-            } else {
-                finalFlags[overriddenKeys[i]] = overriddenFlags[overriddenKeys[i]]
-            }
+            finalFlags[overriddenKeys[i]] = overriddenFlags[overriddenKeys[i]]
         }
         if (!this._override_warning) {
             logger.warn(' Overriding feature flags!', {
@@ -194,7 +190,7 @@ export class PostHogFeatureFlags {
             method: 'POST',
             url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
             data: json_data,
-            compression: Compression.Base64,
+            compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 this.setReloadingPaused(false)

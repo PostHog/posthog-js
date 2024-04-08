@@ -61,6 +61,9 @@ describe('posthog core', () => {
                     Object.assign(this.props, properties)
                 },
                 props: {},
+                get_user_state: () => 'anonymous',
+                get_initial_campaign_params: () => undefined,
+                get_initial_referrer_info: () => undefined,
             },
             sessionPersistence: {
                 update_search_keyword: jest.fn(),
@@ -68,6 +71,9 @@ describe('posthog core', () => {
                 update_referrer_info: jest.fn(),
                 update_config: jest.fn(),
                 properties: jest.fn(),
+                get_user_state: () => 'anonymous',
+                get_initial_campaign_params: () => undefined,
+                get_initial_referrer_info: () => undefined,
             },
             _send_request: jest.fn(),
             compression: {},
@@ -371,11 +377,13 @@ describe('posthog core', () => {
         given('overrides', () => ({
             config: given.config,
             persistence: {
-                properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+                properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
+                get_user_state: () => 'anonymous',
             },
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+                get_user_state: () => 'anonymous',
             },
             sessionManager: {
                 checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
@@ -386,6 +394,7 @@ describe('posthog core', () => {
         }))
 
         given('config', () => ({
+            api_host: 'https://app.posthog.com',
             token: 'testtoken',
             property_denylist: given.property_denylist,
             property_blacklist: given.property_blacklist,
@@ -407,11 +416,35 @@ describe('posthog core', () => {
                 persistent: 'prop',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $is_identified: false,
+                $process_person: true,
+            })
+        })
+
+        it('sets $lib_custom_api_host if api_host is not the default', () => {
+            given('config', () => ({
+                api_host: 'https://custom.posthog.com',
+                token: 'testtoken',
+                property_denylist: given.property_denylist,
+                property_blacklist: given.property_blacklist,
+                sanitize_properties: given.sanitize_properties,
+            }))
+            expect(given.subject).toEqual({
+                token: 'testtoken',
+                event: 'prop',
+                $lib: 'web',
+                distinct_id: 'abc',
+                persistent: 'prop',
+                $window_id: 'windowId',
+                $session_id: 'sessionId',
+                $lib_custom_api_host: 'https://custom.posthog.com',
+                $is_identified: false,
+                $process_person: true,
             })
         })
 
         it('respects property_denylist and property_blacklist', () => {
-            given('property_denylist', () => ['$lib', 'persistent'])
+            given('property_denylist', () => ['$lib', 'persistent', '$is_identified'])
             given('property_blacklist', () => ['token'])
 
             expect(given.subject).toEqual({
@@ -419,7 +452,15 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $process_person: true,
             })
+        })
+
+        it("can't deny or blacklist $process_person", () => {
+            given('property_denylist', () => ['$process_person'])
+            given('property_blacklist', () => ['$process_person'])
+
+            expect(given.subject['$process_person']).toEqual(true)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
@@ -450,6 +491,7 @@ describe('posthog core', () => {
             expect(given.subject).toEqual({
                 event_name: given.event_name,
                 token: 'testtoken',
+                $process_person: true,
             })
         })
 
@@ -734,30 +776,6 @@ describe('posthog core', () => {
         it('does not load decide endpoint on advanced_disable_decide', () => {
             expect(given.decide).toBe(undefined)
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
-        })
-
-        it('does not set __loaded_recorder_version flag if recording script has not been included', () => {
-            delete window.rrweb
-            window.rrweb = { record: undefined }
-            delete window.rrwebRecord
-            window.rrwebRecord = undefined
-            expect(given.lib.__loaded_recorder_version).toEqual(undefined)
-        })
-
-        it('set __loaded_recorder_version flag to v1 if recording script has been included', () => {
-            delete window.rrweb
-            window.rrweb = { record: 'anything', version: '1.1.3' }
-            delete window.rrwebRecord
-            window.rrwebRecord = 'is possible'
-            expect(given.lib.__loaded_recorder_version).toMatch(/^1\./) // start with 1.?.?
-        })
-
-        it('set __loaded_recorder_version flag to v2 if recording script has been included', () => {
-            delete window.rrweb
-            window.rrweb = { record: 'anything', version: '2.0.0-alpha.6' }
-            delete window.rrwebRecord
-            window.rrwebRecord = 'is possible'
-            expect(given.lib.__loaded_recorder_version).toMatch(/^2\./) // start with 2.?.?
         })
 
         it('does not load autocapture, feature flags, toolbar, session recording', () => {
@@ -1127,16 +1145,16 @@ describe('posthog core', () => {
         })
 
         it('returns the replay URL', () => {
-            expect(given.lib.get_session_replay_url()).toEqual('https://app.posthog.com/replay/sessionId')
+            expect(given.lib.get_session_replay_url()).toEqual('https://us.posthog.com/replay/sessionId')
         })
 
         it('returns the replay URL including timestamp', () => {
             expect(given.lib.get_session_replay_url({ withTimestamp: true })).toEqual(
-                'https://app.posthog.com/replay/sessionId?t=20' // default lookback is 10 seconds
+                'https://us.posthog.com/replay/sessionId?t=20' // default lookback is 10 seconds
             )
 
             expect(given.lib.get_session_replay_url({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
-                'https://app.posthog.com/replay/sessionId?t=30'
+                'https://us.posthog.com/replay/sessionId?t=30'
             )
         })
     })

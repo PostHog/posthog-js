@@ -1,6 +1,6 @@
 import '@/styles/globals.css'
 
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import type { AppProps } from 'next/app'
 import { useRouter } from 'next/router'
 
@@ -10,12 +10,11 @@ import { CookieBanner, cookieConsentGiven } from '@/src/CookieBanner'
 
 if (typeof window !== 'undefined') {
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
-        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://app.posthog.com',
+        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
         session_recording: {
             recordCrossOriginIframes: true,
         },
         debug: true,
-        __preview_send_client_session_params: true,
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
     })
