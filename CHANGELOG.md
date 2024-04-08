@@ -1,3 +1,7 @@
+## 1.120.2 - 2024-04-08
+
+- Fix to include project in urls (#1098)
+
 ## 1.120.1 - 2024-04-08
 
 - chore: Add workflow to update the posthog.com repo with new posthog-js versions (#1120)
