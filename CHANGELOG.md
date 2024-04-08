@@ -1,3 +1,7 @@
+## 1.119.2 - 2024-04-08
+
+- chore: upgrade rrweb to 2.0.0-alpha.12 (#1115)
+
 ## 1.119.1 - 2024-04-08
 
 - fix: Default api host to us.i.posthog.com (#1087)
