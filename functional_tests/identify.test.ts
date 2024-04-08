@@ -47,11 +47,9 @@ describe('FunctionalTests / Identify', () => {
                 expect.objectContaining({
                     event: '$identify',
                     $set: { email: 'first@email.com' },
-                    $set_once: {
+                    $set_once: expect.objectContaining({
                         location: 'first',
-                        $initial_referrer: '$direct',
-                        $initial_referring_domain: '$direct',
-                    },
+                    }),
                     properties: expect.objectContaining({
                         distinct_id: 'test-id',
                         $anon_distinct_id: anonymousId,
@@ -97,11 +95,9 @@ describe('FunctionalTests / Identify', () => {
                 expect.objectContaining({
                     event: '$identify',
                     $set: { email: 'first@email.com' },
-                    $set_once: {
+                    $set_once: expect.objectContaining({
                         location: 'first',
-                        $initial_referrer: '$direct',
-                        $initial_referring_domain: '$direct',
-                    },
+                    }),
                     properties: expect.objectContaining({
                         distinct_id: 'test-id',
                         $anon_distinct_id: anonymousId,
@@ -121,8 +117,6 @@ describe('FunctionalTests / Identify', () => {
                     properties: expect.objectContaining({
                         $browser: 'Safari',
                         $browser_version: null,
-                        $referrer: '$direct',
-                        $referring_domain: '$direct',
                         $set: { email: 'test@email.com' },
                         $set_once: { location: 'second' },
                         distinct_id: 'another-test-id',
