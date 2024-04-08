@@ -117,6 +117,8 @@ describe('FunctionalTests / Identify', () => {
                     properties: expect.objectContaining({
                         $browser: 'Safari',
                         $browser_version: null,
+                        $referrer: '$direct',
+                        $referring_domain: '$direct',
                         $set: { email: 'test@email.com' },
                         $set_once: { location: 'second' },
                         distinct_id: 'another-test-id',
