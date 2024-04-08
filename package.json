@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.118.1",
+    "version": "1.119.2",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -47,7 +47,7 @@
         "@rollup/plugin-node-resolve": "^15.2.3",
         "@rollup/plugin-terser": "^0.4.4",
         "@rollup/plugin-typescript": "^11.1.6",
-        "@rrweb/types": "2.0.0-alpha.11",
+        "@rrweb/types": "2.0.0-alpha.12",
         "@segment/analytics-next": "^1.66.0",
         "@sentry/types": "7.37.2",
         "@testing-library/dom": "^9.3.0",
@@ -88,8 +88,8 @@
         "rollup": "^4.9.6",
         "rollup-plugin-dts": "^6.1.0",
         "rollup-plugin-visualizer": "^5.12.0",
-        "rrweb": "2.0.0-alpha.11",
-        "rrweb-snapshot": "2.0.0-alpha.11",
+        "rrweb": "2.0.0-alpha.12",
+        "rrweb-snapshot": "2.0.0-alpha.12",
         "sinon": "9.0.2",
         "testcafe": "1.19.0",
         "testcafe-browser-provider-browserstack": "1.14.0",
@@ -109,7 +109,7 @@
     ],
     "pnpm": {
         "patchedDependencies": {
-            "rrweb@2.0.0-alpha.11": "patches/rrweb@2.0.0-alpha.11.patch"
+            "rrweb@2.0.0-alpha.12": "patches/rrweb@2.0.0-alpha.12.patch"
         }
     }
 }

@@ -14,7 +14,7 @@ import { window, assignableWindow, location } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
+import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, SESSION_RECORDING_IS_SAMPLED } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
@@ -107,7 +107,7 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
-    api_host: 'https://app.posthog.com',
+    api_host: 'https://us.i.posthog.com',
     api_transport: 'XHR',
     ui_host: null,
     token: '',
@@ -176,12 +176,14 @@ class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
         return this.__forceAllowLocalhost
     }
+
     set _forceAllowLocalhost(value: boolean) {
         logger.error(
             'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
         )
         this.__forceAllowLocalhost = value
     }
+
     private __forceAllowLocalhost: boolean = false
 }
 
@@ -1474,12 +1476,12 @@ export class PostHog {
      *
      *     {
      *       // PostHog API host
-     *       api_host: 'https://app.posthog.com',
+     *       api_host: 'https://us.i.posthog.com',
      *     *
      *       // PostHog web app host, currently only used by the Sentry integration.
      *       // This will only be different from api_host when using a reverse-proxied API host – in that case
      *       // the original web app host needs to be passed here so that links to the web app are still convenient.
-     *       ui_host: 'https://app.posthog.com',
+     *       ui_host: 'https://us.posthog.com',
      *
      *       // Automatically capture clicks, form submissions and change events
      *       autocapture: true
@@ -1651,8 +1653,18 @@ export class PostHog {
     /**
      * turns session recording on, and updates the config option
      * disable_session_recording to false
+     * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      */
-    startSessionRecording(): void {
+    startSessionRecording(override: { sampling?: boolean }): void {
+        if (override?.sampling) {
+            // allow the session id check to rotate session id if necessary
+            const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
+            this.persistence?.register({
+                // short-circuits the `makeSamplingDecision` function in the session recording module
+                [SESSION_RECORDING_IS_SAMPLED]: true,
+            })
+            logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
+        }
         this.set_config({ disable_session_recording: false })
     }
 

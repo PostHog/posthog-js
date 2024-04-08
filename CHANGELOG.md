@@ -1,3 +1,15 @@
+## 1.119.2 - 2024-04-08
+
+- chore: upgrade rrweb to 2.0.0-alpha.12 (#1115)
+
+## 1.119.1 - 2024-04-08
+
+- fix: Default api host to us.i.posthog.com (#1087)
+
+## 1.119.0 - 2024-04-08
+
+- feat: allow override sampling (#1105)
+
 ## 1.118.1 - 2024-04-05
 
 - Fix nextjs playground version of posthog-js (#1117)
