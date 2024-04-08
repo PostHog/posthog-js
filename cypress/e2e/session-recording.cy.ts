@@ -2,6 +2,7 @@
 
 import { _isNull } from '../../src/utils/type-utils'
 import { start } from '../support/setup'
+import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
 
 function ensureRecordingIsStopped() {
     cy.resetPhCaptures()
@@ -360,6 +361,106 @@ describe('Session recording', () => {
                         expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
                     })
                 })
+        })
+    })
+
+    describe.only('with sampling', () => {
+        beforeEach(() => {
+            start({
+                decideResponseOverrides: {
+                    config: { enable_collect_everything: false },
+                    isAuthenticated: false,
+                    sessionRecording: {
+                        endpoint: '/ses/',
+                        sampleRate: '0',
+                    },
+                    capturePerformance: true,
+                },
+                url: './playground/cypress',
+            })
+            cy.wait('@recorder')
+        })
+
+        it('does not capture when sampling is set to 0', () => {
+            cy.get('[data-cy-input]').type('hello world! ')
+            cy.wait(500)
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .wait(200) // can't wait on call to session recording, it's not going to happen
+                .then(() => {
+                    cy.phCaptures({ full: true }).then((captures) => {
+                        // should be a pageview and a $snapshot
+                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
+                    })
+                })
+        })
+
+        it.only('can override sampling when starting session recording', () => {
+            cy.intercept('POST', '/decide/*', {
+                config: { enable_collect_everything: false },
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview'])
+            })
+
+            cy.posthog().invoke('startSessionRecording', { sampling: true })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.resetPhCaptures()
+
+            cy.get('[data-cy-input]').type('hello posthog!')
+
+            pollPhCaptures('$snapshot').then(() => {
+                cy.phCaptures({ full: true }).then((captures) => {
+                    expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
+                })
+            })
+
+            // sampling override survives a page refresh
+            cy.log('refreshing page')
+            cy.resetPhCaptures()
+            cy.reload(true).then(() => {
+                start({
+                    decideResponseOverrides: {
+                        config: { enable_collect_everything: false },
+                        isAuthenticated: false,
+                        sessionRecording: {
+                            endpoint: '/ses/',
+                            sampleRate: '0',
+                        },
+                        capturePerformance: true,
+                    },
+                    url: './playground/cypress',
+                })
+                cy.wait('@recorder')
+
+                cy.get('[data-cy-input]').type('hello posthog!')
+
+                pollPhCaptures('$snapshot').then(() => {
+                    cy.phCaptures({ full: true }).then((captures) => {
+                        expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
+                    })
+                })
+            })
         })
     })
 })

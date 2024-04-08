@@ -16,7 +16,7 @@ Cypress: run `pnpm start` to have a test server running and separately `pnpm cyp
 Testing on IE11 requires a bit more setup. TestCafe tests will use the
 playground application to test the locally built array.full.js bundle. It will
 also verify that the events emitted during the testing of playground are loaded
-into the PostHog app. By default it uses https://app.posthog.com and the
+into the PostHog app. By default it uses https://us.i.posthog.com and the
 project with ID 11213. See the testcafe tests to see how to override these if
 needed. For PostHog internal users ask @benjackwhite or @hazzadous to invite you
 to the Project. You'll need to set `POSTHOG_API_KEY` to your personal API key, and

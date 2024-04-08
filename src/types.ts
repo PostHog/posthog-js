@@ -145,6 +145,13 @@ export interface PostHogConfig {
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
+
+    /** You can control whether events from PostHog-js have person processing enabled with the `process_person` config setting. There are three options:
+     * - `process_person: 'always'` _(default)_ - we will process persons data for all events
+     * - `process_person: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonyomous to identified. All events (including `$identify`) will be sent with `$process_person: False`.
+     * - `process_person: 'identified_only'` - we will only process persons when you call `posthog.identify([distinct_id])`. Anonymous users won't get person profiles.
+     */
+    __preview_process_person?: 'always' | 'never' | 'identified_only'
 }
 
 export interface OptInOutCapturingOptions {

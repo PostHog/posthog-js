@@ -5,9 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  rrweb@2.0.0-alpha.11:
-    hash: ldhsspyvwscjgedotm5w5frkg4
-    path: patches/rrweb@2.0.0-alpha.11.patch
+  rrweb@2.0.0-alpha.12:
+    hash: nyylzlnsejqdkzdjaj3uehgqdm
+    path: patches/rrweb@2.0.0-alpha.12.patch
 
 dependencies:
   fflate:
@@ -49,8 +49,8 @@ devDependencies:
     specifier: ^11.1.6
     version: 11.1.6(rollup@4.9.6)(tslib@2.5.0)(typescript@4.9.5)
   '@rrweb/types':
-    specifier: 2.0.0-alpha.11
-    version: 2.0.0-alpha.11
+    specifier: 2.0.0-alpha.12
+    version: 2.0.0-alpha.12
   '@sentry/types':
     specifier: 7.37.2
     version: 7.37.2
@@ -169,11 +169,11 @@ devDependencies:
     specifier: ^5.12.0
     version: 5.12.0(rollup@4.9.6)
   rrweb:
-    specifier: 2.0.0-alpha.11
-    version: 2.0.0-alpha.11(patch_hash=ldhsspyvwscjgedotm5w5frkg4)
+    specifier: 2.0.0-alpha.12
+    version: 2.0.0-alpha.12(patch_hash=nyylzlnsejqdkzdjaj3uehgqdm)
   rrweb-snapshot:
-    specifier: 2.0.0-alpha.11
-    version: 2.0.0-alpha.11
+    specifier: 2.0.0-alpha.12
+    version: 2.0.0-alpha.12
   sinon:
     specifier: 9.0.2
     version: 9.0.2
@@ -2649,10 +2649,10 @@ packages:
     dev: true
     optional: true
 
-  /@rrweb/types@2.0.0-alpha.11:
-    resolution: {integrity: sha512-8ccocIkT5J/bfNRQY85qR/g6p5YQFpgFO2cMt4+Ex7w31Lq0yqZBRaoYEsawQKpLrn5KOHkdn2UTUrna7WMQuA==}
+  /@rrweb/types@2.0.0-alpha.12:
+    resolution: {integrity: sha512-dHFMvVBA9JD8MBV+waHtJs8lIeTPCVeT3h+WZ5s8a+EX42TQ08t+ObFMK0OYEszvWgJMJ5WZi5lXTvF46P27Hg==}
     dependencies:
-      rrweb-snapshot: 2.0.0-alpha.11
+      rrweb-snapshot: 2.0.0-alpha.12
     dev: true
 
   /@sentry/types@7.37.2:
@@ -9184,27 +9184,27 @@ packages:
       fsevents: 2.3.3
     dev: true
 
-  /rrdom@2.0.0-alpha.11:
-    resolution: {integrity: sha512-U37m0t4jTz63wnVRcOQ5qFzSTrI5RdNgeXnHAha2Fmh9+1K+XuCx421a8D1wZk3WcDc2sFz/04FVdM0OD2caHg==}
+  /rrdom@2.0.0-alpha.12:
+    resolution: {integrity: sha512-xdl51tE/ruN+zO0iEalEyyaQtbb4lb2HLULA6ug/zyApQjIVevaDc3BJnyXbDhd0eYgY9flBXTZ2gM64htUwHQ==}
     dependencies:
-      rrweb-snapshot: 2.0.0-alpha.11
+      rrweb-snapshot: 2.0.0-alpha.12
     dev: true
 
-  /rrweb-snapshot@2.0.0-alpha.11:
-    resolution: {integrity: sha512-N0dzeJA2VhrlSOadkKwCVmV/DuNOwBH+Lhx89hAf9PQK4lCS8AP4AaylhqUdZOYHqwVjqsYel/uZ4hN79vuLhw==}
+  /rrweb-snapshot@2.0.0-alpha.12:
+    resolution: {integrity: sha512-i4sz9469dbsEGFiBzCkq+7I7M+imPeC3NrKgrrdJ2tXu9H+/eegNe4SrQgCsLBeSZHZDHU0o9L5rxTAiapWbGg==}
     dev: true
 
-  /rrweb@2.0.0-alpha.11(patch_hash=ldhsspyvwscjgedotm5w5frkg4):
-    resolution: {integrity: sha512-vJ2gNvF+pUG9C2aaau7iSNqhWBSc4BwtUO4FpegOtDObuH4PIaxNJOlgHz82+WxKr9XPm93ER0LqmNpy0KYdKg==}
+  /rrweb@2.0.0-alpha.12(patch_hash=nyylzlnsejqdkzdjaj3uehgqdm):
+    resolution: {integrity: sha512-lUGwBV7gmbwz1dIgzo9EEayIVyxoTIF6NBF6+Jctqs4Uy45QkyARtikpQlCUfxVCGTCQ0FOee9jeVYsG39oq1g==}
     dependencies:
-      '@rrweb/types': 2.0.0-alpha.11
+      '@rrweb/types': 2.0.0-alpha.12
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
       base64-arraybuffer: 1.0.2
       fflate: 0.4.8
       mitt: 3.0.0
-      rrdom: 2.0.0-alpha.11
-      rrweb-snapshot: 2.0.0-alpha.11
+      rrdom: 2.0.0-alpha.12
+      rrweb-snapshot: 2.0.0-alpha.12
     dev: true
     patched: true
 

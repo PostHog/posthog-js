@@ -8,29 +8,31 @@ import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, de
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
+// Should be kept in sync with https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
+export const CAMPAIGN_PARAMS = [
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_content',
+    'utm_term',
+    'gclid', // google ads
+    'gad_source', // google ads
+    'gclsrc', // google ads 360
+    'dclid', // google display ads
+    'gbraid', // google ads, web to app
+    'wbraid', // google ads, app to web
+    'fbclid', // facebook
+    'msclkid', // microsoft
+    'twclid', // twitter
+    'li_fat_id', // linkedin
+    'mc_cid', // mailchimp campaign id
+    'igshid', // instagram
+    'ttclid', // tiktok
+]
+
 export const _info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {
-        // Should be kept in sync with https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
-        const campaign_keywords = [
-            'utm_source',
-            'utm_medium',
-            'utm_campaign',
-            'utm_content',
-            'utm_term',
-            'gclid', // google ads
-            'gad_source', // google ads
-            'gclsrc', // google ads 360
-            'dclid', // google display ads
-            'gbraid', // google ads, web to app
-            'wbraid', // google ads, app to web
-            'fbclid', // facebook
-            'msclkid', // microsoft
-            'twclid', // twitter
-            'li_fat_id', // linkedin
-            'mc_cid', // mailchimp campaign id
-            'igshid', // instagram
-            'ttclid', // tiktok
-        ].concat(customParams || [])
+        const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
 
         const params: Record<string, any> = {}
         _each(campaign_keywords, function (kwkey) {

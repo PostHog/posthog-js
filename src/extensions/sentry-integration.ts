@@ -26,6 +26,7 @@ import { PostHog } from '../posthog-core'
 //     EventProcessor as _SentryEventProcessor,
 //     Hub as _SentryHub,
 //     Integration as _SentryIntegration,
+//     SeverityLevel as _SeverityLevel,
 // } from '@sentry/types'
 
 // Uncomment the above and comment the below to get type checking for development
@@ -38,6 +39,11 @@ interface _SentryIntegration {
     name: string
     setupOnce(addGlobalEventProcessor: (callback: _SentryEventProcessor) => void, getCurrentHub: () => _SentryHub): void
 }
+
+// levels copied from Sentry to avoid relying on a frequently changing @sentry/types dependency
+// but provided as an array of literal types, so we can constrain the level below
+const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
+declare type _SeverityLevel = typeof severityLevels[number]
 
 interface SentryExceptionProperties {
     $sentry_event_id: any
@@ -56,12 +62,27 @@ export class SentryIntegration implements _SentryIntegration {
         getCurrentHub: () => _SentryHub
     ) => void
 
-    constructor(_posthog: PostHog, organization?: string, projectId?: number, prefix?: string) {
+    constructor(
+        _posthog: PostHog,
+        organization?: string,
+        projectId?: number,
+        prefix?: string,
+        /**
+         * By default, only errors are sent to PostHog. You can set this to '*' to send all events.
+         * Or to an error of SeverityLevel to only send events matching the provided levels.
+         * e.g. ['error', 'fatal'] to send only errors and fatals
+         * e.g. ['error'] to send only errors -- the default when omitted
+         * e.g. '*' to send all events
+         */
+        severityAllowList: _SeverityLevel[] | '*' = ['error']
+    ) {
         // setupOnce gets called by Sentry when it intializes the plugin
         this.name = 'posthog-js'
         this.setupOnce = function (addGlobalEventProcessor: (callback: _SentryEventProcessor) => void) {
             addGlobalEventProcessor((event: _SentryEvent) => {
-                if (event.level !== 'error' || !_posthog.__loaded) return event
+                const shouldProcessLevel =
+                    severityAllowList === '*' || severityAllowList.includes(event.level as _SeverityLevel)
+                if (!shouldProcessLevel || !_posthog.__loaded) return event
                 if (!event.tags) event.tags = {}
 
                 const personUrl = _posthog.requestRouter.endpointFor(
@@ -81,17 +102,19 @@ export class SentryIntegration implements _SentryIntegration {
                     $exception_message: any
                     $exception_type: any
                     $exception_personURL: string
+                    $level: _SeverityLevel
                 } = {
                     // PostHog Exception Properties,
-                    $exception_message: exceptions[0]?.value,
+                    $exception_message: exceptions[0]?.value || event.message,
                     $exception_type: exceptions[0]?.type,
                     $exception_personURL: personUrl,
                     // Sentry Exception Properties
                     $sentry_event_id: event.event_id,
                     $sentry_exception: event.exception,
-                    $sentry_exception_message: exceptions[0]?.value,
+                    $sentry_exception_message: exceptions[0]?.value || event.message,
                     $sentry_exception_type: exceptions[0]?.type,
                     $sentry_tags: event.tags,
+                    $level: event.level,
                 }
 
                 if (organization && projectId)

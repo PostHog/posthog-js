@@ -60,6 +60,9 @@ describe('posthog core', () => {
                     Object.assign(this.props, properties)
                 },
                 props: {},
+                get_user_state: () => 'anonymous',
+                get_initial_campaign_params: () => undefined,
+                get_initial_referrer_info: () => undefined,
             },
             sessionPersistence: {
                 update_search_keyword: jest.fn(),
@@ -67,6 +70,9 @@ describe('posthog core', () => {
                 update_referrer_info: jest.fn(),
                 update_config: jest.fn(),
                 properties: jest.fn(),
+                get_user_state: () => 'anonymous',
+                get_initial_campaign_params: () => undefined,
+                get_initial_referrer_info: () => undefined,
             },
             _send_request: jest.fn(),
             compression: {},
@@ -369,11 +375,13 @@ describe('posthog core', () => {
         given('overrides', () => ({
             config: given.config,
             persistence: {
-                properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+                properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
+                get_user_state: () => 'anonymous',
             },
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
+                get_user_state: () => 'anonymous',
             },
             sessionManager: {
                 checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
@@ -406,6 +414,8 @@ describe('posthog core', () => {
                 persistent: 'prop',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $is_identified: false,
+                $process_person: true,
             })
         })
 
@@ -426,11 +436,13 @@ describe('posthog core', () => {
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
                 $lib_custom_api_host: 'https://custom.posthog.com',
+                $is_identified: false,
+                $process_person: true,
             })
         })
 
         it('respects property_denylist and property_blacklist', () => {
-            given('property_denylist', () => ['$lib', 'persistent'])
+            given('property_denylist', () => ['$lib', 'persistent', '$is_identified'])
             given('property_blacklist', () => ['token'])
 
             expect(given.subject).toEqual({
@@ -438,7 +450,15 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $process_person: true,
             })
+        })
+
+        it("can't deny or blacklist $process_person", () => {
+            given('property_denylist', () => ['$process_person'])
+            given('property_blacklist', () => ['$process_person'])
+
+            expect(given.subject['$process_person']).toEqual(true)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
@@ -469,6 +489,7 @@ describe('posthog core', () => {
             expect(given.subject).toEqual({
                 event_name: given.event_name,
                 token: 'testtoken',
+                $process_person: true,
             })
         })
 
@@ -1123,17 +1144,17 @@ describe('posthog core', () => {
 
         it('returns the replay URL', () => {
             expect(given.lib.get_session_replay_url()).toEqual(
-                'https://app.posthog.com/project/testtoken/replay/sessionId'
+                'https://us.posthog.com/project/testtoken/replay/sessionId'
             )
         })
 
         it('returns the replay URL including timestamp', () => {
             expect(given.lib.get_session_replay_url({ withTimestamp: true })).toEqual(
-                'https://app.posthog.com/project/testtoken/replay/sessionId?t=20' // default lookback is 10 seconds
+                'https://us.posthog.com/project/testtoken/replay/sessionId?t=20' // default lookback is 10 seconds
             )
 
             expect(given.lib.get_session_replay_url({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
-                'https://app.posthog.com/project/testtoken/replay/sessionId?t=30'
+                'https://us.posthog.com/project/testtoken/replay/sessionId?t=30'
             )
         })
     })
