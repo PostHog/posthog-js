@@ -1,3 +1,7 @@
+## 1.120.1 - 2024-04-08
+
+- chore: Add workflow to update the posthog.com repo with new posthog-js versions (#1120)
+
 ## 1.120.0 - 2024-04-08
 
 - feat: Add person processing mode preview (#1109)
