@@ -128,7 +128,10 @@ export class ExceptionObserver {
         const propertiesToSend = { ...properties, ...errorProperties }
 
         const posthogHost = this.instance.requestRouter.endpointFor('ui')
-        errorProperties.$exception_personURL = posthogHost + '/person/' + this.instance.get_distinct_id()
+
+        errorProperties.$exception_personURL = `${posthogHost}/project/${
+            this.instance.config.token
+        }/person/${this.instance.get_distinct_id()}`
 
         this.sendExceptionEvent(propertiesToSend)
     }

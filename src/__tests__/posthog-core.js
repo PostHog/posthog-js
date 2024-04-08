@@ -1143,16 +1143,18 @@ describe('posthog core', () => {
         })
 
         it('returns the replay URL', () => {
-            expect(given.lib.get_session_replay_url()).toEqual('https://us.posthog.com/replay/sessionId')
+            expect(given.lib.get_session_replay_url()).toEqual(
+                'https://us.posthog.com/project/testtoken/replay/sessionId'
+            )
         })
 
         it('returns the replay URL including timestamp', () => {
             expect(given.lib.get_session_replay_url({ withTimestamp: true })).toEqual(
-                'https://us.posthog.com/replay/sessionId?t=20' // default lookback is 10 seconds
+                'https://us.posthog.com/project/testtoken/replay/sessionId?t=20' // default lookback is 10 seconds
             )
 
             expect(given.lib.get_session_replay_url({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
-                'https://us.posthog.com/replay/sessionId?t=30'
+                'https://us.posthog.com/project/testtoken/replay/sessionId?t=30'
             )
         })
     })
