@@ -47,7 +47,9 @@ describe('FunctionalTests / Identify', () => {
                 expect.objectContaining({
                     event: '$identify',
                     $set: { email: 'first@email.com' },
-                    $set_once: { location: 'first' },
+                    $set_once: expect.objectContaining({
+                        location: 'first',
+                    }),
                     properties: expect.objectContaining({
                         distinct_id: 'test-id',
                         $anon_distinct_id: anonymousId,
@@ -93,7 +95,9 @@ describe('FunctionalTests / Identify', () => {
                 expect.objectContaining({
                     event: '$identify',
                     $set: { email: 'first@email.com' },
-                    $set_once: { location: 'first' },
+                    $set_once: expect.objectContaining({
+                        location: 'first',
+                    }),
                     properties: expect.objectContaining({
                         distinct_id: 'test-id',
                         $anon_distinct_id: anonymousId,

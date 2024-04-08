@@ -61,6 +61,8 @@ describe('posthog core', () => {
                 },
                 props: {},
                 get_user_state: () => 'anonymous',
+                get_initial_campaign_params: () => undefined,
+                get_initial_referrer_info: () => undefined,
             },
             sessionPersistence: {
                 update_search_keyword: jest.fn(),
@@ -69,6 +71,8 @@ describe('posthog core', () => {
                 update_config: jest.fn(),
                 properties: jest.fn(),
                 get_user_state: () => 'anonymous',
+                get_initial_campaign_params: () => undefined,
+                get_initial_referrer_info: () => undefined,
             },
             _send_request: jest.fn(),
             compression: {},
@@ -411,6 +415,7 @@ describe('posthog core', () => {
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
                 $is_identified: false,
+                $process_person: true,
             })
         })
 
@@ -432,6 +437,7 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
+                $process_person: true,
             })
         })
 
@@ -444,7 +450,15 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $process_person: true,
             })
+        })
+
+        it("can't deny or blacklist $process_person", () => {
+            given('property_denylist', () => ['$process_person'])
+            given('property_blacklist', () => ['$process_person'])
+
+            expect(given.subject['$process_person']).toEqual(true)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
@@ -475,6 +489,7 @@ describe('posthog core', () => {
             expect(given.subject).toEqual({
                 event_name: given.event_name,
                 token: 'testtoken',
+                $process_person: true,
             })
         })
 

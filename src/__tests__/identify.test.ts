@@ -39,7 +39,7 @@ describe('identify', () => {
         expect(jest.mocked(logger).warn).toBeCalledTimes(1)
     })
 
-    it('it should send $is_identified = true with the identify event and following events', async () => {
+    it('should send $is_identified = true with the identify event and following events', async () => {
         // arrange
         const token = uuidv7()
         const onCapture = jest.fn()

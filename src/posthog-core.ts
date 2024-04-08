@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { window, assignableWindow, location } from './utils/globals'
+import { assignableWindow, document, location, userAgent, window } from './utils/globals'
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -63,7 +63,6 @@ import {
 } from './utils/type-utils'
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
-import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -170,6 +169,7 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
+    __preview_process_person: 'always',
 })
 
 class DeprecatedWebPerformanceObserver {
@@ -745,9 +745,13 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
-        if (event_name === '$identify') {
-            data['$set'] = options?.['$set']
-            data['$set_once'] = options?.['$set_once']
+        const setProperties = options?.$set
+        if (setProperties) {
+            data.$set = options?.$set
+        }
+        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once)
+        if (setOnceProperties) {
+            data.$set_once = setOnceProperties
         }
 
         data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
@@ -880,9 +884,7 @@ export class PostHog {
             properties
         )
 
-        properties['$is_identified'] =
-            this.persistence.get_user_state() === 'identified' ||
-            this.sessionPersistence.get_user_state() === 'identified'
+        properties['$is_identified'] = this._isIdentified()
 
         if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
             // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
@@ -905,7 +907,26 @@ export class PostHog {
             properties = sanitize_properties(properties, event_name)
         }
 
+        // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
+        properties['$process_person'] = this._hasPersonProcessing()
+
         return properties
+    }
+
+    _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
+        if (
+            !this.sessionPersistence ||
+            !this._hasPersonProcessing() ||
+            this.config.__preview_process_person !== 'identified_only'
+        ) {
+            return dataSetOnce
+        }
+        // if we're an identified person, send initial params with every event
+        const setOnceProperties = _extend({}, this.sessionPersistence.get_initial_props(), dataSetOnce || {})
+        if (_isEmptyObject(setOnceProperties)) {
+            return undefined
+        }
+        return setOnceProperties
     }
 
     /**
@@ -1186,6 +1207,13 @@ export class PostHog {
             return
         }
 
+        if (this.config.__preview_process_person === 'never') {
+            logger.error(
+                'posthog.identify was called, but the process_person configuration is set to "never". This call will be ignored.'
+            )
+            return
+        }
+
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
@@ -1210,7 +1238,7 @@ export class PostHog {
 
         const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
 
-        // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
+        // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
             this.persistence.set_user_state('identified')
@@ -1743,6 +1771,20 @@ export class PostHog {
             name = PRIMARY_INSTANCE_NAME + '.' + name
         }
         return name
+    }
+
+    _isIdentified(): boolean {
+        return (
+            this.persistence?.get_user_state() === 'identified' ||
+            this.sessionPersistence?.get_user_state() === 'identified'
+        )
+    }
+
+    _hasPersonProcessing(): boolean {
+        return !(
+            this.config.__preview_process_person === 'never' ||
+            (this.config.__preview_process_person === 'identified_only' && !this._isIdentified())
+        )
     }
 
     // perform some housekeeping around GDPR opt-in/out state
