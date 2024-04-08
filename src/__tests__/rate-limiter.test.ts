@@ -122,10 +122,10 @@ describe('Rate Limiter', () => {
 
             expect(mockPostHog.capture).toBeCalledTimes(1)
             expect(mockPostHog.capture).toHaveBeenCalledWith(
-                '$$js_capture_client_side_rate_limited',
+                '$$client_ingestion_warning',
                 {
-                    $js_config_rate_limiting_events_per_second: 10,
-                    $js_config_rate_limiting_events_burst_limit: 100,
+                    $$client_ingestion_warning_message:
+                        'posthog-js client rate limited. Config is set to 10 events per second and 100 events burst limit.',
                 },
                 {
                     skip_client_rate_limiting: true,

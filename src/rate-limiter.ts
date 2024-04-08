@@ -4,7 +4,7 @@ import { RequestResponse } from './types'
 import { logger } from './utils/logger'
 
 const ONE_MINUTE_IN_MILLISECONDS = 60 * 1000
-const RATE_LIMIT_EVENT = '$$js_capture_client_side_rate_limited'
+const RATE_LIMIT_EVENT = '$$client_ingestion_warning'
 
 interface CaptureResponse {
     quota_limited?: string[]
@@ -56,8 +56,7 @@ export class RateLimiter {
             this.instance.capture(
                 RATE_LIMIT_EVENT,
                 {
-                    $js_config_rate_limiting_events_per_second: this.captureEventsPerSecond,
-                    $js_config_rate_limiting_events_burst_limit: this.captureEventsBurstLimit,
+                    $$client_ingestion_warning_message: `posthog-js client rate limited. Config is set to ${this.captureEventsPerSecond} events per second and ${this.captureEventsBurstLimit} events burst limit.`,
                 },
                 {
                     skip_client_rate_limiting: true,
