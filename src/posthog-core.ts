@@ -881,9 +881,13 @@ export class PostHog {
         // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
-        const persistenceProperties = this.persistence.properties()
-        const sessionProperties = this.sessionPersistence.properties()
-        properties = _extend({}, _info.properties(), persistenceProperties, sessionProperties, properties)
+        properties = _extend(
+            {},
+            _info.properties(),
+            this.persistence.properties(),
+            this.sessionPersistence.properties(),
+            properties
+        )
 
         properties['$is_identified'] = this._isIdentified()
 
@@ -915,10 +919,11 @@ export class PostHog {
     }
 
     _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
-        if (!this.sessionPersistence) {
-            return dataSetOnce
-        }
-        if (!this._hasPersonProcessing() || this.config.__preview_process_person !== 'identified_only') {
+        if (
+            !this.sessionPersistence ||
+            !this._hasPersonProcessing() ||
+            this.config.__preview_process_person !== 'identified_only'
+        ) {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event
