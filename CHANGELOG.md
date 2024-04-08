@@ -1,3 +1,7 @@
+## 1.120.0 - 2024-04-08
+
+- feat: Add person processing mode preview (#1109)
+
 ## 1.119.2 - 2024-04-08
 
 - chore: upgrade rrweb to 2.0.0-alpha.12 (#1115)
