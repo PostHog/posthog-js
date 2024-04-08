@@ -107,7 +107,7 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
-    api_host: 'https://app.posthog.com',
+    api_host: 'https://us.i.posthog.com',
     api_transport: 'XHR',
     ui_host: null,
     token: '',
@@ -1475,12 +1475,12 @@ export class PostHog {
      *
      *     {
      *       // PostHog API host
-     *       api_host: 'https://app.posthog.com',
+     *       api_host: 'https://us.i.posthog.com',
      *     *
      *       // PostHog web app host, currently only used by the Sentry integration.
      *       // This will only be different from api_host when using a reverse-proxied API host – in that case
      *       // the original web app host needs to be passed here so that links to the web app are still convenient.
-     *       ui_host: 'https://app.posthog.com',
+     *       ui_host: 'https://us.posthog.com',
      *
      *       // Automatically capture clicks, form submissions and change events
      *       autocapture: true
