@@ -19,38 +19,17 @@
 import { PostHog } from '../posthog-core'
 import { logger } from '../utils/logger'
 
-// Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
-interface SegmentPluginContext {
-    event: {
-        event: string
-        userId?: string
-        anonymousId?: string
-        properties: any
-    }
-}
-
-interface SegmentPlugin {
-    name: string
-    version: string
-    type: 'enrichment'
-    isLoaded: () => boolean
-    load: (ctx: SegmentPluginContext, instance: any, config?: any) => Promise<unknown>
-    unload?: (ctx: SegmentPluginContext, instance: any) => Promise<unknown> | unknown
-    ready?: () => Promise<unknown>
-    track?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    identify?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    page?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    group?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    alias?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    screen?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-}
+import type { Plugin as SegmentPlugin, Context as SegmentContext } from '@segment/analytics-next'
 
 export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     if (!Promise || !Promise.resolve) {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }
 
-    const enrichEvent = (ctx: SegmentPluginContext, eventName: string) => {
+    const enrichEvent = (ctx: SegmentContext, eventName: string | undefined) => {
+        if (!eventName) {
+            return ctx
+        }
         if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
             // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
             posthog.reset()
@@ -62,7 +41,7 @@ export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
             posthog.reloadFeatureFlags()
         }
 
-        const additionalProperties = posthog._calculate_event_properties(eventName, ctx.event.properties)
+        const additionalProperties = posthog._calculate_event_properties(eventName, ctx.event.properties ?? {})
         ctx.event.properties = Object.assign({}, additionalProperties, ctx.event.properties)
         return ctx
     }

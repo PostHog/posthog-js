@@ -386,13 +386,14 @@ export class PostHog {
         this._gdpr_init()
 
         if (config.segment) {
+            const segmentUser = config.segment.user()
             // Use segments anonymousId instead
-            this.config.get_device_id = () => config.segment.user().anonymousId()
+            this.config.get_device_id = () => segmentUser.anonymousId() || uuidv7()
 
             // If a segment user ID exists, set it as the distinct_id
-            if (config.segment.user().id()) {
+            if (segmentUser.id()) {
                 this.register({
-                    distinct_id: config.segment.user().id(),
+                    distinct_id: segmentUser.id(),
                 })
                 this.persistence.set_user_state('identified')
             }
