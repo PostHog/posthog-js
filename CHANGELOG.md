@@ -1,3 +1,7 @@
+## 1.119.1 - 2024-04-08
+
+- fix: Default api host to us.i.posthog.com (#1087)
+
 ## 1.119.0 - 2024-04-08
 
 - feat: allow override sampling (#1105)
