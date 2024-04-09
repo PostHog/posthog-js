@@ -1,4 +1,4 @@
-import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
+import type { MaskInputOptions, MaskTextFn, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 
 export type Property = any
@@ -177,7 +177,7 @@ export interface SessionRecordingOptions {
     ignoreClass?: string
     maskTextClass?: string | RegExp
     maskTextSelector?: string | null
-    maskTextFn?: ((text: string) => string) | null
+    maskTextFn?: MaskTextFn
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
