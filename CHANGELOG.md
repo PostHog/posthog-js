@@ -1,3 +1,7 @@
+## 1.120.4 - 2024-04-09
+
+- feat: Person processing 2 - handle group and setPersonProperties (#1124)
+
 ## 1.120.3 - 2024-04-09
 
 - fix: typing of maskTextFn (#1122)
