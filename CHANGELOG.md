@@ -1,3 +1,7 @@
+## 1.120.3 - 2024-04-09
+
+- fix: typing of maskTextFn (#1122)
+
 ## 1.120.2 - 2024-04-08
 
 - Fix to include project in urls (#1098)
