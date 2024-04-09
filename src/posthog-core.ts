@@ -14,7 +14,13 @@ import { assignableWindow, document, location, userAgent, window } from './utils
 import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, SESSION_RECORDING_IS_SAMPLED } from './constants'
+import {
+    ALIAS_ID_KEY,
+    ENABLE_PERSON_PROCESSING,
+    FLAG_CALL_REPORTED,
+    PEOPLE_DISTINCT_ID_KEY,
+    SESSION_RECORDING_IS_SAMPLED,
+} from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
@@ -1207,10 +1213,7 @@ export class PostHog {
             return
         }
 
-        if (this.config.__preview_process_person === 'never') {
-            logger.error(
-                'posthog.identify was called, but the process_person configuration is set to "never". This call will be ignored.'
-            )
+        if (!this._requirePersonProcessing('posthog.identify')) {
             return
         }
 
@@ -1272,7 +1275,9 @@ export class PostHog {
     }
 
     /**
-     * Sets properties for the Person associated with the current distinct_id.
+     * Sets properties for the Person associated with the current distinct_id. If person processing is not active for
+     * this user (either due to have process_persons set to never, or set to identified_only and the user is anonymous),
+     * then the properties will be set locally for flags but will not trigger a $set event
      *
      *
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
@@ -1280,6 +1285,10 @@ export class PostHog {
      */
     setPersonProperties(userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
         if (!userPropertiesToSet && !userPropertiesToSetOnce) {
+            return
+        }
+
+        if (!this._requirePersonProcessing('posthog.setPersonProperties')) {
             return
         }
 
@@ -1299,6 +1308,10 @@ export class PostHog {
     group(groupType: string, groupKey: string, groupPropertiesToSet?: Properties): void {
         if (!groupType || !groupKey) {
             logger.error('posthog.group requires a group type and group key')
+            return
+        }
+
+        if (!this._requirePersonProcessing('posthog.group')) {
             return
         }
 
@@ -1344,6 +1357,9 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
+        if (!this._requirePersonProcessing('posthog.setPersonPropertiesForFlags')) {
+            return
+        }
         this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
@@ -1360,6 +1376,9 @@ export class PostHog {
      *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
+        if (!this._requirePersonProcessing('posthog.setGroupPropertiesForFlags')) {
+            return
+        }
         this.featureFlags.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
@@ -1481,6 +1500,9 @@ export class PostHog {
         if (alias === this.get_property(PEOPLE_DISTINCT_ID_KEY)) {
             logger.critical('Attempting to create alias for existing People user - aborting.')
             return -2
+        }
+        if (!this._requirePersonProcessing('posthog.alias')) {
+            return
         }
 
         if (_isUndefined(original)) {
@@ -1783,8 +1805,28 @@ export class PostHog {
     _hasPersonProcessing(): boolean {
         return !(
             this.config.__preview_process_person === 'never' ||
-            (this.config.__preview_process_person === 'identified_only' && !this._isIdentified())
+            (this.config.__preview_process_person === 'identified_only' &&
+                !this._isIdentified() &&
+                _isEmptyObject(this.getGroups()) &&
+                !this.persistence?.props?.[ALIAS_ID_KEY] &&
+                !this.persistence?.props?.[ENABLE_PERSON_PROCESSING])
         )
+    }
+
+    /**
+     * Enables person processing if possible, returns true if it does so or already enabled, false otherwise
+     *
+     * @param function_name
+     */
+    _requirePersonProcessing(function_name: string): boolean {
+        if (this.config.__preview_process_person === 'never') {
+            logger.error(
+                function_name + ' was called, but process_person is set to "never". This call will be ignored.'
+            )
+            return false
+        }
+        this._register_single(ENABLE_PERSON_PROCESSING, true)
+        return true
     }
 
     // perform some housekeeping around GDPR opt-in/out state

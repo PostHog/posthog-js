@@ -17,9 +17,9 @@ if (typeof window !== 'undefined') {
         debug: true,
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
+        __preview_process_person: 'identified_only',
     })
-
-    window.posthog = posthog
+    ;(window as any).posthog = posthog
 }
 
 export default function App({ Component, pageProps }: AppProps) {
