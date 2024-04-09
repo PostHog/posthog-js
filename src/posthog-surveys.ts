@@ -19,7 +19,7 @@ export class PostHogSurveys {
     }
 
     getSurveys(callback: SurveyCallback, forceReload = false) {
-        // Incase we manage to load the surveys script, but config says not to load surveys
+        // In case we manage to load the surveys script, but config says not to load surveys
         // then we shouldn't return survey data
         if (this.instance.config.disable_surveys) {
             return callback([])
