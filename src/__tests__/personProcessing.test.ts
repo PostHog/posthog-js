@@ -167,4 +167,50 @@ describe('person processing', () => {
             expect(eventAfterIdentify[1].$set_once).toEqual(undefined)
         })
     })
+
+    describe('group', () => {
+        it('should start process_person', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+
+            // act
+            posthog.capture('custom event before group')
+            posthog.group('groupType', 'groupKey', { prop: 'value' })
+            posthog.capture('custom event after group')
+
+            // assert
+            const eventBeforeGroup = onCapture.mock.calls[0]
+            expect(eventBeforeGroup[1].properties.$process_person).toEqual(false)
+            const groupIdentify = onCapture.mock.calls[1]
+            expect(groupIdentify[0]).toEqual('$groupidentify')
+            expect(groupIdentify[1].properties.$process_person).toEqual(true)
+            const eventAfterGroup = onCapture.mock.calls[2]
+            expect(eventAfterGroup[1].properties.$process_person).toEqual(true)
+        })
+    })
+
+    describe('setPersonProperties', () => {
+        it("should not send a $set event if process_person is set to 'never'", async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('never')
+
+            // act
+            posthog.setPersonProperties({ prop: 'value' })
+
+            // assert
+            expect(onCapture).toBeCalledTimes(0)
+        })
+
+        it("should send a $set event if process_person is set to 'always'", async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('always')
+
+            // act
+            posthog.setPersonProperties({ prop: 'value' })
+
+            // assert
+            expect(onCapture).toBeCalledTimes(1)
+            expect(onCapture.mock.calls[0][0]).toEqual('$set')
+        })
+    })
 })

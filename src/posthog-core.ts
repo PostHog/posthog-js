@@ -1272,7 +1272,9 @@ export class PostHog {
     }
 
     /**
-     * Sets properties for the Person associated with the current distinct_id.
+     * Sets properties for the Person associated with the current distinct_id. If person processing is not active for
+     * this user (either due to have process_persons set to never, or set to identified_only and the user is anonymous),
+     * then the properties will be set locally for flags but will not trigger a $set event
      *
      *
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
@@ -1286,7 +1288,9 @@ export class PostHog {
         // Update current user properties
         this.setPersonPropertiesForFlags(userPropertiesToSet || {})
 
-        this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+        if (this._hasPersonProcessing()) {
+            this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+        }
     }
 
     /**
@@ -1783,7 +1787,9 @@ export class PostHog {
     _hasPersonProcessing(): boolean {
         return !(
             this.config.__preview_process_person === 'never' ||
-            (this.config.__preview_process_person === 'identified_only' && !this._isIdentified())
+            (this.config.__preview_process_person === 'identified_only' &&
+                !this._isIdentified() &&
+                _isEmptyObject(this.getGroups()))
         )
     }
 
