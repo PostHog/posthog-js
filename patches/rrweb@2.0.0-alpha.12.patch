@@ -1,5 +1,18 @@
+diff --git a/es/rrweb/packages/rrweb/src/record/mutation.js b/es/rrweb/packages/rrweb/src/record/mutation.js
+index 60c42d46a7ee8f5c6f23a7538c7db726bdf17096..5d34de194ae203e34f1bc5a0742ae3f3d9a287ce 100644
+--- a/es/rrweb/packages/rrweb/src/record/mutation.js
++++ b/es/rrweb/packages/rrweb/src/record/mutation.js
+@@ -257,7 +257,7 @@ class MutationBuffer {
+                 texts: this.texts
+                     .map((text) => {
+                     const n = text.node;
+-                    if (n.parentNode.tagName === 'TEXTAREA') {
++                    if (n.parentNode && n.parentNode.tagName === 'TEXTAREA') {
+                         this.genTextAreaValueMutation(n.parentNode);
+                     }
+                     return {
 diff --git a/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js b/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
-index 8746997c9b849ac5c952fdbe0a8dd608d6680a3a..d4a23978d4d6ee5d060c281e1cc8459b2a76885c 100644
+index 8746997c9b849ac5c952fdbe0a8dd608d6680a3a..b7e0ee4b2a9d144fb86b60515e41ce9cc8adcd31 100644
 --- a/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
 +++ b/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
 @@ -91,11 +91,21 @@ class CanvasManager {
