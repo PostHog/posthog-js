@@ -238,6 +238,25 @@ describe('person processing', () => {
             expect(onCapture).toBeCalledTimes(1)
             expect(onCapture.mock.calls[0][0]).toEqual('$set')
         })
+
+        it('should start person processing for identified_only users', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+
+            // act
+            posthog.capture('custom event before setPersonProperties')
+            posthog.setPersonProperties({ prop: 'value' })
+            posthog.capture('custom event after setPersonProperties')
+
+            // assert
+            const eventBeforeGroup = onCapture.mock.calls[0]
+            expect(eventBeforeGroup[1].properties.$process_person).toEqual(false)
+            const set = onCapture.mock.calls[1]
+            expect(set[0]).toEqual('$set')
+            expect(set[1].properties.$process_person).toEqual(true)
+            const eventAfterGroup = onCapture.mock.calls[2]
+            expect(eventAfterGroup[1].properties.$process_person).toEqual(true)
+        })
     })
 
     describe('alias', () => {
@@ -253,14 +272,14 @@ describe('person processing', () => {
             // assert
             const eventBeforeGroup = onCapture.mock.calls[0]
             expect(eventBeforeGroup[1].properties.$process_person).toEqual(false)
-            const groupIdentify = onCapture.mock.calls[1]
-            expect(groupIdentify[0]).toEqual('$create_alias')
-            expect(groupIdentify[1].properties.$process_person).toEqual(true)
+            const alias = onCapture.mock.calls[1]
+            expect(alias[0]).toEqual('$create_alias')
+            expect(alias[1].properties.$process_person).toEqual(true)
             const eventAfterGroup = onCapture.mock.calls[2]
             expect(eventAfterGroup[1].properties.$process_person).toEqual(true)
         })
 
-        it('should provide a warning if person processing is set to "never"', async () => {
+        it('should not send a $create_alias event if person processing is set to "never"', async () => {
             // arrange
             const { posthog, onCapture } = await setup('never')
 
