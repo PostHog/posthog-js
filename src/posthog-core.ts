@@ -1316,11 +1316,13 @@ export class PostHog {
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
         if (groupPropertiesToSet) {
-            this.capture('$groupidentify', {
-                $group_type: groupType,
-                $group_key: groupKey,
-                $group_set: groupPropertiesToSet,
-            })
+            if (this._hasPersonProcessing()) {
+                this.capture('$groupidentify', {
+                    $group_type: groupType,
+                    $group_key: groupKey,
+                    $group_set: groupPropertiesToSet,
+                })
+            }
             this.setGroupPropertiesForFlags({ [groupType]: groupPropertiesToSet })
         }
 
@@ -1485,6 +1487,12 @@ export class PostHog {
         if (alias === this.get_property(PEOPLE_DISTINCT_ID_KEY)) {
             logger.critical('Attempting to create alias for existing People user - aborting.')
             return -2
+        }
+        if (this.config.__preview_process_person === 'never') {
+            logger.error(
+                'posthog.alias was called, but the process_person configuration is set to "never". This call will be ignored.'
+            )
+            return
         }
 
         if (_isUndefined(original)) {
@@ -1789,7 +1797,8 @@ export class PostHog {
             this.config.__preview_process_person === 'never' ||
             (this.config.__preview_process_person === 'identified_only' &&
                 !this._isIdentified() &&
-                _isEmptyObject(this.getGroups()))
+                _isEmptyObject(this.getGroups()) &&
+                !this.persistence?.props?.[ALIAS_ID_KEY])
         )
     }
 
