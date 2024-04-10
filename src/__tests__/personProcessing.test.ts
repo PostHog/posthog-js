@@ -1,13 +1,34 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { logger } from '../utils/logger'
+
 jest.mock('../utils/logger')
+
+const mockReferrerGetter = jest.fn()
+const mockURLGetter = jest.fn()
+jest.mock('../utils/globals', () => {
+    const orig = jest.requireActual('../utils/globals')
+    return {
+        ...orig,
+        document: {
+            ...orig.document,
+            createElement: (...args: any[]) => orig.document.createElement(...args),
+            get referrer() {
+                return mockReferrerGetter()
+            },
+            get URL() {
+                return mockURLGetter()
+            },
+        },
+    }
+})
 
 describe('person processing', () => {
     const distinctId = '123'
-
     beforeEach(() => {
         console.error = jest.fn()
+        mockReferrerGetter.mockReturnValue('https://referrer.com')
+        mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
     })
 
     const setup = async (processPerson: 'always' | 'identified_only' | 'never' | undefined) => {
@@ -112,8 +133,55 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
-                $initial_referrer: '$direct',
-                $initial_referring_domain: '$direct',
+                $initial_referrer: 'https://referrer.com',
+                $initial_referring_domain: 'referrer.com',
+                $initial_utm_source: 'foo',
+            })
+        })
+
+        it('should preserve initial referrer info across a separate session', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+            mockReferrerGetter.mockReturnValue('https://referrer1.com')
+            mockURLGetter.mockReturnValue('https://example1.com?utm_source=foo1')
+
+            // act
+            // s1
+            posthog.capture('event s1')
+
+            // end session
+            posthog.sessionManager!.resetSessionId()
+            posthog.sessionPersistence!.clear()
+
+            // s2
+            mockReferrerGetter.mockReturnValue('https://referrer2.com')
+            mockURLGetter.mockReturnValue('https://example2.com?utm_source=foo2')
+            posthog.capture('event s2 before identify')
+            posthog.identify(distinctId)
+            posthog.capture('event s2 after identify')
+
+            // assert
+            const eventS1 = onCapture.mock.calls[0]
+            const eventS2Before = onCapture.mock.calls[1]
+            const eventS2Identify = onCapture.mock.calls[2]
+            const eventS2After = onCapture.mock.calls[3]
+
+            expect(eventS1[1].$set_once).toEqual(undefined)
+
+            expect(eventS2Before[1].$set_once).toEqual(undefined)
+
+            expect(eventS2Identify[0]).toEqual('$identify')
+            expect(eventS2Identify[1].$set_once).toEqual({
+                $initial_referrer: 'https://referrer1.com',
+                $initial_referring_domain: 'referrer1.com',
+                $initial_utm_source: 'foo1',
+            })
+
+            expect(eventS2After[0]).toEqual('event s2 after identify')
+            expect(eventS2After[1].$set_once).toEqual({
+                $initial_referrer: 'https://referrer1.com',
+                $initial_referring_domain: 'referrer1.com',
+                $initial_utm_source: 'foo1',
             })
         })
 
@@ -146,8 +214,9 @@ describe('person processing', () => {
             expect(eventBeforeIdentify[1].$set_once).toBeUndefined()
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
-                $initial_referrer: '$direct',
-                $initial_referring_domain: '$direct',
+                $initial_referrer: 'https://referrer.com',
+                $initial_referring_domain: 'referrer.com',
+                $initial_utm_source: 'foo',
             })
         })
 

@@ -221,9 +221,12 @@ export class PostHogPersistence {
         if (!this.campaign_params_saved) {
             const campaignParams = _info.campaignParams(this.config.custom_campaign_params)
             this.register(campaignParams)
-            this.register_once({ [INITIAL_CAMPAIGN_PARAMS]: campaignParams }, undefined)
             this.campaign_params_saved = true
         }
+    }
+    set_initial_campaign_params(): void {
+        const campaignParams = _info.campaignParams(this.config.custom_campaign_params)
+        this.register_once({ [INITIAL_CAMPAIGN_PARAMS]: campaignParams }, undefined)
     }
 
     update_search_keyword(): void {
@@ -236,6 +239,13 @@ export class PostHogPersistence {
             $referring_domain: this.props['$referring_domain'] || _info.referringDomain(),
         }
         this.register(referrerProps)
+    }
+
+    set_initial_referrer_info(): void {
+        const referrerProps = {
+            $referrer: this.props['$referrer'] || _info.referrer(),
+            $referring_domain: this.props['$referring_domain'] || _info.referringDomain(),
+        }
         this.register_once(
             {
                 [INITIAL_REFERRER_INFO]: referrerProps,

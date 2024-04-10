@@ -713,7 +713,7 @@ export class PostHog {
     capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
-        if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
+        if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
             return logger.uninitializedWarning('posthog.capture')
         }
 
@@ -740,9 +740,11 @@ export class PostHog {
 
         if (this.config.store_google) {
             this.sessionPersistence.update_campaign_params()
+            this.persistence.set_initial_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
+            this.persistence.set_initial_referrer_info()
         }
 
         let data: CaptureResult = {
@@ -920,15 +922,11 @@ export class PostHog {
     }
 
     _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
-        if (
-            !this.sessionPersistence ||
-            !this._hasPersonProcessing() ||
-            this.config.process_person !== 'identified_only'
-        ) {
+        if (!this.persistence || !this._hasPersonProcessing() || this.config.process_person !== 'identified_only') {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event
-        const setOnceProperties = _extend({}, this.sessionPersistence.get_initial_props(), dataSetOnce || {})
+        const setOnceProperties = _extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
         if (_isEmptyObject(setOnceProperties)) {
             return undefined
         }
