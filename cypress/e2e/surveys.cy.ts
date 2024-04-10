@@ -49,6 +49,7 @@ describe('Surveys', () => {
             editorParams: {},
             surveys: true,
             isAuthenticated: false,
+            autocapture_opt_out: true,
         }).as('decide')
     })
 
