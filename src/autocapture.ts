@@ -64,7 +64,12 @@ export class Autocapture {
         }
         const handler = (e: Event) => {
             e = e || window?.event
-            this._captureEvent(e)
+            try {
+                this._captureEvent(e)
+            } catch (e) {
+                console.error(e)
+                throw new Error('Error in autocapture event handler')
+            }
         }
 
         const copiedTextHandler = (e: Event) => {
@@ -219,7 +224,7 @@ export class Autocapture {
         }
     }
 
-    private _captureEvent(e: Event, eventName = '$autocapture', extraProps?: Properties): boolean | void {
+    private _captureEvent(e: Event, eventName = '$autocapture'): boolean | void {
         /*** Don't mess with this code without running IE8 tests on it ***/
         let target = this._getEventTarget(e)
         if (isTextNode(target)) {
@@ -323,8 +328,7 @@ export class Autocapture {
                           $elements: elementsJson,
                       },
                 elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
-                autocaptureAugmentProperties,
-                extraProps || {}
+                autocaptureAugmentProperties
             )
 
             if (eventName === COPY_AUTOCAPTURE_EVENT) {
