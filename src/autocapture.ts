@@ -44,16 +44,13 @@ export class Autocapture {
 
     constructor(instance: PostHog) {
         this.instance = instance
-
-        // precompile the regex
-        // TODO: This doesn't work - we can't override the config like this
-        if (this.config?.url_allowlist) {
-            this.config.url_allowlist = this.config.url_allowlist.map((url) => new RegExp(url))
-        }
     }
 
     private get config(): AutocaptureConfig {
-        return _isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
+        const config = _isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
+        // precompile the regex
+        config.url_allowlist = config.url_allowlist?.map((url) => new RegExp(url))
+        return config
     }
 
     private _addDomEventHandlers(): void {
