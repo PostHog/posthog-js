@@ -348,13 +348,6 @@ describe('posthog core', () => {
 
             expect(given.lib.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
-
-        it('enables elementsChainAsString if given', () => {
-            given('decideResponse', () => ({ elementsChainAsString: true }))
-            given.subject()
-
-            expect(given.lib.elementsChainAsString).toBe(true)
-        })
     })
 
     describe('_calculate_event_properties()', () => {

@@ -72,6 +72,7 @@ import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { Autocapture } from './autocapture-v2'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -213,6 +214,7 @@ export class PostHog {
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
+    autocapture: Autocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -226,7 +228,6 @@ export class PostHog {
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
-    elementsChainAsString: boolean
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
@@ -247,7 +248,6 @@ export class PostHog {
         this.__loaded = false
         this.__autocapture = undefined
         this.analyticsDefaultEndpoint = '/e/'
-        this.elementsChainAsString = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -370,16 +370,13 @@ export class PostHog {
             this.pageViewManager.startMeasuringScrollPosition()
         }
 
+        this.autocapture = new Autocapture(this)
+
         this.__autocapture = this.config.autocapture
         autocapture._setIsAutocaptureEnabled(this)
         if (autocapture._isAutocaptureEnabled) {
             this.__autocapture = this.config.autocapture
-            const num_buckets = 100
-            const num_enabled_buckets = 100
-            if (!autocapture.enabledForProject(this.config.token, num_buckets, num_enabled_buckets)) {
-                this.__autocapture = false
-                logger.info('Not in active bucket: disabling Automatic Event Collection.')
-            } else if (!autocapture.isBrowserSupported()) {
+            if (!autocapture.isBrowserSupported()) {
                 this.__autocapture = false
                 logger.info('Disabling Automatic Event Collection because this browser is not supported')
             } else {
@@ -486,10 +483,6 @@ export class PostHog {
 
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
-        }
-
-        if (response.elementsChainAsString) {
-            this.elementsChainAsString = response.elementsChainAsString
         }
     }
 

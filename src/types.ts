@@ -252,10 +252,10 @@ export type FlagVariant = { flag: string; variant: string }
 
 export interface DecideResponse {
     supportedCompression: Compression[]
+    // NOTE: Remove this entirely as it is never used
     config: {
         enable_collect_everything: boolean
     }
-    custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
@@ -300,13 +300,6 @@ export type FeatureFlagsCallback = (
         errorsLoading?: boolean
     }
 ) => void
-
-// TODO: delete custom_properties after changeless typescript refactor
-export interface AutoCaptureCustomProperty {
-    name: string
-    css_selector: string
-    event_selectors: string[]
-}
 
 export interface GDPROptions {
     capture?: (
