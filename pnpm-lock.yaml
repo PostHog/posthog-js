@@ -105,6 +105,9 @@ devDependencies:
   eslint-plugin-jest:
     specifier: ^27.2.3
     version: 27.2.3(@typescript-eslint/eslint-plugin@6.19.0)(eslint@8.56.0)(jest@27.5.1)(typescript@4.9.5)
+  eslint-plugin-no-only-tests:
+    specifier: ^3.1.0
+    version: 3.1.0
   eslint-plugin-posthog-js:
     specifier: link:eslint-rules
     version: link:eslint-rules
@@ -4945,6 +4948,11 @@ packages:
     transitivePeerDependencies:
       - supports-color
       - typescript
+    dev: true
+
+  /eslint-plugin-no-only-tests@3.1.0:
+    resolution: {integrity: sha512-Lf4YW/bL6Un1R6A76pRZyE1dl1vr31G/ev8UzIc/geCgFWyrKil8hVjYqWVKGB/UIGmb6Slzs9T0wNezdSVegw==}
+    engines: {node: '>=5.0.0'}
     dev: true
 
   /eslint-plugin-prettier@4.2.1(eslint-config-prettier@8.5.0)(eslint@8.56.0)(prettier@2.7.1):
