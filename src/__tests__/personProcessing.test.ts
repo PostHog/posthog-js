@@ -15,7 +15,7 @@ describe('person processing', () => {
         const onCapture = jest.fn()
         const posthog = await createPosthogInstance(token, {
             _onCapture: onCapture,
-            __preview_process_person: processPerson,
+            process_person: processPerson,
         })
         return { token, onCapture, posthog }
     }
@@ -27,11 +27,11 @@ describe('person processing', () => {
 
             // act
             const posthog = await createPosthogInstance(token, {
-                __preview_process_person: undefined,
+                process_person: undefined,
             })
 
             // assert
-            expect(posthog.config.__preview_process_person).toEqual('always')
+            expect(posthog.config.process_person).toEqual('always')
         })
         it('should read process_person from init config', async () => {
             // arrange
@@ -39,11 +39,11 @@ describe('person processing', () => {
 
             // act
             const posthog = await createPosthogInstance(token, {
-                __preview_process_person: 'never',
+                process_person: 'never',
             })
 
             // assert
-            expect(posthog.config.__preview_process_person).toEqual('never')
+            expect(posthog.config.process_person).toEqual('never')
         })
     })
 

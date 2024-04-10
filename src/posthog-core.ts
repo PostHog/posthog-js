@@ -175,7 +175,7 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    __preview_process_person: 'always',
+    process_person: 'always',
 })
 
 class DeprecatedWebPerformanceObserver {
@@ -923,7 +923,7 @@ export class PostHog {
         if (
             !this.sessionPersistence ||
             !this._hasPersonProcessing() ||
-            this.config.__preview_process_person !== 'identified_only'
+            this.config.process_person !== 'identified_only'
         ) {
             return dataSetOnce
         }
@@ -1804,8 +1804,8 @@ export class PostHog {
 
     _hasPersonProcessing(): boolean {
         return !(
-            this.config.__preview_process_person === 'never' ||
-            (this.config.__preview_process_person === 'identified_only' &&
+            this.config.process_person === 'never' ||
+            (this.config.process_person === 'identified_only' &&
                 !this._isIdentified() &&
                 _isEmptyObject(this.getGroups()) &&
                 !this.persistence?.props?.[ALIAS_ID_KEY] &&
@@ -1819,7 +1819,7 @@ export class PostHog {
      * @param function_name
      */
     _requirePersonProcessing(function_name: string): boolean {
-        if (this.config.__preview_process_person === 'never') {
+        if (this.config.process_person === 'never') {
             logger.error(
                 function_name + ' was called, but process_person is set to "never". This call will be ignored.'
             )
