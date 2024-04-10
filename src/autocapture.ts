@@ -133,6 +133,7 @@ export class Autocapture {
 
         const props: Properties = {}
 
+        console.log('elem.attributes', elem.attributes, elem)
         _each(elem.attributes, function (attr: Attr) {
             console.log('attr.name', attr, attr.name)
             if (attr.name.indexOf('data-ph-capture-attribute') === 0) {
@@ -269,6 +270,8 @@ export class Autocapture {
             const autocaptureAugmentProperties: Properties = {}
             let href,
                 explicitNoCapture = false
+
+            console.log('targetElementList', targetElementList)
             _each(targetElementList, (el) => {
                 const shouldCaptureEl = shouldCaptureElement(el)
 
