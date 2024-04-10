@@ -1706,7 +1706,7 @@ export class PostHog {
      * disable_session_recording to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      */
-    startSessionRecording(override: { sampling?: boolean }): void {
+    startSessionRecording(override?: { sampling?: boolean }): void {
         if (override?.sampling) {
             // allow the session id check to rotate session id if necessary
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
