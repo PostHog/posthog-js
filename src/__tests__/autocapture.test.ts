@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 /* eslint-disable compat/compat */
 
-import { Autocapture } from '../autocapture-v2'
+import { Autocapture } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { AutocaptureConfig, DecideResponse, PostHogConfig } from '../types'

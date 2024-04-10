@@ -72,7 +72,7 @@ import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
-import { Autocapture } from './autocapture-v2'
+import { Autocapture } from './autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -214,7 +214,7 @@ export class PostHog {
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
-    autocapture: Autocapture
+    autocapture?: Autocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
