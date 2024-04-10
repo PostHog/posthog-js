@@ -30,7 +30,6 @@ import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import {
-    AutocaptureConfig,
     CaptureOptions,
     CaptureResult,
     Compression,
