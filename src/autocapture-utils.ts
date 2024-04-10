@@ -254,6 +254,7 @@ export function shouldCaptureDomEvent(
         return true
     }
 
+    console.log('allowedEventTypes', allowedEventTypes, autocaptureCompatibleElements)
     const tag = el.tagName.toLowerCase()
     switch (tag) {
         case 'html':
@@ -517,6 +518,8 @@ function extractElements(elements: Properties[]): PHElement[] {
             nth_of_type: el['nth_of_type'],
             attributes: {} as { [id: string]: any },
         }
+
+        console.log('extractElements', _entries(el))
         _entries(el)
             .filter(([key]) => key.indexOf('attr__') === 0)
             .forEach(([key, value]) => (response.attributes[key] = value))

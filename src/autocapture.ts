@@ -64,13 +64,7 @@ export class Autocapture {
         }
         const handler = (e: Event) => {
             e = e || window?.event
-            try {
-                this._captureEvent(e)
-            } catch (e: any) {
-                // eslint-disable-next-line no-console
-                console.error(e, e.stack, 'Error in autocapture event handler')
-                throw new Error('Error in autocapture event handler')
-            }
+            this._captureEvent(e)
         }
 
         const copiedTextHandler = (e: Event) => {
@@ -140,6 +134,7 @@ export class Autocapture {
         const props: Properties = {}
 
         _each(elem.attributes, function (attr: Attr) {
+            console.log('attr.name', attr, attr.name)
             if (attr.name.indexOf('data-ph-capture-attribute') === 0) {
                 const propertyKey = attr.name.replace('data-ph-capture-attribute-', '')
                 const propertyValue = attr.value
@@ -156,6 +151,7 @@ export class Autocapture {
         const props: Properties = {
             tag_name: tag_name,
         }
+        console.log('autocaptureCompatibleElements', autocaptureCompatibleElements)
         if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
             if (tag_name.toLowerCase() === 'a' || tag_name.toLowerCase() === 'button') {
                 props['$el_text'] = limitText(1024, getDirectAndNestedSpanText(elem))
