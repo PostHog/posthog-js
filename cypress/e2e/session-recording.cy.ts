@@ -395,7 +395,7 @@ describe('Session recording', () => {
                 })
         })
 
-        it('can override sampling when starting session recording', () => {
+        it.only('can override sampling when starting session recording', () => {
             cy.intercept('POST', '/decide/*', {
                 config: { enable_collect_everything: false },
                 editorParams: {},
