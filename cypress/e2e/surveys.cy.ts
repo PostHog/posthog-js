@@ -46,7 +46,6 @@ describe('Surveys', () => {
 
     beforeEach(() => {
         cy.intercept('POST', '**/decide/*', {
-            config: { enable_collect_everything: false },
             editorParams: {},
             surveys: true,
             isAuthenticated: false,

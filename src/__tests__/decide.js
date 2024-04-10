@@ -1,4 +1,3 @@
-import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
@@ -72,7 +71,7 @@ describe('Decide', () => {
         getGroups: () => ({ organization: '5' }),
     }))
 
-    given('decideResponse', () => ({ enable_collect_everything: true }))
+    given('decideResponse', () => ({}))
 
     given('config', () => ({ api_host: 'https://test.com', persistence: 'memory' }))
 
@@ -195,9 +194,7 @@ describe('Decide', () => {
         given('subject', () => () => given.decide.parseDecideResponse(given.decideResponse))
 
         it('properly parses decide response', () => {
-            given('decideResponse', () => ({
-                enable_collect_everything: true,
-            }))
+            given('decideResponse', () => ({}))
             given.subject()
 
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
@@ -220,7 +217,6 @@ describe('Decide', () => {
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags_on_first_load is set', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
             }))
             given('config', () => ({
@@ -241,7 +237,6 @@ describe('Decide', () => {
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags is set', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
             }))
             given('config', () => ({
@@ -282,7 +277,6 @@ describe('Decide', () => {
 
         it('Make sure surveys are not loaded when decide response says no', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
                 surveys: false,
             }))
@@ -299,7 +293,6 @@ describe('Decide', () => {
 
         it('Make sure surveys are loaded when decide response says so', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
                 surveys: true,
             }))
@@ -316,7 +309,6 @@ describe('Decide', () => {
 
         it('Make sure surveys are not loaded when config says no', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
                 surveys: true,
             }))

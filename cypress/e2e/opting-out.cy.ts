@@ -15,7 +15,6 @@ describe('opting out', () => {
     describe('session recording', () => {
         beforeEach(() => {
             cy.intercept('POST', '/decide/*', {
-                config: { enable_collect_everything: false },
                 editorParams: {},
                 featureFlags: ['session-recording-player'],
                 isAuthenticated: false,
@@ -114,7 +113,6 @@ describe('opting out', () => {
 
         it('can override sampling when starting session recording', () => {
             cy.intercept('POST', '/decide/*', {
-                config: { enable_collect_everything: false },
                 editorParams: {},
                 isAuthenticated: false,
                 sessionRecording: {

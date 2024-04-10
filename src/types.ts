@@ -253,10 +253,6 @@ export type FlagVariant = { flag: string; variant: string }
 
 export interface DecideResponse {
     supportedCompression: Compression[]
-    // NOTE: Remove this entirely as it is never used
-    config: {
-        enable_collect_everything: boolean
-    }
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
