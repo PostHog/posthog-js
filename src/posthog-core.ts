@@ -135,6 +135,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_session_recording: false,
     disable_persistence: false,
     disable_cookie: false,
+    disable_surveys: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
@@ -174,7 +175,7 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    __preview_process_person: 'always',
+    process_person: 'always',
 })
 
 class DeprecatedWebPerformanceObserver {
@@ -690,7 +691,7 @@ export class PostHog {
     capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
-        if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
+        if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
             return logger.uninitializedWarning('posthog.capture')
         }
 
@@ -715,11 +716,16 @@ export class PostHog {
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
+        // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
+        // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
+        // with every event and used by the session table to create session-initial props.
         if (this.config.store_google) {
             this.sessionPersistence.update_campaign_params()
+            this.persistence.set_initial_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
+            this.persistence.set_initial_referrer_info()
         }
 
         let data: CaptureResult = {
@@ -897,15 +903,11 @@ export class PostHog {
     }
 
     _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
-        if (
-            !this.sessionPersistence ||
-            !this._hasPersonProcessing() ||
-            this.config.__preview_process_person !== 'identified_only'
-        ) {
+        if (!this.persistence || !this._hasPersonProcessing()) {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event
-        const setOnceProperties = _extend({}, this.sessionPersistence.get_initial_props(), dataSetOnce || {})
+        const setOnceProperties = _extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
         if (_isEmptyObject(setOnceProperties)) {
             return undefined
         }
@@ -1781,8 +1783,8 @@ export class PostHog {
 
     _hasPersonProcessing(): boolean {
         return !(
-            this.config.__preview_process_person === 'never' ||
-            (this.config.__preview_process_person === 'identified_only' &&
+            this.config.process_person === 'never' ||
+            (this.config.process_person === 'identified_only' &&
                 !this._isIdentified() &&
                 _isEmptyObject(this.getGroups()) &&
                 !this.persistence?.props?.[ALIAS_ID_KEY] &&
@@ -1796,7 +1798,7 @@ export class PostHog {
      * @param function_name
      */
     _requirePersonProcessing(function_name: string): boolean {
-        if (this.config.__preview_process_person === 'never') {
+        if (this.config.process_person === 'never') {
             logger.error(
                 function_name + ' was called, but process_person is set to "never". This call will be ignored.'
             )

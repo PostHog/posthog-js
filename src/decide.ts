@@ -77,7 +77,7 @@ export class Decide {
         // @ts-ignore
         const surveysGenerator = window?.extendPostHogWithSurveys
 
-        if (response['surveys'] && !surveysGenerator) {
+        if (!this.instance.config.disable_surveys && response['surveys'] && !surveysGenerator) {
             loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)

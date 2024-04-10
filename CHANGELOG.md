@@ -1,3 +1,12 @@
+## 1.121.0 - 2024-04-10
+
+- feat(surveys): Add disable config option (#1123)
+- feat: Person Processing 3: Handle $initial props across sessions, send $initial props with all person processing events, remove __preview (#1127)
+
+## 1.120.5 - 2024-04-10
+
+- fix: missing parentNode protection (#1125)
+
 ## 1.120.4 - 2024-04-09
 
 - feat: Person processing 2 - handle group and setPersonProperties (#1124)

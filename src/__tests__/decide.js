@@ -20,6 +20,25 @@ const expectDecodedSendRequest = (send_request, data, noCompression) => {
     })
 }
 
+const checkScriptsForSrc = (src, negate = false) => {
+    const scripts = document.querySelectorAll('body > script')
+    let foundScript = false
+    for (let i = 0; i < scripts.length; i++) {
+        if (scripts[i].src === src) {
+            foundScript = true
+            break
+        }
+    }
+
+    if (foundScript && negate) {
+        throw new Error(`Script with src ${src} was found when it should not have been.`)
+    } else if (!foundScript && !negate) {
+        throw new Error(`Script with src ${src} was not found when it should have been.`)
+    } else {
+        return true
+    }
+}
+
 describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))
     given('posthog', () => ({
@@ -56,6 +75,12 @@ describe('Decide', () => {
     given('decideResponse', () => ({ enable_collect_everything: true }))
 
     given('config', () => ({ api_host: 'https://test.com', persistence: 'memory' }))
+
+    beforeEach(() => {
+        // clean the JSDOM to prevent interdependencies between tests
+        document.body.innerHTML = ''
+        document.head.innerHTML = ''
+    })
 
     describe('constructor', () => {
         given('subject', () => () => given.decide.call())
@@ -239,8 +264,7 @@ describe('Decide', () => {
             given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: true, persistence: 'memory' }))
             given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             given.subject()
-            const element = window.document.body.children[0]
-            expect(element.src).toBe('https://test.com/site_app/1/tokentoken/hash/')
+            expect(checkScriptsForSrc('https://test.com/site_app/1/tokentoken/hash/')).toBe(true)
         })
 
         it('does not run site apps code if not opted in', () => {
@@ -253,6 +277,59 @@ describe('Decide', () => {
                 // throwing only in tests, just an error in production
                 'Unexpected console.error: [PostHog.js],PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
+            expect(checkScriptsForSrc('https://test.com/site_app/1/tokentoken/hash/', true)).toBe(true)
+        })
+
+        it('Make sure surveys are not loaded when decide response says no', () => {
+            given('decideResponse', () => ({
+                enable_collect_everything: true,
+                featureFlags: { 'test-flag': true },
+                surveys: false,
+            }))
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+            }))
+
+            given.subject()
+            // Make sure the script is not loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
+        })
+
+        it('Make sure surveys are loaded when decide response says so', () => {
+            given('decideResponse', () => ({
+                enable_collect_everything: true,
+                featureFlags: { 'test-flag': true },
+                surveys: true,
+            }))
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+            }))
+
+            given.subject()
+            // Make sure the script is loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js')).toBe(true)
+        })
+
+        it('Make sure surveys are not loaded when config says no', () => {
+            given('decideResponse', () => ({
+                enable_collect_everything: true,
+                featureFlags: { 'test-flag': true },
+                surveys: true,
+            }))
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+                disable_surveys: true,
+            }))
+
+            given.subject()
+            // Make sure the script is not loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
         })
     })
 })
