@@ -842,6 +842,8 @@ export class PostHog {
         }
 
         if (event_name === '$heatmap') {
+            const persistenceProps = this.persistence.properties()
+            properties['distinct_id'] = persistenceProps.distinct_id
             properties = _extend({}, infoProperties, properties)
             // Early exit for heatmaps, as they don't need any other properties
             return properties
