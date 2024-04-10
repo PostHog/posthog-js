@@ -11,7 +11,6 @@ import {
     isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, document, location, userAgent, window } from './utils/globals'
-import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
@@ -225,7 +224,6 @@ export class PostHog {
     compression?: Compression
     __captureHooks: ((eventName: string) => void)[]
     __request_queue: QueuedRequestOptions[]
-    __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
 
@@ -246,7 +244,6 @@ export class PostHog {
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
-        this.__autocapture = undefined
         this.analyticsDefaultEndpoint = '/e/'
 
         this.featureFlags = new PostHogFeatureFlags(this)
@@ -371,18 +368,6 @@ export class PostHog {
         }
 
         this.autocapture = new Autocapture(this)
-
-        this.__autocapture = this.config.autocapture
-        autocapture._setIsAutocaptureEnabled(this)
-        if (autocapture._isAutocaptureEnabled) {
-            this.__autocapture = this.config.autocapture
-            if (!autocapture.isBrowserSupported()) {
-                this.__autocapture = false
-                logger.info('Disabling Automatic Event Collection because this browser is not supported')
-            } else {
-                autocapture.init(this)
-            }
-        }
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
