@@ -1,3 +1,8 @@
+## 1.121.1 - 2024-04-10
+
+- fix: sampling typescript error (#1129)
+- chore: no only tests are allowed (#1128)
+
 ## 1.121.0 - 2024-04-10
 
 - feat(surveys): Add disable config option (#1123)
