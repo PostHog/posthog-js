@@ -23,12 +23,10 @@ const expectDecodedSendRequest = (send_request, data, noCompression) => {
 const checkScriptsForSrc = (src, negate = false) => {
     const scripts = document.querySelectorAll('body > script')
     let foundScript = false
-    if (scripts.length > 0) {
-        for (let i = 0; i < scripts.length; i++) {
-            if (scripts[i].src === src) {
-                foundScript = true
-                break
-            }
+    for (let i = 0; i < scripts.length; i++) {
+        if (scripts[i].src === src) {
+            foundScript = true
+            break
         }
     }
 
