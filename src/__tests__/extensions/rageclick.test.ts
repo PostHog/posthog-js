@@ -5,7 +5,7 @@ describe('RageClick()', () => {
 
     describe('when enabled', () => {
         beforeEach(() => {
-            instance = new RageClick(true)
+            instance = new RageClick()
         })
 
         it('identifies some rage clicking', () => {
@@ -72,15 +72,5 @@ describe('RageClick()', () => {
 
             expect(rageClickDetected).toBeFalsy()
         })
-    })
-
-    test('does not capture rage clicks when disabled', () => {
-        instance = new RageClick(false)
-
-        instance.isRageClick(5, 5, 10)
-        instance.isRageClick(5, 5, 20)
-        const rageClickDetected = instance.isRageClick(5, 5, 40)
-
-        expect(rageClickDetected).toBeFalsy()
     })
 })
