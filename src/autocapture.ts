@@ -103,6 +103,8 @@ export class Autocapture {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
+        console.log('IS ENABLED', this.isEnabled)
+
         if (this.isEnabled) {
             this._addDomEventHandlers()
             this._initialized = true
@@ -110,11 +112,11 @@ export class Autocapture {
     }
 
     public get isEnabled(): boolean {
-        const disabled_server_side = _isNull(this._isDisabledServerSide)
+        const disabledServer = _isNull(this._isDisabledServerSide)
             ? !!this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
             : this._isDisabledServerSide
-        const enabled_client_side = !!this.instance.config.autocapture
-        return enabled_client_side && !disabled_server_side
+        const disabledClient = !this.instance.config.autocapture
+        return !disabledClient && !disabledServer
     }
 
     private _previousElementSibling(el: Element): Element | null {

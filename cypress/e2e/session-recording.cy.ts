@@ -361,7 +361,7 @@ describe('Session recording', () => {
         })
     })
 
-    describe.only('with sampling', () => {
+    describe('with sampling', () => {
         beforeEach(() => {
             start({
                 decideResponseOverrides: {
@@ -391,8 +391,9 @@ describe('Session recording', () => {
                 })
         })
 
-        it.only('can override sampling when starting session recording', () => {
+        it('can override sampling when starting session recording', () => {
             cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
                 editorParams: {},
                 isAuthenticated: false,
                 sessionRecording: {
