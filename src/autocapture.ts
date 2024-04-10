@@ -67,7 +67,7 @@ export class Autocapture {
             try {
                 this._captureEvent(e)
             } catch (e) {
-                console.error(e)
+                console.error(e, e.stack)
                 throw new Error('Error in autocapture event handler')
             }
         }
