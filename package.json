@@ -101,7 +101,8 @@
         "*.{ts,tsx,js,json}": "prettier --write",
         "*.js": "eslint --cache --fix",
         "*.{ts,tsx}": [
-            "eslint src --fix"
+            "eslint src --fix",
+            "eslint cypress --fix"
         ]
     },
     "browserslist": [
