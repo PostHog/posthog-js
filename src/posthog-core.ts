@@ -922,7 +922,7 @@ export class PostHog {
     }
 
     _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
-        if (!this.persistence || !this._hasPersonProcessing() || this.config.process_person !== 'identified_only') {
+        if (!this.persistence || !this._hasPersonProcessing()) {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event

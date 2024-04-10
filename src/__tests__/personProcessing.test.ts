@@ -185,7 +185,7 @@ describe('person processing', () => {
             })
         })
 
-        it('should not include initial referrer info in identify event if always', async () => {
+        it('should include initial referrer info in identify event if always', async () => {
             // arrange
             const { posthog, onCapture } = await setup('always')
 
@@ -195,7 +195,11 @@ describe('person processing', () => {
             // assert
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].$set_once).toEqual({})
+            expect(identifyCall[1].$set_once).toEqual({
+                $initial_referrer: 'https://referrer.com',
+                $initial_referring_domain: 'referrer.com',
+                $initial_utm_source: 'foo',
+            })
         })
     })
 
@@ -220,7 +224,7 @@ describe('person processing', () => {
             })
         })
 
-        it('should not add initial referrer to set_once when in always mode', async () => {
+        it('should add initial referrer to set_once when in always mode', async () => {
             // arrange
             const { posthog, onCapture } = await setup('always')
 
@@ -231,9 +235,17 @@ describe('person processing', () => {
 
             // assert
             const eventBeforeIdentify = onCapture.mock.calls[0]
-            expect(eventBeforeIdentify[1].$set_once).toEqual(undefined)
+            expect(eventBeforeIdentify[1].$set_once).toEqual({
+                $initial_referrer: 'https://referrer.com',
+                $initial_referring_domain: 'referrer.com',
+                $initial_utm_source: 'foo',
+            })
             const eventAfterIdentify = onCapture.mock.calls[2]
-            expect(eventAfterIdentify[1].$set_once).toEqual(undefined)
+            expect(eventAfterIdentify[1].$set_once).toEqual({
+                $initial_referrer: 'https://referrer.com',
+                $initial_referring_domain: 'referrer.com',
+                $initial_utm_source: 'foo',
+            })
         })
     })
 

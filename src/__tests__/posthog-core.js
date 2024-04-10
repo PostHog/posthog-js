@@ -63,8 +63,7 @@ describe('posthog core', () => {
                 get_user_state: () => 'anonymous',
                 set_initial_campaign_params: jest.fn(),
                 set_initial_referrer_info: jest.fn(),
-                get_initial_campaign_params: () => undefined,
-                get_initial_referrer_info: () => undefined,
+                get_initial_props: () => ({}),
             },
             sessionPersistence: {
                 update_search_keyword: jest.fn(),
