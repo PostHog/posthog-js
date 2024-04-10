@@ -51,6 +51,7 @@ describe('Session recording', () => {
                         endpoint: '/ses/',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
             })
 
@@ -88,6 +89,7 @@ describe('Session recording', () => {
                         networkPayloadCapture: { recordBody: true },
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
                 options: {
@@ -129,6 +131,7 @@ describe('Session recording', () => {
                         endpoint: '/ses/',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
             })
@@ -371,6 +374,7 @@ describe('Session recording', () => {
                         sampleRate: '0',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
             })
@@ -443,6 +447,7 @@ describe('Session recording', () => {
                             sampleRate: '0',
                         },
                         capturePerformance: true,
+                        autocapture_opt_out: true,
                     },
                     url: './playground/cypress',
                 })
