@@ -64,7 +64,11 @@ export class Autocapture {
         }
         const handler = (e: Event) => {
             e = e || window?.event
-            this._captureEvent(e)
+            try {
+                this._captureEvent(e)
+            } catch (error) {
+                logger.error('Failed to capture event', error)
+            }
         }
 
         const copiedTextHandler = (e: Event) => {
