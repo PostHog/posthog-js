@@ -154,7 +154,6 @@ export class Autocapture {
         const props: Properties = {
             tag_name: tag_name,
         }
-        console.log('autocaptureCompatibleElements', autocaptureCompatibleElements)
         if (autocaptureCompatibleElements.indexOf(tag_name) > -1 && !maskText) {
             if (tag_name.toLowerCase() === 'a' || tag_name.toLowerCase() === 'button') {
                 props['$el_text'] = limitText(1024, getDirectAndNestedSpanText(elem))
@@ -273,7 +272,6 @@ export class Autocapture {
             let href,
                 explicitNoCapture = false
 
-            console.log('targetElementList', targetElementList)
             _each(targetElementList, (el) => {
                 const shouldCaptureEl = shouldCaptureElement(el)
 
