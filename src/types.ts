@@ -99,6 +99,7 @@ export interface PostHogConfig {
     disable_persistence: boolean
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie: boolean
+    disable_surveys: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean

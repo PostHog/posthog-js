@@ -136,6 +136,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_session_recording: false,
     disable_persistence: false,
     disable_cookie: false,
+    disable_surveys: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
