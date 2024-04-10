@@ -103,8 +103,6 @@ export class Autocapture {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        console.log('IS ENABLED', this.isEnabled)
-
         if (this.isEnabled) {
             this._addDomEventHandlers()
             this._initialized = true
