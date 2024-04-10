@@ -143,6 +143,7 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
     segment?: any
     __preview_send_client_session_params?: boolean
+    __preview_heatmaps?: boolean
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]

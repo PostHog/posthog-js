@@ -71,6 +71,7 @@ import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { Autocapture } from './autocapture'
+import { Heatmaps } from './heatmaps'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -214,6 +215,7 @@ export class PostHog {
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
     autocapture?: Autocapture
+    heatmaps?: Heatmaps
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -368,6 +370,7 @@ export class PostHog {
         }
 
         this.autocapture = new Autocapture(this)
+        this.heatmaps = new Heatmaps(this)
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -838,11 +841,9 @@ export class PostHog {
             properties['title'] = document.title
         }
 
-        if (event_name === '$performance_event') {
-            const persistenceProps = this.persistence.properties()
-            // Early exit for $performance_event as we only need session and $current_url
-            properties['distinct_id'] = persistenceProps.distinct_id
-            properties['$current_url'] = infoProperties.$current_url
+        if (event_name === '$heatmap') {
+            properties = _extend({}, infoProperties, properties)
+            // Early exit for heatmaps, as they don't need any other properties
             return properties
         }
 
@@ -867,7 +868,7 @@ export class PostHog {
         // update properties with pageview info and super-properties
         properties = _extend(
             {},
-            _info.properties(),
+            infoProperties,
             this.persistence.properties(),
             this.sessionPersistence.properties(),
             properties
