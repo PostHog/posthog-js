@@ -137,10 +137,8 @@ export class Autocapture {
 
         const props: Properties = {}
 
-        console.log('elem.attributes', elem.attributes, elem)
         _each(elem.attributes, function (attr: Attr) {
-            console.log('attr.name', attr, attr.name)
-            if (attr.name.indexOf('data-ph-capture-attribute') === 0) {
+            if (attr.name && attr.name.indexOf('data-ph-capture-attribute') === 0) {
                 const propertyKey = attr.name.replace('data-ph-capture-attribute-', '')
                 const propertyValue = attr.value
                 if (propertyKey && propertyValue && shouldCaptureValue(propertyValue)) {
