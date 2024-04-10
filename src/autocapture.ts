@@ -66,8 +66,9 @@ export class Autocapture {
             e = e || window?.event
             try {
                 this._captureEvent(e)
-            } catch (e) {
-                console.error(e, e.stack)
+            } catch (e: any) {
+                // eslint-disable-next-line no-console
+                console.error(e, e.stack, 'Error in autocapture event handler')
                 throw new Error('Error in autocapture event handler')
             }
         }
