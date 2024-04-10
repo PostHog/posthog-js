@@ -40,6 +40,9 @@ describe('Decide', () => {
         sessionRecording: {
             afterDecideResponse: jest.fn(),
         },
+        autocapture: {
+            afterDecideResponse: jest.fn(),
+        },
         featureFlags: {
             receivedFeatureFlags: jest.fn(),
             setReloadingPaused: jest.fn(),
@@ -53,10 +56,6 @@ describe('Decide', () => {
     given('decideResponse', () => ({ enable_collect_everything: true }))
 
     given('config', () => ({ api_host: 'https://test.com', persistence: 'memory' }))
-
-    beforeEach(() => {
-        jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
-    })
 
     describe('constructor', () => {
         given('subject', () => () => given.decide.call())
@@ -180,7 +179,7 @@ describe('Decide', () => {
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
             expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
@@ -208,7 +207,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
 
@@ -229,7 +228,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
 
