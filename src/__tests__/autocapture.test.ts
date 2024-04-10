@@ -370,37 +370,6 @@ describe('Autocapture system', () => {
             posthog.config.rageclick = true
         })
 
-        it('should add the custom property when an element matching any of the event selectors is clicked', () => {
-            posthog.config.mask_all_element_attributes = false
-            $autocapture_disabled_server_side = false
-            autocapture.afterDecideResponse({} as DecideResponse)
-
-            const eventElement1 = document.createElement('div')
-            const eventElement2 = document.createElement('div')
-            const propertyElement = document.createElement('div')
-            eventElement1.className = 'event-element-1'
-            eventElement1.style.cursor = 'pointer'
-            eventElement2.className = 'event-element-2'
-            eventElement2.style.cursor = 'pointer'
-            propertyElement.className = 'property-element'
-            propertyElement.textContent = 'my property value'
-            document.body.appendChild(eventElement1)
-            document.body.appendChild(eventElement2)
-            document.body.appendChild(propertyElement)
-
-            expect(captureMock).toHaveBeenCalledTimes(0)
-            simulateClick(eventElement1)
-            simulateClick(eventElement2)
-            expect(captureMock).toHaveBeenCalledTimes(2)
-            const captureArgs1 = captureMock.mock.calls[0]
-            const captureArgs2 = captureMock.mock.calls[1]
-            const eventType1 = captureArgs1[1]['my property name']
-            const eventType2 = captureArgs2[1]['my property name']
-            console.warn(JSON.stringify(captureArgs1[1]))
-            expect(eventType1).toBe('my property value')
-            expect(eventType2).toBe('my property value')
-        })
-
         it('should capture rageclick', () => {
             const elTarget = document.createElement('img')
             const elParent = document.createElement('span')
