@@ -851,7 +851,7 @@ export class PostHog {
             // Early exit for heatmaps, as they don't need any other properties
 
             // TODO: Remove below testing code
-            const heatmapData = (window.heatmapData = window.heatmapData ?? [])
+            const heatmapData = (assignableWindow.heatmapData = assignableWindow.heatmapData ?? [])
             heatmapData.push(properties)
 
             return properties
