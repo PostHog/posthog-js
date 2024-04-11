@@ -72,6 +72,7 @@ import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { Autocapture } from './autocapture'
 import { Heatmaps } from './heatmaps'
+import { ScrollManager } from './scroll-manager'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -203,6 +204,7 @@ export class PostHog {
     config: PostHogConfig
 
     rateLimiter: RateLimiter
+    scrollManager: ScrollManager
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
@@ -250,6 +252,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
+        this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
@@ -366,7 +369,7 @@ export class PostHog {
         this.sessionRecording.startRecordingIfEnabled()
 
         if (!this.config.disable_scroll_properties) {
-            this.pageViewManager.startMeasuringScrollPosition()
+            this.scrollManager.startMeasuringScrollPosition()
         }
 
         this.autocapture = new Autocapture(this)
