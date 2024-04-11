@@ -849,6 +849,11 @@ export class PostHog {
             properties['distinct_id'] = persistenceProps.distinct_id
             properties = _extend({}, infoProperties, properties)
             // Early exit for heatmaps, as they don't need any other properties
+
+            // TODO: Remove below testing code
+            const heatmapData = (window.heatmapData = window.heatmapData ?? [])
+            heatmapData.push(properties)
+
             return properties
         }
 

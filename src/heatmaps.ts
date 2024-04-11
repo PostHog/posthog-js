@@ -1,4 +1,4 @@
-import { _include, _includes, _register_event } from './utils'
+import { _includes, _register_event } from './utils'
 import RageClick from './extensions/rageclick'
 import { Properties } from './types'
 import { PostHog } from './posthog-core'
@@ -103,7 +103,7 @@ export class Heatmaps {
                 ...properties,
                 $heatmap_event: 'mousemove',
             })
-        }, 1000)
+        }, 500)
     }
 
     private _capture(properties: Properties): void {
