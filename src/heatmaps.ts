@@ -41,8 +41,8 @@ export class Heatmaps {
 
     private _getProperties(e: MouseEvent): Properties {
         return {
-            $mouse_x: e.clientX,
-            $mouse_y: e.clientY,
+            $pointer_x: e.clientX,
+            $pointer_y: e.clientY,
         }
     }
 
