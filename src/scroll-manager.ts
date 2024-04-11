@@ -40,9 +40,9 @@ export class ScrollManager {
             this.context = {}
         }
 
-        const el = this._scrollElement()
+        const el = this.scrollElement()
 
-        const scrollY = this._scrollY()
+        const scrollY = this.scrollY()
         const scrollHeight = el ? Math.max(0, el.scrollHeight - el.clientHeight) : 0
         const contentY = scrollY + (el?.clientHeight || 0)
         const contentHeight = el?.scrollHeight || 0
@@ -65,7 +65,7 @@ export class ScrollManager {
         window?.addEventListener('resize', this._updateScrollData)
     }
 
-    private _scrollElement(): Element | null | undefined {
+    public scrollElement(): Element | undefined {
         if (this.instance.config.scroll_root_selector) {
             const selectors = _isArray(this.instance.config.scroll_root_selector)
                 ? this.instance.config.scroll_root_selector
@@ -82,12 +82,21 @@ export class ScrollManager {
         }
     }
 
-    private _scrollY(): number {
+    public scrollY(): number {
         if (this.instance.config.scroll_root_selector) {
-            const element = this._scrollElement()
+            const element = this.scrollElement()
             return (element && element.scrollTop) || 0
         } else {
             return window ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0 : 0
+        }
+    }
+
+    public scrollX(): number {
+        if (this.instance.config.scroll_root_selector) {
+            const element = this.scrollElement()
+            return (element && element.scrollLeft) || 0
+        } else {
+            return window ? window.scrollX || window.pageXOffset || window.document.documentElement.scrollLeft || 0 : 0
         }
     }
 }
