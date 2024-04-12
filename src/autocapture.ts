@@ -97,7 +97,7 @@ export class Autocapture {
                 [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
             })
         }
-        // store this in-memory incase persistence is disabled
+        // store this in-memory in case persistence is disabled
         this._isDisabledServerSide = !!response['autocapture_opt_out']
 
         if (response.elementsChainAsString) {
