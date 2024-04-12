@@ -390,14 +390,14 @@ export class SessionRecording {
         this.startRecordingIfEnabled()
     }
 
-    private _onSessionIdListener: (() => void) | null = null
+    private _samplingSessionListener: (() => void) | null = null
 
     /**
      * This might be called more than once so needs to be idempotent
      */
     private _setupSampling() {
-        if (_isNumber(this.sampleRate) && _isNull(this._onSessionIdListener)) {
-            this._onSessionIdListener = this.sessionManager.onSessionId((sessionId) => {
+        if (_isNumber(this.sampleRate) && _isNull(this._samplingSessionListener)) {
+            this._samplingSessionListener = this.sessionManager.onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
         }
