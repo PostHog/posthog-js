@@ -844,19 +844,6 @@ export class PostHog {
             properties['title'] = document.title
         }
 
-        if (event_name === '$heatmap') {
-            const persistenceProps = this.persistence.properties()
-            properties['distinct_id'] = persistenceProps.distinct_id
-            properties = _extend({}, infoProperties, properties)
-            // Early exit for heatmaps, as they don't need any other properties
-
-            // TODO: Remove below testing code
-            const heatmapData = (assignableWindow.heatmapData = assignableWindow.heatmapData ?? [])
-            heatmapData.push(properties)
-
-            return properties
-        }
-
         // set $duration if time_event was previously called for this event
         if (!_isUndefined(start_timestamp)) {
             const duration_in_ms = new Date().getTime() - start_timestamp
@@ -909,6 +896,11 @@ export class PostHog {
 
         // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
         properties['$process_person'] = this._hasPersonProcessing()
+
+        const heatmapsBuffer = this.heatmaps?.getBuffer()
+        if (heatmapsBuffer?.length) {
+            properties['$heatmap_events'] = heatmapsBuffer
+        }
 
         return properties
     }

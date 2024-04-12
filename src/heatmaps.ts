@@ -31,6 +31,8 @@ export class Heatmaps {
     _initialized = false
     _mouseMoveTimeout: number | undefined
 
+    private buffer: Properties[] = []
+
     constructor(instance: PostHog) {
         this.instance = instance
 
@@ -41,6 +43,10 @@ export class Heatmaps {
 
     public get isEnabled(): boolean {
         return !!this.instance.config.__preview_heatmaps
+    }
+
+    public getBuffer(): Properties[] {
+        return this.buffer
     }
 
     private _setupListeners(): void {
@@ -58,7 +64,7 @@ export class Heatmaps {
         )
     }
 
-    private _getProperties(e: MouseEvent): Properties {
+    private _getProperties(e: MouseEvent, type: string): Properties {
         // We need to know if the target element is fixed or not
         // If fixed then we won't account for scrolling
         // If not then we will account for scrolling
@@ -70,45 +76,37 @@ export class Heatmaps {
         const isFixedOrSticky = elementOrParentPositionMatches(e.target as Element, ['fixed', 'sticky'], scrollElement)
 
         return {
-            $pointer_x: e.clientX + (isFixedOrSticky ? 0 : scrollX),
-            $pointer_y: e.clientY + (isFixedOrSticky ? 0 : scrollY),
-            $pointer_target_fixed: isFixedOrSticky,
+            x: e.clientX + (isFixedOrSticky ? 0 : scrollX),
+            y: e.clientY + (isFixedOrSticky ? 0 : scrollY),
+            target_fixed: isFixedOrSticky,
+            type,
         }
     }
 
     private _onClick(e: MouseEvent): void {
-        const properties = this._getProperties(e)
+        const properties = this._getProperties(e, 'click')
 
         if (this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
             this._capture({
                 ...properties,
-                $heatmap_event: 'rageclick',
+                type: 'rageclick',
             })
         }
 
         // TODO: Detect deadclicks
 
-        this._capture({
-            ...properties,
-            $heatmap_event: 'click',
-        })
+        this._capture(properties)
     }
 
     private _onMouseMove(e: Event): void {
         clearTimeout(this._mouseMoveTimeout)
 
         this._mouseMoveTimeout = setTimeout(() => {
-            const properties = this._getProperties(e as MouseEvent)
-            this._capture({
-                ...properties,
-                $heatmap_event: 'mousemove',
-            })
+            this._capture(this._getProperties(e as MouseEvent, 'mousemove'))
         }, 500)
     }
 
     private _capture(properties: Properties): void {
-        this.instance.capture('$heatmap', properties, {
-            _batchKey: 'heatmaps',
-        })
+        this.buffer.push(properties)
     }
 }
