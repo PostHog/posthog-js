@@ -6,6 +6,12 @@ import { PostHog } from './posthog-core'
 import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
 
+type HeatmapEventBuffer =
+    | {
+          [key: string]: Properties[]
+      }
+    | undefined
+
 function elementOrParentPositionMatches(el: Element, matches: string[], breakOnElement?: Element): boolean {
     let curEl: Element | false = el
 
@@ -32,11 +38,7 @@ export class Heatmaps {
     _mouseMoveTimeout: number | undefined
 
     // TODO: Periodically flush this if no other event has taken care of it
-    private buffer:
-        | {
-              [key: string]: Properties[]
-          }
-        | undefined
+    private buffer: HeatmapEventBuffer
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -50,9 +52,7 @@ export class Heatmaps {
         return !!this.instance.config.__preview_heatmaps
     }
 
-    public getAndClearBuffer(): {
-        [key: string]: Properties[]
-    } {
+    public getAndClearBuffer(): HeatmapEventBuffer {
         const buffer = this.buffer
         this.buffer = undefined
         return buffer
