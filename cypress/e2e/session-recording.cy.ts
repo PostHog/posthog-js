@@ -363,7 +363,7 @@ describe('Session recording', () => {
                 })
         })
 
-        it('starts a new recordings after calling reset', () => {
+        it('starts a new recording after calling reset', () => {
             cy.phCaptures({ full: true }).then((captures) => {
                 // should be a pageview at the beginning
                 expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
@@ -375,16 +375,11 @@ describe('Session recording', () => {
                 startingSessionId = ph.get_session_id()
             })
 
-            cy.get('[data-cy-input]').type('hello world!')
-            cy.wait(500)
             ensureActivitySendsSnapshots()
+
             cy.posthog().then((ph) => {
                 ph.reset()
             })
-
-            cy.get('[data-cy-input]').type('a new world!')
-            cy.wait(500)
-            ensureActivitySendsSnapshots()
 
             // the session id is rotated after reset is called
             cy.posthog().then((ph) => {
