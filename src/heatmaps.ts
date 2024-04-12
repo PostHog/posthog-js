@@ -46,8 +46,10 @@ export class Heatmaps {
         return !!this.instance.config.__preview_heatmaps
     }
 
-    public getBuffer(): Properties[] {
-        return this.buffer
+    public getAndClearBuffer(): Properties[] {
+        const buffer = this.buffer
+        this.buffer = []
+        return buffer
     }
 
     private _setupListeners(): void {

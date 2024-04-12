@@ -897,7 +897,7 @@ export class PostHog {
         // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
         properties['$process_person'] = this._hasPersonProcessing()
 
-        const heatmapsBuffer = this.heatmaps?.getBuffer()
+        const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
         if (heatmapsBuffer?.length) {
             properties['$heatmap_data'] = heatmapsBuffer
         }
