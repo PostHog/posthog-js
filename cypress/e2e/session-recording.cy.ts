@@ -362,6 +362,38 @@ describe('Session recording', () => {
                     })
                 })
         })
+
+        it('starts a new recordings after calling reset', () => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                // should be a pageview at the beginning
+                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
+            })
+            cy.resetPhCaptures()
+
+            let startingSessionId: string | null = null
+            cy.posthog().then((ph) => {
+                startingSessionId = ph.get_session_id()
+            })
+
+            cy.get('[data-cy-input]').type('hello world!')
+            cy.wait(500)
+            ensureActivitySendsSnapshots()
+            cy.posthog().then((ph) => {
+                ph.reset()
+            })
+
+            cy.get('[data-cy-input]').type('a new world!')
+            cy.wait(500)
+            ensureActivitySendsSnapshots()
+
+            // the session id is rotated after reset is called
+            cy.posthog().then((ph) => {
+                const secondSessionId = ph.get_session_id()
+                expect(startingSessionId).not.to.be.null
+                expect(secondSessionId).not.to.be.null
+                expect(secondSessionId).not.to.equal(startingSessionId)
+            })
+        })
     })
 
     describe('with sampling', () => {
