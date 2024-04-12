@@ -31,6 +31,7 @@ export class Heatmaps {
     _initialized = false
     _mouseMoveTimeout: number | undefined
 
+    // TODO: Periodically flush this if no other event has taken care of it
     private buffer: Properties[] = []
 
     constructor(instance: PostHog) {
