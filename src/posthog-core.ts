@@ -899,7 +899,7 @@ export class PostHog {
 
         const heatmapsBuffer = this.heatmaps?.getBuffer()
         if (heatmapsBuffer?.length) {
-            properties['$heatmap_events'] = heatmapsBuffer
+            properties['$heatmap_data'] = heatmapsBuffer
         }
 
         return properties
