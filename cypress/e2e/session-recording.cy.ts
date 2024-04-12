@@ -18,7 +18,7 @@ function ensureRecordingIsStopped() {
         })
 }
 
-function ensureActivitySendsSnapshots() {
+function ensureActivitySendsSnapshots(initial = true) {
     cy.resetPhCaptures()
 
     cy.get('[data-cy-input]')
@@ -31,12 +31,15 @@ function ensureActivitySendsSnapshots() {
                 // a meta and then a full snapshot
                 expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                 expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                expect(captures[0]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-                expect(captures[0]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+                // Not sent if recording is not stopped but session_id changes (e.g. reset called)
+                if (initial) {
+                    expect(captures[0]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                    expect(captures[0]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+                }
                 // Making a set from the rest should all be 3 - incremental snapshots
-                expect(new Set(captures[0]['properties']['$snapshot_data'].slice(4).map((s) => s.type))).to.deep.equal(
-                    new Set([3])
-                )
+                expect(
+                    new Set(captures[0]['properties']['$snapshot_data'].slice(initial ? 4 : 2).map((s) => s.type))
+                ).to.deep.equal(new Set([3]))
             })
         })
 }
@@ -380,6 +383,8 @@ describe('Session recording', () => {
             cy.posthog().then((ph) => {
                 ph.reset()
             })
+
+            ensureActivitySendsSnapshots(false)
 
             // the session id is rotated after reset is called
             cy.posthog().then((ph) => {
