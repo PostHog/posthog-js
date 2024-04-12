@@ -32,7 +32,11 @@ export class Heatmaps {
     _mouseMoveTimeout: number | undefined
 
     // TODO: Periodically flush this if no other event has taken care of it
-    private buffer: Properties[] = []
+    private buffer:
+        | {
+              [key: string]: Properties[]
+          }
+        | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -46,9 +50,11 @@ export class Heatmaps {
         return !!this.instance.config.__preview_heatmaps
     }
 
-    public getAndClearBuffer(): Properties[] {
+    public getAndClearBuffer(): {
+        [key: string]: Properties[]
+    } {
         const buffer = this.buffer
-        this.buffer = []
+        this.buffer = undefined
         return buffer
     }
 
@@ -110,6 +116,17 @@ export class Heatmaps {
     }
 
     private _capture(properties: Properties): void {
-        this.buffer.push(properties)
+        if (!window) {
+            return
+        }
+        const url = window.location.href
+
+        this.buffer = this.buffer || {}
+
+        if (!this.buffer[url]) {
+            this.buffer[url] = []
+        }
+
+        this.buffer[url].push(properties)
     }
 }

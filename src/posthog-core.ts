@@ -898,7 +898,7 @@ export class PostHog {
         properties['$process_person'] = this._hasPersonProcessing()
 
         const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
-        if (heatmapsBuffer?.length) {
+        if (heatmapsBuffer) {
             properties['$heatmap_data'] = heatmapsBuffer
         }
 
