@@ -357,30 +357,7 @@ export class SessionRecording {
     }
 
     afterDecideResponse(response: DecideResponse) {
-        const receivedSampleRate = response.sessionRecording?.sampleRate
-        const parsedSampleRate = _isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
-
-        const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
-
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
-                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
-                [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
-                [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: {
-                    capturePerformance: response.capturePerformance,
-                    ...response.sessionRecording?.networkPayloadCapture,
-                },
-                [SESSION_RECORDING_CANVAS_RECORDING]: {
-                    enabled: response.sessionRecording?.recordCanvas,
-                    fps: response.sessionRecording?.canvasFps,
-                    quality: response.sessionRecording?.canvasQuality,
-                },
-                [SESSION_RECORDING_SAMPLE_RATE]: parsedSampleRate,
-                [SESSION_RECORDING_MINIMUM_DURATION]: _isUndefined(receivedMinimumDuration)
-                    ? null
-                    : receivedMinimumDuration,
-            })
-        }
+        this._persistDecideResponse(response)
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
@@ -423,6 +400,40 @@ export class SessionRecording {
             this._samplingSessionListener = this.sessionManager.onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
+        }
+    }
+
+    private _persistDecideResponse(response: DecideResponse): void {
+        if (this.instance.persistence) {
+            const persistence = this.instance.persistence
+
+            const persistResponse = () => {
+                const receivedSampleRate = response.sessionRecording?.sampleRate
+
+                const parsedSampleRate = _isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+                const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
+
+                persistence.register({
+                    [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
+                    [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
+                    [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: {
+                        capturePerformance: response.capturePerformance,
+                        ...response.sessionRecording?.networkPayloadCapture,
+                    },
+                    [SESSION_RECORDING_CANVAS_RECORDING]: {
+                        enabled: response.sessionRecording?.recordCanvas,
+                        fps: response.sessionRecording?.canvasFps,
+                        quality: response.sessionRecording?.canvasQuality,
+                    },
+                    [SESSION_RECORDING_SAMPLE_RATE]: parsedSampleRate,
+                    [SESSION_RECORDING_MINIMUM_DURATION]: _isUndefined(receivedMinimumDuration)
+                        ? null
+                        : receivedMinimumDuration,
+                })
+            }
+
+            persistResponse()
+            this.sessionManager.onSessionId(persistResponse)
         }
     }
 

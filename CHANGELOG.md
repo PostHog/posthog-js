@@ -1,3 +1,7 @@
+## 1.121.2 - 2024-04-12
+
+- fix: continue recording after reset (#1135)
+
 ## 1.121.1 - 2024-04-10
 
 - fix: sampling typescript error (#1129)
