@@ -72,6 +72,7 @@ import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { SimpleEventEmitter } from './utils/simple-event-emitter'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -232,6 +233,8 @@ export class PostHog {
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
 
+    debugEventEmitter = new SimpleEventEmitter()
+
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
         set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
@@ -270,6 +273,8 @@ export class PostHog {
                 callback?.({} as any)
             },
         }
+
+        this.debugEventEmitter.on('eventCaptured', (data) => logger.info('send', data))
     }
 
     // Initialization methods
@@ -780,7 +785,7 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        logger.info('send', data)
+        this.debugEventEmitter.emit('eventCaptured', data)
 
         const requestOptions: QueuedRequestOptions = {
             method: 'POST',
