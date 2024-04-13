@@ -223,7 +223,6 @@ export class PostHog {
 
     _triggered_notifs: any
     compression?: Compression
-    __captureHooks: ((eventName: string) => void)[]
     __request_queue: QueuedRequestOptions[]
     __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
@@ -246,7 +245,6 @@ export class PostHog {
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.segmentIntegration = () => createSegmentIntegration(this)
-        this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
         this.__autocapture = undefined
@@ -363,7 +361,6 @@ export class PostHog {
 
         this._requestQueue = new RequestQueue((req) => this._send_request(req))
         this._retryQueue = new RetryQueue(this)
-        this.__captureHooks = []
         this.__request_queue = []
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
@@ -474,6 +471,10 @@ export class PostHog {
             })
         } else {
             this._loaded()
+        }
+
+        if (_isFunction(this.config._onCapture)) {
+            this.debugEventEmitter.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
         return this
@@ -801,18 +802,11 @@ export class PostHog {
             this._send_retriable_request(requestOptions)
         }
 
-        this._invokeCaptureHooks(event_name, data)
-
         return data
     }
 
     _addCaptureHook(callback: (eventName: string) => void): void {
-        this.__captureHooks.push(callback)
-    }
-
-    _invokeCaptureHooks(eventName: string, eventData: CaptureResult): void {
-        this.config._onCapture(eventName, eventData)
-        _each(this.__captureHooks, (callback) => callback(eventName))
+        this.debugEventEmitter.on('eventCaptured', (data) => callback(data.event))
     }
 
     _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
