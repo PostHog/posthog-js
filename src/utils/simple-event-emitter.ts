@@ -1,5 +1,5 @@
 export class SimpleEventEmitter {
-    events: { [key: string]: ((...args: any[]) => void)[] } = {}
+    private events: { [key: string]: ((...args: any[]) => void)[] } = {}
 
     constructor() {
         this.events = {}
