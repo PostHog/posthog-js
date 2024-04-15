@@ -289,7 +289,7 @@ export class SessionRecording {
         this._setupSampling()
     }
 
-    startRecordingIfEnabled() {
+    startOrStopIfEnabled() {
         if (this.isRecordingEnabled) {
             this._startCapture()
             logger.info(LOGGER_PREFIX + ' started')
@@ -387,7 +387,7 @@ export class SessionRecording {
         }
 
         this.receivedDecide = true
-        this.startRecordingIfEnabled()
+        this.startOrStopIfEnabled()
     }
 
     private _samplingSessionListener: (() => void) | null = null

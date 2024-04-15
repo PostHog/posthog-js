@@ -86,6 +86,13 @@ export class Autocapture {
         }
     }
 
+    public startOrStopIfEnabled() {
+        if (this.isEnabled && !this._initialized) {
+            this._addDomEventHandlers()
+            this._initialized = true
+        }
+    }
+
     public afterDecideResponse(response: DecideResponse) {
         if (this._initialized) {
             logger.info('autocapture already initialized')
@@ -104,10 +111,7 @@ export class Autocapture {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        if (this.isEnabled) {
-            this._addDomEventHandlers()
-            this._initialized = true
-        }
+        this.startOrStopIfEnabled()
     }
 
     public get isEnabled(): boolean {
@@ -224,6 +228,10 @@ export class Autocapture {
     }
 
     private _captureEvent(e: Event, eventName = '$autocapture'): boolean | void {
+        if (!this.isEnabled) {
+            return
+        }
+
         /*** Don't mess with this code without running IE8 tests on it ***/
         let target = this._getEventTarget(e)
         if (isTextNode(target)) {

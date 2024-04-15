@@ -22,22 +22,6 @@ export class Toolbar {
         this.instance = instance
     }
 
-    afterDecideResponse(response: DecideResponse) {
-        const toolbarParams: ToolbarParams =
-            response['toolbarParams'] ||
-            response['editorParams'] ||
-            (response['toolbarVersion'] ? { toolbarVersion: response['toolbarVersion'] } : {})
-        if (
-            response['isAuthenticated'] &&
-            toolbarParams['toolbarVersion'] &&
-            toolbarParams['toolbarVersion'].indexOf('toolbar') === 0
-        ) {
-            this.loadToolbar({
-                ...toolbarParams,
-            })
-        }
-    }
-
     /**
      * To load the toolbar, we need an access token and other state. That state comes from one of three places:
      * 1. In the URL hash params
