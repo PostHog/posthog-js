@@ -51,16 +51,6 @@ describe('Decide', () => {
         _afterDecideResponse: jest.fn(),
         get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
         _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: given.decideResponse })),
-        toolbar: {
-            maybeLoadToolbar: jest.fn(),
-            afterDecideResponse: jest.fn(),
-        },
-        sessionRecording: {
-            afterDecideResponse: jest.fn(),
-        },
-        autocapture: {
-            afterDecideResponse: jest.fn(),
-        },
         featureFlags: {
             receivedFeatureFlags: jest.fn(),
             setReloadingPaused: jest.fn(),
@@ -197,11 +187,8 @@ describe('Decide', () => {
             given('decideResponse', () => ({}))
             given.subject()
 
-            expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
             expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
@@ -228,10 +215,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-
+            expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
 
@@ -248,10 +232,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-
+            expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
 

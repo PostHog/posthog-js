@@ -769,7 +769,7 @@ describe('posthog core', () => {
             given('overrides', () => ({
                 sessionRecording: {
                     afterDecideResponse: jest.fn(),
-                    startRecordingIfEnabled: jest.fn(),
+                    startOrStopIfEnabled: jest.fn(),
                 },
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),
