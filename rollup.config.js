@@ -172,6 +172,28 @@ export default [
         ],
     },
     {
+        input: 'src/loaders/loader-module-minimal.ts',
+        output: [
+            {
+                file: pkg.main.replace('.js', '.minimal.js'),
+                format: 'cjs',
+                sourcemap: true,
+                exports: 'auto',
+            },
+            {
+                file: pkg.main.replace('.js', '.minimal.js'),
+                format: 'es',
+                sourcemap: true,
+            },
+        ],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/module.html',
+            }),
+        ],
+    },
+    {
         input: './lib/src/loaders/loader-module.d.ts',
         output: [{ file: pkg.types, format: 'es' }],
         plugins: [

@@ -7,7 +7,6 @@ import {
     _register_event,
     _safewrap_class,
 } from './utils'
-import { userAgent } from './utils/globals'
 import {
     SESSION_RECORDING_IS_SAMPLED,
 } from './constants'
@@ -39,40 +38,8 @@ import {
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { _isBlockedUA } from './utils/blocked-uas'
-import { SUPPORTS_REQUEST } from './request'
 import { Autocapture } from './autocapture'
-import { PostHogCore } from './posthog-core'
-
-/*
-SIMPLE STYLE GUIDE:
-
-this.x === public function
-this._x === internal - only use within this file
-this.__x === private - only use within the class
-
-Globals should be all caps
-*/
-
-/* posthog.init is called with `Partial<PostHogConfig>`
- * and we want to ensure that only valid keys are passed to the config object.
- * TypeScript does not enforce that the object passed does not have extra keys.
- * So someone can call with { bootstrap: { distinctId: '123'} }
- * which is not a valid key. They should have passed distinctID (upper case D).
- * That's a really tricky mistake to spot.
- * The OnlyValidKeys type ensures that only keys that are valid in the PostHogConfig type are allowed.
- */
-
-
-/*
- * Dynamic... constants? Is that an oxymoron?
- */
-// http://hacks.mozilla.org/2009/07/cross-site-xmlhttprequest-with-cors/
-// https://developer.mozilla.org/en-US/docs/DOM/XMLHttpRequest#withCredentials
-
-// IE<10 does not support cross-origin XHR's but script tags
-// with defer won't block window.onload; ENQUEUE_REQUESTS
-// should only be true for Opera<12
-let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
+import { POSTHOG_INSTANCES, PostHogCore } from './posthog-core'
 
 
 class DeprecatedWebPerformanceObserver {
@@ -97,6 +64,7 @@ class DeprecatedWebPerformanceObserver {
  * @constructor
  */
 export class PostHogExtended extends PostHogCore {
+    protected _Cls = PostHogExtended
     surveys: PostHogSurveys
     toolbar: Toolbar
     autocapture?: Autocapture
@@ -134,20 +102,25 @@ export class PostHogExtended extends PostHogCore {
         }
     }
 
+    init(
+        token: string,
+        config?: any,
+        name?: string
+    ): PostHogCore | void {
+        if (!name || name === "posthog") {
+            // This means we are initializing the primary instance (i.e. this)
+            return this._init(token, config, name)
+        } else {
+            const namedPosthog = POSTHOG_INSTANCES[name] ?? new PostHogCore()
+            namedPosthog._init(token, config, name)
+            POSTHOG_INSTANCES[name] = namedPosthog
+            // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
+            ;(POSTHOG_INSTANCES["posthog"] as any)[name] = namedPosthog
 
-    // posthog._init(token:string, config:object, name:string)
-    //
-    // This function sets up the current instance of the posthog
-    // library.  The difference between this method and the init(...)
-    // method is this one initializes the actual instance, whereas the
-    // init(...) method sets up a new library and calls _init on it.
-    //
-    // Note that there are operations that can be asynchronous, so we
-    // accept a callback that is called when all the asynchronous work
-    // is done. Note that we do not use promises because we want to be
-    // IE11 compatible. We could use polyfills, which would make the
-    // code a bit cleaner, but will add some overhead.
-    //
+            return namedPosthog
+        }
+    }
+
     _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHogExtended {
         super._init(token, config, name)
 
@@ -159,7 +132,6 @@ export class PostHogExtended extends PostHogCore {
 
         return this
     }
-
 
     /*
      * Register an event listener that runs whenever the session id or window id change.
@@ -215,7 +187,6 @@ export class PostHogExtended extends PostHogCore {
 
         return url
     }
-
 
     // Override
     set_config(config: Partial<PostHogConfig>): void {
@@ -284,5 +255,4 @@ export class PostHogExtended extends PostHogCore {
     loadToolbar(params: ToolbarParams): boolean {
         return this.toolbar.loadToolbar(params)
     }
-
 }

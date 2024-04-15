@@ -5,7 +5,7 @@
  * currently not supported in the browser lib).
  */
 
-import posthog, { PostHog } from '../loader-module'
+import posthog, { PostHog } from '../loaders/loader-module'
 import sinon from 'sinon'
 import { window } from '../utils/globals'
 

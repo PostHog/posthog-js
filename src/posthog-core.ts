@@ -201,7 +201,6 @@ export class PostHogCore {
 
     segmentIntegration: () => any
 
-
     constructor() {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
@@ -309,11 +308,9 @@ export class PostHogCore {
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
-
         if (!this.config.disable_scroll_properties) {
             this.pageViewManager.startMeasuringScrollPosition()
         }
-
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -386,7 +383,6 @@ export class PostHogCore {
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
         window?.addEventListener?.('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
-
 
         // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
@@ -1566,7 +1562,6 @@ export class PostHogCore {
             if (this.config.debug) {
                 Config.DEBUG = true
             }
-
         }
     }
 

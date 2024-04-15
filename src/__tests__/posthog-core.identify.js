@@ -1,4 +1,4 @@
-import _posthog from '../loader-module'
+import _posthog from '../loaders/loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { uuidv7 } from '../uuidv7'
 
