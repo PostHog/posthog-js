@@ -172,7 +172,7 @@ export class Autocapture {
         const elementAttributeIgnorelist = this.config?.element_attribute_ignorelist
         _each(elem.attributes, function (attr: Attr) {
             // Only capture attributes we know are safe
-            if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
+            if (isSensitiveElement(elem) && ['name', 'id', 'class', 'aria-label'].indexOf(attr.name) === -1) return
 
             if (elementAttributeIgnorelist?.includes(attr.name)) return
 
