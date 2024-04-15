@@ -6,7 +6,6 @@ export const start = ({
     resetOnInit = false,
     options = {},
     decideResponseOverrides = {
-        config: { enable_collect_everything: true },
         sessionRecording: undefined,
         isAuthenticated: false,
         capturePerformance: true,
@@ -27,7 +26,7 @@ export const start = ({
         excludedDomains: [],
         autocaptureExceptions: false,
         ...decideResponseOverrides,
-        config: { enable_collect_everything: true, ...decideResponseOverrides.config },
+        config: { ...decideResponseOverrides.config },
     }
     cy.intercept('POST', '/decide/*', decideResponse).as('decide')
 

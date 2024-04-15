@@ -1,4 +1,3 @@
-import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
@@ -59,6 +58,9 @@ describe('Decide', () => {
         sessionRecording: {
             afterDecideResponse: jest.fn(),
         },
+        autocapture: {
+            afterDecideResponse: jest.fn(),
+        },
         featureFlags: {
             receivedFeatureFlags: jest.fn(),
             setReloadingPaused: jest.fn(),
@@ -69,12 +71,11 @@ describe('Decide', () => {
         getGroups: () => ({ organization: '5' }),
     }))
 
-    given('decideResponse', () => ({ enable_collect_everything: true }))
+    given('decideResponse', () => ({}))
 
     given('config', () => ({ api_host: 'https://test.com', persistence: 'memory' }))
 
     beforeEach(() => {
-        jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
         // clean the JSDOM to prevent interdependencies between tests
         document.body.innerHTML = ''
         document.head.innerHTML = ''
@@ -193,16 +194,14 @@ describe('Decide', () => {
         given('subject', () => () => given.decide.parseDecideResponse(given.decideResponse))
 
         it('properly parses decide response', () => {
-            given('decideResponse', () => ({
-                enable_collect_everything: true,
-            }))
+            given('decideResponse', () => ({}))
             given.subject()
 
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
             expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
@@ -218,7 +217,6 @@ describe('Decide', () => {
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags_on_first_load is set', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
             }))
             given('config', () => ({
@@ -230,7 +228,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
 
@@ -239,7 +237,6 @@ describe('Decide', () => {
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags is set', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
             }))
             given('config', () => ({
@@ -251,7 +248,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
 
@@ -280,7 +277,6 @@ describe('Decide', () => {
 
         it('Make sure surveys are not loaded when decide response says no', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
                 surveys: false,
             }))
@@ -297,7 +293,6 @@ describe('Decide', () => {
 
         it('Make sure surveys are loaded when decide response says so', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
                 surveys: true,
             }))
@@ -314,7 +309,6 @@ describe('Decide', () => {
 
         it('Make sure surveys are not loaded when config says no', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
                 surveys: true,
             }))

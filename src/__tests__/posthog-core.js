@@ -1,7 +1,6 @@
 import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
-import { autocapture } from '../autocapture'
 
 import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
@@ -346,13 +345,6 @@ describe('posthog core', () => {
             given.subject()
 
             expect(given.lib.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
-        })
-
-        it('enables elementsChainAsString if given', () => {
-            given('decideResponse', () => ({ elementsChainAsString: true }))
-            given.subject()
-
-            expect(given.lib.elementsChainAsString).toBe(true)
         })
     })
 
@@ -750,8 +742,6 @@ describe('posthog core', () => {
         beforeEach(() => {
             jest.spyOn(window.console, 'warn').mockImplementation()
             jest.spyOn(window.console, 'error').mockImplementation()
-            jest.spyOn(autocapture, 'init').mockImplementation()
-            jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
         })
 
         given('advanced_disable_decide', () => true)
@@ -775,7 +765,7 @@ describe('posthog core', () => {
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
         })
 
-        it('does not load autocapture, feature flags, toolbar, session recording', () => {
+        it('does not load feature flags, toolbar, session recording', () => {
             given('overrides', () => ({
                 sessionRecording: {
                     afterDecideResponse: jest.fn(),
@@ -794,9 +784,6 @@ describe('posthog core', () => {
             jest.spyOn(given.lib.toolbar, 'afterDecideResponse').mockImplementation()
             jest.spyOn(given.lib.sessionRecording, 'afterDecideResponse').mockImplementation()
             jest.spyOn(given.lib.persistence, 'register').mockImplementation()
-
-            // Autocapture
-            expect(autocapture.afterDecideResponse).not.toHaveBeenCalled()
 
             // Feature flags
             expect(given.lib.persistence.register).not.toHaveBeenCalled() // FFs are saved this way

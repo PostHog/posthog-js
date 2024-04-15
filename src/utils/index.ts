@@ -21,14 +21,6 @@ export const _trim = function (str: string): string {
     return str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
 }
 
-export const _bind_instance_methods = function (obj: Record<string, any>): void {
-    for (const func in obj) {
-        if (_isFunction(obj[func])) {
-            obj[func] = obj[func].bind(obj)
-        }
-    }
-}
-
 export function _eachArray<E = any>(
     obj: E[] | null | undefined,
     iterator: (value: E, key: number) => void | Breaker,
@@ -202,14 +194,6 @@ export const _safewrap = function <F extends (...args: any[]) => any = (...args:
 export const _safewrap_class = function (klass: Function, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]] = _safewrap(klass.prototype[functions[i]])
-    }
-}
-
-export const _safewrap_instance_methods = function (obj: Record<string, any>): void {
-    for (const func in obj) {
-        if (_isFunction(obj[func])) {
-            obj[func] = _safewrap(obj[func])
-        }
     }
 }
 
