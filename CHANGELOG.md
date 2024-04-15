@@ -1,3 +1,8 @@
+## 1.122.0 - 2024-04-15
+
+- feat: readonly event emitter (#1136)
+- fix: Allow capturing `aria-label` attribute on sensitive elements (#1118)
+
 ## 1.121.4 - 2024-04-15
 
 - chore: Autocapture refactor (#1126)
