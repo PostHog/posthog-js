@@ -27,4 +27,5 @@ react/dist
 test-result.json
 yarn-error.log
 stats.html
+stats/
 .eslintcache

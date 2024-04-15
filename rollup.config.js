@@ -16,8 +16,7 @@ const plugins = [
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
     }),
-    terser({ toplevel: true }),
-    visualizer(),
+    terser({ toplevel: true })
 ]
 
 /** @type {import('rollup').RollupOptions[]} */
@@ -39,7 +38,12 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/recorder.html',
+            }),
+        ],
     },
     {
         input: 'src/loader-surveys.ts',
@@ -54,7 +58,12 @@ export default [
                 },
             },
         ],
-        plugins: [...plugins],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/surveys.html',
+            }),
+        ],
     },
     {
         input: 'src/loader-surveys-preview.ts',
@@ -65,7 +74,12 @@ export default [
                 sourcemap: true,
             },
         ],
-        plugins: [...plugins],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/surveys-preview.html',
+            }),
+        ],
     },
     {
         input: 'src/loader-exception-autocapture.ts',
@@ -77,7 +91,12 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/exception-autocapture.html',
+            }),
+        ],
     },
     {
         input: 'src/loader-globals.ts',
@@ -89,7 +108,12 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/array.html',
+            }),
+        ],
     },
     {
         input: 'src/loader-globals-full.ts',
@@ -101,7 +125,12 @@ export default [
                 name: 'posthog',
             },
         ],
-        plugins: [...plugins],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/array.full.html',
+            }),
+        ],
     },
     {
         input: 'src/loader-module.ts',
@@ -118,7 +147,12 @@ export default [
                 sourcemap: true,
             },
         ],
-        plugins: [...plugins],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/module.html',
+            }),
+        ],
     },
     {
         input: './lib/src/loader-module.d.ts',
