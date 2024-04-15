@@ -2,7 +2,10 @@ import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
 import { SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
 import { _isUrlMatchingRegex } from './utils/request-utils'
-import { window, document } from './utils/globals'
+import { window, document, assignableWindow } from './utils/globals'
+import { DecideResponse } from './types'
+import { loadScript } from './utils'
+import { logger } from './utils/logger'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -13,9 +16,29 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
 
 export class PostHogSurveys {
     instance: PostHog
+    private _decideServerResponse?: boolean
 
     constructor(instance: PostHog) {
         this.instance = instance
+    }
+
+    afterDecideResponse(response: DecideResponse) {
+        this._decideServerResponse = !!response['surveys']
+        this.startOrStopIfEnabled()
+    }
+
+    startOrStopIfEnabled() {
+        const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
+    
+        if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
+            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
+                if (err) {
+                    return logger.error(`Could not load surveys script`, err)
+                }
+
+                assignableWindow.extendPostHogWithSurveys(this.instance)
+            })
+        }
     }
 
     getSurveys(callback: SurveyCallback, forceReload = false) {

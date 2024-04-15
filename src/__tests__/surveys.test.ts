@@ -8,6 +8,7 @@ import { DecideResponse, PostHogConfig, Properties } from '../types'
 import { window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
+import { checkScriptsForSrc } from './helpers/script-utils'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -398,6 +399,28 @@ describe('surveys', () => {
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([activeSurvey, surveyWithSelector, surveyWithEverything])
             })
+        })
+    })
+
+    describe("decide response", () => {
+        it('should not load when decide response says no', () => {
+            surveys.afterDecideResponse({ surveys: false} as DecideResponse)
+            // Make sure the script is not loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
+        })
+
+        it('should load when decide response says so', () => {
+            surveys.afterDecideResponse({ surveys: true } as DecideResponse)
+            // Make sure the script is loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js')).toBe(true)
+        })
+
+        it('should not load when config says no', () => {
+
+            config.disable_surveys = true
+            surveys.afterDecideResponse({ surveys: true } as DecideResponse)
+            // Make sure the script is not loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
         })
     })
 })

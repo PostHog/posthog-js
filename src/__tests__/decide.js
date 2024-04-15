@@ -1,6 +1,8 @@
 import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
+import { checkScriptsForSrc } from './helpers/script-utils'
+
 
 const expectDecodedSendRequest = (send_request, data, noCompression) => {
     const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
@@ -19,24 +21,6 @@ const expectDecodedSendRequest = (send_request, data, noCompression) => {
     })
 }
 
-const checkScriptsForSrc = (src, negate = false) => {
-    const scripts = document.querySelectorAll('body > script')
-    let foundScript = false
-    for (let i = 0; i < scripts.length; i++) {
-        if (scripts[i].src === src) {
-            foundScript = true
-            break
-        }
-    }
-
-    if (foundScript && negate) {
-        throw new Error(`Script with src ${src} was found when it should not have been.`)
-    } else if (!foundScript && !negate) {
-        throw new Error(`Script with src ${src} was not found when it should have been.`)
-    } else {
-        return true
-    }
-}
 
 describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))
@@ -254,55 +238,6 @@ describe('Decide', () => {
                 'Unexpected console.error: [PostHog.js],PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
             expect(checkScriptsForSrc('https://test.com/site_app/1/tokentoken/hash/', true)).toBe(true)
-        })
-
-        it('Make sure surveys are not loaded when decide response says no', () => {
-            given('decideResponse', () => ({
-                featureFlags: { 'test-flag': true },
-                surveys: false,
-            }))
-            given('config', () => ({
-                api_host: 'https://test.com',
-                token: 'testtoken',
-                persistence: 'memory',
-            }))
-
-            given.subject()
-            // Make sure the script is not loaded
-            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
-        })
-
-        it('Make sure surveys are loaded when decide response says so', () => {
-            given('decideResponse', () => ({
-                featureFlags: { 'test-flag': true },
-                surveys: true,
-            }))
-            given('config', () => ({
-                api_host: 'https://test.com',
-                token: 'testtoken',
-                persistence: 'memory',
-            }))
-
-            given.subject()
-            // Make sure the script is loaded
-            expect(checkScriptsForSrc('https://test.com/static/surveys.js')).toBe(true)
-        })
-
-        it('Make sure surveys are not loaded when config says no', () => {
-            given('decideResponse', () => ({
-                featureFlags: { 'test-flag': true },
-                surveys: true,
-            }))
-            given('config', () => ({
-                api_host: 'https://test.com',
-                token: 'testtoken',
-                persistence: 'memory',
-                disable_surveys: true,
-            }))
-
-            given.subject()
-            // Make sure the script is not loaded
-            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
         })
     })
 })

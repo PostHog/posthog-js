@@ -369,6 +369,7 @@ export class PostHog {
 
         this.autocapture = new Autocapture(this)
         this.autocapture.startOrStopIfEnabled()
+        this.surveys.startOrStopIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -1667,6 +1668,7 @@ export class PostHog {
 
             this.sessionRecording?.startOrStopIfEnabled()
             this.autocapture?.startOrStopIfEnabled()
+            this.surveys.startOrStopIfEnabled()
         }
     }
 
