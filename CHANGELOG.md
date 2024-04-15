@@ -1,3 +1,7 @@
+## 1.121.4 - 2024-04-15
+
+- chore: Autocapture refactor (#1126)
+
 ## 1.121.3 - 2024-04-15
 
 - chore: patch to fix broken worker (#1134)
