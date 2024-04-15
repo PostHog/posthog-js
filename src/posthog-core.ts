@@ -232,7 +232,7 @@ export class PostHog {
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
 
-    debugEventEmitter = new SimpleEventEmitter()
+    private _debugEventEmitter = new SimpleEventEmitter()
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -272,7 +272,7 @@ export class PostHog {
             },
         }
 
-        this.debugEventEmitter.on('eventCaptured', (data) => logger.info('send', data))
+        this.on('eventCaptured', (data) => logger.info('send', data))
     }
 
     // Initialization methods
@@ -474,7 +474,7 @@ export class PostHog {
         }
 
         if (_isFunction(this.config._onCapture)) {
-            this.debugEventEmitter.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
+            this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
         return this
@@ -786,7 +786,7 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        this.debugEventEmitter.emit('eventCaptured', data)
+        this._debugEventEmitter.emit('eventCaptured', data)
 
         const requestOptions: QueuedRequestOptions = {
             method: 'POST',
@@ -806,7 +806,7 @@ export class PostHog {
     }
 
     _addCaptureHook(callback: (eventName: string) => void): void {
-        this.debugEventEmitter.on('eventCaptured', (data) => callback(data.event))
+        this.on('eventCaptured', (data) => callback(data.event))
     }
 
     _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
@@ -1099,6 +1099,18 @@ export class PostHog {
     /** Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. */
     getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
         return this.featureFlags.getEarlyAccessFeatures(callback, force_reload)
+    }
+
+    /**
+     * Exposes a set of events that PostHog will emit.
+     * e.g. `eventCaptured` is emitted immediately before trying to send an event
+     *
+     * Unlike  `onFeatureFlags` and `onSessionId` these are not called when the
+     * listener is registered, the first callback will be the next event
+     * _after_ registering a listener
+     */
+    on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void {
+        return this._debugEventEmitter.on(event, cb)
     }
 
     /*
