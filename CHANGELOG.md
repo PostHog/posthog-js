@@ -1,3 +1,7 @@
+## 1.121.3 - 2024-04-15
+
+- chore: patch to fix broken worker (#1134)
+
 ## 1.121.2 - 2024-04-12
 
 - fix: continue recording after reset (#1135)
