@@ -70,6 +70,7 @@ import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
 
 /*
@@ -222,13 +223,14 @@ export class PostHog {
 
     _triggered_notifs: any
     compression?: Compression
-    __captureHooks: ((eventName: string) => void)[]
     __request_queue: QueuedRequestOptions[]
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
+
+    private _debugEventEmitter = new SimpleEventEmitter()
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -241,7 +243,6 @@ export class PostHog {
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.segmentIntegration = () => createSegmentIntegration(this)
-        this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
@@ -266,6 +267,8 @@ export class PostHog {
                 callback?.({} as any)
             },
         }
+
+        this.on('eventCaptured', (data) => logger.info('send', data))
     }
 
     // Initialization methods
@@ -354,7 +357,6 @@ export class PostHog {
 
         this._requestQueue = new RequestQueue((req) => this._send_request(req))
         this._retryQueue = new RetryQueue(this)
-        this.__captureHooks = []
         this.__request_queue = []
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
@@ -450,6 +452,10 @@ export class PostHog {
             })
         } else {
             this._loaded()
+        }
+
+        if (_isFunction(this.config._onCapture)) {
+            this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
         return this
@@ -757,7 +763,7 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        logger.info('send', data)
+        this._debugEventEmitter.emit('eventCaptured', data)
 
         const requestOptions: QueuedRequestOptions = {
             method: 'POST',
@@ -773,18 +779,11 @@ export class PostHog {
             this._send_retriable_request(requestOptions)
         }
 
-        this._invokeCaptureHooks(event_name, data)
-
         return data
     }
 
     _addCaptureHook(callback: (eventName: string) => void): void {
-        this.__captureHooks.push(callback)
-    }
-
-    _invokeCaptureHooks(eventName: string, eventData: CaptureResult): void {
-        this.config._onCapture(eventName, eventData)
-        _each(this.__captureHooks, (callback) => callback(eventName))
+        this.on('eventCaptured', (data) => callback(data.event))
     }
 
     _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
@@ -1077,6 +1076,18 @@ export class PostHog {
     /** Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. */
     getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
         return this.featureFlags.getEarlyAccessFeatures(callback, force_reload)
+    }
+
+    /**
+     * Exposes a set of events that PostHog will emit.
+     * e.g. `eventCaptured` is emitted immediately before trying to send an event
+     *
+     * Unlike  `onFeatureFlags` and `onSessionId` these are not called when the
+     * listener is registered, the first callback will be the next event
+     * _after_ registering a listener
+     */
+    on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void {
+        return this._debugEventEmitter.on(event, cb)
     }
 
     /*
