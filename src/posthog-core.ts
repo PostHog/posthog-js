@@ -11,7 +11,6 @@ import {
     isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, document, location, userAgent, window } from './utils/globals'
-import { autocapture } from './autocapture'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
@@ -31,7 +30,6 @@ import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import {
-    AutocaptureConfig,
     CaptureOptions,
     CaptureResult,
     Compression,
@@ -73,6 +71,7 @@ import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
+import { Autocapture } from './autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -215,6 +214,7 @@ export class PostHog {
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
+    autocapture?: Autocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -224,10 +224,8 @@ export class PostHog {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
-    __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
-    elementsChainAsString: boolean
 
     SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
@@ -247,9 +245,7 @@ export class PostHog {
         this.segmentIntegration = () => createSegmentIntegration(this)
         this.__request_queue = []
         this.__loaded = false
-        this.__autocapture = undefined
         this.analyticsDefaultEndpoint = '/e/'
-        this.elementsChainAsString = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -373,22 +369,7 @@ export class PostHog {
             this.pageViewManager.startMeasuringScrollPosition()
         }
 
-        this.__autocapture = this.config.autocapture
-        autocapture._setIsAutocaptureEnabled(this)
-        if (autocapture._isAutocaptureEnabled) {
-            this.__autocapture = this.config.autocapture
-            const num_buckets = 100
-            const num_enabled_buckets = 100
-            if (!autocapture.enabledForProject(this.config.token, num_buckets, num_enabled_buckets)) {
-                this.__autocapture = false
-                logger.info('Not in active bucket: disabling Automatic Event Collection.')
-            } else if (!autocapture.isBrowserSupported()) {
-                this.__autocapture = false
-                logger.info('Disabling Automatic Event Collection because this browser is not supported')
-            } else {
-                autocapture.init(this)
-            }
-        }
+        this.autocapture = new Autocapture(this)
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -493,10 +474,6 @@ export class PostHog {
 
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
-        }
-
-        if (response.elementsChainAsString) {
-            this.elementsChainAsString = response.elementsChainAsString
         }
     }
 

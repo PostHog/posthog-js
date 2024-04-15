@@ -8,18 +8,12 @@ const RAGE_CLICK_CLICK_COUNT = 3
 
 export default class RageClick {
     clicks: { x: number; y: number; timestamp: number }[]
-    enabled: boolean
 
-    constructor(enabled: boolean) {
+    constructor() {
         this.clicks = []
-        this.enabled = enabled
     }
 
     isRageClick(x: number, y: number, timestamp: number): boolean {
-        if (!this.enabled) {
-            return false
-        }
-
         const lastClick = this.clicks[this.clicks.length - 1]
         if (
             lastClick &&

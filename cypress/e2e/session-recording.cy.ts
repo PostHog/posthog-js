@@ -49,12 +49,12 @@ describe('Session recording', () => {
         it('captures session events', () => {
             start({
                 decideResponseOverrides: {
-                    config: { enable_collect_everything: false },
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
             })
 
@@ -86,13 +86,13 @@ describe('Session recording', () => {
         beforeEach(() => {
             start({
                 decideResponseOverrides: {
-                    config: { enable_collect_everything: false },
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                         networkPayloadCapture: { recordBody: true },
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
                 options: {
@@ -129,12 +129,12 @@ describe('Session recording', () => {
         beforeEach(() => {
             start({
                 decideResponseOverrides: {
-                    config: { enable_collect_everything: false },
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
             })
@@ -400,13 +400,13 @@ describe('Session recording', () => {
         beforeEach(() => {
             start({
                 decideResponseOverrides: {
-                    config: { enable_collect_everything: false },
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                         sampleRate: '0',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
             })
@@ -429,7 +429,7 @@ describe('Session recording', () => {
 
         it('can override sampling when starting session recording', () => {
             cy.intercept('POST', '/decide/*', {
-                config: { enable_collect_everything: false },
+                autocapture_opt_out: true,
                 editorParams: {},
                 isAuthenticated: false,
                 sessionRecording: {
@@ -473,13 +473,13 @@ describe('Session recording', () => {
             cy.reload(true).then(() => {
                 start({
                     decideResponseOverrides: {
-                        config: { enable_collect_everything: false },
                         isAuthenticated: false,
                         sessionRecording: {
                             endpoint: '/ses/',
                             sampleRate: '0',
                         },
                         capturePerformance: true,
+                        autocapture_opt_out: true,
                     },
                     url: './playground/cypress',
                 })

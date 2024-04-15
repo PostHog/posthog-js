@@ -1,4 +1,3 @@
-import { autocapture } from './autocapture'
 import { loadScript } from './utils'
 import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
@@ -71,7 +70,7 @@ export class Decide {
 
         this.instance.toolbar.afterDecideResponse(response)
         this.instance.sessionRecording?.afterDecideResponse(response)
-        autocapture.afterDecideResponse(response, this.instance)
+        this.instance.autocapture?.afterDecideResponse(response)
         this.instance._afterDecideResponse(response)
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
