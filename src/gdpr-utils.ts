@@ -15,7 +15,7 @@ import { _each, _includes } from './utils'
 import { window } from './utils/globals'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
-import { PostHog } from './posthog-core'
+import type { PostHogCore } from './posthog-core'
 
 import { _isNumber, _isString } from './utils/type-utils'
 import { logger } from './utils/logger'
@@ -214,7 +214,7 @@ function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
     }
 }
 
-export function userOptedOut(posthog: PostHog) {
+export function userOptedOut(posthog: PostHogCore) {
     let optedOut = false
 
     try {

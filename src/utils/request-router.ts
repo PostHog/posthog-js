@@ -1,4 +1,4 @@
-import { PostHog } from '../posthog-core'
+import type { PostHogCore } from '../posthog-core'
 
 /**
  * The request router helps simplify the logic to determine which endpoints should be called for which things
@@ -17,10 +17,10 @@ export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 const ingestionDomain = 'i.posthog.com'
 
 export class RequestRouter {
-    instance: PostHog
+    instance: PostHogCore
     private _regionCache: Record<string, RequestRouterRegion> = {}
 
-    constructor(instance: PostHog) {
+    constructor(instance: PostHogCore) {
         this.instance = instance
     }
 

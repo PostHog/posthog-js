@@ -19,7 +19,7 @@ import {
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, DecideResponse, Properties } from './types'
-import { PostHog } from './posthog-core'
+import type { PostHogExtended } from './posthog-extended'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { _isFunction, _isNull, _isObject, _isUndefined } from './utils/type-utils'
@@ -36,14 +36,12 @@ function limitText(length: number, text: string): string {
 }
 
 export class Autocapture {
-    instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
     rageclicks = new RageClick()
     _elementsChainAsString = false
 
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private instance: PostHogExtended) {
     }
 
     private get config(): AutocaptureConfig {

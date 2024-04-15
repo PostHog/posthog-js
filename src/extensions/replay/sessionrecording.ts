@@ -16,7 +16,7 @@ import {
     rrwebRecord,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
-import { PostHog } from '../../posthog-core'
+import { PostHogExtended } from '../../posthog-extended'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
@@ -113,7 +113,7 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 const LOGGER_PREFIX = '[SessionRecording]'
 
 export class SessionRecording {
-    private instance: PostHog
+    private instance: PostHogExtended
     private _endpoint: string
     private flushBufferTimer?: any
 
@@ -251,7 +251,7 @@ export class SessionRecording {
         }
     }
 
-    constructor(instance: PostHog) {
+    constructor(instance: PostHogExtended) {
         this.instance = instance
         this._captureStarted = false
         this._endpoint = BASE_ENDPOINT

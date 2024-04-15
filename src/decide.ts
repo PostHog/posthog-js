@@ -1,17 +1,15 @@
 import { loadScript } from './utils'
-import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 import { _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window, document, assignableWindow } from './utils/globals'
+import type { PostHogExtended } from './posthog-extended'
+import type { PostHogCore } from './posthog-core'
 
 export class Decide {
-    instance: PostHog
-
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private instance: PostHogCore | PostHogExtended) {
         // don't need to wait for `decide` to return if flags were provided on initialisation
         this.instance.decideEndpointWasHit = this.instance._hasBootstrappedFeatureFlags()
     }
@@ -68,9 +66,12 @@ export class Decide {
             return
         }
 
-        this.instance.toolbar.afterDecideResponse(response)
-        this.instance.sessionRecording?.afterDecideResponse(response)
-        this.instance.autocapture?.afterDecideResponse(response)
+        if ("toolbar" in this.instance) {
+            this.instance.toolbar && this.instance.toolbar.afterDecideResponse(response)
+            this.instance.sessionRecording?.afterDecideResponse(response)
+            this.instance.autocapture?.afterDecideResponse(response)
+        }
+        
         this.instance._afterDecideResponse(response)
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment

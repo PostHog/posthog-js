@@ -1,5 +1,5 @@
 import { _register_event, _try, loadScript } from '../utils'
-import { PostHog } from '../posthog-core'
+import type { PostHogCore } from '../posthog-core'
 import { DecideResponse, ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { logger } from '../utils/logger'
@@ -14,11 +14,11 @@ const STATE_FROM_WINDOW = window?.location
 const LOCALSTORAGE_KEY = '_postHogToolbarParams'
 
 export class Toolbar {
-    instance: PostHog
+    instance: PostHogCore
 
     private _toolbarScriptLoaded = false
 
-    constructor(instance: PostHog) {
+    constructor(instance: PostHogCore) {
         this.instance = instance
     }
 

@@ -3,7 +3,7 @@ import { RetriableRequestOptions } from './types'
 import { _isNumber, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
-import { PostHog } from './posthog-core'
+import type { PostHogCore } from './posthog-core'
 import { extendURLParams } from './request'
 
 const thirtyMinutes = 30 * 60 * 1000
@@ -39,7 +39,7 @@ export class RetryQueue {
     private queue: RetryQueueElement[] = []
     private areWeOnline: boolean
 
-    constructor(private instance: PostHog) {
+    constructor(private instance: PostHogCore) {
         this.queue = []
         this.areWeOnline = true
 

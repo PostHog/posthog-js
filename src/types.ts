@@ -1,5 +1,5 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
-import { PostHog } from './posthog-core'
+import type { PostHogCore as PostHog } from './posthog-core'
 
 export type Property = any
 export type Properties = Record<string, Property>

@@ -1,5 +1,5 @@
 import { _entries, _extend } from './utils'
-import { PostHog } from './posthog-core'
+import type { PostHogCore } from './posthog-core'
 import {
     DecideResponse,
     FeatureFlagsCallback,
@@ -80,15 +80,13 @@ export const parseFeatureFlagDecideResponse = (
 }
 
 export class PostHogFeatureFlags {
-    instance: PostHog
     _override_warning: boolean
     featureFlagEventHandlers: FeatureFlagsCallback[]
     reloadFeatureFlagsQueued: boolean
     reloadFeatureFlagsInAction: boolean
     $anon_distinct_id: string | undefined
 
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private instance: PostHogCore) {
         this._override_warning = false
         this.featureFlagEventHandlers = []
 

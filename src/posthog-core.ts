@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { assignableWindow, document, location, userAgent, window } from './utils/globals'
+import { document, location, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
@@ -18,11 +18,8 @@ import {
     ENABLE_PERSON_PROCESSING,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
-    SESSION_RECORDING_IS_SAMPLED,
 } from './constants'
-import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
-import { Toolbar } from './extensions/toolbar'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
 import { RequestQueue } from './request-queue'
@@ -43,18 +40,13 @@ import {
     Properties,
     Property,
     QueuedRequestOptions,
-    RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
-    ToolbarParams,
 } from './types'
-import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
-import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
-import { SurveyCallback } from './posthog-surveys-types'
 import {
     _isArray,
     _isEmptyObject,
@@ -70,7 +62,6 @@ import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
-import { Autocapture } from './autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -92,7 +83,7 @@ Globals should be all caps
  */
 type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> extends never ? T : never) : never
 
-const instances: Record<string, PostHog> = {}
+export const POSTHOG_INSTANCES: Record<string, PostHogCore> = {}
 
 // some globals for comparisons
 const __NOOP = () => {}
@@ -178,34 +169,18 @@ export const defaultConfig = (): PostHogConfig => ({
     process_person: 'always',
 })
 
-class DeprecatedWebPerformanceObserver {
-    get _forceAllowLocalhost(): boolean {
-        return this.__forceAllowLocalhost
-    }
-
-    set _forceAllowLocalhost(value: boolean) {
-        logger.error(
-            'WebPerformanceObserver is deprecated and has no impact on network capture. Use `_forceAllowLocalhostNetworkCapture` on `posthog.sessionRecording`'
-        )
-        this.__forceAllowLocalhost = value
-    }
-
-    private __forceAllowLocalhost: boolean = false
-}
 
 /**
  * PostHog Library Object
  * @constructor
  */
-export class PostHog {
+export class PostHogCore {
     __loaded: boolean
     config: PostHogConfig
 
     rateLimiter: RateLimiter
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
-    surveys: PostHogSurveys
-    toolbar: Toolbar
 
     // These are instance-specific state created after initialisation
     persistence?: PostHogPersistence
@@ -213,12 +188,9 @@ export class PostHog {
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
-    autocapture?: Autocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
-    sessionRecording?: SessionRecording
-    webPerformance = new DeprecatedWebPerformanceObserver()
 
     _triggered_notifs: any
     compression?: Compression
@@ -227,19 +199,12 @@ export class PostHog {
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
 
-    SentryIntegration: typeof SentryIntegration
     segmentIntegration: () => any
 
-    /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
-    people: {
-        set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
-        set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
-    }
 
     constructor() {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
-        this.SentryIntegration = SentryIntegration
         this.segmentIntegration = () => createSegmentIntegration(this)
         this.__captureHooks = []
         this.__request_queue = []
@@ -247,25 +212,9 @@ export class PostHog {
         this.analyticsDefaultEndpoint = '/e/'
 
         this.featureFlags = new PostHogFeatureFlags(this)
-        this.toolbar = new Toolbar(this)
         this.pageViewManager = new PageViewManager(this)
-        this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter()
         this.requestRouter = new RequestRouter(this)
-
-        // NOTE: See the property definition for deprecation notice
-        this.people = {
-            set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = _isString(prop) ? { [prop]: to } : prop
-                this.setPersonProperties(setProps)
-                callback?.({} as any)
-            },
-            set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = _isString(prop) ? { [prop]: to } : prop
-                this.setPersonProperties(undefined, setProps)
-                callback?.({} as any)
-            },
-        }
     }
 
     // Initialization methods
@@ -290,16 +239,16 @@ export class PostHog {
         token: string,
         config?: OnlyValidKeys<Partial<PostHogConfig>, Partial<PostHogConfig>>,
         name?: string
-    ): PostHog | void {
+    ): PostHogCore | void {
         if (!name || name === PRIMARY_INSTANCE_NAME) {
             // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
         } else {
-            const namedPosthog = instances[name] ?? new PostHog()
+            const namedPosthog = POSTHOG_INSTANCES[name] ?? new PostHogCore()
             namedPosthog._init(token, config, name)
-            instances[name] = namedPosthog
+            POSTHOG_INSTANCES[name] = namedPosthog
             // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
-            ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
+            ;(POSTHOG_INSTANCES[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
 
             return namedPosthog
         }
@@ -318,7 +267,7 @@ export class PostHog {
     // IE11 compatible. We could use polyfills, which would make the
     // code a bit cleaner, but will add some overhead.
     //
-    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHog {
+    _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHogCore {
         if (_isUndefined(token) || _isEmptyString(token)) {
             logger.critical(
                 'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
@@ -360,14 +309,11 @@ export class PostHog {
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
-        this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startRecordingIfEnabled()
 
         if (!this.config.disable_scroll_properties) {
             this.pageViewManager.startMeasuringScrollPosition()
         }
 
-        this.autocapture = new Autocapture(this)
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -441,7 +387,6 @@ export class PostHog {
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
         window?.addEventListener?.('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
 
-        this.toolbar.maybeLoadToolbar()
 
         // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
@@ -1112,16 +1057,6 @@ export class PostHog {
         return this.sessionManager?.onSessionId(callback) ?? (() => {})
     }
 
-    /** Get list of all surveys. */
-    getSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getSurveys(callback, forceReload)
-    }
-
-    /** Get surveys that should be enabled for the current user. */
-    getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getActiveMatchingSurveys(callback, forceReload)
-    }
-
     /**
      * Identify a user with a unique ID instead of a PostHog
      * randomly generated distinct_id. If the method is never called,
@@ -1424,34 +1359,6 @@ export class PostHog {
     }
 
     /**
-     * Returns the Replay url for the current session.
-     *
-     * @param options Options for the url
-     * @param options.withTimestamp Whether to include the timestamp in the url (defaults to false)
-     * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
-     */
-    get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
-        if (!this.sessionManager) {
-            return ''
-        }
-        const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        let url = this.requestRouter.endpointFor('ui', `/project/${this.config.token}/replay/${sessionId}`)
-        if (options?.withTimestamp && sessionStartTimestamp) {
-            const LOOK_BACK = options.timestampLookBack ?? 10
-            if (!sessionStartTimestamp) {
-                return url
-            }
-            const recordingStartTime = Math.max(
-                Math.floor((new Date().getTime() - sessionStartTimestamp) / 1000) - LOOK_BACK,
-                0
-            )
-            url += `?t=${recordingStartTime}`
-        }
-
-        return url
-    }
-
-    /**
      * Create an alias, which PostHog will use to link two distinct_ids going forward (not retroactively).
      * Multiple aliases can map to the same original ID, but not vice-versa. Aliases can also be chained - the
      * following is a valid scenario:
@@ -1660,65 +1567,7 @@ export class PostHog {
                 Config.DEBUG = true
             }
 
-            if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
-                const disable_session_recording_has_changed =
-                    oldConfig.disable_session_recording !== config.disable_session_recording
-                // if opting back in, this config might not have changed
-                const try_enable_after_opt_in =
-                    !userOptedOut(this) && !config.disable_session_recording && !this.sessionRecording.started
-
-                if (disable_session_recording_has_changed || try_enable_after_opt_in) {
-                    if (config.disable_session_recording) {
-                        this.sessionRecording.stopRecording()
-                    } else {
-                        this.sessionRecording.startRecordingIfEnabled()
-                    }
-                }
-            }
         }
-    }
-
-    /**
-     * turns session recording on, and updates the config option
-     * disable_session_recording to false
-     * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
-     */
-    startSessionRecording(override?: { sampling?: boolean }): void {
-        if (override?.sampling) {
-            // allow the session id check to rotate session id if necessary
-            const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
-            this.persistence?.register({
-                // short-circuits the `makeSamplingDecision` function in the session recording module
-                [SESSION_RECORDING_IS_SAMPLED]: true,
-            })
-            logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
-        }
-        this.set_config({ disable_session_recording: false })
-    }
-
-    /**
-     * turns session recording off, and updates the config option
-     * disable_session_recording to true
-     */
-    stopSessionRecording(): void {
-        this.set_config({ disable_session_recording: true })
-    }
-
-    /**
-     * returns a boolean indicating whether session recording
-     * is currently running
-     */
-    sessionRecordingStarted(): boolean {
-        return !!this.sessionRecording?.started
-    }
-
-    /**
-     * returns a boolean indicating whether the toolbar loaded
-     * @param toolbarParams
-     */
-
-    loadToolbar(params: ToolbarParams): boolean {
-        return this.toolbar.loadToolbar(params)
     }
 
     /**
@@ -2060,105 +1909,5 @@ export class PostHog {
     }
 }
 
-_safewrap_class(PostHog, ['identify'])
+_safewrap_class(PostHogCore, ['identify'])
 
-const add_dom_loaded_handler = function () {
-    // Cross browser DOM Loaded support
-    function dom_loaded_handler() {
-        // function flag since we only want to execute this once
-        if ((dom_loaded_handler as any).done) {
-            return
-        }
-        ;(dom_loaded_handler as any).done = true
-
-        ENQUEUE_REQUESTS = false
-
-        _each(instances, function (inst: PostHog) {
-            inst._dom_loaded()
-        })
-    }
-
-    if (document?.addEventListener) {
-        if (document.readyState === 'complete') {
-            // safari 4 can fire the DOMContentLoaded event before loading all
-            // external JS (including this file). you will see some copypasta
-            // on the internet that checks for 'complete' and 'loaded', but
-            // 'loaded' is an IE thing
-            dom_loaded_handler()
-        } else {
-            document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
-        }
-    }
-
-    // fallback handler, always will work
-    if (window) {
-        _register_event(window, 'load', dom_loaded_handler, true)
-    }
-}
-
-export function init_from_snippet(): void {
-    const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
-
-    const snippetPostHog = assignableWindow['posthog']
-
-    if (snippetPostHog) {
-        /**
-         * The snippet uses some clever tricks to allow deferred loading of array.js (this code)
-         *
-         * window.posthog is an array which the queue of calls made before the lib is loaded
-         * It has methods attached to it to simulate the posthog object so for instance
-         *
-         * window.posthog.init("TOKEN", {api_host: "foo" })
-         * window.posthog.capture("my-event", {foo: "bar" })
-         *
-         * ... will mean that window.posthog will look like this:
-         * window.posthog == [
-         *  ["my-event", {foo: "bar"}]
-         * ]
-         *
-         * window.posthog[_i] == [
-         *   ["TOKEN", {api_host: "foo" }, "posthog"]
-         * ]
-         *
-         * If a name is given to the init function then the same as above is true but as a sub-property on the object:
-         *
-         * window.posthog.init("TOKEN", {}, "ph2")
-         * window.posthog.ph2.people.set({foo: "bar"})
-         *
-         * window.posthog.ph2 == []
-         * window.posthog.people == [
-         *  ["set", {foo: "bar"}]
-         * ]
-         *
-         */
-
-        // Call all pre-loaded init calls properly
-
-        _each(snippetPostHog['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
-            if (item && _isArray(item)) {
-                const instance = posthogMain.init(item[0], item[1], item[2])
-
-                const instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
-
-                if (instance) {
-                    // Crunch through the people queue first - we queue this data up &
-                    // flush on identify, so it's better to do all these operations first
-                    instance._execute_array.call(instance.people, instanceSnippet.people)
-                    instance._execute_array(instanceSnippet)
-                }
-            }
-        })
-    }
-
-    assignableWindow['posthog'] = posthogMain
-
-    add_dom_loaded_handler()
-}
-
-export function init_as_module(): PostHog {
-    const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
-
-    add_dom_loaded_handler()
-
-    return posthogMain
-}

@@ -16,7 +16,7 @@
  *  })
  *  ```
  */
-import { PostHog } from '../posthog-core'
+import {  PostHogCore } from '../posthog-core'
 import { logger } from '../utils/logger'
 
 // Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
@@ -45,7 +45,7 @@ interface SegmentPlugin {
     screen?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
 }
 
-export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
+export const createSegmentIntegration = (posthog: PostHogCore): SegmentPlugin => {
     if (!Promise || !Promise.resolve) {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }

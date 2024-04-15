@@ -1,4 +1,4 @@
-import { PostHog } from '../../posthog-core'
+import type { PostHogExtended } from '../../posthog-extended'
 import { Survey, SurveyAppearance } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { createContext } from 'preact'
@@ -534,7 +534,7 @@ export const createShadow = (styleSheet: string, surveyId: string) => {
 export const sendSurveyEvent = (
     responses: Record<string, string | number | string[] | null> = {},
     survey: Survey,
-    posthog?: PostHog
+    posthog?: PostHogExtended
 ) => {
     if (!posthog) return
     localStorage.setItem(`seenSurvey_${survey.id}`, 'true')

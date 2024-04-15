@@ -1,5 +1,5 @@
 import { window } from '../../utils/globals'
-import { PostHog } from '../../posthog-core'
+import type { PostHogCore } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
 import { isPrimitive } from './type-checking'
@@ -7,21 +7,21 @@ import { isPrimitive } from './type-checking'
 import { _isArray, _isObject, _isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 
-export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
+export const extendPostHog = (instance: PostHogCore, response: DecideResponse) => {
     const exceptionObserver = new ExceptionObserver(instance)
     exceptionObserver.afterDecideResponse(response)
     return exceptionObserver
 }
 
 export class ExceptionObserver {
-    instance: PostHog
+    instance: PostHogCore
     remoteEnabled: boolean | undefined
     private originalOnErrorHandler: Window['onerror'] | null | undefined = undefined
     private originalOnUnhandledRejectionHandler: Window['onunhandledrejection'] | null | undefined = undefined
 
     private errorsToIgnore: RegExp[] = []
 
-    constructor(instance: PostHog) {
+    constructor(instance: PostHogCore) {
         this.instance = instance
     }
 

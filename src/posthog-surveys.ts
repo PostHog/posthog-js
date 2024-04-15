@@ -1,4 +1,4 @@
-import { PostHog } from './posthog-core'
+import { PostHogCore } from './posthog-core'
 import { SURVEYS } from './constants'
 import { SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
 import { _isUrlMatchingRegex } from './utils/request-utils'
@@ -12,9 +12,8 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
 }
 
 export class PostHogSurveys {
-    instance: PostHog
 
-    constructor(instance: PostHog) {
+    constructor(private instance: PostHogCore) {
         this.instance = instance
     }
 

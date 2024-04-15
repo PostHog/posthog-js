@@ -1,5 +1,5 @@
 import { window } from './utils/globals'
-import { PostHog } from './posthog-core'
+import type { PostHogCore } from './posthog-core'
 import { _isArray } from './utils/type-utils'
 
 interface PageViewData {
@@ -34,11 +34,8 @@ interface PageViewEventProperties extends ScrollProperties {
 export class PageViewManager {
     _pageViewData: PageViewData | undefined
     _hasSeenPageView = false
-    _instance: PostHog
 
-    constructor(instance: PostHog) {
-        this._instance = instance
-    }
+    constructor(private _instance: PostHogCore) {}
 
     _createPageViewData(): PageViewData {
         return {

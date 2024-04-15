@@ -16,7 +16,7 @@
  * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  */
 
-import { PostHog } from '../posthog-core'
+import type { PostHogExtended } from '../posthog-extended'
 
 // NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
 // We only use a small subset of the types, so we can just define the integration overall and use any for the rest
@@ -63,7 +63,7 @@ export class SentryIntegration implements _SentryIntegration {
     ) => void
 
     constructor(
-        _posthog: PostHog,
+        _posthog: PostHogExtended,
         organization?: string,
         projectId?: number,
         prefix?: string,

@@ -1,0 +1,6 @@
+
+import { PostHogExtended } from '../posthog-extended'
+import { POSTHOG_INSTANCES } from '../posthog-core'
+import { init_from_snippet } from '../loaders/loader-helpers'
+
+init_from_snippet(PostHogExtended, POSTHOG_INSTANCES)

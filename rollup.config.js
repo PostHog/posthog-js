@@ -22,7 +22,7 @@ const plugins = [
 /** @type {import('rollup').RollupOptions[]} */
 export default [
     {
-        input: 'src/loader-recorder.ts',
+        input: 'src/loaders/loader-recorder.ts',
         output: [
             {
                 file: 'dist/recorder.js',
@@ -46,7 +46,7 @@ export default [
         ],
     },
     {
-        input: 'src/loader-surveys.ts',
+        input: 'src/loaders/loader-surveys.ts',
         output: [
             {
                 file: 'dist/surveys.js',
@@ -66,7 +66,7 @@ export default [
         ],
     },
     {
-        input: 'src/loader-surveys-preview.ts',
+        input: 'src/loaders/loader-surveys-preview.ts',
         output: [
             {
                 file: 'dist/surveys-module-previews.js',
@@ -82,7 +82,7 @@ export default [
         ],
     },
     {
-        input: 'src/loader-exception-autocapture.ts',
+        input: 'src/loaders/loader-exception-autocapture.ts',
         output: [
             {
                 file: 'dist/exception-autocapture.js',
@@ -99,7 +99,7 @@ export default [
         ],
     },
     {
-        input: 'src/loader-globals.ts',
+        input: 'src/loaders/loader-array.ts',
         output: [
             {
                 file: 'dist/array.js',
@@ -116,7 +116,24 @@ export default [
         ],
     },
     {
-        input: 'src/loader-globals-full.ts',
+        input: 'src/loaders/loader-array-minimal.ts',
+        output: [
+            {
+                file: 'dist/array.minimal.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [
+            ...plugins,
+            visualizer({
+                filename: 'stats/array.minimal.html',
+            }),
+        ],
+    },
+    {
+        input: 'src/loaders/loader-array-full.ts',
         output: [
             {
                 file: 'dist/array.full.js',
@@ -133,7 +150,7 @@ export default [
         ],
     },
     {
-        input: 'src/loader-module.ts',
+        input: 'src/loaders/loader-module.ts',
         output: [
             {
                 file: pkg.main,
@@ -155,7 +172,7 @@ export default [
         ],
     },
     {
-        input: './lib/src/loader-module.d.ts',
+        input: './lib/src/loaders/loader-module.d.ts',
         output: [{ file: pkg.types, format: 'es' }],
         plugins: [
             dts({

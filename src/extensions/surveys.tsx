@@ -1,4 +1,4 @@
-import { PostHog } from '../posthog-core'
+import type { PostHogExtended } from '../posthog-extended'
 import {
     BasicSurveyQuestion,
     LinkSurveyQuestion,
@@ -37,14 +37,14 @@ import {
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-const handleWidget = (posthog: PostHog, survey: Survey) => {
+const handleWidget = (posthog: PostHogExtended, survey: Survey) => {
     const shadow = createWidgetShadow(survey)
     const surveyStyleSheet = style(survey.appearance)
     shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
     Preact.render(<FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} />, shadow)
 }
 
-export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
+export const callSurveys = (posthog: PostHogExtended, forceReload: boolean = false) => {
     posthog?.getActiveMatchingSurveys((surveys) => {
         const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
         nonAPISurveys.forEach((survey) => {
@@ -150,7 +150,7 @@ export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement) =
 }
 
 // This is the main exported function
-export function generateSurveys(posthog: PostHog) {
+export function generateSurveys(posthog: PostHogExtended) {
     // NOTE: Important to ensure we never try and run surveys without a window environment
     if (!document || !window) {
         return
@@ -172,7 +172,7 @@ export function Surveys({
     previewQuestionIndex,
 }: {
     survey: Survey
-    posthog?: PostHog
+    posthog?: PostHogExtended
     readOnly?: boolean
     style?: React.CSSProperties
     initialDisplayState?: 'survey' | 'confirmation' | 'closed'
@@ -301,7 +301,7 @@ export function Questions({
     styleOverrides,
 }: {
     survey: Survey
-    posthog?: PostHog
+    posthog?: PostHogExtended
     styleOverrides?: React.CSSProperties
 }) {
     const textColor = getContrastingTextColor(
@@ -358,7 +358,7 @@ export function Questions({
     )
 }
 
-const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
+const closeSurveyPopup = (survey: Survey, posthog?: PostHogExtended, readOnly?: boolean) => {
     // TODO: state management and unit tests for this would be nice
     if (readOnly || !posthog) {
         return
@@ -381,7 +381,7 @@ export function FeedbackWidget({
     readOnly,
 }: {
     survey: Survey
-    posthog?: PostHog
+    posthog?: PostHogExtended
     readOnly?: boolean
 }): JSX.Element {
     const [showSurvey, setShowSurvey] = useState(false)
