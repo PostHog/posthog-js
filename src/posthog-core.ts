@@ -18,7 +18,7 @@ import {
     ENABLE_PERSON_PROCESSING,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
-    SESSION_RECORDINGis_SAMPLED,
+    SESSION_RECORDING_IS_SAMPLED,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
@@ -1700,7 +1700,7 @@ export class PostHog {
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
             this.persistence?.register({
                 // short-circuits the `makeSamplingDecision` function in the session recording module
-                [SESSION_RECORDINGis_SAMPLED]: true,
+                [SESSION_RECORDING_IS_SAMPLED]: true,
             })
             logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
         }

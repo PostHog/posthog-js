@@ -2,7 +2,7 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
-    SESSION_RECORDINGis_SAMPLED,
+    SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
@@ -162,7 +162,7 @@ export class SessionRecording {
     }
 
     private get isSampled(): boolean | null {
-        const currentValue = this.instance.get_property(SESSION_RECORDINGis_SAMPLED)
+        const currentValue = this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
         return isBoolean(currentValue) ? currentValue : null
     }
 
@@ -318,7 +318,7 @@ export class SessionRecording {
 
         if (!isNumber(currentSampleRate)) {
             this.instance.persistence?.register({
-                [SESSION_RECORDINGis_SAMPLED]: null,
+                [SESSION_RECORDING_IS_SAMPLED]: null,
             })
             return
         }
@@ -352,7 +352,7 @@ export class SessionRecording {
         })
 
         this.instance.persistence?.register({
-            [SESSION_RECORDINGis_SAMPLED]: shouldSample,
+            [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
         })
     }
 
