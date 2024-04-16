@@ -1,4 +1,4 @@
-export const checkScriptsForSrc = (src, negate = false) => {
+const checkScriptsForSrcExists = (src: string): boolean => {
     const scripts = document.querySelectorAll('body > script')
     let foundScript = false
     for (let i = 0; i < scripts.length; i++) {
@@ -8,11 +8,17 @@ export const checkScriptsForSrc = (src, negate = false) => {
         }
     }
 
-    if (foundScript && negate) {
-        throw new Error(`Script with src ${src} was found when it should not have been.`)
-    } else if (!foundScript && !negate) {
-        throw new Error(`Script with src ${src} was not found when it should have been.`)
-    } else {
-        return true
+    return foundScript
+}
+
+export const expectScriptToExist = (src: string) => {
+    if (!checkScriptsForSrcExists(src)) {
+        throw new Error(`Script with src ${src} was not found.`)
+    }
+}
+
+export const expectScriptToNotExist = (src: string) => {
+    if (checkScriptsForSrcExists(src)) {
+        throw new Error(`Script with src ${src} was found.`)
     }
 }

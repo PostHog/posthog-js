@@ -1,7 +1,7 @@
 import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
-import { checkScriptsForSrc } from './helpers/script-utils'
+import { expectScriptToExist, expectScriptToNotExist } from './helpers/script-utils'
 
 const expectDecodedSendRequest = (send_request, data, noCompression) => {
     const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
@@ -222,7 +222,7 @@ describe('Decide', () => {
             given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: true, persistence: 'memory' }))
             given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             given.subject()
-            expect(checkScriptsForSrc('https://test.com/site_app/1/tokentoken/hash/')).toBe(true)
+            expectScriptToExist('https://test.com/site_app/1/tokentoken/hash/')
         })
 
         it('does not run site apps code if not opted in', () => {
@@ -235,7 +235,7 @@ describe('Decide', () => {
                 // throwing only in tests, just an error in production
                 'Unexpected console.error: [PostHog.js],PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
-            expect(checkScriptsForSrc('https://test.com/site_app/1/tokentoken/hash/', true)).toBe(true)
+            expectScriptToNotExist('https://test.com/site_app/1/tokentoken/hash/')
         })
     })
 })
