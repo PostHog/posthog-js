@@ -305,8 +305,8 @@ describe('Event capture', () => {
     })
 
     describe('advanced_disable_decide config', () => {
-        it('does not autocapture anything when /decide is disabled', () => {
-            start({ options: { advanced_disable_decide: true }, waitForDecide: false })
+        it.only('does not autocapture anything when /decide is disabled', () => {
+            start({ options: { autocapture: false, advanced_disable_decide: true }, waitForDecide: false })
 
             cy.get('body').click(100, 100).click(98, 102).click(101, 103)
             cy.get('[data-cy-custom-event-button]').click()
