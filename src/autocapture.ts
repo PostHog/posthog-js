@@ -95,7 +95,6 @@ export class Autocapture {
 
     public afterDecideResponse(response: DecideResponse) {
         if (this._initialized) {
-            logger.info('autocapture already initialized')
             return
         }
 
