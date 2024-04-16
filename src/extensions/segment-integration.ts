@@ -42,6 +42,8 @@ interface SegmentContext {
     }
 }
 
+type SegmentFunction = (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+
 interface SegmentPlugin {
     name: string
     version: string
@@ -50,12 +52,12 @@ interface SegmentPlugin {
     load: (ctx: SegmentContext, instance: any, config?: any) => Promise<unknown>
     unload?: (ctx: SegmentContext, instance: any) => Promise<unknown> | unknown
     ready?: () => Promise<unknown>
-    track?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
-    identify?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
-    page?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
-    group?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
-    alias?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
-    screen?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+    track?: SegmentFunction
+    identify?: SegmentFunction
+    page?: SegmentFunction
+    group?: SegmentFunction
+    alias?: SegmentFunction
+    screen?: SegmentFunction
 }
 
 const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
