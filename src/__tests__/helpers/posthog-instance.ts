@@ -1,6 +1,6 @@
 // The library depends on having the module initialized before it can be used.
 
-import { PostHog } from '../../posthog-core'
+import { PostHog } from '../../loaders/loader-module'
 import { PostHogConfig } from '../../types'
 import { uuidv7 } from '../../uuidv7'
 

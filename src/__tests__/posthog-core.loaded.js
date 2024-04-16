@@ -1,4 +1,4 @@
-import { PostHog } from '../posthog-core'
+import { PostHog } from '../loaders/loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 

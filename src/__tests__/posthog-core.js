@@ -13,12 +13,14 @@ jest.mock('../gdpr-utils', () => ({
 }))
 jest.mock('../decide')
 
+
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
 
     given('lib', () => {
         const posthog = _posthog.init('testtoken', given.config, uuidv7())
         posthog.debug()
+
         return Object.assign(posthog, given.overrides)
     })
 

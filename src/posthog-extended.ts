@@ -111,7 +111,7 @@ export class PostHogExtended extends PostHogCore {
             // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
         } else {
-            const namedPosthog = POSTHOG_INSTANCES[name] ?? new PostHogCore()
+            const namedPosthog = POSTHOG_INSTANCES[name] ?? new PostHogExtended()
             namedPosthog._init(token, config, name)
             POSTHOG_INSTANCES[name] = namedPosthog
             // Add as a property to the primary instance (this isn't type-safe but its how it was always done)

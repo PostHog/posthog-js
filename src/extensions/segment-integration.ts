@@ -16,7 +16,7 @@
  *  })
  *  ```
  */
-import {  PostHogCore } from '../posthog-core'
+import { PostHogCore } from '../posthog-core'
 import { logger } from '../utils/logger'
 
 // Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
