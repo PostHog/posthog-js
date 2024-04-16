@@ -403,6 +403,12 @@ describe('surveys', () => {
     })
 
     describe('decide response', () => {
+        beforeEach(() => {
+            // clean the JSDOM to prevent interdependencies between tests
+            document.body.innerHTML = ''
+            document.head.innerHTML = ''
+        })
+
         it('should not load when decide response says no', () => {
             surveys.afterDecideResponse({ surveys: false } as DecideResponse)
             // Make sure the script is not loaded
