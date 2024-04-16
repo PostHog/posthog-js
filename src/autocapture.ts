@@ -38,7 +38,7 @@ function limitText(length: number, text: string): string {
 export class Autocapture {
     instance: PostHog
     _initialized: boolean = false
-    isDisabledServerSide: boolean | null = null
+    _isDisabledServerSide: boolean | null = null
     rageclicks = new RageClick()
     _elementsChainAsString = false
 
@@ -98,7 +98,7 @@ export class Autocapture {
             })
         }
         // store this in-memory in case persistence is disabled
-        this.isDisabledServerSide = !!response['autocapture_opt_out']
+        this._isDisabledServerSide = !!response['autocapture_opt_out']
 
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
@@ -111,9 +111,9 @@ export class Autocapture {
     }
 
     public get isEnabled(): boolean {
-        const disabledServer = isNull(this.isDisabledServerSide)
+        const disabledServer = isNull(this._isDisabledServerSide)
             ? !!this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
-            : this.isDisabledServerSide
+            : this._isDisabledServerSide
         const disabledClient = !this.instance.config.autocapture
         return !disabledClient && !disabledServer
     }
