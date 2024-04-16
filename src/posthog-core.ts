@@ -37,7 +37,7 @@ import {
     SessionIdChangedCallback,
     SnippetArrayItem,
 } from './types'
-import { createSegmentIntegration } from './extensions/segment-integration'
+import { setupSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
@@ -224,14 +224,11 @@ export class PostHogCore {
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
 
-    segmentIntegration: () => any
-
     private _debugEventEmitter = new SimpleEventEmitter()
 
     constructor() {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
-        this.segmentIntegration = () => createSegmentIntegration(this)
         this.__request_queue = []
         this.__dom_loaded = false
         this.__loaded = false
@@ -343,19 +340,6 @@ export class PostHogCore {
 
         this._gdpr_init()
 
-        if (config.segment) {
-            // Use segments anonymousId instead
-            this.config.get_device_id = () => config.segment.user().anonymousId()
-
-            // If a segment user ID exists, set it as the distinct_id
-            if (config.segment.user().id()) {
-                this.register({
-                    distinct_id: config.segment.user().id(),
-                })
-                this.persistence.set_user_state('identified')
-            }
-        }
-
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
@@ -411,9 +395,7 @@ export class PostHogCore {
 
         // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
-            config.segment.register(this.segmentIntegration()).then(() => {
-                this._loaded()
-            })
+            setupSegmentIntegration(this, () => this._loaded())
         } else {
             this._loaded()
         }

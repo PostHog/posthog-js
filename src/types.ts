@@ -1,5 +1,6 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import type { PostHogCore as PostHog } from './posthog-core'
+import type { SegmentAnalytics } from './extensions/segment-integration'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -142,7 +143,7 @@ export interface PostHogConfig {
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
     bootstrap: BootstrapConfig
-    segment?: any
+    segment?: SegmentAnalytics
     __preview_send_client_session_params?: boolean
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`

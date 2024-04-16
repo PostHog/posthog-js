@@ -9,20 +9,16 @@
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 
-import posthog from '../loaders/loader-module'
-import { PostHogCore as PostHog } from '../posthog-core'
-import { uuidv7 } from '../uuidv7'
+import { PostHog } from '../loaders/loader-module'
 
-describe(`Module-based loader in Node env`, () => {
+describe(`Segment integration`, () => {
     let segment: any
     let segmentIntegration: any
     let posthogName: string
 
-    beforeEach(() => {
-        jest.spyOn(posthog, '_send_request').mockReturnValue()
-        jest.spyOn(console, 'log').mockReturnValue()
-        posthogName = uuidv7()
+    jest.setTimeout(500)
 
+    beforeEach(() => {
         // Create something that looks like the Segment Analytics 2.0 API. We
         // could use the actual client, but it's a little more tricky and we'd
         // want to mock out the network requests, for which we don't have a good
@@ -39,6 +35,7 @@ describe(`Module-based loader in Node env`, () => {
                 // To ensure the Promise isn't resolved instantly, we use a
                 // setTimeout with a delay of 0 to ensure it happens as a
                 // microtask in the future.
+
                 return new Promise((resolve) => {
                     setTimeout(() => {
                         segmentIntegration = integration
@@ -49,36 +46,66 @@ describe(`Module-based loader in Node env`, () => {
         }
     })
 
-    it('should call loaded after the segment integration has been set up', (done) => {
-        // This test is to ensure that, by the time the `loaded` callback is
-        // called, the PostHog Segment integration have completed registration.
-        // If this is not the case, then we end up in odd situations where we
-        // try to send segment events but we do not get the enriched event
-        // information as the integration provides.
-        const posthog = new PostHog()
-        jest.spyOn(posthog, 'capture')
-
-        posthog.init(
-            `test-token`,
-            {
-                debug: true,
-                persistence: `localStorage`,
-                api_host: `https://test.com`,
-                segment: segment,
-                loaded: () => {
-                    expect(segmentIntegration).toBeDefined()
-                    done()
+    it('should call loaded after the segment integration has been set up', async () => {
+        const loadPromise = new Promise((resolve) => {
+            return new PostHog().init(
+                `test-token`,
+                {
+                    debug: true,
+                    persistence: `localStorage`,
+                    api_host: `https://test.com`,
+                    segment: segment,
+                    loaded: resolve,
                 },
-            },
-            posthogName
-        )
-
-        // Assuming we've set up our mocks correctly, the segmentIntegration
-        // shouldn't have been set by now, but just to be sure we're actually
-        // checking that loaded callback handles async code, we explicitly check
-        // this first.
+                posthogName
+            )
+        })
         expect(segmentIntegration).toBeUndefined()
+        await loadPromise
+        expect(segmentIntegration).toBeDefined()
     })
 
-    // TODO: add tests for distinct id setting and event enrichment.
+    it('should set properties from the segment user', async () => {
+        const posthog = await new Promise<PostHog>((resolve) => {
+            return new PostHog().init(
+                `test-token`,
+                {
+                    debug: true,
+                    persistence: `localStorage`,
+                    api_host: `https://test.com`,
+                    segment: segment,
+                    loaded: resolve,
+                },
+                posthogName
+            )
+        })
+
+        expect(posthog.get_distinct_id()).toBe('test-id')
+        expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
+    })
+
+    it('should handle the segment user being a promise', async () => {
+        segment.user = () =>
+            Promise.resolve({
+                anonymousId: () => 'test-anonymous-id',
+                id: () => 'test-id',
+            })
+
+        const posthog = await new Promise<PostHog>((resolve) => {
+            return new PostHog().init(
+                `test-token`,
+                {
+                    debug: true,
+                    persistence: `localStorage`,
+                    api_host: `https://test.com`,
+                    segment: segment,
+                    loaded: resolve,
+                },
+                posthogName
+            )
+        })
+
+        expect(posthog.get_distinct_id()).toBe('test-id')
+        expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
+    })
 })
