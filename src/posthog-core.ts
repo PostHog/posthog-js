@@ -175,25 +175,37 @@ export const defaultConfig = (): PostHogConfig => ({
     person_profiles: 'always',
 })
 
-export const configRenames = (config: Partial<PostHogConfig>): Partial<PostHogConfig> => {
+export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
     const renames: Partial<PostHogConfig> = {}
-    if (!_isUndefined(config.process_person)) {
-        renames.person_profiles = config.process_person
+    if (!_isUndefined(origConfig.process_person)) {
+        renames.person_profiles = origConfig.process_person
     }
-    if (!_isUndefined(config.xhr_headers)) {
-        renames.request_headers = config.xhr_headers
+    if (!_isUndefined(origConfig.xhr_headers)) {
+        renames.request_headers = origConfig.xhr_headers
     }
-    if (!_isUndefined(config.cookie_name)) {
-        renames.persistence_name = config.cookie_name
+    if (!_isUndefined(origConfig.cookie_name)) {
+        renames.persistence_name = origConfig.cookie_name
     }
-    if (!_isUndefined(config.disable_cookie)) {
-        renames.disable_persistence = config.disable_cookie
-    }
-    if (!_isUndefined(config.property_blacklist)) {
-        renames.property_denylist = config.property_blacklist
+    if (!_isUndefined(origConfig.disable_cookie)) {
+        renames.disable_persistence = origConfig.disable_cookie
     }
     // on_xhr_error is not present, as the type is different to on_request_error
-    return renames
+
+    // the original config takes priority over the renames
+    const newConfig = _extend({}, renames, origConfig)
+
+    if (_isArray(origConfig.property_blacklist)) {
+        if (_isUndefined(origConfig.property_denylist)) {
+            newConfig.property_denylist = origConfig.property_blacklist
+        } else if (_isArray(origConfig.property_denylist)) {
+            // merge property_denylist and property_blacklist
+            newConfig.property_denylist = [...origConfig.property_blacklist, ...origConfig.property_denylist]
+        } else {
+            logger.error('Invalid value for property_denylist config: ' + origConfig.property_denylist)
+        }
+    }
+
+    return newConfig
 }
 
 class DeprecatedWebPerformanceObserver {
@@ -356,7 +368,7 @@ export class PostHog {
         this._triggered_notifs = []
 
         this.set_config(
-            _extend({}, defaultConfig(), config, {
+            _extend({}, defaultConfig(), configRenames(config), {
                 name: name,
                 token: token,
             })
@@ -889,11 +901,8 @@ export class PostHog {
 
         properties['$is_identified'] = this._isIdentified()
 
-        if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
-            // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
-            // TODO: merge this only once, requires refactoring tests
-            const property_denylist = [...this.config.property_blacklist, ...this.config.property_denylist]
-            _each(property_denylist, function (denylisted_prop) {
+        if (_isArray(this.config.property_denylist)) {
+            _each(this.config.property_denylist, function (denylisted_prop) {
                 delete properties[denylisted_prop]
             })
         } else {
@@ -1664,7 +1673,7 @@ export class PostHog {
     set_config(config: Partial<PostHogConfig>): void {
         const oldConfig = { ...this.config }
         if (_isObject(config)) {
-            _extend(this.config, configRenames(config), config)
+            _extend(this.config, configRenames(config))
 
             this.persistence?.update_config(this.config, oldConfig)
             this.sessionPersistence =
