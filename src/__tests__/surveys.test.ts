@@ -149,6 +149,14 @@ describe('surveys', () => {
         })
     })
 
+    it('getSurveys returns empty array if surveys are disabled', () => {
+        instance.config.disable_surveys = true
+        surveys.getSurveys((data) => {
+            expect(data).toEqual([])
+        })
+        expect(instance._send_request).not.toHaveBeenCalled()
+    })
+
     describe('getActiveMatchingSurveys', () => {
         const draftSurvey: Survey = {
             name: 'draft survey',

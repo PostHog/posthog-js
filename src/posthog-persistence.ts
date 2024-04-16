@@ -1,12 +1,14 @@
 /* eslint camelcase: "off" */
 
-import { _each, _extend, _include, _strip_empty_properties } from './utils'
-import { cookieStore, localStore, localPlusCookieStore, memoryStore, sessionStore } from './storage'
+import { _each, _extend, _include, _strip_empty_properties, _strip_leading_dollar } from './utils'
+import { cookieStore, localPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
-    PERSISTENCE_RESERVED_PROPERTIES,
-    EVENT_TIMERS_KEY,
     ENABLED_FEATURE_FLAGS,
+    EVENT_TIMERS_KEY,
+    INITIAL_CAMPAIGN_PARAMS,
+    INITIAL_REFERRER_INFO,
+    PERSISTENCE_RESERVED_PROPERTIES,
     POSTHOG_QUOTA_LIMITED,
     USER_STATE,
 } from './constants'
@@ -221,16 +223,28 @@ export class PostHogPersistence {
             this.campaign_params_saved = true
         }
     }
+    set_initial_campaign_params(): void {
+        this.register_once(
+            { [INITIAL_CAMPAIGN_PARAMS]: _info.campaignParams(this.config.custom_campaign_params) },
+            undefined
+        )
+    }
 
     update_search_keyword(): void {
         this.register(_info.searchInfo())
     }
 
     update_referrer_info(): void {
-        this.register({
-            $referrer: this.props['$referrer'] || _info.referrer(),
-            $referring_domain: this.props['$referring_domain'] || _info.referringDomain(),
-        })
+        this.register(_info.referrerInfo())
+    }
+
+    set_initial_referrer_info(): void {
+        this.register_once(
+            {
+                [INITIAL_REFERRER_INFO]: _info.referrerInfo(),
+            },
+            undefined
+        )
     }
 
     get_referrer_info(): Properties {
@@ -238,6 +252,19 @@ export class PostHogPersistence {
             $referrer: this['props']['$referrer'],
             $referring_domain: this['props']['$referring_domain'],
         })
+    }
+
+    get_initial_props(): Properties {
+        const p: Properties = {}
+        _each([INITIAL_REFERRER_INFO, INITIAL_CAMPAIGN_PARAMS], (key) => {
+            const initialReferrerInfo = this.props[key]
+            if (initialReferrerInfo) {
+                _each(initialReferrerInfo, function (v, k) {
+                    p['$initial_' + _strip_leading_dollar(k)] = v
+                })
+            }
+        })
+        return p
     }
 
     // safely fills the passed in object with stored properties,

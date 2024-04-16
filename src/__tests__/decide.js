@@ -1,4 +1,3 @@
-import { autocapture } from '../autocapture'
 import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
@@ -18,6 +17,25 @@ const expectDecodedSendRequest = (send_request, data, noCompression) => {
         compression: noCompression ? undefined : 'base64',
         timeout: undefined,
     })
+}
+
+const checkScriptsForSrc = (src, negate = false) => {
+    const scripts = document.querySelectorAll('body > script')
+    let foundScript = false
+    for (let i = 0; i < scripts.length; i++) {
+        if (scripts[i].src === src) {
+            foundScript = true
+            break
+        }
+    }
+
+    if (foundScript && negate) {
+        throw new Error(`Script with src ${src} was found when it should not have been.`)
+    } else if (!foundScript && !negate) {
+        throw new Error(`Script with src ${src} was not found when it should have been.`)
+    } else {
+        return true
+    }
 }
 
 describe('Decide', () => {
@@ -40,6 +58,9 @@ describe('Decide', () => {
         sessionRecording: {
             afterDecideResponse: jest.fn(),
         },
+        autocapture: {
+            afterDecideResponse: jest.fn(),
+        },
         featureFlags: {
             receivedFeatureFlags: jest.fn(),
             setReloadingPaused: jest.fn(),
@@ -50,12 +71,14 @@ describe('Decide', () => {
         getGroups: () => ({ organization: '5' }),
     }))
 
-    given('decideResponse', () => ({ enable_collect_everything: true }))
+    given('decideResponse', () => ({}))
 
     given('config', () => ({ api_host: 'https://test.com', persistence: 'memory' }))
 
     beforeEach(() => {
-        jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
+        // clean the JSDOM to prevent interdependencies between tests
+        document.body.innerHTML = ''
+        document.head.innerHTML = ''
     })
 
     describe('constructor', () => {
@@ -171,16 +194,14 @@ describe('Decide', () => {
         given('subject', () => () => given.decide.parseDecideResponse(given.decideResponse))
 
         it('properly parses decide response', () => {
-            given('decideResponse', () => ({
-                enable_collect_everything: true,
-            }))
+            given('decideResponse', () => ({}))
             given.subject()
 
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
             expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
@@ -196,7 +217,6 @@ describe('Decide', () => {
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags_on_first_load is set', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
             }))
             given('config', () => ({
@@ -208,7 +228,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
 
@@ -217,7 +237,6 @@ describe('Decide', () => {
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags is set', () => {
             given('decideResponse', () => ({
-                enable_collect_everything: true,
                 featureFlags: { 'test-flag': true },
             }))
             given('config', () => ({
@@ -229,7 +248,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse, given.posthog)
+            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.sessionRecording.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
             expect(given.posthog.toolbar.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
 
@@ -240,8 +259,7 @@ describe('Decide', () => {
             given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: true, persistence: 'memory' }))
             given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             given.subject()
-            const element = window.document.body.children[0]
-            expect(element.src).toBe('https://test.com/site_app/1/tokentoken/hash/')
+            expect(checkScriptsForSrc('https://test.com/site_app/1/tokentoken/hash/')).toBe(true)
         })
 
         it('does not run site apps code if not opted in', () => {
@@ -254,6 +272,56 @@ describe('Decide', () => {
                 // throwing only in tests, just an error in production
                 'Unexpected console.error: [PostHog.js],PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
+            expect(checkScriptsForSrc('https://test.com/site_app/1/tokentoken/hash/', true)).toBe(true)
+        })
+
+        it('Make sure surveys are not loaded when decide response says no', () => {
+            given('decideResponse', () => ({
+                featureFlags: { 'test-flag': true },
+                surveys: false,
+            }))
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+            }))
+
+            given.subject()
+            // Make sure the script is not loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
+        })
+
+        it('Make sure surveys are loaded when decide response says so', () => {
+            given('decideResponse', () => ({
+                featureFlags: { 'test-flag': true },
+                surveys: true,
+            }))
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+            }))
+
+            given.subject()
+            // Make sure the script is loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js')).toBe(true)
+        })
+
+        it('Make sure surveys are not loaded when config says no', () => {
+            given('decideResponse', () => ({
+                featureFlags: { 'test-flag': true },
+                surveys: true,
+            }))
+            given('config', () => ({
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                persistence: 'memory',
+                disable_surveys: true,
+            }))
+
+            given.subject()
+            // Make sure the script is not loaded
+            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
         })
     })
 })

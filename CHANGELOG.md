@@ -1,3 +1,54 @@
+## 1.122.0 - 2024-04-15
+
+- feat: readonly event emitter (#1136)
+- fix: Allow capturing `aria-label` attribute on sensitive elements (#1118)
+
+## 1.121.4 - 2024-04-15
+
+- chore: Autocapture refactor (#1126)
+
+## 1.121.3 - 2024-04-15
+
+- chore: patch to fix broken worker (#1134)
+
+## 1.121.2 - 2024-04-12
+
+- fix: continue recording after reset (#1135)
+
+## 1.121.1 - 2024-04-10
+
+- fix: sampling typescript error (#1129)
+- chore: no only tests are allowed (#1128)
+
+## 1.121.0 - 2024-04-10
+
+- feat(surveys): Add disable config option (#1123)
+- feat: Person Processing 3: Handle $initial props across sessions, send $initial props with all person processing events, remove __preview (#1127)
+
+## 1.120.5 - 2024-04-10
+
+- fix: missing parentNode protection (#1125)
+
+## 1.120.4 - 2024-04-09
+
+- feat: Person processing 2 - handle group and setPersonProperties (#1124)
+
+## 1.120.3 - 2024-04-09
+
+- fix: typing of maskTextFn (#1122)
+
+## 1.120.2 - 2024-04-08
+
+- Fix to include project in urls (#1098)
+
+## 1.120.1 - 2024-04-08
+
+- chore: Add workflow to update the posthog.com repo with new posthog-js versions (#1120)
+
+## 1.120.0 - 2024-04-08
+
+- feat: Add person processing mode preview (#1109)
+
 ## 1.119.2 - 2024-04-08
 
 - chore: upgrade rrweb to 2.0.0-alpha.12 (#1115)

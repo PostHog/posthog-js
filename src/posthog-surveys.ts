@@ -19,6 +19,11 @@ export class PostHogSurveys {
     }
 
     getSurveys(callback: SurveyCallback, forceReload = false) {
+        // In case we manage to load the surveys script, but config says not to load surveys
+        // then we shouldn't return survey data
+        if (this.instance.config.disable_surveys) {
+            return callback([])
+        }
         const existingSurveys = this.instance.get_property(SURVEYS)
         if (!existingSurveys || forceReload) {
             this.instance._send_request({

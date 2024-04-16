@@ -10,11 +10,16 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { window, assignableWindow, location } from './utils/globals'
-import { autocapture } from './autocapture'
+import { assignableWindow, document, location, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import { ALIAS_ID_KEY, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY, SESSION_RECORDING_IS_SAMPLED } from './constants'
+import {
+    ALIAS_ID_KEY,
+    ENABLE_PERSON_PROCESSING,
+    FLAG_CALL_REPORTED,
+    PEOPLE_DISTINCT_ID_KEY,
+    SESSION_RECORDING_IS_SAMPLED,
+} from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
@@ -25,7 +30,6 @@ import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import {
-    AutocaptureConfig,
     CaptureOptions,
     CaptureResult,
     Compression,
@@ -63,10 +67,11 @@ import {
 } from './utils/type-utils'
 import { _info } from './utils/event-utils'
 import { logger } from './utils/logger'
-import { document, userAgent } from './utils/globals'
 import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { SimpleEventEmitter } from './utils/simple-event-emitter'
+import { Autocapture } from './autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -131,6 +136,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_session_recording: false,
     disable_persistence: false,
     disable_cookie: false,
+    disable_surveys: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
@@ -170,6 +176,7 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
+    process_person: 'always',
 })
 
 class DeprecatedWebPerformanceObserver {
@@ -207,6 +214,7 @@ export class PostHog {
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
+    autocapture?: Autocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -215,14 +223,13 @@ export class PostHog {
 
     _triggered_notifs: any
     compression?: Compression
-    __captureHooks: ((eventName: string) => void)[]
     __request_queue: QueuedRequestOptions[]
-    __autocapture: boolean | AutocaptureConfig | undefined
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
-    elementsChainAsString: boolean
 
     SentryIntegration: typeof SentryIntegration
+
+    private _debugEventEmitter = new SimpleEventEmitter()
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -234,12 +241,9 @@ export class PostHog {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
-        this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
-        this.__autocapture = undefined
         this.analyticsDefaultEndpoint = '/e/'
-        this.elementsChainAsString = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -261,6 +265,8 @@ export class PostHog {
                 callback?.({} as any)
             },
         }
+
+        this.on('eventCaptured', (data) => logger.info('send', data))
     }
 
     // Initialization methods
@@ -349,7 +355,6 @@ export class PostHog {
 
         this._requestQueue = new RequestQueue((req) => this._send_request(req))
         this._retryQueue = new RetryQueue(this)
-        this.__captureHooks = []
         this.__request_queue = []
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
@@ -362,22 +367,7 @@ export class PostHog {
             this.pageViewManager.startMeasuringScrollPosition()
         }
 
-        this.__autocapture = this.config.autocapture
-        autocapture._setIsAutocaptureEnabled(this)
-        if (autocapture._isAutocaptureEnabled) {
-            this.__autocapture = this.config.autocapture
-            const num_buckets = 100
-            const num_enabled_buckets = 100
-            if (!autocapture.enabledForProject(this.config.token, num_buckets, num_enabled_buckets)) {
-                this.__autocapture = false
-                logger.info('Not in active bucket: disabling Automatic Event Collection.')
-            } else if (!autocapture.isBrowserSupported()) {
-                this.__autocapture = false
-                logger.info('Disabling Automatic Event Collection because this browser is not supported')
-            } else {
-                autocapture.init(this)
-            }
-        }
+        this.autocapture = new Autocapture(this)
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -447,6 +437,10 @@ export class PostHog {
             this._loaded()
         }
 
+        if (_isFunction(this.config._onCapture)) {
+            this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
+        }
+
         return this
     }
 
@@ -463,10 +457,6 @@ export class PostHog {
 
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
-        }
-
-        if (response.elementsChainAsString) {
-            this.elementsChainAsString = response.elementsChainAsString
         }
     }
 
@@ -690,7 +680,7 @@ export class PostHog {
     capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
-        if (!this.__loaded || !this.sessionPersistence || !this._requestQueue) {
+        if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
             return logger.uninitializedWarning('posthog.capture')
         }
 
@@ -715,11 +705,16 @@ export class PostHog {
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
+        // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
+        // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
+        // with every event and used by the session table to create session-initial props.
         if (this.config.store_google) {
             this.sessionPersistence.update_campaign_params()
+            this.persistence.set_initial_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
+            this.persistence.set_initial_referrer_info()
         }
 
         let data: CaptureResult = {
@@ -728,9 +723,13 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
-        if (event_name === '$identify') {
-            data['$set'] = options?.['$set']
-            data['$set_once'] = options?.['$set_once']
+        const setProperties = options?.$set
+        if (setProperties) {
+            data.$set = options?.$set
+        }
+        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once)
+        if (setOnceProperties) {
+            data.$set_once = setOnceProperties
         }
 
         data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
@@ -747,7 +746,7 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        logger.info('send', data)
+        this._debugEventEmitter.emit('eventCaptured', data)
 
         const requestOptions: QueuedRequestOptions = {
             method: 'POST',
@@ -763,18 +762,11 @@ export class PostHog {
             this._send_retriable_request(requestOptions)
         }
 
-        this._invokeCaptureHooks(event_name, data)
-
         return data
     }
 
     _addCaptureHook(callback: (eventName: string) => void): void {
-        this.__captureHooks.push(callback)
-    }
-
-    _invokeCaptureHooks(eventName: string, eventData: CaptureResult): void {
-        this.config._onCapture(eventName, eventData)
-        _each(this.__captureHooks, (callback) => callback(eventName))
+        this.on('eventCaptured', (data) => callback(data.event))
     }
 
     _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
@@ -863,9 +855,7 @@ export class PostHog {
             properties
         )
 
-        properties['$is_identified'] =
-            this.persistence.get_user_state() === 'identified' ||
-            this.sessionPersistence.get_user_state() === 'identified'
+        properties['$is_identified'] = this._isIdentified()
 
         if (_isArray(this.config.property_denylist) && _isArray(this.config.property_blacklist)) {
             // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
@@ -888,7 +878,22 @@ export class PostHog {
             properties = sanitize_properties(properties, event_name)
         }
 
+        // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
+        properties['$process_person'] = this._hasPersonProcessing()
+
         return properties
+    }
+
+    _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
+        if (!this.persistence || !this._hasPersonProcessing()) {
+            return dataSetOnce
+        }
+        // if we're an identified person, send initial params with every event
+        const setOnceProperties = _extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
+        if (_isEmptyObject(setOnceProperties)) {
+            return undefined
+        }
+        return setOnceProperties
     }
 
     /**
@@ -1056,6 +1061,18 @@ export class PostHog {
         return this.featureFlags.getEarlyAccessFeatures(callback, force_reload)
     }
 
+    /**
+     * Exposes a set of events that PostHog will emit.
+     * e.g. `eventCaptured` is emitted immediately before trying to send an event
+     *
+     * Unlike  `onFeatureFlags` and `onSessionId` these are not called when the
+     * listener is registered, the first callback will be the next event
+     * _after_ registering a listener
+     */
+    on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void {
+        return this._debugEventEmitter.on(event, cb)
+    }
+
     /*
      * Register an event listener that runs when feature flags become available or when they change.
      * If there are flags, the listener is called immediately in addition to being called on future changes.
@@ -1169,6 +1186,10 @@ export class PostHog {
             return
         }
 
+        if (!this._requirePersonProcessing('posthog.identify')) {
+            return
+        }
+
         const previous_distinct_id = this.get_distinct_id()
         this.register({ $user_id: new_distinct_id })
 
@@ -1193,7 +1214,7 @@ export class PostHog {
 
         const isKnownAnonymous = this.persistence.get_user_state() === 'anonymous'
 
-        // send an $identify event any time the distinct_id is changing and the old ID is an anoymous ID
+        // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
         // - logic on the server will determine whether or not to do anything with it.
         if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
             this.persistence.set_user_state('identified')
@@ -1227,7 +1248,9 @@ export class PostHog {
     }
 
     /**
-     * Sets properties for the Person associated with the current distinct_id.
+     * Sets properties for the Person associated with the current distinct_id. If person processing is not active for
+     * this user (either due to have process_persons set to never, or set to identified_only and the user is anonymous),
+     * then the properties will be set locally for flags but will not trigger a $set event
      *
      *
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
@@ -1235,6 +1258,10 @@ export class PostHog {
      */
     setPersonProperties(userPropertiesToSet?: Properties, userPropertiesToSetOnce?: Properties): void {
         if (!userPropertiesToSet && !userPropertiesToSetOnce) {
+            return
+        }
+
+        if (!this._requirePersonProcessing('posthog.setPersonProperties')) {
             return
         }
 
@@ -1254,6 +1281,10 @@ export class PostHog {
     group(groupType: string, groupKey: string, groupPropertiesToSet?: Properties): void {
         if (!groupType || !groupKey) {
             logger.error('posthog.group requires a group type and group key')
+            return
+        }
+
+        if (!this._requirePersonProcessing('posthog.group')) {
             return
         }
 
@@ -1299,6 +1330,9 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
+        if (!this._requirePersonProcessing('posthog.setPersonPropertiesForFlags')) {
+            return
+        }
         this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
@@ -1315,6 +1349,9 @@ export class PostHog {
      *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
+        if (!this._requirePersonProcessing('posthog.setGroupPropertiesForFlags')) {
+            return
+        }
         this.featureFlags.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
@@ -1392,7 +1429,7 @@ export class PostHog {
             return ''
         }
         const { sessionId, sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        let url = this.requestRouter.endpointFor('ui', '/replay/' + sessionId)
+        let url = this.requestRouter.endpointFor('ui', `/project/${this.config.token}/replay/${sessionId}`)
         if (options?.withTimestamp && sessionStartTimestamp) {
             const LOOK_BACK = options.timestampLookBack ?? 10
             if (!sessionStartTimestamp) {
@@ -1436,6 +1473,9 @@ export class PostHog {
         if (alias === this.get_property(PEOPLE_DISTINCT_ID_KEY)) {
             logger.critical('Attempting to create alias for existing People user - aborting.')
             return -2
+        }
+        if (!this._requirePersonProcessing('posthog.alias')) {
+            return
         }
 
         if (_isUndefined(original)) {
@@ -1637,7 +1677,7 @@ export class PostHog {
      * disable_session_recording to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      */
-    startSessionRecording(override: { sampling?: boolean }): void {
+    startSessionRecording(override?: { sampling?: boolean }): void {
         if (override?.sampling) {
             // allow the session id check to rotate session id if necessary
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
@@ -1726,6 +1766,40 @@ export class PostHog {
             name = PRIMARY_INSTANCE_NAME + '.' + name
         }
         return name
+    }
+
+    _isIdentified(): boolean {
+        return (
+            this.persistence?.get_user_state() === 'identified' ||
+            this.sessionPersistence?.get_user_state() === 'identified'
+        )
+    }
+
+    _hasPersonProcessing(): boolean {
+        return !(
+            this.config.process_person === 'never' ||
+            (this.config.process_person === 'identified_only' &&
+                !this._isIdentified() &&
+                _isEmptyObject(this.getGroups()) &&
+                !this.persistence?.props?.[ALIAS_ID_KEY] &&
+                !this.persistence?.props?.[ENABLE_PERSON_PROCESSING])
+        )
+    }
+
+    /**
+     * Enables person processing if possible, returns true if it does so or already enabled, false otherwise
+     *
+     * @param function_name
+     */
+    _requirePersonProcessing(function_name: string): boolean {
+        if (this.config.process_person === 'never') {
+            logger.error(
+                function_name + ' was called, but process_person is set to "never". This call will be ignored.'
+            )
+            return false
+        }
+        this._register_single(ENABLE_PERSON_PROCESSING, true)
+        return true
     }
 
     // perform some housekeeping around GDPR opt-in/out state

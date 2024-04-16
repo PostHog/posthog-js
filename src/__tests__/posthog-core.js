@@ -1,7 +1,6 @@
 import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
-import { autocapture } from '../autocapture'
 
 import { _info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
@@ -61,6 +60,9 @@ describe('posthog core', () => {
                 },
                 props: {},
                 get_user_state: () => 'anonymous',
+                set_initial_campaign_params: jest.fn(),
+                set_initial_referrer_info: jest.fn(),
+                get_initial_props: () => ({}),
             },
             sessionPersistence: {
                 update_search_keyword: jest.fn(),
@@ -344,13 +346,6 @@ describe('posthog core', () => {
 
             expect(given.lib.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
-
-        it('enables elementsChainAsString if given', () => {
-            given('decideResponse', () => ({ elementsChainAsString: true }))
-            given.subject()
-
-            expect(given.lib.elementsChainAsString).toBe(true)
-        })
     })
 
     describe('_calculate_event_properties()', () => {
@@ -411,6 +406,7 @@ describe('posthog core', () => {
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
                 $is_identified: false,
+                $process_person: true,
             })
         })
 
@@ -432,6 +428,7 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
+                $process_person: true,
             })
         })
 
@@ -444,7 +441,15 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $process_person: true,
             })
+        })
+
+        it("can't deny or blacklist $process_person", () => {
+            given('property_denylist', () => ['$process_person'])
+            given('property_blacklist', () => ['$process_person'])
+
+            expect(given.subject['$process_person']).toEqual(true)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
@@ -475,6 +480,7 @@ describe('posthog core', () => {
             expect(given.subject).toEqual({
                 event_name: given.event_name,
                 token: 'testtoken',
+                $process_person: true,
             })
         })
 
@@ -736,8 +742,6 @@ describe('posthog core', () => {
         beforeEach(() => {
             jest.spyOn(window.console, 'warn').mockImplementation()
             jest.spyOn(window.console, 'error').mockImplementation()
-            jest.spyOn(autocapture, 'init').mockImplementation()
-            jest.spyOn(autocapture, 'afterDecideResponse').mockImplementation()
         })
 
         given('advanced_disable_decide', () => true)
@@ -761,7 +765,7 @@ describe('posthog core', () => {
             expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
         })
 
-        it('does not load autocapture, feature flags, toolbar, session recording', () => {
+        it('does not load feature flags, toolbar, session recording', () => {
             given('overrides', () => ({
                 sessionRecording: {
                     afterDecideResponse: jest.fn(),
@@ -780,9 +784,6 @@ describe('posthog core', () => {
             jest.spyOn(given.lib.toolbar, 'afterDecideResponse').mockImplementation()
             jest.spyOn(given.lib.sessionRecording, 'afterDecideResponse').mockImplementation()
             jest.spyOn(given.lib.persistence, 'register').mockImplementation()
-
-            // Autocapture
-            expect(autocapture.afterDecideResponse).not.toHaveBeenCalled()
 
             // Feature flags
             expect(given.lib.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
@@ -1128,16 +1129,18 @@ describe('posthog core', () => {
         })
 
         it('returns the replay URL', () => {
-            expect(given.lib.get_session_replay_url()).toEqual('https://us.posthog.com/replay/sessionId')
+            expect(given.lib.get_session_replay_url()).toEqual(
+                'https://us.posthog.com/project/testtoken/replay/sessionId'
+            )
         })
 
         it('returns the replay URL including timestamp', () => {
             expect(given.lib.get_session_replay_url({ withTimestamp: true })).toEqual(
-                'https://us.posthog.com/replay/sessionId?t=20' // default lookback is 10 seconds
+                'https://us.posthog.com/project/testtoken/replay/sessionId?t=20' // default lookback is 10 seconds
             )
 
             expect(given.lib.get_session_replay_url({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
-                'https://us.posthog.com/replay/sessionId?t=30'
+                'https://us.posthog.com/project/testtoken/replay/sessionId?t=30'
             )
         })
     })

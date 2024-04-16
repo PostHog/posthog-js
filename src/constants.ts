@@ -28,6 +28,9 @@ export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const USER_STATE = '$user_state'
 export const POSTHOG_QUOTA_LIMITED = '$posthog_quota_limited'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
+export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
+export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
+export const ENABLE_PERSON_PROCESSING = '$epp'
 
 // These are properties that are reserved and will not be automatically included in events
 export const PERSISTENCE_RESERVED_PROPERTIES = [
@@ -46,4 +49,7 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     SURVEYS,
     FLAG_CALL_REPORTED,
     CLIENT_SESSION_PROPS,
+    INITIAL_CAMPAIGN_PARAMS,
+    INITIAL_REFERRER_INFO,
+    ENABLE_PERSON_PROCESSING,
 ]

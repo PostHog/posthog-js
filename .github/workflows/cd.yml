@@ -94,7 +94,7 @@ jobs:
                 -F prerelease=false \
                 -F generate_release_notes=false 
 
-    create-pull-request:
+    create-posthog-main-repo-pull-request:
         name: Create main repo PR with new posthog-js version
         runs-on: ubuntu-20.04
         needs: [check-package-version, release]
@@ -154,3 +154,61 @@ jobs:
             - name: Output pull request result
               run: |
                   echo "PostHog pull request for posthog-js version ${{ env.COMMITTED_VERSION }} ready: ${{ steps.main-repo-pr.outputs.pull-request-url }}"
+
+    create-posthog-com-repo-pull-request:
+        name: Create posthog.com repo PR with new posthog-js version
+        runs-on: ubuntu-20.04
+        needs: [check-package-version, release]
+        env:
+            COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
+            PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
+        steps:
+            - name: Check out main repo
+              uses: actions/checkout@v2
+              with:
+                  repository: 'PostHog/posthog.com'
+                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v3
+              with:
+                  node-version: 18
+                  cache: yarn
+
+            - name: Install new posthog-js version in posthog.com repo
+              id: yarn-upgrade
+              run: |
+                  OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
+                  echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
+                  for i in $(seq 1 $RETRY_TIMES); do
+                      # Retry loop because of npm being _eventually_ consistent
+                      if yarn upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then
+                          break
+                      else
+                          [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
+                      fi
+                  done
+              env:
+                  RETRY_TIMES: 20
+                  RETRY_WAIT_SECONDS: 5
+
+            - name: Create posthog.com repo pull request
+              id: com-repo-pr
+              uses: peter-evans/create-pull-request@v3
+              with:
+                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+                  commit-message: 'chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}'
+                  branch: posthog-js-${{ env.COMMITTED_VERSION }}
+                  delete-branch: true
+                  labels: automerge
+                  title: 'chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}'
+                  body: |
+                      ## Changes
+
+                      posthog-js version ${{ env.COMMITTED_VERSION }} has been released. This updates PostHog to use it.
+
+                      https://github.com/PostHog/posthog-js/compare/v${{ steps.pnpm-upgrade.outputs.outgoing-version }}...v${{ env.COMMITTED_VERSION }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/posthog-js?activeTab=version)
+
+            - name: Output pull request result
+              run: |
+                  echo "PostHog pull request for posthog-js version ${{ env.COMMITTED_VERSION }} ready: ${{ steps.com-repo-pr.outputs.pull-request-url }}"

@@ -18,7 +18,7 @@ function ensureRecordingIsStopped() {
         })
 }
 
-function ensureActivitySendsSnapshots() {
+function ensureActivitySendsSnapshots(initial = true) {
     cy.resetPhCaptures()
 
     cy.get('[data-cy-input]')
@@ -31,12 +31,15 @@ function ensureActivitySendsSnapshots() {
                 // a meta and then a full snapshot
                 expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                 expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                expect(captures[0]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-                expect(captures[0]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+                // Not sent if recording is not stopped but session_id changes (e.g. reset called)
+                if (initial) {
+                    expect(captures[0]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                    expect(captures[0]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+                }
                 // Making a set from the rest should all be 3 - incremental snapshots
-                expect(new Set(captures[0]['properties']['$snapshot_data'].slice(4).map((s) => s.type))).to.deep.equal(
-                    new Set([3])
-                )
+                expect(
+                    new Set(captures[0]['properties']['$snapshot_data'].slice(initial ? 4 : 2).map((s) => s.type))
+                ).to.deep.equal(new Set([3]))
             })
         })
 }
@@ -46,12 +49,12 @@ describe('Session recording', () => {
         it('captures session events', () => {
             start({
                 decideResponseOverrides: {
-                    config: { enable_collect_everything: false },
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
             })
 
@@ -83,13 +86,13 @@ describe('Session recording', () => {
         beforeEach(() => {
             start({
                 decideResponseOverrides: {
-                    config: { enable_collect_everything: false },
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                         networkPayloadCapture: { recordBody: true },
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
                 options: {
@@ -126,12 +129,12 @@ describe('Session recording', () => {
         beforeEach(() => {
             start({
                 decideResponseOverrides: {
-                    config: { enable_collect_everything: false },
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
             })
@@ -362,19 +365,48 @@ describe('Session recording', () => {
                     })
                 })
         })
+
+        it('starts a new recording after calling reset', () => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                // should be a pageview at the beginning
+                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
+            })
+            cy.resetPhCaptures()
+
+            let startingSessionId: string | null = null
+            cy.posthog().then((ph) => {
+                startingSessionId = ph.get_session_id()
+            })
+
+            ensureActivitySendsSnapshots()
+
+            cy.posthog().then((ph) => {
+                ph.reset()
+            })
+
+            ensureActivitySendsSnapshots(false)
+
+            // the session id is rotated after reset is called
+            cy.posthog().then((ph) => {
+                const secondSessionId = ph.get_session_id()
+                expect(startingSessionId).not.to.be.null
+                expect(secondSessionId).not.to.be.null
+                expect(secondSessionId).not.to.equal(startingSessionId)
+            })
+        })
     })
 
-    describe.only('with sampling', () => {
+    describe('with sampling', () => {
         beforeEach(() => {
             start({
                 decideResponseOverrides: {
-                    config: { enable_collect_everything: false },
                     isAuthenticated: false,
                     sessionRecording: {
                         endpoint: '/ses/',
                         sampleRate: '0',
                     },
                     capturePerformance: true,
+                    autocapture_opt_out: true,
                 },
                 url: './playground/cypress',
             })
@@ -395,9 +427,9 @@ describe('Session recording', () => {
                 })
         })
 
-        it.only('can override sampling when starting session recording', () => {
+        it('can override sampling when starting session recording', () => {
             cy.intercept('POST', '/decide/*', {
-                config: { enable_collect_everything: false },
+                autocapture_opt_out: true,
                 editorParams: {},
                 isAuthenticated: false,
                 sessionRecording: {
@@ -441,13 +473,13 @@ describe('Session recording', () => {
             cy.reload(true).then(() => {
                 start({
                     decideResponseOverrides: {
-                        config: { enable_collect_everything: false },
                         isAuthenticated: false,
                         sessionRecording: {
                             endpoint: '/ses/',
                             sampleRate: '0',
                         },
                         capturePerformance: true,
+                        autocapture_opt_out: true,
                     },
                     url: './playground/cypress',
                 })

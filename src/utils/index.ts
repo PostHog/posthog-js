@@ -21,14 +21,6 @@ export const _trim = function (str: string): string {
     return str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
 }
 
-export const _bind_instance_methods = function (obj: Record<string, any>): void {
-    for (const func in obj) {
-        if (_isFunction(obj[func])) {
-            obj[func] = obj[func].bind(obj)
-        }
-    }
-}
-
 export function _eachArray<E = any>(
     obj: E[] | null | undefined,
     iterator: (value: E, key: number) => void | Breaker,
@@ -205,14 +197,6 @@ export const _safewrap_class = function (klass: Function, functions: string[]): 
     }
 }
 
-export const _safewrap_instance_methods = function (obj: Record<string, any>): void {
-    for (const func in obj) {
-        if (_isFunction(obj[func])) {
-            obj[func] = _safewrap(obj[func])
-        }
-    }
-}
-
 export const _strip_empty_properties = function (p: Properties): Properties {
     const ret: Properties = {}
     _each(p, function (v, k) {
@@ -221,6 +205,10 @@ export const _strip_empty_properties = function (p: Properties): Properties {
         }
     })
     return ret
+}
+
+export const _strip_leading_dollar = function (s: string): string {
+    return s.replace(/^\$/, '')
 }
 
 /**
