@@ -172,7 +172,7 @@ export const defaultConfig = (): PostHogConfig => ({
 
 
 /**
- * PostHog Library Object
+ * PostHog Library Object - "Core" version containing only base event capturing and feature flags
  * @constructor
  */
 export class PostHogCore {
