@@ -361,15 +361,15 @@ export class PostHog {
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
         this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startOrStopIfEnabled()
+        this.sessionRecording.startIfEnabledOrStop()
 
         if (!this.config.disable_scroll_properties) {
             this.pageViewManager.startMeasuringScrollPosition()
         }
 
         this.autocapture = new Autocapture(this)
-        this.autocapture.startOrStopIfEnabled()
-        this.surveys.startOrStopIfEnabled()
+        this.autocapture.startIfEnabled()
+        this.surveys.loadIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -1666,9 +1666,9 @@ export class PostHog {
                 Config.DEBUG = true
             }
 
-            this.sessionRecording?.startOrStopIfEnabled()
-            this.autocapture?.startOrStopIfEnabled()
-            this.surveys.startOrStopIfEnabled()
+            this.sessionRecording?.startIfEnabledOrStop()
+            this.autocapture?.startIfEnabled()
+            this.surveys.loadIfEnabled()
         }
     }
 

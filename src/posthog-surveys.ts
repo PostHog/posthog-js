@@ -24,10 +24,10 @@ export class PostHogSurveys {
 
     afterDecideResponse(response: DecideResponse) {
         this._decideServerResponse = !!response['surveys']
-        this.startOrStopIfEnabled()
+        this.loadIfEnabled()
     }
 
-    startOrStopIfEnabled() {
+    loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {

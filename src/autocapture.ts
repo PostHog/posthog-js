@@ -86,7 +86,7 @@ export class Autocapture {
         }
     }
 
-    public startOrStopIfEnabled() {
+    public startIfEnabled() {
         if (this.isEnabled && !this._initialized) {
             this._addDomEventHandlers()
             this._initialized = true
@@ -110,7 +110,7 @@ export class Autocapture {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        this.startOrStopIfEnabled()
+        this.startIfEnabled()
     }
 
     public get isEnabled(): boolean {
