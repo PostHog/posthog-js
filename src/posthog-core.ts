@@ -45,7 +45,7 @@ import {
     ToolbarParams,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
-import { createSegmentIntegration } from './extensions/segment-integration'
+import { setupSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
 import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
@@ -223,7 +223,6 @@ export class PostHog {
     elementsChainAsString: boolean
 
     SentryIntegration: typeof SentryIntegration
-    segmentIntegration: () => any
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -235,7 +234,6 @@ export class PostHog {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
-        this.segmentIntegration = () => createSegmentIntegration(this)
         this.__captureHooks = []
         this.__request_queue = []
         this.__loaded = false
@@ -387,20 +385,6 @@ export class PostHog {
 
         this._gdpr_init()
 
-        if (config.segment) {
-            const segmentUser = config.segment.user()
-            // Use segments anonymousId instead
-            this.config.get_device_id = () => segmentUser.anonymousId() || uuidv7()
-
-            // If a segment user ID exists, set it as the distinct_id
-            if (segmentUser.id()) {
-                this.register({
-                    distinct_id: segmentUser.id(),
-                })
-                this.persistence.set_user_state('identified')
-            }
-        }
-
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
@@ -458,9 +442,7 @@ export class PostHog {
 
         // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
-            config.segment.register(this.segmentIntegration()).then(() => {
-                this._loaded()
-            })
+            setupSegmentIntegration(this, () => this._loaded())
         } else {
             this._loaded()
         }

@@ -20,8 +20,20 @@ import { PostHog } from '../posthog-core'
 import { logger } from '../utils/logger'
 
 import type { Plugin as SegmentPlugin, Context as SegmentContext } from '@segment/analytics-next'
+import { uuidv7 } from '../uuidv7'
+import { _isFunction } from '../utils/type-utils'
 
-export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
+export type SegmentUser = {
+    anonymousId(): string | undefined
+    id(): string | undefined
+}
+
+export type SegmentAnalytics = {
+    user: () => SegmentUser | Promise<SegmentUser>
+    register: (integration: SegmentPlugin) => Promise<void>
+}
+
+const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     if (!Promise || !Promise.resolve) {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }
@@ -59,4 +71,50 @@ export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         identify: (ctx) => enrichEvent(ctx, '$identify'),
         screen: (ctx) => enrichEvent(ctx, '$screen'),
     }
+}
+
+function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
+    const segment = posthog.config.segment
+    if (!segment) {
+        return done()
+    }
+
+    const bootstrapUser = (user: SegmentUser) => {
+        // Use segments anonymousId instead
+        const getSegmentAnonymousId = () => user.anonymousId() || uuidv7()
+        posthog.config.get_device_id = getSegmentAnonymousId
+
+        // If a segment user ID exists, set it as the distinct_id
+        if (user.id()) {
+            posthog.register({
+                distinct_id: user.id(),
+                $device_id: getSegmentAnonymousId(),
+            })
+            posthog.persistence!.set_user_state('identified')
+        }
+
+        done()
+    }
+
+    const segmentUser = segment.user()
+
+    // If segmentUser is a promise then we need to wait for it to resolve
+    if ('then' in segmentUser && _isFunction(segmentUser.then)) {
+        segmentUser.then((user) => bootstrapUser(user))
+    } else {
+        bootstrapUser(segmentUser as SegmentUser)
+    }
+}
+
+export function setupSegmentIntegration(posthog: PostHog, done: () => void) {
+    const segment = posthog.config.segment
+    if (!segment) {
+        return done()
+    }
+
+    setupPostHogFromSegment(posthog, () => {
+        segment.register(createSegmentIntegration(posthog)).then(() => {
+            done()
+        })
+    })
 }
