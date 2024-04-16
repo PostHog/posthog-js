@@ -58,9 +58,7 @@ class DeprecatedWebPerformanceObserver {
 }
 
 /**
- * PostHogExtended
- * 
- * Anything that is considered "extended" should be here. Core functionality is only around standard capture and feature flags logic
+ * PostHog Library Object - "Extended" version containing base event capturing and feature flags as well as extended features like session recording, autocapture, and surveys.
  * @constructor
  */
 export class PostHogExtended extends PostHogCore {
