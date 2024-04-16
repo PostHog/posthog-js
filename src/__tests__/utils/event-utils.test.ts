@@ -1,14 +1,14 @@
-import { _info } from '../../utils/event-utils'
+import { Info } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
 import uaParserDeviceTestCases from './device.test.json'
 import uaParserOSTestCases from './os-test.json'
-import { _isUndefined } from '../../utils/type-utils'
+import { isUndefined } from '../../utils/type-utils'
 import { detectBrowser } from '../../utils/user-agent-utils'
 
 describe(`event-utils`, () => {
     describe('properties', () => {
         it('should have $host and $pathname in properties', () => {
-            const properties = _info.properties()
+            const properties = Info.properties()
             expect(properties['$current_url']).toBeDefined()
             expect(properties['$host']).toBeDefined()
             expect(properties['$pathname']).toBeDefined()
@@ -19,7 +19,7 @@ describe(`event-utils`, () => {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             globals['userAgent'] = 'blah'
-            const properties = _info.properties()
+            const properties = Info.properties()
             expect(properties['$raw_user_agent']).toBe('blah')
         })
 
@@ -28,7 +28,7 @@ describe(`event-utils`, () => {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             globals['userAgent'] = 'a'.repeat(1001)
-            const properties = _info.properties()
+            const properties = Info.properties()
             expect(properties['$raw_user_agent'].length).toBe(1000)
             expect(properties['$raw_user_agent'].substring(995)).toBe('aa...')
         })
@@ -211,11 +211,11 @@ describe(`event-utils`, () => {
         ]
 
         test.each(browserTestcases)('browser version %s', ({ userAgent, vendor, expectedVersion }) => {
-            expect(_info.browserVersion(userAgent, vendor, '')).toBe(expectedVersion)
+            expect(Info.browserVersion(userAgent, vendor, '')).toBe(expectedVersion)
         })
 
         test.each(browserTestcases)('browser %s', ({ userAgent, vendor, expectedBrowser }) => {
-            expect(_info.browser(userAgent, vendor, '')).toBe(expectedBrowser)
+            expect(Info.browser(userAgent, vendor, '')).toBe(expectedBrowser)
         })
 
         /**
@@ -236,9 +236,9 @@ describe(`event-utils`, () => {
                 // we don't support it
                 return
             }
-            const actual = _info.deviceType(testCase['ua']).toLowerCase()
+            const actual = Info.deviceType(testCase['ua']).toLowerCase()
             const expected =
-                _isUndefined(testCase['expect']['type']) || testCase['expect']['type'] === 'undefined'
+                isUndefined(testCase['expect']['type']) || testCase['expect']['type'] === 'undefined'
                     ? 'desktop'
                     : testCase['expect']['type']
             expect(actual).toBe(expected)
@@ -252,7 +252,7 @@ describe(`event-utils`, () => {
          * we had to edit them a chunk because we don't aim for the same level of detail
          */
         test.each(uaParserOSTestCases.filter((tc) => !tc['//']))('OS - $ua', (testCase) => {
-            const result = _info.os(testCase['ua'])
+            const result = Info.os(testCase['ua'])
             const expected = testCase['expect']
             expect(result).toStrictEqual([expected.os_name, expected.os_version])
         })
@@ -311,7 +311,7 @@ describe(`event-utils`, () => {
             }
 
             for (const [userAgent, osInfo] of Object.entries(osVersions)) {
-                const [os_name, os_version] = _info.os(userAgent)
+                const [os_name, os_version] = Info.os(userAgent)
                 expect(os_name).toBe(osInfo.os_name)
                 expect(os_version).toBe(osInfo.os_version)
             }

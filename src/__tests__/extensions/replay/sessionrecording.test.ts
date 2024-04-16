@@ -5,7 +5,7 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
-    SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDINGis_SAMPLED,
     SESSION_RECORDING_SAMPLE_RATE,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
@@ -166,7 +166,7 @@ describe('SessionRecording', () => {
         posthog.persistence?.register({
             [SESSION_RECORDING_ENABLED_SERVER_SIDE]: true,
             [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false,
-            [SESSION_RECORDING_IS_SAMPLED]: undefined,
+            [SESSION_RECORDINGis_SAMPLED]: undefined,
         })
 
         sessionRecording = new SessionRecording(posthog)

@@ -1,5 +1,5 @@
 import { Toolbar } from '../../extensions/toolbar'
-import { _isString, _isUndefined } from '../../utils/type-utils'
+import { isString, isUndefined } from '../../utils/type-utils'
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig, ToolbarParams } from '../../types'
 import { assignableWindow, window } from '../../utils/globals'
@@ -64,7 +64,7 @@ describe('Toolbar', () => {
             key: string = 'state'
         ) => ({
             access_token: 'access token',
-            [key]: encodeURIComponent(_isString(hashState) ? hashState : JSON.stringify(hashState)),
+            [key]: encodeURIComponent(isString(hashState) ? hashState : JSON.stringify(hashState)),
             expires_in: 3600,
         })
 
@@ -75,7 +75,7 @@ describe('Toolbar', () => {
         }
 
         const aLocation = (hash?: string): Location => {
-            if (_isUndefined(hash)) {
+            if (isUndefined(hash)) {
                 hash = withHash(withHashParamsFrom())
             }
 

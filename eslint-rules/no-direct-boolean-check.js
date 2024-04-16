@@ -15,7 +15,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isBoolean instead of direct boolean checks.',
+                        message: 'Use isBoolean instead of direct boolean checks.',
                     })
                 }
 
@@ -29,7 +29,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isBoolean instead of direct boolean checks.',
+                        message: 'Use isBoolean instead of direct boolean checks.',
                     })
                 }
             },

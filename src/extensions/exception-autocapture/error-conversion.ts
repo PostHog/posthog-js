@@ -10,7 +10,7 @@ import {
 } from './type-checking'
 import { defaultStackParser, StackFrame } from './stack-trace'
 
-import { _isNumber, _isString, _isUndefined } from '../../utils/type-utils'
+import { isNumber, isString, isUndefined } from '../../utils/type-utils'
 
 /**
  * based on the very wonderful MIT licensed Sentry SDK
@@ -34,7 +34,7 @@ export interface ErrorProperties {
     $exception_lineno?: number
     $exception_colno?: number
     $exception_DOMException_code?: string
-    $exception_is_synthetic?: boolean
+    $exceptionis_synthetic?: boolean
     $exception_stack_trace_raw?: string
     $exception_handled?: boolean
     $exception_personURL?: string
@@ -44,7 +44,7 @@ const reactMinifiedRegexp = /Minified React error #\d+;/i
 
 function getPopSize(ex: Error & { framesToPop?: number }): number {
     if (ex) {
-        if (_isNumber(ex.framesToPop)) {
+        if (isNumber(ex.framesToPop)) {
             return ex.framesToPop
         }
 
@@ -131,7 +131,7 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         $exception_message?: string
     } = {}
 
-    if (_isUndefined(error) && _isString(event)) {
+    if (isUndefined(error) && isString(event)) {
         let name = 'Error'
         let message = event
         const groups = event.match(ERROR_TYPES_PATTERN)
@@ -173,12 +173,12 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         // group these by using the keys available on the object
         const objectException = candidate as Record<string, unknown>
         errorProperties = errorPropertiesFromObject(objectException)
-        errorProperties.$exception_is_synthetic = true
+        errorProperties.$exceptionis_synthetic = true
     } else {
         // If none of previous checks were valid, then it must be a string
         errorProperties.$exception_type = errorProperties.$exception_type || 'Error'
         errorProperties.$exception_message = errorProperties.$exception_message || candidate
-        errorProperties.$exception_is_synthetic = true
+        errorProperties.$exceptionis_synthetic = true
     }
 
     return {

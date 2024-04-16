@@ -15,7 +15,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isDate instead of direct date checks.',
+                        message: 'Use isDate instead of direct date checks.',
                     })
                 }
 
@@ -23,7 +23,7 @@ module.exports = {
                 if (node.operator === 'instanceof' && node.right.type === 'Identifier' && node.right.name === 'Date') {
                     context.report({
                         node,
-                        message: 'Use _isDate instead of direct date checks.',
+                        message: 'Use isDate instead of direct date checks.',
                     })
                 }
             },

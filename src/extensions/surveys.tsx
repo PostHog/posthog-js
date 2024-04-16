@@ -24,7 +24,7 @@ import * as Preact from 'preact'
 import { render } from 'preact-render-to-string'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { useState, useEffect, useRef, useContext } from 'preact/hooks'
-import { _isNumber } from '../utils/type-utils'
+import { isNumber } from '../utils/type-utils'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import {
     OpenTextQuestion,
@@ -212,7 +212,7 @@ export function Surveys({
             }
         })
     }, [])
-    const confirmationBoxLeftStyle = style?.left && _isNumber(style?.left) ? { left: style.left - 40 } : {}
+    const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
     return (
         <>

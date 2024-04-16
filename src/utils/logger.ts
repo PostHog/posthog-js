@@ -1,5 +1,5 @@
 import Config from '../config'
-import { _isUndefined } from './type-utils'
+import { isUndefined } from './type-utils'
 import { assignableWindow, window } from './globals'
 
 const LOGGER_PREFIX = '[PostHog.js]'
@@ -8,7 +8,7 @@ export const logger = {
         if (
             window &&
             (Config.DEBUG || assignableWindow.POSTHOG_DEBUG) &&
-            !_isUndefined(window.console) &&
+            !isUndefined(window.console) &&
             window.console
         ) {
             const consoleLog =

@@ -5,7 +5,7 @@ import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuidv7 } from './uuidv7'
 import { window } from './utils/globals'
 
-import { _isArray, _isNumber, _isUndefined } from './utils/type-utils'
+import { isArray, isNumber, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 minutes
@@ -45,7 +45,7 @@ export class SessionIdManager {
         const persistenceName = config['persistence_name'] || config['token']
         let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
 
-        if (!_isNumber(desiredTimeout)) {
+        if (!isNumber(desiredTimeout)) {
             logger.warn('session_idle_timeout_seconds must be a number. Defaulting to 30 minutes.')
             desiredTimeout = MAX_SESSION_IDLE_TIMEOUT
         } else if (desiredTimeout > MAX_SESSION_IDLE_TIMEOUT) {
@@ -82,7 +82,7 @@ export class SessionIdManager {
     onSessionId(callback: SessionIdChangedCallback): () => void {
         // KLUDGE: when running in tests the handlers array was always undefined
         // it's yucky but safe to set it here so that it's always definitely available
-        if (_isUndefined(this._sessionIdChangedHandlers)) {
+        if (isUndefined(this._sessionIdChangedHandlers)) {
             this._sessionIdChangedHandlers = []
         }
 
@@ -152,7 +152,7 @@ export class SessionIdManager {
         }
         const sessionId = this.persistence.props[SESSION_ID]
 
-        if (_isArray(sessionId) && sessionId.length === 2) {
+        if (isArray(sessionId) && sessionId.length === 2) {
             // Storage does not yet have a session start time. Add the last activity timestamp as the start time
             sessionId.push(sessionId[0])
         }

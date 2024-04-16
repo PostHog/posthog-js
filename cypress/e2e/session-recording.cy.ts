@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-import { _isNull } from '../../src/utils/type-utils'
+import { isNull } from '../../src/utils/type-utils'
 import { start } from '../support/setup'
 import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
 
@@ -185,7 +185,7 @@ describe('Session recording', () => {
             cy.wait('@session-recording').then(() => {
                 cy.phCaptures({ full: true }).then((captures) => {
                     captures.forEach((c) => {
-                        if (_isNull(sessionId)) {
+                        if (isNull(sessionId)) {
                             sessionId = c.properties['$session_id']
                         }
                         // all captures should be from one session
@@ -248,7 +248,7 @@ describe('Session recording', () => {
             cy.wait('@session-recording').then(() => {
                 cy.phCaptures({ full: true }).then((captures) => {
                     captures.forEach((c) => {
-                        if (_isNull(sessionId)) {
+                        if (isNull(sessionId)) {
                             sessionId = c.properties['$session_id']
                         }
                         // all captures should be from one session

@@ -6,7 +6,7 @@ import {
     unhandledRejectionToProperties,
 } from '../../../extensions/exception-autocapture/error-conversion'
 
-import { _isNull } from '../../../utils/type-utils'
+import { isNull } from '../../../utils/type-utils'
 
 // ugh, jest
 // can't reference PromiseRejectionEvent to construct it 🤷
@@ -35,7 +35,7 @@ describe('Error conversion', () => {
         const expected: ErrorProperties = {
             $exception_type: 'InternalError',
             $exception_message: 'but somehow still a string',
-            $exception_is_synthetic: true,
+            $exceptionis_synthetic: true,
         }
         expect(errorToProperties(['Uncaught exception: InternalError: but somehow still a string'])).toEqual(expected)
     })
@@ -44,7 +44,7 @@ describe('Error conversion', () => {
         const expected: ErrorProperties = {
             $exception_type: 'Error',
             $exception_message: 'Non-Error exception captured with keys: foo, string',
-            $exception_is_synthetic: true,
+            $exceptionis_synthetic: true,
         }
         expect(errorToProperties([{ string: 'candidate', foo: 'bar' } as unknown as Event])).toEqual(expected)
     })
@@ -53,7 +53,7 @@ describe('Error conversion', () => {
         const expected: ErrorProperties = {
             $exception_type: 'MouseEvent',
             $exception_message: 'Non-Error exception captured with keys: isTrusted',
-            $exception_is_synthetic: true,
+            $exceptionis_synthetic: true,
         }
         const event = new MouseEvent('click', { bubbles: true, cancelable: true, composed: true })
         expect(errorToProperties([event])).toEqual(expected)
@@ -63,7 +63,7 @@ describe('Error conversion', () => {
         const error = new Error('oh no an error has happened')
 
         const errorProperties = errorToProperties(['something', undefined, undefined, undefined, error])
-        if (_isNull(errorProperties)) {
+        if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
         }
 
@@ -93,7 +93,7 @@ describe('Error conversion', () => {
         const event = new DOMException('oh no disaster', 'dom-exception')
         const errorProperties = errorToProperties([event as unknown as Event])
 
-        if (_isNull(errorProperties)) {
+        if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
         }
 
@@ -109,7 +109,7 @@ describe('Error conversion', () => {
         const event = new ErrorEvent('oh no an error event', { error: new Error('the real error is hidden inside') })
 
         const errorProperties = errorToProperties([event as unknown as Event])
-        if (_isNull(errorProperties)) {
+        if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
         }
 
@@ -124,7 +124,7 @@ describe('Error conversion', () => {
     it('can convert source, lineno, colno', () => {
         const expected: ErrorProperties = {
             $exception_colno: 200,
-            $exception_is_synthetic: true,
+            $exceptionis_synthetic: true,
             $exception_lineno: 12,
             $exception_message: 'string candidate',
             $exception_source: 'a source',

@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { _each, _extend, _include, _strip_empty_properties, _strip_leading_dollar } from './utils'
+import { each, extend, include, stripEmptyProperties, stripLeadingDollar } from './utils'
 import { cookieStore, localPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
@@ -13,8 +13,8 @@ import {
     USER_STATE,
 } from './constants'
 
-import { _isObject, _isUndefined } from './utils/type-utils'
-import { _info } from './utils/event-utils'
+import { isObject, isUndefined } from './utils/type-utils'
+import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
@@ -103,13 +103,13 @@ export class PostHogPersistence {
     properties(): Properties {
         const p: Properties = {}
         // Filter out reserved properties
-        _each(this.props, function (v, k) {
-            if (k === ENABLED_FEATURE_FLAGS && _isObject(v)) {
+        each(this.props, function (v, k) {
+            if (k === ENABLED_FEATURE_FLAGS && isObject(v)) {
                 const keys = Object.keys(v)
                 for (let i = 0; i < keys.length; i++) {
                     p[`$feature/${keys[i]}`] = v[keys[i]]
                 }
-            } else if (!_include(PERSISTENCE_RESERVED_PROPERTIES, k)) {
+            } else if (!include(PERSISTENCE_RESERVED_PROPERTIES, k)) {
                 p[k] = v
             }
         })
@@ -124,7 +124,7 @@ export class PostHogPersistence {
         const entry = this.storage.parse(this.name)
 
         if (entry) {
-            this.props = _extend({}, entry)
+            this.props = extend({}, entry)
         }
     }
 
@@ -161,15 +161,15 @@ export class PostHogPersistence {
      */
 
     register_once(props: Properties, default_value: any, days?: number): boolean {
-        if (_isObject(props)) {
-            if (_isUndefined(default_value)) {
+        if (isObject(props)) {
+            if (isUndefined(default_value)) {
                 default_value = 'None'
             }
-            this.expire_days = _isUndefined(days) ? this.default_expiry : days
+            this.expire_days = isUndefined(days) ? this.default_expiry : days
 
             let hasChanges = false
 
-            _each(props, (val, prop) => {
+            each(props, (val, prop) => {
                 if (!this.props.hasOwnProperty(prop) || this.props[prop] === default_value) {
                     this.props[prop] = val
                     hasChanges = true
@@ -190,12 +190,12 @@ export class PostHogPersistence {
      */
 
     register(props: Properties, days?: number): boolean {
-        if (_isObject(props)) {
-            this.expire_days = _isUndefined(days) ? this.default_expiry : days
+        if (isObject(props)) {
+            this.expire_days = isUndefined(days) ? this.default_expiry : days
 
             let hasChanges = false
 
-            _each(props, (val, prop) => {
+            each(props, (val, prop) => {
                 if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
                     this.props[prop] = val
                     hasChanges = true
@@ -219,36 +219,36 @@ export class PostHogPersistence {
 
     update_campaign_params(): void {
         if (!this.campaign_params_saved) {
-            this.register(_info.campaignParams(this.config.custom_campaign_params))
+            this.register(Info.campaignParams(this.config.custom_campaign_params))
             this.campaign_params_saved = true
         }
     }
     set_initial_campaign_params(): void {
         this.register_once(
-            { [INITIAL_CAMPAIGN_PARAMS]: _info.campaignParams(this.config.custom_campaign_params) },
+            { [INITIAL_CAMPAIGN_PARAMS]: Info.campaignParams(this.config.custom_campaign_params) },
             undefined
         )
     }
 
     update_search_keyword(): void {
-        this.register(_info.searchInfo())
+        this.register(Info.searchInfo())
     }
 
     update_referrer_info(): void {
-        this.register(_info.referrerInfo())
+        this.register(Info.referrerInfo())
     }
 
     set_initial_referrer_info(): void {
         this.register_once(
             {
-                [INITIAL_REFERRER_INFO]: _info.referrerInfo(),
+                [INITIAL_REFERRER_INFO]: Info.referrerInfo(),
             },
             undefined
         )
     }
 
     get_referrer_info(): Properties {
-        return _strip_empty_properties({
+        return stripEmptyProperties({
             $referrer: this['props']['$referrer'],
             $referring_domain: this['props']['$referring_domain'],
         })
@@ -256,11 +256,11 @@ export class PostHogPersistence {
 
     get_initial_props(): Properties {
         const p: Properties = {}
-        _each([INITIAL_REFERRER_INFO, INITIAL_CAMPAIGN_PARAMS], (key) => {
+        each([INITIAL_REFERRER_INFO, INITIAL_CAMPAIGN_PARAMS], (key) => {
             const initialReferrerInfo = this.props[key]
             if (initialReferrerInfo) {
-                _each(initialReferrerInfo, function (v, k) {
-                    p['$initial_' + _strip_leading_dollar(k)] = v
+                each(initialReferrerInfo, function (v, k) {
+                    p['$initial_' + stripLeadingDollar(k)] = v
                 })
             }
         })
@@ -272,7 +272,7 @@ export class PostHogPersistence {
     // returns the passed in object
 
     safe_merge(props: Properties): Properties {
-        _each(this.props, function (val, prop) {
+        each(this.props, function (val, prop) {
             if (!(prop in props)) {
                 props[prop] = val
             }
@@ -340,7 +340,7 @@ export class PostHogPersistence {
     remove_event_timer(event_name: string): number {
         const timers = this.props[EVENT_TIMERS_KEY] || {}
         const timestamp = timers[event_name]
-        if (!_isUndefined(timestamp)) {
+        if (!isUndefined(timestamp)) {
             delete this.props[EVENT_TIMERS_KEY][event_name]
             this.save()
         }

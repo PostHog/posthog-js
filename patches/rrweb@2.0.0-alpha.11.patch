@@ -1081,11 +1081,11 @@ index 81ad4520d1435d088752a85f9a55a68ad6e0f514..e19dec6cc98ea782d53328853ca1b46d
  function isParentRemoved(removes, n, mirror) {
 -    if (removes.length === 0)
 -        return false;
--    return _isParentRemoved(removes, n, mirror);
+-    return isParentRemoved(removes, n, mirror);
 +  if (removes.length === 0) return false;
-+  return _isParentRemoved(removes, n, mirror);
++  return isParentRemoved(removes, n, mirror);
  }
- function _isParentRemoved(removes, n, mirror) {
+ function isParentRemoved(removes, n, mirror) {
 -    const { parentNode } = n;
 -    if (!parentNode) {
 -        return false;
@@ -1094,7 +1094,7 @@ index 81ad4520d1435d088752a85f9a55a68ad6e0f514..e19dec6cc98ea782d53328853ca1b46d
 -    if (removes.some((r) => r.id === parentId)) {
 -        return true;
 -    }
--    return _isParentRemoved(removes, parentNode, mirror);
+-    return isParentRemoved(removes, parentNode, mirror);
 +  const { parentNode } = n;
 +  if (!parentNode) {
 +    return false;
@@ -1103,16 +1103,16 @@ index 81ad4520d1435d088752a85f9a55a68ad6e0f514..e19dec6cc98ea782d53328853ca1b46d
 +  if (removes.some((r) => r.id === parentId)) {
 +    return true;
 +  }
-+  return _isParentRemoved(removes, parentNode, mirror);
++  return isParentRemoved(removes, parentNode, mirror);
  }
  function isAncestorInSet(set, n) {
 -    if (set.size === 0)
 -        return false;
--    return _isAncestorInSet(set, n);
+-    return isAncestorInSet(set, n);
 +  if (set.size === 0) return false;
-+  return _isAncestorInSet(set, n);
++  return isAncestorInSet(set, n);
  }
- function _isAncestorInSet(set, n) {
+ function isAncestorInSet(set, n) {
 -    const { parentNode } = n;
 -    if (!parentNode) {
 -        return false;
@@ -1120,7 +1120,7 @@ index 81ad4520d1435d088752a85f9a55a68ad6e0f514..e19dec6cc98ea782d53328853ca1b46d
 -    if (set.has(parentNode)) {
 -        return true;
 -    }
--    return _isAncestorInSet(set, parentNode);
+-    return isAncestorInSet(set, parentNode);
 +  const { parentNode } = n;
 +  if (!parentNode) {
 +    return false;
@@ -1128,7 +1128,7 @@ index 81ad4520d1435d088752a85f9a55a68ad6e0f514..e19dec6cc98ea782d53328853ca1b46d
 +  if (set.has(parentNode)) {
 +    return true;
 +  }
-+  return _isAncestorInSet(set, parentNode);
++  return isAncestorInSet(set, parentNode);
  }
  
  export { MutationBuffer as default };
