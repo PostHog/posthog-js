@@ -19,7 +19,6 @@
 import { PostHog } from '../posthog-core'
 import { logger } from '../utils/logger'
 
-import type { Plugin as SegmentPlugin, Context as SegmentContext } from '@segment/analytics-next'
 import { uuidv7 } from '../uuidv7'
 import { _isFunction } from '../utils/type-utils'
 
@@ -31,6 +30,32 @@ export type SegmentUser = {
 export type SegmentAnalytics = {
     user: () => SegmentUser | Promise<SegmentUser>
     register: (integration: SegmentPlugin) => Promise<void>
+}
+
+// Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
+interface SegmentContext {
+    event: {
+        event: string
+        userId?: string
+        anonymousId?: string
+        properties: any
+    }
+}
+
+interface SegmentPlugin {
+    name: string
+    version: string
+    type: 'enrichment'
+    isLoaded: () => boolean
+    load: (ctx: SegmentContext, instance: any, config?: any) => Promise<unknown>
+    unload?: (ctx: SegmentContext, instance: any) => Promise<unknown> | unknown
+    ready?: () => Promise<unknown>
+    track?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+    identify?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+    page?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+    group?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+    alias?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+    screen?: (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
 }
 
 const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
