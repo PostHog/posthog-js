@@ -71,7 +71,7 @@ Install Yalc to link a local version of `posthog-js` in another JS project: `npm
 
 Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) – automatically.
   
-If you want to release a new version without a PR (e.g. because you forgot to use the label), check out the `main` branch and run `npm version [major | minor | patch] && git push --tags` - this will trigger the automated release process just like the label.
+If you forget to add the label, don't try to update the version locally as you won't be able to push that commit to the main branch. Instead, just make a new PR.
 
 ### Prereleases
 
