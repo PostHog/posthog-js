@@ -1,3 +1,7 @@
+## 1.123.1 - 2024-04-16
+
+- feat: Update support for segment analytics (#1119)
+
 ## 1.123.0 - 2024-04-16
 
 - feat: Rename process_person config option to person_profiles (#1141)
