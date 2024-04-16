@@ -121,7 +121,6 @@ export const defaultConfig = (): PostHogConfig => ({
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
-    cookie_name: '',
     loaded: __NOOP,
     store_google: true,
     custom_campaign_params: [],
@@ -135,7 +134,6 @@ export const defaultConfig = (): PostHogConfig => ({
     upgrade: false,
     disable_session_recording: false,
     disable_persistence: false,
-    disable_cookie: false,
     disable_surveys: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -146,8 +144,6 @@ export const defaultConfig = (): PostHogConfig => ({
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
-    // Deprecated, use property_denylist instead.
-    property_blacklist: [],
     property_denylist: [],
     respect_dnt: false,
     sanitize_properties: null,
@@ -176,8 +172,41 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    process_person: 'always',
+    person_profiles: 'always',
 })
+
+export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
+    const renames: Partial<PostHogConfig> = {}
+    if (!isUndefined(origConfig.process_person)) {
+        renames.person_profiles = origConfig.process_person
+    }
+    if (!isUndefined(origConfig.xhr_headers)) {
+        renames.request_headers = origConfig.xhr_headers
+    }
+    if (!isUndefined(origConfig.cookie_name)) {
+        renames.persistence_name = origConfig.cookie_name
+    }
+    if (!isUndefined(origConfig.disable_cookie)) {
+        renames.disable_persistence = origConfig.disable_cookie
+    }
+    // on_xhr_error is not present, as the type is different to on_request_error
+
+    // the original config takes priority over the renames
+    const newConfig = extend({}, renames, origConfig)
+
+    // merge property_blacklist into property_denylist
+    if (isArray(origConfig.property_blacklist)) {
+        if (isUndefined(origConfig.property_denylist)) {
+            newConfig.property_denylist = origConfig.property_blacklist
+        } else if (isArray(origConfig.property_denylist)) {
+            newConfig.property_denylist = [...origConfig.property_blacklist, ...origConfig.property_denylist]
+        } else {
+            logger.error('Invalid value for property_denylist config: ' + origConfig.property_denylist)
+        }
+    }
+
+    return newConfig
+}
 
 class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
@@ -338,10 +367,8 @@ export class PostHog {
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
 
-        config.request_headers = config.request_headers || config.xhr_headers
-
         this.set_config(
-            extend({}, defaultConfig(), config, {
+            extend({}, defaultConfig(), configRenames(config), {
                 name: name,
                 token: token,
             })
@@ -872,13 +899,10 @@ export class PostHog {
             properties
         )
 
-        properties['$is_identified'] = this.isIdentified()
+        properties['$is_identified'] = this._isIdentified()
 
-        if (isArray(this.config.property_denylist) && isArray(this.config.property_blacklist)) {
-            // since property_blacklist is deprecated in favor of property_denylist, we merge both of them here
-            // TODO: merge this only once, requires refactoring tests
-            const property_denylist = [...this.config.property_blacklist, ...this.config.property_denylist]
-            each(property_denylist, function (denylisted_prop) {
+        if (isArray(this.config.property_denylist)) {
+            each(this.config.property_denylist, function (denylisted_prop) {
                 delete properties[denylisted_prop]
             })
         } else {
@@ -1649,14 +1673,7 @@ export class PostHog {
     set_config(config: Partial<PostHogConfig>): void {
         const oldConfig = { ...this.config }
         if (isObject(config)) {
-            extend(this.config, config)
-
-            if (!this.config.persistence_name) {
-                this.config.persistence_name = this.config.cookie_name
-            }
-            if (!this.config.disable_persistence) {
-                this.config.disable_persistence = this.config.disable_cookie
-            }
+            extend(this.config, configRenames(config))
 
             this.persistence?.update_config(this.config, oldConfig)
             this.sessionPersistence =
@@ -1785,7 +1802,7 @@ export class PostHog {
         return name
     }
 
-    isIdentified(): boolean {
+    _isIdentified(): boolean {
         return (
             this.persistence?.get_user_state() === 'identified' ||
             this.sessionPersistence?.get_user_state() === 'identified'
@@ -1794,9 +1811,9 @@ export class PostHog {
 
     _hasPersonProcessing(): boolean {
         return !(
-            this.config.process_person === 'never' ||
-            (this.config.process_person === 'identified_only' &&
-                !this.isIdentified() &&
+            this.config.person_profiles === 'never' ||
+            (this.config.person_profiles === 'identified_only' &&
+                !this._isIdentified() &&
                 isEmptyObject(this.getGroups()) &&
                 !this.persistence?.props?.[ALIAS_ID_KEY] &&
                 !this.persistence?.props?.[ENABLE_PERSON_PROCESSING])
@@ -1809,7 +1826,7 @@ export class PostHog {
      * @param function_name
      */
     _requirePersonProcessing(function_name: string): boolean {
-        if (this.config.process_person === 'never') {
+        if (this.config.person_profiles === 'never') {
             logger.error(
                 function_name + ' was called, but process_person is set to "never". This call will be ignored.'
             )
