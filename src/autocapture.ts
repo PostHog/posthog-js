@@ -41,8 +41,7 @@ export class Autocapture {
     rageclicks = new RageClick()
     _elementsChainAsString = false
 
-    constructor(private instance: PostHogExtended) {
-    }
+    constructor(private instance: PostHogExtended) {}
 
     private get config(): AutocaptureConfig {
         const config = _isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}

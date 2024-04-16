@@ -1,4 +1,4 @@
-import {  POSTHOG_INSTANCES, PostHogCore } from '../posthog-core'
+import { POSTHOG_INSTANCES, PostHogCore } from '../posthog-core'
 
 import { init_as_module } from '../loaders/loader-helpers'
 

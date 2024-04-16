@@ -1,4 +1,3 @@
-
 import { PostHogExtended } from '../posthog-extended'
 import { POSTHOG_INSTANCES } from '../posthog-core'
 import { init_from_snippet } from './loader-helpers'

@@ -1,12 +1,5 @@
-
 import { assignableWindow, document, userAgent, window } from '../utils/globals'
-import {
-    _copyAndTruncateStrings,
-    _each,
-    _eachArray,
-    _extend,
-    _register_event,
-} from '../utils'
+import { _copyAndTruncateStrings, _each, _eachArray, _extend, _register_event } from '../utils'
 import {
     _isArray,
     _isEmptyObject,
@@ -59,8 +52,6 @@ const add_dom_loaded_handler = function (instances: PostHogInstancesType) {
         _register_event(window, 'load', dom_loaded_handler, true)
     }
 }
-
-
 
 export function init_from_snippet(PostHogCls: new () => PostHogCore, instances: PostHogInstancesType): void {
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHogCls())

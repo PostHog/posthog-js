@@ -13,12 +13,7 @@ import {
 import { document, location, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
-import {
-    ALIAS_ID_KEY,
-    ENABLE_PERSON_PROCESSING,
-    FLAG_CALL_REPORTED,
-    PEOPLE_DISTINCT_ID_KEY,
-} from './constants'
+import { ALIAS_ID_KEY, ENABLE_PERSON_PROCESSING, FLAG_CALL_REPORTED, PEOPLE_DISTINCT_ID_KEY } from './constants'
 import { Decide } from './decide'
 import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
 import { cookieStore, localStore } from './storage'
@@ -100,7 +95,7 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 // IE<10 does not support cross-origin XHR's but script tags
 // with defer won't block window.onload; ENQUEUE_REQUESTS
 // should only be true for Opera<12
-let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
+const ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
@@ -169,7 +164,6 @@ export const defaultConfig = (): PostHogConfig => ({
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     process_person: 'always',
 })
-
 
 /**
  * PostHog Library Object - "Core" version containing only base event capturing and feature flags
@@ -1915,4 +1909,3 @@ export class PostHogCore {
 }
 
 _safewrap_class(PostHogCore, ['identify'])
-

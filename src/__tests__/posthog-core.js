@@ -13,7 +13,6 @@ jest.mock('../gdpr-utils', () => ({
 }))
 jest.mock('../decide')
 
-
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
 

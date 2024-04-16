@@ -7,20 +7,12 @@ import {
     _register_event,
     _safewrap_class,
 } from './utils'
-import {
-    SESSION_RECORDING_IS_SAMPLED,
-} from './constants'
+import { SESSION_RECORDING_IS_SAMPLED } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Toolbar } from './extensions/toolbar'
 import { userOptedOut } from './gdpr-utils'
 import { RequestRouter } from './utils/request-router'
-import {
-    PostHogConfig,
-    Properties,
-    RequestCallback,
-    SessionIdChangedCallback,
-    ToolbarParams,
-} from './types'
+import { PostHogConfig, Properties, RequestCallback, SessionIdChangedCallback, ToolbarParams } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PostHogSurveys } from './posthog-surveys'
@@ -40,7 +32,6 @@ import { logger } from './utils/logger'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { Autocapture } from './autocapture'
 import { POSTHOG_INSTANCES, PostHogCore } from './posthog-core'
-
 
 class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
@@ -100,12 +91,8 @@ export class PostHogExtended extends PostHogCore {
         }
     }
 
-    init(
-        token: string,
-        config?: any,
-        name?: string
-    ): PostHogCore | void {
-        if (!name || name === "posthog") {
+    init(token: string, config?: any, name?: string): PostHogCore | void {
+        if (!name || name === 'posthog') {
             // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
         } else {
@@ -113,7 +100,7 @@ export class PostHogExtended extends PostHogCore {
             namedPosthog._init(token, config, name)
             POSTHOG_INSTANCES[name] = namedPosthog
             // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
-            ;(POSTHOG_INSTANCES["posthog"] as any)[name] = namedPosthog
+            ;(POSTHOG_INSTANCES['posthog'] as any)[name] = namedPosthog
 
             return namedPosthog
         }

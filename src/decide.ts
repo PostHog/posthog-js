@@ -66,12 +66,12 @@ export class Decide {
             return
         }
 
-        if ("toolbar" in this.instance) {
+        if ('toolbar' in this.instance) {
             this.instance.toolbar && this.instance.toolbar.afterDecideResponse(response)
             this.instance.sessionRecording?.afterDecideResponse(response)
             this.instance.autocapture?.afterDecideResponse(response)
         }
-        
+
         this.instance._afterDecideResponse(response)
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment

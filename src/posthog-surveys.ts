@@ -12,7 +12,6 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
 }
 
 export class PostHogSurveys {
-
     constructor(private instance: PostHogCore) {
         this.instance = instance
     }
