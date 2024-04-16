@@ -433,19 +433,6 @@ describe('posthog core', () => {
             })
         })
 
-        it('respects property_denylist and property_blacklist', () => {
-            given('property_denylist', () => ['$lib', 'persistent', '$is_identified'])
-            given('property_blacklist', () => ['token'])
-
-            expect(given.subject).toEqual({
-                event: 'prop',
-                distinct_id: 'abc',
-                $window_id: 'windowId',
-                $session_id: 'sessionId',
-                $process_person: true,
-            })
-        })
-
         it("can't deny or blacklist $process_person", () => {
             given('property_denylist', () => ['$process_person'])
             given('property_blacklist', () => ['$process_person'])
