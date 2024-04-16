@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react'
 import { cookieConsentGiven, updatePostHogConsent } from './posthog'
 
-export function CookieBanner() {
-    const [consentGiven, setConsentGiven] = useState<null | boolean>(null)
+export function useCookieConsent(): [boolean | null, (consentGiven: boolean) => void] {
+    const [consentGiven, setConsentGiven] = useState<boolean | null>(null)
 
     useEffect(() => {
         setConsentGiven(cookieConsentGiven())
@@ -14,6 +14,12 @@ export function CookieBanner() {
 
         updatePostHogConsent(consentGiven)
     }, [consentGiven])
+
+    return [consentGiven, setConsentGiven]
+}
+
+export function CookieBanner() {
+    const [consentGiven, setConsentGiven] = useCookieConsent()
 
     if (consentGiven === null) return null
 

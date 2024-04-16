@@ -7,7 +7,8 @@ import posthog, { PostHogConfig } from 'posthog-js'
  * Once given, we enable autocapture, session recording, and use localStorage+cookie for persistence via set_config
  * This is only an example - data privacy requirements are different for every project
  */
-export function cookieConsentGiven() {
+export function cookieConsentGiven(): null | boolean {
+    if (typeof window === 'undefined') return null
     return localStorage.getItem('cookie_consent') === 'true'
 }
 
