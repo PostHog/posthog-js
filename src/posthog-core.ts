@@ -135,7 +135,7 @@ export const defaultConfig = (): PostHogConfig => ({
     upgrade: false,
     disable_session_recording: false,
     disable_persistence: false,
-    disable_cookie: false,
+    disable_cookie: undefined,
     disable_surveys: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -176,8 +176,30 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    process_person: 'always',
+    process_person: undefined,
+    person_profiles: 'always',
 })
+
+export const configRenames = (config: Partial<PostHogConfig>): Partial<PostHogConfig> => {
+    const renames: Partial<PostHogConfig> = {}
+    if (!_isUndefined(config.process_person)) {
+        renames.person_profiles = config.process_person
+    }
+    if (!_isUndefined(config.xhr_headers)) {
+        renames.request_headers = config.xhr_headers
+    }
+    if (!_isUndefined(config.cookie_name)) {
+        renames.persistence_name = config.cookie_name
+    }
+    if (!_isUndefined(config.disable_cookie)) {
+        renames.disable_persistence = config.disable_cookie
+    }
+    if (!_isUndefined(config.property_blacklist)) {
+        renames.property_denylist = config.property_blacklist
+    }
+    // on_xhr_error is not present, as the type is different to on_request_error
+    return renames
+}
 
 class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
@@ -338,10 +360,8 @@ export class PostHog {
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
 
-        config.request_headers = config.request_headers || config.xhr_headers
-
         this.set_config(
-            _extend({}, defaultConfig(), config, {
+            _extend({}, defaultConfig(), configRenames(config), config, {
                 name: name,
                 token: token,
             })
@@ -1649,11 +1669,8 @@ export class PostHog {
     set_config(config: Partial<PostHogConfig>): void {
         const oldConfig = { ...this.config }
         if (_isObject(config)) {
-            _extend(this.config, config)
+            _extend(this.config, configRenames(config), config)
 
-            if (!this.config.persistence_name) {
-                this.config.persistence_name = this.config.cookie_name
-            }
             if (!this.config.disable_persistence) {
                 this.config.disable_persistence = this.config.disable_cookie
             }
@@ -1794,8 +1811,8 @@ export class PostHog {
 
     _hasPersonProcessing(): boolean {
         return !(
-            this.config.process_person === 'never' ||
-            (this.config.process_person === 'identified_only' &&
+            this.config.person_profiles === 'never' ||
+            (this.config.person_profiles === 'identified_only' &&
                 !this._isIdentified() &&
                 _isEmptyObject(this.getGroups()) &&
                 !this.persistence?.props?.[ALIAS_ID_KEY] &&
@@ -1809,7 +1826,7 @@ export class PostHog {
      * @param function_name
      */
     _requirePersonProcessing(function_name: string): boolean {
-        if (this.config.process_person === 'never') {
+        if (this.config.person_profiles === 'never') {
             logger.error(
                 function_name + ' was called, but process_person is set to "never". This call will be ignored.'
             )

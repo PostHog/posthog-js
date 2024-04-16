@@ -36,25 +36,37 @@ describe('person processing', () => {
         const onCapture = jest.fn()
         const posthog = await createPosthogInstance(token, {
             _onCapture: onCapture,
-            process_person: processPerson,
+            person_profiles: processPerson,
         })
         return { token, onCapture, posthog }
     }
 
     describe('init', () => {
-        it("should default to 'always' process_person", async () => {
+        it("should default to 'always' person_profiles", async () => {
             // arrange
             const token = uuidv7()
 
             // act
             const posthog = await createPosthogInstance(token, {
-                process_person: undefined,
+                person_profiles: undefined,
             })
 
             // assert
-            expect(posthog.config.process_person).toEqual('always')
+            expect(posthog.config.person_profiles).toEqual('always')
         })
-        it('should read process_person from init config', async () => {
+        it('should read person_profiles from init config', async () => {
+            // arrange
+            const token = uuidv7()
+
+            // act
+            const posthog = await createPosthogInstance(token, {
+                person_profiles: 'never',
+            })
+
+            // assert
+            expect(posthog.config.person_profiles).toEqual('never')
+        })
+        it('should read person_profiles from init config as process_person', async () => {
             // arrange
             const token = uuidv7()
 
@@ -64,7 +76,20 @@ describe('person processing', () => {
             })
 
             // assert
-            expect(posthog.config.process_person).toEqual('never')
+            expect(posthog.config.person_profiles).toEqual('never')
+        })
+        it('should prefer the correct name to the deprecated one', async () => {
+            // arrange
+            const token = uuidv7()
+
+            // act
+            const posthog = await createPosthogInstance(token, {
+                process_person: 'never',
+                person_profiles: 'identified_only',
+            })
+
+            // assert
+            expect(posthog.config.person_profiles).toEqual('identified_only')
         })
     })
 
