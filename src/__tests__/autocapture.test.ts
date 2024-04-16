@@ -920,6 +920,7 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             document.title = 'test page'
             posthog.config.mask_all_element_attributes = false
+            autocapture.afterDecideResponse({} as DecideResponse)
         })
 
         it('should capture click events', () => {
@@ -943,7 +944,12 @@ describe('Autocapture system', () => {
             jest.spyOn(autocapture, '_addDomEventHandlers')
         })
 
-        it('should be enabled before the decide response', () => {
+        it('should not be enabled before the decide response', () => {
+            expect(autocapture.isEnabled).toBe(false)
+        })
+
+        it('should be enabled before the decide response if decide is disabled', () => {
+            posthog.config.advanced_disable_decide = true
             expect(autocapture.isEnabled).toBe(true)
         })
 
