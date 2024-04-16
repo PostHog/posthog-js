@@ -1,4 +1,4 @@
-// Same as loader-globals.ts except includes rrweb scripts.
+// Same as loader-array.ts except it uses PostHogCore instead of PostHogExtended
 import { POSTHOG_INSTANCES, PostHogCore } from '../posthog-core'
 import { init_from_snippet } from './loader-helpers'
 
