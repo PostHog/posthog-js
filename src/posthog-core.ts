@@ -474,7 +474,7 @@ export class PostHog {
 
         this.sessionRecording?.afterDecideResponse(response)
         this.autocapture?.afterDecideResponse(response)
-
+        this.surveys?.afterDecideResponse(response)
     }
 
     _loaded(): void {

@@ -70,8 +70,6 @@ export class Decide {
 
         this.instance._afterDecideResponse(response)
 
-        // TODO: Need to change this to be able to be more reactive 
-
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         const exceptionAutoCaptureAddedToWindow = window?.extendPostHogWithExceptionAutoCapture
