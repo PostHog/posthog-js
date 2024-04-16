@@ -4,11 +4,11 @@
     "private": true,
     "scripts": {
         "clean-react": "cd ../../react && rm -rf ./node_modules/",
-        "dev": "pnpm run clean-react && next dev",
+        "dev": "pnpm run link-posthog-js && pnpm run clean-react && next dev",
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
-        "yalc-dev": "pnpm run -C ../.. yalc-publish && rm -r .next/cache .yalc/posthog-js && yalc add posthog-js && pnpm dev"
+        "link-posthog-js": "cd ../../ && pnpm link --global && cd playground/nextjs && pnpm link --global posthog-js",
     },
     "dependencies": {
         "@lottiefiles/react-lottie-player": "^3.5.3",
