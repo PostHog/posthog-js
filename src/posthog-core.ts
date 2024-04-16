@@ -194,11 +194,11 @@ export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostH
     // the original config takes priority over the renames
     const newConfig = _extend({}, renames, origConfig)
 
+    // merge property_blacklist into property_denylist
     if (_isArray(origConfig.property_blacklist)) {
         if (_isUndefined(origConfig.property_denylist)) {
             newConfig.property_denylist = origConfig.property_blacklist
         } else if (_isArray(origConfig.property_denylist)) {
-            // merge property_denylist and property_blacklist
             newConfig.property_denylist = [...origConfig.property_blacklist, ...origConfig.property_denylist]
         } else {
             logger.error('Invalid value for property_denylist config: ' + origConfig.property_denylist)
