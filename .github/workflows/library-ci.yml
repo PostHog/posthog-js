@@ -85,7 +85,6 @@ jobs:
                   cache: 'pnpm'
             - run: pnpm install
 
-            - run: |
-                  pnpm prettier --check
-                  pnpm lint
-                  pnpm tsc -b
+            - run: pnpm prettier --check
+            - run: pnpm lint
+            - run: pnpm tsc -b

@@ -517,6 +517,7 @@ function extractElements(elements: Properties[]): PHElement[] {
             nth_of_type: el['nth_of_type'],
             attributes: {} as { [id: string]: any },
         }
+
         _entries(el)
             .filter(([key]) => key.indexOf('attr__') === 0)
             .forEach(([key, value]) => (response.attributes[key] = value))

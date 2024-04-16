@@ -99,6 +99,7 @@ export interface PostHogConfig {
     disable_persistence: boolean
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie: boolean
+    disable_surveys: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean
@@ -148,10 +149,10 @@ export interface PostHogConfig {
 
     /** You can control whether events from PostHog-js have person processing enabled with the `process_person` config setting. There are three options:
      * - `process_person: 'always'` _(default)_ - we will process persons data for all events
-     * - `process_person: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonyomous to identified. All events (including `$identify`) will be sent with `$process_person: False`.
-     * - `process_person: 'identified_only'` - we will only process persons when you call `posthog.identify([distinct_id])`. Anonymous users won't get person profiles.
+     * - `process_person: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person: False`.
+     * - `process_person: 'identified_only'` - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.
      */
-    __preview_process_person?: 'always' | 'never' | 'identified_only'
+    process_person?: 'always' | 'never' | 'identified_only'
 
     /** Client side rate limiting */
     rate_limiting?: {
@@ -185,7 +186,7 @@ export interface SessionRecordingOptions {
     ignoreClass?: string
     maskTextClass?: string | RegExp
     maskTextSelector?: string | null
-    maskTextFn?: ((text: string) => string) | null
+    maskTextFn?: ((text: string, element: HTMLElement | null) => string) | null
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
@@ -261,10 +262,6 @@ export type FlagVariant = { flag: string; variant: string }
 
 export interface DecideResponse {
     supportedCompression: Compression[]
-    config: {
-        enable_collect_everything: boolean
-    }
-    custom_properties: AutoCaptureCustomProperty[] // TODO: delete, not sent
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
@@ -309,13 +306,6 @@ export type FeatureFlagsCallback = (
         errorsLoading?: boolean
     }
 ) => void
-
-// TODO: delete custom_properties after changeless typescript refactor
-export interface AutoCaptureCustomProperty {
-    name: string
-    css_selector: string
-    event_selectors: string[]
-}
 
 export interface GDPROptions {
     capture?: (

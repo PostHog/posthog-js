@@ -122,6 +122,13 @@ export const _info = {
         return convertToURL(document.referrer)?.host || '$direct'
     },
 
+    referrerInfo: function (): Record<string, any> {
+        return {
+            $referrer: this.referrer(),
+            $referring_domain: this.referringDomain(),
+        }
+    },
+
     properties: function (): Properties {
         if (!userAgent) {
             return {}

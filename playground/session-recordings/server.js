@@ -15,7 +15,6 @@ app.listen(port, () => {
 
 app.post('/decide', function (req, res) {
     res.json({
-        config: { enable_collect_everything: false },
         editorParams: {},
         featureFlags: ['session-recording-player'],
         isAuthenticated: false,
