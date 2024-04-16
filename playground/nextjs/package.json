@@ -8,7 +8,7 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
-        "link-posthog-js": "cd ../../ && pnpm link --global && cd playground/nextjs && pnpm link --global posthog-js",
+        "link-posthog-js": "cd ../../ && pnpm link --global && cd playground/nextjs && pnpm link --global posthog-js"
     },
     "dependencies": {
         "@lottiefiles/react-lottie-player": "^3.5.3",
