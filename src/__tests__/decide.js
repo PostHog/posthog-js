@@ -3,7 +3,6 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { checkScriptsForSrc } from './helpers/script-utils'
 
-
 const expectDecodedSendRequest = (send_request, data, noCompression) => {
     const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
 
@@ -20,7 +19,6 @@ const expectDecodedSendRequest = (send_request, data, noCompression) => {
         timeout: undefined,
     })
 }
-
 
 describe('Decide', () => {
     given('decide', () => new Decide(given.posthog))

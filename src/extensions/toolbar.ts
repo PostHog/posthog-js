@@ -1,6 +1,6 @@
 import { _register_event, _try, loadScript } from '../utils'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, ToolbarParams } from '../types'
+import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { logger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'

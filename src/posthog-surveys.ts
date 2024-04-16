@@ -29,7 +29,7 @@ export class PostHogSurveys {
 
     startOrStopIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
-    
+
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
                 if (err) {
