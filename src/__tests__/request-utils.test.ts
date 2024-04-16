@@ -1,4 +1,4 @@
-import { _getQueryParam, _formDataToQuery, isUrlMatchingRegex } from '../utils/request-utils'
+import { getQueryParam, formDataToQuery, isUrlMatchingRegex } from '../utils/request-utils'
 
 describe('request utils', () => {
     describe('_HTTPBuildQuery', () => {
@@ -14,11 +14,11 @@ describe('request utils', () => {
             ['handles empty form data', new FormData(), ''],
             ['handles form data', exampleFormData, 'x=y&a=b'],
         ])('%s', (_name, formData, expected) => {
-            expect(_formDataToQuery(formData)).toEqual(expected)
+            expect(formDataToQuery(formData)).toEqual(expected)
         })
     })
 
-    describe('_getQueryParam', () => {
+    describe('getQueryParam', () => {
         test.each([
             ['gets query param', '?name=something', 'name', 'something'],
             [
@@ -44,7 +44,7 @@ describe('request utils', () => {
             ['gets param when no match and there are params', '/?test=123', 'name', ''],
             ['gets param when no match and there are params with trailing slash', '/?test=123', 'name', ''],
         ])('%s', (_name, url, param, expected) => {
-            expect(_getQueryParam(`https://example.com${url}`, param)).toEqual(expected)
+            expect(getQueryParam(`https://example.com${url}`, param)).toEqual(expected)
         })
     })
 
