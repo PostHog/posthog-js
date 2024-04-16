@@ -1,12 +1,3 @@
-import {
-    _copyAndTruncateStrings,
-    _each,
-    _eachArray,
-    _extend,
-    _includes,
-    _register_event,
-    _safewrap_class,
-} from './utils'
 import { SESSION_RECORDING_IS_SAMPLED } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Toolbar } from './extensions/toolbar'
@@ -17,19 +8,8 @@ import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PostHogSurveys } from './posthog-surveys'
 import { SurveyCallback } from './posthog-surveys-types'
-import {
-    _isArray,
-    _isEmptyObject,
-    _isEmptyString,
-    _isFunction,
-    _isNumber,
-    _isObject,
-    _isString,
-    _isUndefined,
-} from './utils/type-utils'
-import { _info } from './utils/event-utils'
+import { _isObject, _isString, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { _isBlockedUA } from './utils/blocked-uas'
 import { Autocapture } from './autocapture'
 import { POSTHOG_INSTANCES, PostHogCore } from './posthog-core'
 

@@ -5,7 +5,6 @@ import {
     _eachArray,
     _extend,
     _includes,
-    _register_event,
     _safewrap_class,
     isCrossDomainCookie,
     isDistinctIdStringLike,
@@ -58,6 +57,7 @@ import { SessionPropsManager } from './session-props'
 import { _isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
+import { onDomLoaded } from './utils/dom-loaded'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -95,7 +95,8 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 // IE<10 does not support cross-origin XHR's but script tags
 // with defer won't block window.onload; ENQUEUE_REQUESTS
 // should only be true for Opera<12
-const ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
+const SUPPORTS_ENQUEUE_REQUESTS =
+    !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
@@ -190,6 +191,7 @@ export class PostHogCore {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
+    __dom_loaded: boolean
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
 
@@ -202,6 +204,7 @@ export class PostHogCore {
         this.decideEndpointWasHit = false
         this.segmentIntegration = () => createSegmentIntegration(this)
         this.__request_queue = []
+        this.__dom_loaded = false
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
 
@@ -388,6 +391,8 @@ export class PostHogCore {
             this._loaded()
         }
 
+        onDomLoaded(() => this._dom_loaded())
+
         if (_isFunction(this.config._onCapture)) {
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
@@ -460,6 +465,8 @@ export class PostHogCore {
     }
 
     _dom_loaded(): void {
+        this.__dom_loaded = true
+
         if (!this.has_opted_out_capturing()) {
             _eachArray(this.__request_queue, (item) => this._send_retriable_request(item))
         }
@@ -489,7 +496,7 @@ export class PostHogCore {
             return
         }
 
-        if (ENQUEUE_REQUESTS) {
+        if (SUPPORTS_ENQUEUE_REQUESTS && !this.__dom_loaded) {
             this.__request_queue.push(options)
             return
         }

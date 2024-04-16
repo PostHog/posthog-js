@@ -1,57 +1,11 @@
-import { assignableWindow, document, userAgent, window } from '../utils/globals'
-import { _copyAndTruncateStrings, _each, _eachArray, _extend, _register_event } from '../utils'
-import {
-    _isArray,
-    _isEmptyObject,
-    _isEmptyString,
-    _isFunction,
-    _isNumber,
-    _isObject,
-    _isString,
-    _isUndefined,
-} from '../utils/type-utils'
+import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
 type PostHogInstancesType = Record<string, PostHogCore>
 const PRIMARY_INSTANCE_NAME = 'posthog'
-import { SUPPORTS_REQUEST } from '../request'
 import { PostHogCore } from '../posthog-core'
-
-let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
-
-const add_dom_loaded_handler = function (instances: PostHogInstancesType) {
-    // Cross browser DOM Loaded support
-    function dom_loaded_handler() {
-        // function flag since we only want to execute this once
-        if ((dom_loaded_handler as any).done) {
-            return
-        }
-        ;(dom_loaded_handler as any).done = true
-
-        ENQUEUE_REQUESTS = false
-
-        _each(instances, function (inst: any) {
-            inst._dom_loaded()
-        })
-    }
-
-    if (document?.addEventListener) {
-        if (document.readyState === 'complete') {
-            // safari 4 can fire the DOMContentLoaded event before loading all
-            // external JS (including this file). you will see some copypasta
-            // on the internet that checks for 'complete' and 'loaded', but
-            // 'loaded' is an IE thing
-            dom_loaded_handler()
-        } else {
-            document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
-        }
-    }
-
-    // fallback handler, always will work
-    if (window) {
-        _register_event(window, 'load', dom_loaded_handler, true)
-    }
-}
+import { _each } from '../utils'
+import { _isArray } from '../utils/type-utils'
 
 export function init_from_snippet(PostHogCls: new () => PostHogCore, instances: PostHogInstancesType): void {
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHogCls())
@@ -109,14 +63,10 @@ export function init_from_snippet(PostHogCls: new () => PostHogCore, instances: 
     }
 
     assignableWindow['posthog'] = posthogMain
-
-    add_dom_loaded_handler(instances)
 }
 
 export function init_as_module(PostHogCls: new () => PostHogCore, instances: PostHogInstancesType): PostHogCore {
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHogCls())
-
-    add_dom_loaded_handler(instances)
 
     return posthogMain
 }
