@@ -122,11 +122,12 @@ export class PostHogExtended extends PostHogCore {
     _init(token: string, config: Partial<PostHogConfig> = {}, name?: string): PostHogExtended {
         super._init(token, config, name)
 
-        // TODO: Detect if the parent needed loading...
-        this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startRecordingIfEnabled()
-        this.autocapture = new Autocapture(this)
-        this.toolbar.maybeLoadToolbar()
+        if (this.__loaded) {
+            this.sessionRecording = new SessionRecording(this)
+            this.sessionRecording.startRecordingIfEnabled()
+            this.autocapture = new Autocapture(this)
+            this.toolbar.maybeLoadToolbar()
+        }
 
         return this
     }
