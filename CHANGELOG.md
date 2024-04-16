@@ -1,3 +1,8 @@
+## 1.124.0 - 2024-04-16
+
+- Update docs on versioning (#1142)
+- feat: Update support for segment analytics (#1119)
+
 ## 1.123.1 - 2024-04-16
 
 - feat: Update support for segment analytics (#1119)
