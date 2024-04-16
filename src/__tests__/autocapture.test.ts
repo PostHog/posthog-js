@@ -368,6 +368,8 @@ describe('Autocapture system', () => {
     describe('_captureEvent', () => {
         beforeEach(() => {
             posthog.config.rageclick = true
+            // Trigger proper enabling
+            autocapture.afterDecideResponse({} as DecideResponse)
         })
 
         it('should capture rageclick', () => {
@@ -924,7 +926,6 @@ describe('Autocapture system', () => {
         })
 
         it('should capture click events', () => {
-            autocapture['_addDomEventHandlers']()
             const button = document.createElement('button')
             document.body.appendChild(button)
             simulateClick(button)
