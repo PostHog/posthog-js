@@ -35,7 +35,7 @@ describe('Error conversion', () => {
         const expected: ErrorProperties = {
             $exception_type: 'InternalError',
             $exception_message: 'but somehow still a string',
-            $exceptionis_synthetic: true,
+            $exception_is_synthetic: true,
         }
         expect(errorToProperties(['Uncaught exception: InternalError: but somehow still a string'])).toEqual(expected)
     })
@@ -44,7 +44,7 @@ describe('Error conversion', () => {
         const expected: ErrorProperties = {
             $exception_type: 'Error',
             $exception_message: 'Non-Error exception captured with keys: foo, string',
-            $exceptionis_synthetic: true,
+            $exception_is_synthetic: true,
         }
         expect(errorToProperties([{ string: 'candidate', foo: 'bar' } as unknown as Event])).toEqual(expected)
     })
@@ -53,7 +53,7 @@ describe('Error conversion', () => {
         const expected: ErrorProperties = {
             $exception_type: 'MouseEvent',
             $exception_message: 'Non-Error exception captured with keys: isTrusted',
-            $exceptionis_synthetic: true,
+            $exception_is_synthetic: true,
         }
         const event = new MouseEvent('click', { bubbles: true, cancelable: true, composed: true })
         expect(errorToProperties([event])).toEqual(expected)
@@ -124,7 +124,7 @@ describe('Error conversion', () => {
     it('can convert source, lineno, colno', () => {
         const expected: ErrorProperties = {
             $exception_colno: 200,
-            $exceptionis_synthetic: true,
+            $exception_is_synthetic: true,
             $exception_lineno: 12,
             $exception_message: 'string candidate',
             $exception_source: 'a source',

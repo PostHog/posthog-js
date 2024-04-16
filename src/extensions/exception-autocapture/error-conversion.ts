@@ -34,7 +34,7 @@ export interface ErrorProperties {
     $exception_lineno?: number
     $exception_colno?: number
     $exception_DOMException_code?: string
-    $exceptionis_synthetic?: boolean
+    $exception_is_synthetic?: boolean
     $exception_stack_trace_raw?: string
     $exception_handled?: boolean
     $exception_personURL?: string
@@ -173,12 +173,12 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         // group these by using the keys available on the object
         const objectException = candidate as Record<string, unknown>
         errorProperties = errorPropertiesFromObject(objectException)
-        errorProperties.$exceptionis_synthetic = true
+        errorProperties.$exception_is_synthetic = true
     } else {
         // If none of previous checks were valid, then it must be a string
         errorProperties.$exception_type = errorProperties.$exception_type || 'Error'
         errorProperties.$exception_message = errorProperties.$exception_message || candidate
-        errorProperties.$exceptionis_synthetic = true
+        errorProperties.$exception_is_synthetic = true
     }
 
     return {
