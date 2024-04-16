@@ -792,7 +792,7 @@ export class PostHog {
         }
 
         // set defaults
-        const starttimestamp = this.persistence.remove_event_timer(event_name)
+        const startTimestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
         properties['token'] = this.config.token
 
@@ -846,8 +846,8 @@ export class PostHog {
         }
 
         // set $duration if time_event was previously called for this event
-        if (!isUndefined(starttimestamp)) {
-            const duration_in_ms = new Date().getTime() - starttimestamp
+        if (!isUndefined(startTimestamp)) {
+            const duration_in_ms = new Date().getTime() - startTimestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
 
