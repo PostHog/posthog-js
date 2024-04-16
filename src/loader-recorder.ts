@@ -273,7 +273,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 username?: string | null,
                 password?: string | null
             ) {
-                // because this function is returned in its actual context `this` is_ an XMLHttpRequest
+                // because this function is returned in its actual context `this` _is_ an XMLHttpRequest
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
                 const xhr = this as XMLHttpRequest
