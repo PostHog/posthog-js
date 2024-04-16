@@ -402,25 +402,24 @@ describe('surveys', () => {
         })
     })
 
-    describe("decide response", () => {
+    describe('decide response', () => {
         it('should not load when decide response says no', () => {
-            surveys.afterDecideResponse({ surveys: false} as DecideResponse)
+            surveys.afterDecideResponse({ surveys: false } as DecideResponse)
             // Make sure the script is not loaded
-            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
+            expect(checkScriptsForSrc('https://us-assets.i.posthog.com/static/surveys.js', true)).toBe(true)
         })
 
         it('should load when decide response says so', () => {
             surveys.afterDecideResponse({ surveys: true } as DecideResponse)
             // Make sure the script is loaded
-            expect(checkScriptsForSrc('https://test.com/static/surveys.js')).toBe(true)
+            expect(checkScriptsForSrc('https://us-assets.i.posthog.com/static/surveys.js')).toBe(true)
         })
 
         it('should not load when config says no', () => {
-
             config.disable_surveys = true
             surveys.afterDecideResponse({ surveys: true } as DecideResponse)
             // Make sure the script is not loaded
-            expect(checkScriptsForSrc('https://test.com/static/surveys.js', true)).toBe(true)
+            expect(checkScriptsForSrc('https://us-assets.i.posthog.com/static/surveys.js', true)).toBe(true)
         })
     })
 })
