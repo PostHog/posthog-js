@@ -121,7 +121,6 @@ export const defaultConfig = (): PostHogConfig => ({
     cross_subdomain_cookie: isCrossDomainCookie(document?.location),
     persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
-    cookie_name: '',
     loaded: __NOOP,
     store_google: true,
     custom_campaign_params: [],
@@ -135,7 +134,6 @@ export const defaultConfig = (): PostHogConfig => ({
     upgrade: false,
     disable_session_recording: false,
     disable_persistence: false,
-    disable_cookie: undefined,
     disable_surveys: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -146,8 +144,6 @@ export const defaultConfig = (): PostHogConfig => ({
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
-    // Deprecated, use property_denylist instead.
-    property_blacklist: [],
     property_denylist: [],
     respect_dnt: false,
     sanitize_properties: null,
@@ -176,7 +172,6 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    process_person: undefined,
     person_profiles: 'always',
 })
 
@@ -361,7 +356,7 @@ export class PostHog {
         this._triggered_notifs = []
 
         this.set_config(
-            _extend({}, defaultConfig(), configRenames(config), config, {
+            _extend({}, defaultConfig(), config, {
                 name: name,
                 token: token,
             })
@@ -1670,10 +1665,6 @@ export class PostHog {
         const oldConfig = { ...this.config }
         if (_isObject(config)) {
             _extend(this.config, configRenames(config), config)
-
-            if (!this.config.disable_persistence) {
-                this.config.disable_persistence = this.config.disable_cookie
-            }
 
             this.persistence?.update_config(this.config, oldConfig)
             this.sessionPersistence =
