@@ -916,6 +916,37 @@ describe('Autocapture system', () => {
                 'a.test-class.test-class2.test-class3.test-class4.test-class5:nth-child="1"nth-of-type="1"href="http://test.com"attr__href="http://test.com"attr__class="test-class test-class2 test-class3 test-class4 test-class5";span:nth-child="1"nth-of-type="1"'
             )
         })
+
+        it('correctly captures text when multiple button children elements', () => {
+            const parent = document.createElement('div')
+            const button = document.createElement('button')
+            const image = document.createElement('img')
+            const textOne = document.createElement('span')
+            textOne.textContent = 'the button text'
+            const textTwo = document.createElement('span')
+            textTwo.textContent = `
+            with more
+            <!-- -->
+            info
+            `
+            parent.appendChild(button)
+            button.appendChild(image)
+            button.appendChild(textOne)
+            button.appendChild(textTwo)
+
+            const e = {
+                target: image,
+                type: 'click',
+            } as unknown as MouseEvent
+
+            autocapture['_captureEvent'](e)
+
+            expect(captureMock).toHaveBeenCalledTimes(1)
+            const props = captureMock.mock.calls[0][1]
+            const capturedButton = props['$elements'][1]
+            expect(capturedButton['tag_name']).toBe('button')
+            expect(capturedButton['$el_text']).toBe('the button text with more <!-- --> info')
+        })
     })
 
     describe('_addDomEventHandlers', () => {
