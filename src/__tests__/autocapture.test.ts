@@ -943,7 +943,7 @@ describe('Autocapture system', () => {
             const props = captureMock.mock.calls[0][1]
             const capturedButton = props['$elements'][1]
             expect(capturedButton['tag_name']).toBe('button')
-            expect(capturedButton['$el_text']).toBe('the button text more <!-- --> info')
+            expect(capturedButton['$el_text']).toBe('the button text with more <!-- --> info')
         })
     })
 
