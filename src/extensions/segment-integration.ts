@@ -19,8 +19,22 @@
 import { PostHog } from '../posthog-core'
 import { logger } from '../utils/logger'
 
+import { uuidv7 } from '../uuidv7'
+import { _isFunction } from '../utils/type-utils'
+import { USER_STATE } from '../constants'
+
+export type SegmentUser = {
+    anonymousId(): string | undefined
+    id(): string | undefined
+}
+
+export type SegmentAnalytics = {
+    user: () => SegmentUser | Promise<SegmentUser>
+    register: (integration: SegmentPlugin) => Promise<void>
+}
+
 // Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
-interface SegmentPluginContext {
+interface SegmentContext {
     event: {
         event: string
         userId?: string
@@ -29,28 +43,33 @@ interface SegmentPluginContext {
     }
 }
 
+type SegmentFunction = (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+
 interface SegmentPlugin {
     name: string
     version: string
     type: 'enrichment'
     isLoaded: () => boolean
-    load: (ctx: SegmentPluginContext, instance: any, config?: any) => Promise<unknown>
-    unload?: (ctx: SegmentPluginContext, instance: any) => Promise<unknown> | unknown
+    load: (ctx: SegmentContext, instance: any, config?: any) => Promise<unknown>
+    unload?: (ctx: SegmentContext, instance: any) => Promise<unknown> | unknown
     ready?: () => Promise<unknown>
-    track?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    identify?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    page?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    group?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    alias?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
-    screen?: (ctx: SegmentPluginContext) => Promise<SegmentPluginContext> | SegmentPluginContext
+    track?: SegmentFunction
+    identify?: SegmentFunction
+    page?: SegmentFunction
+    group?: SegmentFunction
+    alias?: SegmentFunction
+    screen?: SegmentFunction
 }
 
-export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
+const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     if (!Promise || !Promise.resolve) {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }
 
-    const enrichEvent = (ctx: SegmentPluginContext, eventName: string) => {
+    const enrichEvent = (ctx: SegmentContext, eventName: string | undefined) => {
+        if (!eventName) {
+            return ctx
+        }
         if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
             // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
             posthog.reset()
@@ -62,7 +81,7 @@ export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
             posthog.reloadFeatureFlags()
         }
 
-        const additionalProperties = posthog._calculate_event_properties(eventName, ctx.event.properties)
+        const additionalProperties = posthog._calculate_event_properties(eventName, ctx.event.properties ?? {})
         ctx.event.properties = Object.assign({}, additionalProperties, ctx.event.properties)
         return ctx
     }
@@ -80,4 +99,50 @@ export const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         identify: (ctx) => enrichEvent(ctx, '$identify'),
         screen: (ctx) => enrichEvent(ctx, '$screen'),
     }
+}
+
+function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
+    const segment = posthog.config.segment
+    if (!segment) {
+        return done()
+    }
+
+    const bootstrapUser = (user: SegmentUser) => {
+        // Use segments anonymousId instead
+        const getSegmentAnonymousId = () => user.anonymousId() || uuidv7()
+        posthog.config.get_device_id = getSegmentAnonymousId
+
+        // If a segment user ID exists, set it as the distinct_id
+        if (user.id()) {
+            posthog.register({
+                distinct_id: user.id(),
+                $device_id: getSegmentAnonymousId(),
+            })
+            posthog.persistence!.set_property(USER_STATE, 'identified')
+        }
+
+        done()
+    }
+
+    const segmentUser = segment.user()
+
+    // If segmentUser is a promise then we need to wait for it to resolve
+    if ('then' in segmentUser && _isFunction(segmentUser.then)) {
+        segmentUser.then((user) => bootstrapUser(user))
+    } else {
+        bootstrapUser(segmentUser as SegmentUser)
+    }
+}
+
+export function setupSegmentIntegration(posthog: PostHog, done: () => void) {
+    const segment = posthog.config.segment
+    if (!segment) {
+        return done()
+    }
+
+    setupPostHogFromSegment(posthog, () => {
+        segment.register(createSegmentIntegration(posthog)).then(() => {
+            done()
+        })
+    })
 }

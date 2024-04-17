@@ -1,3 +1,27 @@
+## 1.125.0 - 2024-04-16
+
+- Rename $process_person to $process_person_profile (#1143)
+
+## 1.124.0 - 2024-04-16
+
+- Update docs on versioning (#1142)
+- feat: Update support for segment analytics (#1119)
+
+## 1.123.1 - 2024-04-16
+
+- feat: Update support for segment analytics (#1119)
+
+## 1.123.0 - 2024-04-16
+
+- feat: Rename process_person config option to person_profiles (#1141)
+- feat: readonly event emitter (#1136)
+- fix: Allow capturing `aria-label` attribute on sensitive elements (#1118)
+- chore: Autocapture refactor (#1126)
+- chore: patch to fix broken worker (#1134)
+- fix: continue recording after reset (#1135)
+- fix: sampling typescript error (#1129)
+- chore: no only tests are allowed (#1128)
+
 ## 1.122.0 - 2024-04-15
 
 - feat: readonly event emitter (#1136)

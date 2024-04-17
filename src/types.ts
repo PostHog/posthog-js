@@ -1,5 +1,6 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
+import type { SegmentAnalytics } from './extensions/segment-integration'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -80,7 +81,8 @@ export interface PostHogConfig {
     cross_subdomain_cookie: boolean
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
     persistence_name: string
-    cookie_name: string
+    /** @deprecated - Use 'persistence_name' instead */
+    cookie_name?: string
     loaded: (posthog_instance: PostHog) => void
     store_google: boolean
     custom_campaign_params: string[]
@@ -98,7 +100,7 @@ export interface PostHogConfig {
     disable_session_recording: boolean
     disable_persistence: boolean
     /** @deprecated - use `disable_persistence` instead  */
-    disable_cookie: boolean
+    disable_cookie?: boolean
     disable_surveys: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
@@ -112,7 +114,7 @@ export interface PostHogConfig {
     opt_in_site_apps: boolean
     respect_dnt: boolean
     /** @deprecated - use `property_denylist` instead  */
-    property_blacklist: string[]
+    property_blacklist?: string[]
     property_denylist: string[]
     request_headers: { [header_name: string]: string }
     on_request_error?: (error: RequestResponse) => void
@@ -141,17 +143,19 @@ export interface PostHogConfig {
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
     bootstrap: BootstrapConfig
-    segment?: any
+    segment?: SegmentAnalytics
     __preview_send_client_session_params?: boolean
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
 
-    /** You can control whether events from PostHog-js have person processing enabled with the `process_person` config setting. There are three options:
-     * - `process_person: 'always'` _(default)_ - we will process persons data for all events
-     * - `process_person: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person: False`.
-     * - `process_person: 'identified_only'` - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.
+    /** You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting. There are three options:
+     * - `person_profiles: 'always'` _(default)_ - we will process persons data for all events
+     * - `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`.
+     * - `person_profiles: 'identified_only'` - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.
      */
+    person_profiles?: 'always' | 'never' | 'identified_only'
+    /** @deprecated - use `person_profiles` instead  */
     process_person?: 'always' | 'never' | 'identified_only'
 
     /** Client side rate limiting */

@@ -408,7 +408,7 @@ describe('posthog core', () => {
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
                 $is_identified: false,
-                $process_person: true,
+                $process_person_profile: true,
             })
         })
 
@@ -430,28 +430,15 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
-                $process_person: true,
+                $process_person_profile: true,
             })
         })
 
-        it('respects property_denylist and property_blacklist', () => {
-            given('property_denylist', () => ['$lib', 'persistent', '$is_identified'])
-            given('property_blacklist', () => ['token'])
+        it("can't deny or blacklist $process_person_profile", () => {
+            given('property_denylist', () => ['$process_person_profile'])
+            given('property_blacklist', () => ['$process_person_profile'])
 
-            expect(given.subject).toEqual({
-                event: 'prop',
-                distinct_id: 'abc',
-                $window_id: 'windowId',
-                $session_id: 'sessionId',
-                $process_person: true,
-            })
-        })
-
-        it("can't deny or blacklist $process_person", () => {
-            given('property_denylist', () => ['$process_person'])
-            given('property_blacklist', () => ['$process_person'])
-
-            expect(given.subject['$process_person']).toEqual(true)
+            expect(given.subject['$process_person_profile']).toEqual(true)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
@@ -482,7 +469,7 @@ describe('posthog core', () => {
             expect(given.subject).toEqual({
                 event_name: given.event_name,
                 token: 'testtoken',
-                $process_person: true,
+                $process_person_profile: true,
             })
         })
 
@@ -771,7 +758,7 @@ describe('posthog core', () => {
             given('overrides', () => ({
                 sessionRecording: {
                     afterDecideResponse: jest.fn(),
-                    startRecordingIfEnabled: jest.fn(),
+                    startIfEnabledOrStop: jest.fn(),
                 },
                 toolbar: {
                     maybeLoadToolbar: jest.fn(),

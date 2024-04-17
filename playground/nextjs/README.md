@@ -16,20 +16,12 @@ NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://
 ```
 
 ### Testing local changes to posthog-js
-Follow the instructions to set up YALC in the [root README](../../README.md).
 
-After you have run `yalc publish` in the root directory, run `yalc add posthog-js` in this directory, and then you can
-run `pnpm dev` to see your changes reflected in the demo project.
+Running `pnpm dev` will run an additional script that uses pnpm to link `posthog-js` locally to this package.
 
-There is a shorthand script for running these 3 commands
+If you need to provide environment variables, you can do so:
 
 ```bash
-pnpm yalc-dev
-```
-
-If you need to provide environment variables, you can do so, like
-
-```bash
-NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8000' pnpm yalc-dev
+NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8000' pnpm dev
 ```
 

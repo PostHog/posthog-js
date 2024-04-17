@@ -31,30 +31,42 @@ describe('person processing', () => {
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
     })
 
-    const setup = async (processPerson: 'always' | 'identified_only' | 'never' | undefined) => {
+    const setup = async (person_profiles: 'always' | 'identified_only' | 'never' | undefined) => {
         const token = uuidv7()
         const onCapture = jest.fn()
         const posthog = await createPosthogInstance(token, {
             _onCapture: onCapture,
-            process_person: processPerson,
+            person_profiles,
         })
         return { token, onCapture, posthog }
     }
 
     describe('init', () => {
-        it("should default to 'always' process_person", async () => {
+        it("should default to 'always' person_profiles", async () => {
             // arrange
             const token = uuidv7()
 
             // act
             const posthog = await createPosthogInstance(token, {
-                process_person: undefined,
+                person_profiles: undefined,
             })
 
             // assert
-            expect(posthog.config.process_person).toEqual('always')
+            expect(posthog.config.person_profiles).toEqual('always')
         })
-        it('should read process_person from init config', async () => {
+        it('should read person_profiles from init config', async () => {
+            // arrange
+            const token = uuidv7()
+
+            // act
+            const posthog = await createPosthogInstance(token, {
+                person_profiles: 'never',
+            })
+
+            // assert
+            expect(posthog.config.person_profiles).toEqual('never')
+        })
+        it('should read person_profiles from init config as process_person', async () => {
             // arrange
             const token = uuidv7()
 
@@ -64,7 +76,20 @@ describe('person processing', () => {
             })
 
             // assert
-            expect(posthog.config.process_person).toEqual('never')
+            expect(posthog.config.person_profiles).toEqual('never')
+        })
+        it('should prefer the correct name to the deprecated one', async () => {
+            // arrange
+            const token = uuidv7()
+
+            // act
+            const posthog = await createPosthogInstance(token, {
+                process_person: 'never',
+                person_profiles: 'identified_only',
+            })
+
+            // assert
+            expect(posthog.config.person_profiles).toEqual('identified_only')
         })
     })
 
@@ -95,12 +120,12 @@ describe('person processing', () => {
             // assert
             expect(jest.mocked(logger).error).toBeCalledTimes(0)
             const eventBeforeIdentify = onCapture.mock.calls[0]
-            expect(eventBeforeIdentify[1].properties.$process_person).toEqual(false)
+            expect(eventBeforeIdentify[1].properties.$process_person_profile).toEqual(false)
             const identifyCall = onCapture.mock.calls[1]
             expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].properties.$process_person).toEqual(true)
+            expect(identifyCall[1].properties.$process_person_profile).toEqual(true)
             const eventAfterIdentify = onCapture.mock.calls[2]
-            expect(eventAfterIdentify[1].properties.$process_person).toEqual(true)
+            expect(eventAfterIdentify[1].properties.$process_person_profile).toEqual(true)
         })
 
         it('should not change $person_process if process_person is always', async () => {
@@ -114,12 +139,12 @@ describe('person processing', () => {
             // assert
             expect(jest.mocked(logger).error).toBeCalledTimes(0)
             const eventBeforeIdentify = onCapture.mock.calls[0]
-            expect(eventBeforeIdentify[1].properties.$process_person).toEqual(true)
+            expect(eventBeforeIdentify[1].properties.$process_person_profile).toEqual(true)
             const identifyCall = onCapture.mock.calls[1]
             expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].properties.$process_person).toEqual(true)
+            expect(identifyCall[1].properties.$process_person_profile).toEqual(true)
             const eventAfterIdentify = onCapture.mock.calls[2]
-            expect(eventAfterIdentify[1].properties.$process_person).toEqual(true)
+            expect(eventAfterIdentify[1].properties.$process_person_profile).toEqual(true)
         })
 
         it('should include initial referrer info in identify event if identified_only', async () => {
@@ -261,12 +286,12 @@ describe('person processing', () => {
 
             // assert
             const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person).toEqual(false)
+            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
             const groupIdentify = onCapture.mock.calls[1]
             expect(groupIdentify[0]).toEqual('$groupidentify')
-            expect(groupIdentify[1].properties.$process_person).toEqual(true)
+            expect(groupIdentify[1].properties.$process_person_profile).toEqual(true)
             const eventAfterGroup = onCapture.mock.calls[2]
-            expect(eventAfterGroup[1].properties.$process_person).toEqual(true)
+            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
         })
 
         it('should not send the $groupidentify event if person_processing is set to never', async () => {
@@ -286,9 +311,9 @@ describe('person processing', () => {
 
             expect(onCapture).toBeCalledTimes(2)
             const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person).toEqual(false)
+            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
             const eventAfterGroup = onCapture.mock.calls[1]
-            expect(eventAfterGroup[1].properties.$process_person).toEqual(false)
+            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(false)
         })
     })
 
@@ -331,12 +356,12 @@ describe('person processing', () => {
 
             // assert
             const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person).toEqual(false)
+            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
             const set = onCapture.mock.calls[1]
             expect(set[0]).toEqual('$set')
-            expect(set[1].properties.$process_person).toEqual(true)
+            expect(set[1].properties.$process_person_profile).toEqual(true)
             const eventAfterGroup = onCapture.mock.calls[2]
-            expect(eventAfterGroup[1].properties.$process_person).toEqual(true)
+            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
         })
     })
 
@@ -352,12 +377,12 @@ describe('person processing', () => {
 
             // assert
             const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person).toEqual(false)
+            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
             const alias = onCapture.mock.calls[1]
             expect(alias[0]).toEqual('$create_alias')
-            expect(alias[1].properties.$process_person).toEqual(true)
+            expect(alias[1].properties.$process_person_profile).toEqual(true)
             const eventAfterGroup = onCapture.mock.calls[2]
-            expect(eventAfterGroup[1].properties.$process_person).toEqual(true)
+            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
         })
 
         it('should not send a $create_alias event if person processing is set to "never"', async () => {
