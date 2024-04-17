@@ -388,13 +388,15 @@ export class PostHog {
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
         this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startRecordingIfEnabled()
+        this.sessionRecording.startIfEnabledOrStop()
 
         if (!this.config.disable_scroll_properties) {
             this.pageViewManager.startMeasuringScrollPosition()
         }
 
         this.autocapture = new Autocapture(this)
+        this.autocapture.startIfEnabled()
+        this.surveys.loadIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -485,6 +487,10 @@ export class PostHog {
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
         }
+
+        this.sessionRecording?.afterDecideResponse(response)
+        this.autocapture?.afterDecideResponse(response)
+        this.surveys?.afterDecideResponse(response)
     }
 
     _loaded(): void {
@@ -1671,21 +1677,9 @@ export class PostHog {
                 Config.DEBUG = true
             }
 
-            if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
-                const disable_session_recording_has_changed =
-                    oldConfig.disable_session_recording !== config.disable_session_recording
-                // if opting back in, this config might not have changed
-                const try_enable_after_opt_in =
-                    !userOptedOut(this) && !config.disable_session_recording && !this.sessionRecording.started
-
-                if (disable_session_recording_has_changed || try_enable_after_opt_in) {
-                    if (config.disable_session_recording) {
-                        this.sessionRecording.stopRecording()
-                    } else {
-                        this.sessionRecording.startRecordingIfEnabled()
-                    }
-                }
-            }
+            this.sessionRecording?.startIfEnabledOrStop()
+            this.autocapture?.startIfEnabled()
+            this.surveys.loadIfEnabled()
         }
     }
 

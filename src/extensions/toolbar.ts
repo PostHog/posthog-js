@@ -1,6 +1,6 @@
 import { _register_event, _try, loadScript } from '../utils'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, ToolbarParams } from '../types'
+import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { logger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
@@ -20,22 +20,6 @@ export class Toolbar {
 
     constructor(instance: PostHog) {
         this.instance = instance
-    }
-
-    afterDecideResponse(response: DecideResponse) {
-        const toolbarParams: ToolbarParams =
-            response['toolbarParams'] ||
-            response['editorParams'] ||
-            (response['toolbarVersion'] ? { toolbarVersion: response['toolbarVersion'] } : {})
-        if (
-            response['isAuthenticated'] &&
-            toolbarParams['toolbarVersion'] &&
-            toolbarParams['toolbarVersion'].indexOf('toolbar') === 0
-        ) {
-            this.loadToolbar({
-                ...toolbarParams,
-            })
-        }
     }
 
     /**
