@@ -71,6 +71,8 @@ import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
 import { isBlockedUA } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { Heatmaps } from './heatmaps'
+import { ScrollManager } from './scroll-manager'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
 
@@ -233,6 +235,7 @@ export class PostHog {
     config: PostHogConfig
 
     rateLimiter: RateLimiter
+    scrollManager: ScrollManager
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
@@ -245,6 +248,7 @@ export class PostHog {
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
     autocapture?: Autocapture
+    heatmaps?: Heatmaps
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -277,6 +281,7 @@ export class PostHog {
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
+        this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter(this)
@@ -392,12 +397,15 @@ export class PostHog {
         this.sessionRecording.startIfEnabledOrStop()
 
         if (!this.config.disable_scroll_properties) {
-            this.pageViewManager.startMeasuringScrollPosition()
+            this.scrollManager.startMeasuringScrollPosition()
         }
 
         this.autocapture = new Autocapture(this)
         this.autocapture.startIfEnabled()
         this.surveys.loadIfEnabled()
+
+        this.heatmaps = new Heatmaps(this)
+        this.heatmaps.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -762,6 +770,13 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
+        if (!options?._noHeatmaps) {
+            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
+            if (heatmapsBuffer) {
+                data.properties['$heatmap_data'] = heatmapsBuffer
+            }
+        }
+
         const setProperties = options?.$set
         if (setProperties) {
             data.$set = options?.$set
@@ -859,14 +874,6 @@ export class PostHog {
             properties['title'] = document.title
         }
 
-        if (event_name === '$performance_event') {
-            const persistenceProps = this.persistence.properties()
-            // Early exit for $performance_event as we only need session and $current_url
-            properties['distinct_id'] = persistenceProps.distinct_id
-            properties['$current_url'] = infoProperties.$current_url
-            return properties
-        }
-
         // set $duration if time_event was previously called for this event
         if (!isUndefined(startTimestamp)) {
             const duration_in_ms = new Date().getTime() - startTimestamp
@@ -888,7 +895,7 @@ export class PostHog {
         // update properties with pageview info and super-properties
         properties = extend(
             {},
-            Info.properties(),
+            infoProperties,
             this.persistence.properties(),
             this.sessionPersistence.properties(),
             properties
@@ -1685,6 +1692,7 @@ export class PostHog {
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
+            this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
         }
     }

@@ -173,7 +173,7 @@ function checkIfElementTreePassesCSSSelectorAllowList(
     return false
 }
 
-function getParentElement(curEl: Element): Element | false {
+export function getParentElement(curEl: Element): Element | false {
     const parentNode = curEl.parentNode
     if (!parentNode || !isElementNode(parentNode)) return false
     return parentNode
