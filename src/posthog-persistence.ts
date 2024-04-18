@@ -9,8 +9,6 @@ import {
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_REFERRER_INFO,
     PERSISTENCE_RESERVED_PROPERTIES,
-    POSTHOG_QUOTA_LIMITED,
-    USER_STATE,
 } from './constants'
 
 import { _isObject, _isUndefined } from './utils/type-utils'
@@ -347,21 +345,12 @@ export class PostHogPersistence {
         return timestamp
     }
 
-    get_user_state(): 'anonymous' | 'identified' {
-        return this.props[USER_STATE] || 'anonymous'
+    get_property(prop: string): any {
+        return this.props[prop]
     }
 
-    set_user_state(state: 'anonymous' | 'identified'): void {
-        this.props[USER_STATE] = state
-        this.save()
-    }
-
-    get_quota_limits(): Record<string, number> {
-        return this.props[POSTHOG_QUOTA_LIMITED] || {}
-    }
-
-    set_quota_limits(state: Record<string, number>): void {
-        this.props[POSTHOG_QUOTA_LIMITED] = state
+    set_property(prop: string, to: any): void {
+        this.props[prop] = to
         this.save()
     }
 }
