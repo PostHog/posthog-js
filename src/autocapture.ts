@@ -41,7 +41,6 @@ export class Autocapture {
     _isDisabledServerSide: boolean | null = null
     rageclicks = new RageClick()
     _elementsChainAsString = false
-    _decideResponse?: DecideResponse
 
     constructor(instance: PostHog) {
         this.instance = instance

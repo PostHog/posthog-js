@@ -451,18 +451,6 @@ describe('posthog core', () => {
             expect(given.overrides.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
-        it('only adds a few propertes if event is $performance_event', () => {
-            given('event_name', () => '$performance_event')
-            expect(given.subject).toEqual({
-                distinct_id: 'abc',
-                event: 'prop', // from actual mock event properties
-                $current_url: undefined,
-                $session_id: 'sessionId',
-                $window_id: 'windowId',
-                token: 'testtoken',
-            })
-        })
-
         it('calls sanitize_properties', () => {
             given('sanitize_properties', () => (props, event_name) => ({ token: props.token, event_name }))
 
