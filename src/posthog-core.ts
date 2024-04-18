@@ -49,7 +49,7 @@ import {
     ToolbarParams,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
-import { createSegmentIntegration } from './extensions/segment-integration'
+import { setupSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
 import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
@@ -257,7 +257,6 @@ export class PostHog {
     analyticsDefaultEndpoint: string
 
     SentryIntegration: typeof SentryIntegration
-    segmentIntegration: () => any
 
     private _debugEventEmitter = new SimpleEventEmitter()
 
@@ -271,7 +270,6 @@ export class PostHog {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
-        this.segmentIntegration = () => createSegmentIntegration(this)
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
@@ -390,32 +388,21 @@ export class PostHog {
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
         this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startRecordingIfEnabled()
+        this.sessionRecording.startIfEnabledOrStop()
 
         if (!this.config.disable_scroll_properties) {
             this.pageViewManager.startMeasuringScrollPosition()
         }
 
         this.autocapture = new Autocapture(this)
+        this.autocapture.startIfEnabled()
+        this.surveys.loadIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
 
         this._gdpr_init()
-
-        if (config.segment) {
-            // Use segments anonymousId instead
-            this.config.get_device_id = () => config.segment.user().anonymousId()
-
-            // If a segment user ID exists, set it as the distinct_id
-            if (config.segment.user().id()) {
-                this.register({
-                    distinct_id: config.segment.user().id(),
-                })
-                this.persistence.set_user_state('identified')
-            }
-        }
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
@@ -474,9 +461,7 @@ export class PostHog {
 
         // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
-            config.segment.register(this.segmentIntegration()).then(() => {
-                this._loaded()
-            })
+            setupSegmentIntegration(this, () => this._loaded())
         } else {
             this._loaded()
         }
@@ -502,6 +487,10 @@ export class PostHog {
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
         }
+
+        this.sessionRecording?.afterDecideResponse(response)
+        this.autocapture?.afterDecideResponse(response)
+        this.surveys?.afterDecideResponse(response)
     }
 
     _loaded(): void {
@@ -920,7 +909,7 @@ export class PostHog {
         }
 
         // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
-        properties['$process_person'] = this._hasPersonProcessing()
+        properties['$process_person_profile'] = this._hasPersonProcessing()
 
         return properties
     }
@@ -1688,21 +1677,9 @@ export class PostHog {
                 Config.DEBUG = true
             }
 
-            if (this.sessionRecording && !isUndefined(config.disable_session_recording)) {
-                const disable_session_recording_has_changed =
-                    oldConfig.disable_session_recording !== config.disable_session_recording
-                // if opting back in, this config might not have changed
-                const try_enable_after_opt_in =
-                    !userOptedOut(this) && !config.disable_session_recording && !this.sessionRecording.started
-
-                if (disable_session_recording_has_changed || try_enable_after_opt_in) {
-                    if (config.disable_session_recording) {
-                        this.sessionRecording.stopRecording()
-                    } else {
-                        this.sessionRecording.startRecordingIfEnabled()
-                    }
-                }
-            }
+            this.sessionRecording?.startIfEnabledOrStop()
+            this.autocapture?.startIfEnabled()
+            this.surveys.loadIfEnabled()
         }
     }
 

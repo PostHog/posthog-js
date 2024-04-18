@@ -1,3 +1,20 @@
+## 1.126.0 - 2024-04-17
+
+- fix: Reacting to config changes (#1138)
+
+## 1.125.0 - 2024-04-16
+
+- Rename $process_person to $process_person_profile (#1143)
+
+## 1.124.0 - 2024-04-16
+
+- Update docs on versioning (#1142)
+- feat: Update support for segment analytics (#1119)
+
+## 1.123.1 - 2024-04-16
+
+- feat: Update support for segment analytics (#1119)
+
 ## 1.123.0 - 2024-04-16
 
 - feat: Rename process_person config option to person_profiles (#1141)

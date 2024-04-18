@@ -8,6 +8,7 @@ import { DecideResponse, PostHogConfig, Properties } from '../types'
 import { window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
+import { expectScriptToExist, expectScriptToNotExist } from './helpers/script-utils'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -398,6 +399,33 @@ describe('surveys', () => {
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([activeSurvey, surveyWithSelector, surveyWithEverything])
             })
+        })
+    })
+
+    describe('decide response', () => {
+        beforeEach(() => {
+            // clean the JSDOM to prevent interdependencies between tests
+            document.body.innerHTML = ''
+            document.head.innerHTML = ''
+        })
+
+        it('should not load when decide response says no', () => {
+            surveys.afterDecideResponse({ surveys: false } as DecideResponse)
+            // Make sure the script is not loaded
+            expectScriptToNotExist('https://us-assets.i.posthog.com/static/surveys.js')
+        })
+
+        it('should load when decide response says so', () => {
+            surveys.afterDecideResponse({ surveys: true } as DecideResponse)
+            // Make sure the script is loaded
+            expectScriptToExist('https://us-assets.i.posthog.com/static/surveys.js')
+        })
+
+        it('should not load when config says no', () => {
+            config.disable_surveys = true
+            surveys.afterDecideResponse({ surveys: true } as DecideResponse)
+            // Make sure the script is not loaded
+            expectScriptToNotExist('https://us-assets.i.posthog.com/static/surveys.js')
         })
     })
 })
