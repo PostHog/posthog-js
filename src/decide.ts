@@ -66,29 +66,7 @@ export class Decide {
             return
         }
 
-        if ('toolbar' in this.instance) {
-            this.instance.toolbar && this.instance.toolbar.afterDecideResponse(response)
-            this.instance.sessionRecording?.afterDecideResponse(response)
-            this.instance.autocapture?.afterDecideResponse(response)
-        }
-
         this.instance._afterDecideResponse(response)
-
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const surveysGenerator = window?.extendPostHogWithSurveys
-
-        if (!this.instance.config.disable_surveys && response['surveys'] && !surveysGenerator) {
-            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
-                if (err) {
-                    return logger.error(`Could not load surveys script`, err)
-                }
-
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                window.extendPostHogWithSurveys(this.instance)
-            })
-        }
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore

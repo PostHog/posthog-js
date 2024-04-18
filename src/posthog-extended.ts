@@ -3,7 +3,14 @@ import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Toolbar } from './extensions/toolbar'
 import { userOptedOut } from './gdpr-utils'
 import { RequestRouter } from './utils/request-router'
-import { PostHogConfig, Properties, RequestCallback, SessionIdChangedCallback, ToolbarParams } from './types'
+import {
+    DecideResponse,
+    PostHogConfig,
+    Properties,
+    RequestCallback,
+    SessionIdChangedCallback,
+    ToolbarParams,
+} from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
 import { createSegmentIntegration } from './extensions/segment-integration'
 import { PostHogSurveys } from './posthog-surveys'
@@ -91,8 +98,10 @@ export class PostHogExtended extends PostHogCore {
 
         if (this.__loaded) {
             this.sessionRecording = new SessionRecording(this)
-            this.sessionRecording.startRecordingIfEnabled()
+            this.sessionRecording.startIfEnabledOrStop()
             this.autocapture = new Autocapture(this)
+            this.autocapture.startIfEnabled()
+            this.surveys.loadIfEnabled()
             this.toolbar.maybeLoadToolbar()
         }
 
@@ -156,27 +165,22 @@ export class PostHogExtended extends PostHogCore {
 
     // Override
     set_config(config: Partial<PostHogConfig>): void {
-        const oldConfig = { ...this.config }
-
         super.set_config(config)
 
         if (_isObject(config)) {
-            if (this.sessionRecording && !_isUndefined(config.disable_session_recording)) {
-                const disable_session_recording_has_changed =
-                    oldConfig.disable_session_recording !== config.disable_session_recording
-                // if opting back in, this config might not have changed
-                const try_enable_after_opt_in =
-                    !userOptedOut(this) && !config.disable_session_recording && !this.sessionRecording.started
-
-                if (disable_session_recording_has_changed || try_enable_after_opt_in) {
-                    if (config.disable_session_recording) {
-                        this.sessionRecording.stopRecording()
-                    } else {
-                        this.sessionRecording.startRecordingIfEnabled()
-                    }
-                }
-            }
+            this.sessionRecording?.startIfEnabledOrStop()
+            this.autocapture?.startIfEnabled()
+            this.surveys.loadIfEnabled()
         }
+    }
+
+    // Override
+
+    _afterDecideResponse(response: DecideResponse) {
+        super._afterDecideResponse(response)
+        this.sessionRecording?.afterDecideResponse(response)
+        this.autocapture?.afterDecideResponse(response)
+        this.surveys?.afterDecideResponse(response)
     }
 
     /**

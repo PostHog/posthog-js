@@ -1,3 +1,11 @@
+## 1.126.0 - 2024-04-17
+
+- fix: Reacting to config changes (#1138)
+
+## 1.125.0 - 2024-04-16
+
+- Rename $process_person to $process_person_profile (#1143)
+
 ## 1.124.0 - 2024-04-16
 
 - Update docs on versioning (#1142)
