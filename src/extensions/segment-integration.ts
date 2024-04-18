@@ -21,6 +21,7 @@ import { logger } from '../utils/logger'
 
 import { uuidv7 } from '../uuidv7'
 import { isFunction } from '../utils/type-utils'
+import { USER_STATE } from '../constants'
 
 export type SegmentUser = {
     anonymousId(): string | undefined
@@ -117,7 +118,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
                 distinct_id: user.id(),
                 $device_id: getSegmentAnonymousId(),
             })
-            posthog.persistence!.set_user_state('identified')
+            posthog.persistence!.set_property(USER_STATE, 'identified')
         }
 
         done()

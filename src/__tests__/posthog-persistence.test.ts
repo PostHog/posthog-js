@@ -40,20 +40,20 @@ describe('persistence', () => {
 
         it('should save user state', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
-            lib.set_user_state('identified')
+            lib.set_property(USER_STATE, 'identified')
             expect(lib.props[USER_STATE]).toEqual('identified')
         })
 
         it('can load user state', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
-            lib.set_user_state('identified')
-            expect(lib.get_user_state()).toEqual('identified')
+            lib.set_property(USER_STATE, 'identified')
+            expect(lib.get_property(USER_STATE)).toEqual('identified')
         })
 
         it('has user state as a reserved property key', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', persistenceMode))
             lib.register({ distinct_id: 'testy', test_prop: 'test_value' })
-            lib.set_user_state('identified')
+            lib.set_property(USER_STATE, 'identified')
             expect(lib.properties()).toEqual({ distinct_id: 'testy', test_prop: 'test_value' })
         })
 
