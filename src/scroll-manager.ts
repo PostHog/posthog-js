@@ -1,5 +1,5 @@
 import { window } from './utils/globals'
-import { PostHog } from './posthog-core'
+import { PostHogCore as PostHog } from './posthog-core'
 import { isArray } from './utils/type-utils'
 
 export interface ScrollContext {

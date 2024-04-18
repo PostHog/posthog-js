@@ -1,7 +1,7 @@
 import { includes, registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
 import { Properties } from './types'
-import { PostHog } from './posthog-core'
+import { PostHogCore } from './posthog-core'
 
 import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
@@ -31,7 +31,6 @@ function elementOrParentPositionMatches(el: Element, matches: string[], breakOnE
 }
 
 export class Heatmaps {
-    instance: PostHog
     rageclicks = new RageClick()
     _isDisabledServerSide: boolean | null = null
     _initialized = false
@@ -40,9 +39,7 @@ export class Heatmaps {
     // TODO: Periodically flush this if no other event has taken care of it
     private buffer: HeatmapEventBuffer
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-    }
+    constructor(private instance: PostHogCore) {}
 
     public startIfEnabled(): void {
         if (this.isEnabled && !this._initialized) {

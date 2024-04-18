@@ -1,5 +1,5 @@
 import { CAPTURE_RATE_LIMIT } from './constants'
-import type { PostHog } from './posthog-core'
+import type { PostHogCore as PostHog } from './posthog-core'
 import { RequestResponse } from './types'
 import { logger } from './utils/logger'
 
@@ -11,16 +11,13 @@ interface CaptureResponse {
 }
 
 export class RateLimiter {
-    instance: PostHog
     serverLimits: Record<string, number> = {}
 
     captureEventsPerSecond: number
     captureEventsBurstLimit: number
     lastEventRateLimited = false
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-
+    constructor(private instance: PostHog) {
         this.captureEventsPerSecond = instance.config.rate_limiting?.events_per_second || 10
         this.captureEventsBurstLimit = Math.max(
             instance.config.rate_limiting?.events_burst_limit || this.captureEventsPerSecond * 10,

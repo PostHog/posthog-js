@@ -16,7 +16,7 @@
  *  })
  *  ```
  */
-import { PostHogCore } from '../posthog-core'
+import { PostHogCore as PostHog } from '../posthog-core'
 import { logger } from '../utils/logger'
 
 import { uuidv7 } from '../uuidv7'
@@ -61,7 +61,7 @@ interface SegmentPlugin {
     screen?: SegmentFunction
 }
 
-const createSegmentIntegration = (posthog: PostHogCore): SegmentPlugin => {
+const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
     if (!Promise || !Promise.resolve) {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }

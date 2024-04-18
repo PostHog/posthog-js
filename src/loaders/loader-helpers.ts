@@ -1,11 +1,12 @@
 import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
+import { PostHogCore } from '../posthog-core'
+import { each } from '../utils'
+import { isArray } from '../utils/type-utils'
+
 type PostHogInstancesType = Record<string, PostHogCore>
 const PRIMARY_INSTANCE_NAME = 'posthog'
-import { PostHogCore } from '../posthog-core'
-import { _each } from '../utils'
-import { _isArray } from '../utils/type-utils'
 
 export function init_from_snippet(PostHogCls: new () => PostHogCore, instances: PostHogInstancesType): void {
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHogCls())
@@ -45,8 +46,8 @@ export function init_from_snippet(PostHogCls: new () => PostHogCore, instances: 
 
         // Call all pre-loaded init calls properly
 
-        _each(snippetPostHog['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
-            if (item && _isArray(item)) {
+        each(snippetPostHog['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
+            if (item && isArray(item)) {
                 const instance = posthogMain.init(item[0], item[1], item[2])
 
                 const instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
