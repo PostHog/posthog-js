@@ -957,7 +957,6 @@ describe('Autocapture system', () => {
         })
 
         it('should capture click events', () => {
-            autocapture['_addDomEventHandlers']()
             const button = document.createElement('button')
             document.body.appendChild(button)
             simulateClick(button)
