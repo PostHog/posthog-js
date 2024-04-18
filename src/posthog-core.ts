@@ -740,6 +740,13 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
+        if (!options?._noHeatmaps) {
+            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
+            if (heatmapsBuffer) {
+                data.properties['$heatmap_data'] = heatmapsBuffer
+            }
+        }
+
         const setProperties = options?.$set
         if (setProperties) {
             data.$set = options?.$set
@@ -896,11 +903,6 @@ export class PostHog {
 
         // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
         properties['$process_person'] = this._hasPersonProcessing()
-
-        const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
-        if (heatmapsBuffer) {
-            properties['$heatmap_data'] = heatmapsBuffer
-        }
 
         return properties
     }
