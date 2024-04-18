@@ -86,10 +86,16 @@ export class Autocapture {
         }
     }
 
+    public startIfEnabled() {
+        if (this.isEnabled && !this._initialized) {
+            this._addDomEventHandlers()
+            this._initialized = true
+        }
+    }
+
     public afterDecideResponse(response: DecideResponse) {
-        if (this._initialized) {
-            logger.info('autocapture already initialized')
-            return
+        if (response.elementsChainAsString) {
+            this._elementsChainAsString = response.elementsChainAsString
         }
 
         if (this.instance.persistence) {
@@ -97,23 +103,25 @@ export class Autocapture {
                 [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
             })
         }
-        // store this in-memory incase persistence is disabled
+        // store this in-memory in case persistence is disabled
         this._isDisabledServerSide = !!response['autocapture_opt_out']
-
-        if (response.elementsChainAsString) {
-            this._elementsChainAsString = response.elementsChainAsString
-        }
-
-        if (this.isEnabled) {
-            this._addDomEventHandlers()
-            this._initialized = true
-        }
+        this.startIfEnabled()
     }
 
     public get isEnabled(): boolean {
-        const disabledServer = _isNull(this._isDisabledServerSide)
-            ? !!this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
-            : this._isDisabledServerSide
+        const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+        const memoryDisabled = this._isDisabledServerSide
+
+        if (
+            _isNull(memoryDisabled) &&
+            !_isBoolean(persistedServerDisabled) &&
+            !this.instance.config.advanced_disable_decide
+        ) {
+            // We only enable if we know that the server has not disabled it (unless decide is disabled)
+            return false
+        }
+
+        const disabledServer = this._isDisabledServerSide ?? !!persistedServerDisabled
         const disabledClient = !this.instance.config.autocapture
         return !disabledClient && !disabledServer
     }
@@ -172,7 +180,7 @@ export class Autocapture {
         const elementAttributeIgnorelist = this.config?.element_attribute_ignorelist
         _each(elem.attributes, function (attr: Attr) {
             // Only capture attributes we know are safe
-            if (isSensitiveElement(elem) && ['name', 'id', 'class'].indexOf(attr.name) === -1) return
+            if (isSensitiveElement(elem) && ['name', 'id', 'class', 'aria-label'].indexOf(attr.name) === -1) return
 
             if (elementAttributeIgnorelist?.includes(attr.name)) return
 
@@ -224,6 +232,10 @@ export class Autocapture {
     }
 
     private _captureEvent(e: Event, eventName = '$autocapture'): boolean | void {
+        if (!this.isEnabled) {
+            return
+        }
+
         /*** Don't mess with this code without running IE8 tests on it ***/
         let target = this._getEventTarget(e)
         if (isTextNode(target)) {

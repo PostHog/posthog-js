@@ -2,6 +2,7 @@ import Head from 'next/head'
 import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { cookieConsentGiven } from '@/src/posthog'
 
 export default function Home() {
     const posthog = usePostHog()
@@ -9,6 +10,7 @@ export default function Home() {
     const result = useFeatureFlagEnabled('test')
 
     const [time, setTime] = useState('')
+    const consentGiven = cookieConsentGiven()
 
     useEffect(() => {
         setIsClient(true)
@@ -75,6 +77,12 @@ export default function Home() {
 
                 {isClient && (
                     <>
+                        {!consentGiven && (
+                            <p className="border border-red-900 bg-red-200 rounded p-2">
+                                <b>Consent not given!</b> Session recording, surveys, and autocapture are disabled.
+                            </p>
+                        )}
+
                         <h2 className="mt-4">PostHog info</h2>
                         <ul className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4">
                             <li className="font-mono">

@@ -6,22 +6,8 @@ import { useRouter } from 'next/router'
 
 import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
-import { CookieBanner, cookieConsentGiven } from '@/src/CookieBanner'
-
-if (typeof window !== 'undefined') {
-    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
-        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
-        session_recording: {
-            recordCrossOriginIframes: true,
-        },
-        debug: true,
-        scroll_root_selector: ['#scroll_element', 'html'],
-        persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
-        __preview_process_person: 'identified_only',
-        __preview_heatmaps: true,
-    })
-    ;(window as any).posthog = posthog
-}
+import { CookieBanner } from '@/src/CookieBanner'
+import '@/src/posthog'
 
 export default function App({ Component, pageProps }: AppProps) {
     const router = useRouter()

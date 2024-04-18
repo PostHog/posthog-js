@@ -10,6 +10,7 @@ const rules = {
     'no-prototype-builtins': 'off',
     'no-empty': 'off',
     'no-console': 'error',
+    'no-only-tests/no-only-tests': 'error',
 }
 
 const extend = [
@@ -36,7 +37,14 @@ module.exports = {
         ecmaVersion: 2018,
         sourceType: 'module',
     },
-    plugins: ['prettier', '@typescript-eslint', 'eslint-plugin-react', 'eslint-plugin-react-hooks', 'jest'],
+    plugins: [
+        'prettier',
+        '@typescript-eslint',
+        'eslint-plugin-react',
+        'eslint-plugin-react-hooks',
+        'jest',
+        'no-only-tests',
+    ],
     extends: extend,
     rules,
     settings: {

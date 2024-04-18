@@ -1,13 +1,9 @@
 /* eslint-disable posthog-js/no-direct-null-check */
-import posthog from 'posthog-js'
 import { useEffect, useState } from 'react'
+import { cookieConsentGiven, updatePostHogConsent } from './posthog'
 
-export function cookieConsentGiven() {
-    return localStorage.getItem('cookie_consent') === 'true'
-}
-
-export function CookieBanner() {
-    const [consentGiven, setConsentGiven] = useState<null | boolean>(null)
+export function useCookieConsent(): [boolean | null, (consentGiven: boolean) => void] {
+    const [consentGiven, setConsentGiven] = useState<boolean | null>(null)
 
     useEffect(() => {
         setConsentGiven(cookieConsentGiven())
@@ -15,8 +11,15 @@ export function CookieBanner() {
 
     useEffect(() => {
         if (consentGiven === null) return
-        posthog.set_config({ persistence: consentGiven ? 'localStorage+cookie' : 'memory' })
+
+        updatePostHogConsent(consentGiven)
     }, [consentGiven])
+
+    return [consentGiven, setConsentGiven]
+}
+
+export function CookieBanner() {
+    const [consentGiven, setConsentGiven] = useCookieConsent()
 
     if (consentGiven === null) return null
 
@@ -27,7 +30,6 @@ export function CookieBanner() {
                     <p>I am a cookie banner - you wouldn't like me when I'm hangry.</p>
                     <button
                         onClick={() => {
-                            localStorage.setItem('cookie_consent', 'true')
                             setConsentGiven(true)
                         }}
                     >
@@ -38,7 +40,6 @@ export function CookieBanner() {
                 <>
                     <button
                         onClick={() => {
-                            localStorage.removeItem('cookie_consent')
                             setConsentGiven(false)
                         }}
                     >
