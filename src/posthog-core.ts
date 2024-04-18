@@ -403,8 +403,8 @@ export class PostHog {
         this.autocapture.startIfEnabled()
         this.surveys.loadIfEnabled()
 
-        this.autocapture = new Autocapture(this)
         this.heatmaps = new Heatmaps(this)
+        this.heatmaps.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -1686,6 +1686,7 @@ export class PostHog {
 
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
+            this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
         }
     }

@@ -42,8 +42,10 @@ export class Heatmaps {
 
     constructor(instance: PostHog) {
         this.instance = instance
+    }
 
-        if (this.isEnabled) {
+    public startIfEnabled(): void {
+        if (this.isEnabled && !this._initialized) {
             this._setupListeners()
         }
     }
@@ -71,6 +73,8 @@ export class Heatmaps {
             false,
             true
         )
+
+        this._initialized = true
     }
 
     private _getProperties(e: MouseEvent, type: string): Properties {
