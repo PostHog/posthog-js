@@ -22,7 +22,7 @@ import { AutocaptureConfig, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { _isFunction, _isNull, _isObject, _isUndefined } from './utils/type-utils'
+import { _isBoolean, _isFunction, _isNull, _isObject, _isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { document, window } from './utils/globals'
 
