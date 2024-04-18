@@ -10,7 +10,7 @@ module.exports = {
                     if (node.operator === '===' || node.operator === '!==') {
                         context.report({
                             node,
-                            message: 'Use _isUndefined() instead of direct undefined checks.',
+                            message: 'Use isUndefined() instead of direct undefined checks.',
                         })
                     }
                 }

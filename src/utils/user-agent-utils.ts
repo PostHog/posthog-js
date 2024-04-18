@@ -1,5 +1,5 @@
-import { _includes } from './index'
-import { _isFunction, _isUndefined } from './type-utils'
+import { includes } from './index'
+import { isFunction, isUndefined } from './type-utils'
 
 /**
  * this device detection code is (at time of writing) about 3% of the size of the entire library
@@ -78,10 +78,10 @@ const windowsVersionMap: Record<string, string> = {
  * before this check is made
  */
 function isSafari(userAgent: string): boolean {
-    return _includes(userAgent, SAFARI) && !_includes(userAgent, CHROME) && !_includes(userAgent, ANDROID)
+    return includes(userAgent, SAFARI) && !includes(userAgent, CHROME) && !includes(userAgent, ANDROID)
 }
 
-const safariCheck = (ua: string, vendor?: string) => (vendor && _includes(vendor, APPLE)) || isSafari(ua)
+const safariCheck = (ua: string, vendor?: string) => (vendor && includes(vendor, APPLE)) || isSafari(ua)
 
 /**
  * This function detects which browser is running this script.
@@ -91,41 +91,41 @@ const safariCheck = (ua: string, vendor?: string) => (vendor && _includes(vendor
 export const detectBrowser = function (user_agent: string, vendor: string | undefined): string {
     vendor = vendor || '' // vendor is undefined for at least IE9
 
-    if (_includes(user_agent, ' OPR/') && _includes(user_agent, 'Mini')) {
+    if (includes(user_agent, ' OPR/') && includes(user_agent, 'Mini')) {
         return OPERA_MINI
-    } else if (_includes(user_agent, ' OPR/')) {
+    } else if (includes(user_agent, ' OPR/')) {
         return OPERA
     } else if (BLACKBERRY_REGEX.test(user_agent)) {
         return BLACKBERRY
-    } else if (_includes(user_agent, 'IE' + MOBILE) || _includes(user_agent, 'WPDesktop')) {
+    } else if (includes(user_agent, 'IE' + MOBILE) || includes(user_agent, 'WPDesktop')) {
         return INTERNET_EXPLORER_MOBILE
     }
     // https://developer.samsung.com/internet/user-agent-string-format
-    else if (_includes(user_agent, SAMSUNG_BROWSER)) {
+    else if (includes(user_agent, SAMSUNG_BROWSER)) {
         return SAMSUNG_INTERNET
-    } else if (_includes(user_agent, EDGE) || _includes(user_agent, 'Edg/')) {
+    } else if (includes(user_agent, EDGE) || includes(user_agent, 'Edg/')) {
         return MICROSOFT_EDGE
-    } else if (_includes(user_agent, 'FBIOS')) {
+    } else if (includes(user_agent, 'FBIOS')) {
         return FACEBOOK + ' ' + MOBILE
-    } else if (_includes(user_agent, CHROME)) {
+    } else if (includes(user_agent, CHROME)) {
         return CHROME
-    } else if (_includes(user_agent, 'CriOS')) {
+    } else if (includes(user_agent, 'CriOS')) {
         return CHROME_IOS
-    } else if (_includes(user_agent, 'UCWEB') || _includes(user_agent, 'UCBrowser')) {
+    } else if (includes(user_agent, 'UCWEB') || includes(user_agent, 'UCBrowser')) {
         return 'UC Browser'
-    } else if (_includes(user_agent, 'FxiOS')) {
+    } else if (includes(user_agent, 'FxiOS')) {
         return FIREFOX_IOS
-    } else if (_includes(user_agent, ANDROID)) {
+    } else if (includes(user_agent, ANDROID)) {
         return ANDROID_MOBILE
-    } else if (_includes(user_agent.toLowerCase(), KONQUEROR.toLowerCase())) {
+    } else if (includes(user_agent.toLowerCase(), KONQUEROR.toLowerCase())) {
         return KONQUEROR
     } else if (safariCheck(user_agent, vendor)) {
-        return _includes(user_agent, MOBILE) ? MOBILE_SAFARI : SAFARI
-    } else if (_includes(user_agent, FIREFOX)) {
+        return includes(user_agent, MOBILE) ? MOBILE_SAFARI : SAFARI
+    } else if (includes(user_agent, FIREFOX)) {
         return FIREFOX
-    } else if (_includes(user_agent, 'MSIE') || _includes(user_agent, 'Trident/')) {
+    } else if (includes(user_agent, 'MSIE') || includes(user_agent, 'Trident/')) {
         return INTERNET_EXPLORER
-    } else if (_includes(user_agent, 'Gecko')) {
+    } else if (includes(user_agent, 'Gecko')) {
         return FIREFOX
     }
 
@@ -163,7 +163,7 @@ const versionRegexes: Record<string, RegExp[]> = {
 export const detectBrowserVersion = function (userAgent: string, vendor: string | undefined): number | null {
     const browser = detectBrowser(userAgent, vendor)
     const regexes: RegExp[] | undefined = versionRegexes[browser as keyof typeof versionRegexes]
-    if (_isUndefined(regexes)) {
+    if (isUndefined(regexes)) {
         return null
     }
 
@@ -230,7 +230,7 @@ const osMatchers: [
             // e.g. Watch4,3/5.3.8 (16U680)
             let version = ''
             if (match && match.length >= 3) {
-                version = _isUndefined(match[2]) ? match[3] : match[2]
+                version = isUndefined(match[2]) ? match[3] : match[2]
             }
             return ['watchOS', version]
         },
@@ -269,7 +269,7 @@ export const detectOS = function (user_agent: string): [string, string] {
     for (let i = 0; i < osMatchers.length; i++) {
         const [rgex, resultOrFn] = osMatchers[i]
         const match = rgex.exec(user_agent)
-        const result = match && (_isFunction(resultOrFn) ? resultOrFn(match, user_agent) : resultOrFn)
+        const result = match && (isFunction(resultOrFn) ? resultOrFn(match, user_agent) : resultOrFn)
         if (result) {
             return result
         }

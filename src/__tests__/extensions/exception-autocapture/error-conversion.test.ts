@@ -6,7 +6,7 @@ import {
     unhandledRejectionToProperties,
 } from '../../../extensions/exception-autocapture/error-conversion'
 
-import { _isNull } from '../../../utils/type-utils'
+import { isNull } from '../../../utils/type-utils'
 
 // ugh, jest
 // can't reference PromiseRejectionEvent to construct it 🤷
@@ -63,7 +63,7 @@ describe('Error conversion', () => {
         const error = new Error('oh no an error has happened')
 
         const errorProperties = errorToProperties(['something', undefined, undefined, undefined, error])
-        if (_isNull(errorProperties)) {
+        if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
         }
 
@@ -93,7 +93,7 @@ describe('Error conversion', () => {
         const event = new DOMException('oh no disaster', 'dom-exception')
         const errorProperties = errorToProperties([event as unknown as Event])
 
-        if (_isNull(errorProperties)) {
+        if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
         }
 
@@ -109,7 +109,7 @@ describe('Error conversion', () => {
         const event = new ErrorEvent('oh no an error event', { error: new Error('the real error is hidden inside') })
 
         const errorProperties = errorToProperties([event as unknown as Event])
-        if (_isNull(errorProperties)) {
+        if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
         }
 

@@ -1,8 +1,8 @@
-import { _getQueryParam, convertToURL } from './request-utils'
-import { _isNull } from './type-utils'
+import { getQueryParam, convertToURL } from './request-utils'
+import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { _each, _extend, _strip_empty_properties, _timestamp } from './index'
+import { each, extend, stripEmptyProperties, timestamp } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 
@@ -30,13 +30,13 @@ export const CAMPAIGN_PARAMS = [
     'ttclid', // tiktok
 ]
 
-export const _info = {
+export const Info = {
     campaignParams: function (customParams?: string[]): Record<string, any> {
         const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
 
         const params: Record<string, any> = {}
-        _each(campaign_keywords, function (kwkey) {
-            const kw = document ? _getQueryParam(document.URL, kwkey) : ''
+        each(campaign_keywords, function (kwkey) {
+            const kw = document ? getQueryParam(document.URL, kwkey) : ''
             if (kw.length) {
                 params[kwkey] = kw
             }
@@ -65,14 +65,14 @@ export const _info = {
     },
 
     searchInfo: function (): Record<string, any> {
-        const search = _info.searchEngine(),
+        const search = Info.searchEngine(),
             param = search != 'yahoo' ? 'q' : 'p',
             ret: Record<string, any> = {}
 
-        if (!_isNull(search)) {
+        if (!isNull(search)) {
             ret['$search_engine'] = search
 
-            const keyword = document ? _getQueryParam(document.referrer, param) : ''
+            const keyword = document ? getQueryParam(document.referrer, param) : ''
             if (keyword.length) {
                 ret['ph_keyword'] = keyword
             }
@@ -133,22 +133,22 @@ export const _info = {
         if (!userAgent) {
             return {}
         }
-        const [os_name, os_version] = _info.os(userAgent)
-        return _extend(
-            _strip_empty_properties({
+        const [os_name, os_version] = Info.os(userAgent)
+        return extend(
+            stripEmptyProperties({
                 $os: os_name,
                 $os_version: os_version,
-                $browser: _info.browser(userAgent, navigator.vendor),
-                $device: _info.device(userAgent),
-                $device_type: _info.deviceType(userAgent),
+                $browser: Info.browser(userAgent, navigator.vendor),
+                $device: Info.device(userAgent),
+                $device_type: Info.deviceType(userAgent),
             }),
             {
                 $current_url: location?.href,
                 $host: location?.host,
                 $pathname: location?.pathname,
                 $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor),
-                $browser_language: _info.browserLanguage(),
+                $browser_version: Info.browserVersion(userAgent, navigator.vendor),
+                $browser_language: Info.browserLanguage(),
                 $screen_height: window?.screen.height,
                 $screen_width: window?.screen.width,
                 $viewport_height: window?.innerHeight,
@@ -156,7 +156,7 @@ export const _info = {
                 $lib: 'web',
                 $lib_version: Config.LIB_VERSION,
                 $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
-                $time: _timestamp() / 1000, // epoch time in seconds
+                $time: timestamp() / 1000, // epoch time in seconds
             }
         )
     },
@@ -166,15 +166,15 @@ export const _info = {
             return {}
         }
 
-        const [os_name, os_version] = _info.os(userAgent)
-        return _extend(
-            _strip_empty_properties({
+        const [os_name, os_version] = Info.os(userAgent)
+        return extend(
+            stripEmptyProperties({
                 $os: os_name,
                 $os_version: os_version,
-                $browser: _info.browser(userAgent, navigator.vendor),
+                $browser: Info.browser(userAgent, navigator.vendor),
             }),
             {
-                $browser_version: _info.browserVersion(userAgent, navigator.vendor),
+                $browser_version: Info.browserVersion(userAgent, navigator.vendor),
             }
         )
     },

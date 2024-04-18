@@ -145,6 +145,7 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
     segment?: SegmentAnalytics
     __preview_send_client_session_params?: boolean
+    __preview_heatmaps?: boolean
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
@@ -157,6 +158,14 @@ export interface PostHogConfig {
     person_profiles?: 'always' | 'never' | 'identified_only'
     /** @deprecated - use `person_profiles` instead  */
     process_person?: 'always' | 'never' | 'identified_only'
+
+    /** Client side rate limiting */
+    rate_limiting?: {
+        /** The average number of events per second that should be permitted (defaults to 10) */
+        events_per_second?: number
+        /** How many events can be captured in a burst. This defaults to 10 times the events_per_second count  */
+        events_burst_limit?: number
+    }
 }
 
 export interface OptInOutCapturingOptions {
@@ -246,9 +255,11 @@ export interface CaptureOptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
     _url?: string /** Used to override the desired endpoint for the captured event */
+    _noHeatmaps?: boolean /** Used to ensure that heatmap data is not included with this event */
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     send_instantly?: boolean /** if set skips the batched queue */
+    skip_client_rate_limiting?: boolean /** if set skips the client side rate limiting */
     transport?: RequestOptions['transport'] /** if set, overrides the desired transport method */
     timestamp?: Date
 }

@@ -1,15 +1,5 @@
 import { Breaker, EventHandler, Properties } from '../types'
-import {
-    _isArray,
-    _isDate,
-    _isFormData,
-    _isFunction,
-    _isNull,
-    _isNullish,
-    _isObject,
-    _isString,
-    hasOwnProperty,
-} from './type-utils'
+import { isArray, isFormData, isFunction, isNull, isNullish, isString, hasOwnProperty } from './type-utils'
 import { logger } from './logger'
 import { window, document, nativeForEach, nativeIndexOf } from './globals'
 
@@ -17,16 +7,16 @@ const breaker: Breaker = {}
 
 // UNDERSCORE
 // Embed part of the Underscore Library
-export const _trim = function (str: string): string {
+export const trim = function (str: string): string {
     return str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
 }
 
-export function _eachArray<E = any>(
+export function eachArray<E = any>(
     obj: E[] | null | undefined,
     iterator: (value: E, key: number) => void | Breaker,
     thisArg?: any
 ): void {
-    if (_isArray(obj)) {
+    if (isArray(obj)) {
         if (nativeForEach && obj.forEach === nativeForEach) {
             obj.forEach(iterator, thisArg)
         } else if ('length' in obj && obj.length === +obj.length) {
@@ -44,14 +34,14 @@ export function _eachArray<E = any>(
  * @param {function(...*)=} iterator
  * @param {Object=} thisArg
  */
-export function _each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
-    if (_isNullish(obj)) {
+export function each(obj: any, iterator: (value: any, key: any) => void | Breaker, thisArg?: any): void {
+    if (isNullish(obj)) {
         return
     }
-    if (_isArray(obj)) {
-        return _eachArray(obj, iterator, thisArg)
+    if (isArray(obj)) {
+        return eachArray(obj, iterator, thisArg)
     }
-    if (_isFormData(obj)) {
+    if (isFormData(obj)) {
         for (const pair of obj.entries()) {
             if (iterator.call(thisArg, pair[1], pair[0]) === breaker) {
                 return
@@ -68,8 +58,8 @@ export function _each(obj: any, iterator: (value: any, key: any) => void | Break
     }
 }
 
-export const _extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
-    _eachArray(args, function (source) {
+export const extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
+    eachArray(args, function (source) {
         for (const prop in source) {
             if (source[prop] !== void 0) {
                 obj[prop] = source[prop]
@@ -79,18 +69,18 @@ export const _extend = function (obj: Record<string, any>, ...args: Record<strin
     return obj
 }
 
-export const _include = function (
+export const include = function (
     obj: null | string | Array<any> | Record<string, any>,
     target: any
 ): boolean | Breaker {
     let found = false
-    if (_isNull(obj)) {
+    if (isNull(obj)) {
         return found
     }
     if (nativeIndexOf && obj.indexOf === nativeIndexOf) {
         return obj.indexOf(target) != -1
     }
-    _each(obj, function (value) {
+    each(obj, function (value) {
         if (found || (found = value === target)) {
             return breaker
         }
@@ -99,7 +89,7 @@ export const _include = function (
     return found
 }
 
-export function _includes<T = any>(str: T[] | string, needle: T): boolean {
+export function includes<T = any>(str: T[] | string, needle: T): boolean {
     return (str as any).indexOf(needle) !== -1
 }
 
@@ -107,7 +97,7 @@ export function _includes<T = any>(str: T[] | string, needle: T): boolean {
  * Object.entries() polyfill
  * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries
  */
-export function _entries<T = any>(obj: Record<string, T>): [string, T][] {
+export function entries<T = any>(obj: Record<string, T>): [string, T][] {
     const ownProps = Object.keys(obj)
     let i = ownProps.length
     const resArray = new Array(i) // preallocate the Array
@@ -118,7 +108,7 @@ export function _entries<T = any>(obj: Record<string, T>): [string, T][] {
     return resArray
 }
 
-export const _isValidRegex = function (str: string): boolean {
+export const isValidRegex = function (str: string): boolean {
     try {
         new RegExp(str)
     } catch (error) {
@@ -127,18 +117,7 @@ export const _isValidRegex = function (str: string): boolean {
     return true
 }
 
-export const _encodeDates = function (obj: Properties): Properties {
-    _each(obj, function (v, k) {
-        if (_isDate(v)) {
-            obj[k] = _formatDate(v)
-        } else if (_isObject(v)) {
-            obj[k] = _encodeDates(v) // recurse
-        }
-    })
-    return obj
-}
-
-export const _timestamp = function (): number {
+export const timestamp = function (): number {
     Date.now =
         Date.now ||
         function () {
@@ -147,27 +126,7 @@ export const _timestamp = function (): number {
     return Date.now()
 }
 
-export const _formatDate = function (d: Date): string {
-    // YYYY-MM-DDTHH:MM:SS in UTC
-    function pad(n: number) {
-        return n < 10 ? '0' + n : n
-    }
-    return (
-        d.getUTCFullYear() +
-        '-' +
-        pad(d.getUTCMonth() + 1) +
-        '-' +
-        pad(d.getUTCDate()) +
-        'T' +
-        pad(d.getUTCHours()) +
-        ':' +
-        pad(d.getUTCMinutes()) +
-        ':' +
-        pad(d.getUTCSeconds())
-    )
-}
-
-export const _try = function <T>(fn: () => T): T | undefined {
+export const trySafe = function <T>(fn: () => T): T | undefined {
     try {
         return fn()
     } catch (e) {
@@ -175,7 +134,7 @@ export const _try = function <T>(fn: () => T): T | undefined {
     }
 }
 
-export const _safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {
+export const safewrap = function <F extends (...args: any[]) => any = (...args: any[]) => any>(f: F): F {
     return function (...args) {
         try {
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -191,23 +150,23 @@ export const _safewrap = function <F extends (...args: any[]) => any = (...args:
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
-export const _safewrap_class = function (klass: Function, functions: string[]): void {
+export const safewrapClass = function (klass: Function, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
-        klass.prototype[functions[i]] = _safewrap(klass.prototype[functions[i]])
+        klass.prototype[functions[i]] = safewrap(klass.prototype[functions[i]])
     }
 }
 
-export const _strip_empty_properties = function (p: Properties): Properties {
+export const stripEmptyProperties = function (p: Properties): Properties {
     const ret: Properties = {}
-    _each(p, function (v, k) {
-        if (_isString(v) && v.length > 0) {
+    each(p, function (v, k) {
+        if (isString(v) && v.length > 0) {
             ret[k] = v
         }
     })
     return ret
 }
 
-export const _strip_leading_dollar = function (s: string): string {
+export const stripLeadingDollar = function (s: string): string {
     return s.replace(/^\$/, '')
 }
 
@@ -233,14 +192,14 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
         COPY_IN_PROGRESS_SET.add(value)
         let result: T
 
-        if (_isArray(value)) {
+        if (isArray(value)) {
             result = [] as any as T
-            _eachArray(value, (it) => {
+            eachArray(value, (it) => {
                 result.push(internalDeepCircularCopy(it))
             })
         } else {
             result = {} as T
-            _each(value, (val, key) => {
+            each(value, (val, key) => {
                 if (!COPY_IN_PROGRESS_SET.has(val)) {
                     ;(result as any)[key] = internalDeepCircularCopy(val, key)
                 }
@@ -251,12 +210,12 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
     return internalDeepCircularCopy(value)
 }
 
-export function _copyAndTruncateStrings<T extends Record<string, any> = Record<string, any>>(
+export function copyAndTruncateStrings<T extends Record<string, any> = Record<string, any>>(
     object: T,
     maxStringLength: number | null
 ): T {
     return deepCircularCopy(object, (value: any) => {
-        if (_isString(value) && !_isNull(maxStringLength)) {
+        if (isString(value) && !isNull(maxStringLength)) {
             return (value as string).slice(0, maxStringLength)
         }
         return value
@@ -285,7 +244,7 @@ export function _base64Encode(data: string | null | undefined): string | null | 
         return data
     }
 
-    data = _utf8Encode(data)
+    data = utf8Encode(data)
 
     do {
         // pack three octets into four hexets
@@ -318,7 +277,7 @@ export function _base64Encode(data: string | null | undefined): string | null | 
     return enc
 }
 
-export const _utf8Encode = function (string: string): string {
+export const utf8Encode = function (string: string): string {
     string = (string + '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
     let utftext = '',
@@ -341,7 +300,7 @@ export const _utf8Encode = function (string: string): string {
         } else {
             enc = String.fromCharCode((c1 >> 12) | 224, ((c1 >> 6) & 63) | 128, (c1 & 63) | 128)
         }
-        if (!_isNull(enc)) {
+        if (!isNull(enc)) {
             if (end > start) {
                 utftext += string.substring(start, end)
             }
@@ -357,7 +316,7 @@ export const _utf8Encode = function (string: string): string {
     return utftext
 }
 
-export const _register_event = (function () {
+export const registerEvent = (function () {
     // written by Dean Edwards, 2005
     // with input from Tino Zijdel - crisp@xs4all.nl
     // with input from Carl Sverre - mail@carlsverre.com
@@ -413,7 +372,7 @@ export const _register_event = (function () {
             let ret = true
             let old_result: any
 
-            if (_isFunction(old_handlers)) {
+            if (isFunction(old_handlers)) {
                 old_result = old_handlers(event)
             }
             const new_result = new_handler.call(element, event)
@@ -473,7 +432,7 @@ export function loadScript(scriptUrlToLoad: string, callback: (error?: string | 
 export function isCrossDomainCookie(documentLocation: Location | undefined) {
     const hostname = documentLocation?.hostname
 
-    if (!_isString(hostname)) {
+    if (!isString(hostname)) {
         return false
     }
     // split and slice isn't a great way to match arbitrary domains,

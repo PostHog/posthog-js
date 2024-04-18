@@ -1,4 +1,4 @@
-import { _each, _register_event } from '.'
+import { each, registerEvent } from '.'
 import { document, window } from './globals'
 
 let DOM_LOADED: number | undefined = undefined
@@ -16,7 +16,7 @@ const addHandler = function () {
 
         DOM_LOADED = 1
 
-        _each(callbacks, (cb) => cb())
+        each(callbacks, (cb) => cb())
     }
 
     if (document?.addEventListener) {
@@ -33,7 +33,7 @@ const addHandler = function () {
 
     // fallback handler, always will work
     if (window) {
-        _register_event(window, 'load', dom_loaded_handler, true)
+        registerEvent(window, 'load', dom_loaded_handler, true)
     }
 }
 

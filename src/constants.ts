@@ -26,8 +26,8 @@ export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
 export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const USER_STATE = '$user_state'
-export const POSTHOG_QUOTA_LIMITED = '$posthog_quota_limited'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
+export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
 export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
 export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
 export const ENABLE_PERSON_PROCESSING = '$epp'
@@ -42,13 +42,13 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
     USER_STATE,
-    POSTHOG_QUOTA_LIMITED,
     PERSISTENCE_EARLY_ACCESS_FEATURES,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     FLAG_CALL_REPORTED,
     CLIENT_SESSION_PROPS,
+    CAPTURE_RATE_LIMIT,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_REFERRER_INFO,
     ENABLE_PERSON_PROCESSING,

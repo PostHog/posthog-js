@@ -20,7 +20,8 @@ import { PostHogCore } from '../posthog-core'
 import { logger } from '../utils/logger'
 
 import { uuidv7 } from '../uuidv7'
-import { _isFunction } from '../utils/type-utils'
+import { isFunction } from '../utils/type-utils'
+import { USER_STATE } from '../constants'
 
 export type SegmentUser = {
     anonymousId(): string | undefined
@@ -117,7 +118,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
                 distinct_id: user.id(),
                 $device_id: getSegmentAnonymousId(),
             })
-            posthog.persistence!.set_user_state('identified')
+            posthog.persistence!.set_property(USER_STATE, 'identified')
         }
 
         done()
@@ -126,7 +127,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
     const segmentUser = segment.user()
 
     // If segmentUser is a promise then we need to wait for it to resolve
-    if ('then' in segmentUser && _isFunction(segmentUser.then)) {
+    if ('then' in segmentUser && isFunction(segmentUser.then)) {
         segmentUser.then((user) => bootstrapUser(user))
     } else {
         bootstrapUser(segmentUser as SegmentUser)

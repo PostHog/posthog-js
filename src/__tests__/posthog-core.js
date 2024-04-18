@@ -2,10 +2,11 @@ import _posthog from '../loaders/loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
 
-import { _info } from '../utils/event-utils'
+import { Info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
+import { USER_STATE } from '../constants'
 
 jest.mock('../gdpr-utils', () => ({
     ...jest.requireActual('../gdpr-utils'),
@@ -60,7 +61,7 @@ describe('posthog core', () => {
                     Object.assign(this.props, properties)
                 },
                 props: {},
-                get_user_state: () => 'anonymous',
+                get_property: () => 'anonymous',
                 set_initial_campaign_params: jest.fn(),
                 set_initial_referrer_info: jest.fn(),
                 get_initial_props: () => ({}),
@@ -71,13 +72,14 @@ describe('posthog core', () => {
                 update_referrer_info: jest.fn(),
                 update_config: jest.fn(),
                 properties: jest.fn(),
-                get_user_state: () => 'anonymous',
+                get_property: () => 'anonymous',
             },
             _send_request: jest.fn(),
             compression: {},
             __captureHooks: [],
             rateLimiter: {
-                isRateLimited: () => false,
+                isServerRateLimited: () => false,
+                isCaptureClientSideRateLimited: () => false,
             },
         }))
 
@@ -369,11 +371,11 @@ describe('posthog core', () => {
             persistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
-                get_user_state: () => 'anonymous',
+                get_property: () => 'anonymous',
             },
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
-                get_user_state: () => 'anonymous',
+                get_property: () => 'anonymous',
             },
             sessionManager: {
                 checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
@@ -394,7 +396,7 @@ describe('posthog core', () => {
         given('property_blacklist', () => [])
 
         beforeEach(() => {
-            jest.spyOn(_info, 'properties').mockReturnValue({ $lib: 'web' })
+            jest.spyOn(Info, 'properties').mockReturnValue({ $lib: 'web' })
         })
 
         it('returns calculated properties', () => {
@@ -448,18 +450,6 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
             })
             expect(given.overrides.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
-        })
-
-        it('only adds a few propertes if event is $performance_event', () => {
-            given('event_name', () => '$performance_event')
-            expect(given.subject).toEqual({
-                distinct_id: 'abc',
-                event: 'prop', // from actual mock event properties
-                $current_url: undefined,
-                $session_id: 'sessionId',
-                $window_id: 'windowId',
-                token: 'testtoken',
-            })
         })
 
         it('calls sanitize_properties', () => {
@@ -582,7 +572,7 @@ describe('posthog core', () => {
 
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('abcd')
-            expect(given.lib.persistence.get_user_state()).toBe('anonymous')
+            expect(given.lib.persistence.get_property(USER_STATE)).toBe('anonymous')
 
             given.lib.identify('efgh')
 
@@ -607,7 +597,7 @@ describe('posthog core', () => {
 
             expect(given.lib.get_distinct_id()).toBe('abcd')
             expect(given.lib.get_property('$device_id')).toBe('og-device-id')
-            expect(given.lib.persistence.get_user_state()).toBe('identified')
+            expect(given.lib.persistence.get_property(USER_STATE)).toBe('identified')
 
             given.lib.identify('efgh')
             expect(given.overrides.capture).not.toHaveBeenCalled()

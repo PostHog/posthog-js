@@ -12,7 +12,7 @@ import type {
 } from '@rrweb/types'
 import type { Mirror, MaskInputOptions, MaskInputFn, MaskTextFn, SlimDOMOptions, DataURLOptions } from 'rrweb-snapshot'
 
-import { _isObject } from '../../utils/type-utils'
+import { isObject } from '../../utils/type-utils'
 
 export const replacementImageURI =
     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNOCAwSDE2TDAgMTZWOEw4IDBaIiBmaWxsPSIjMkQyRDJEIi8+CjxwYXRoIGQ9Ik0xNiA4VjE2SDhMMTYgOFoiIGZpbGw9IiMyRDJEMkQiLz4KPC9zdmc+Cg=='
@@ -109,9 +109,9 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
 
     if (
         event &&
-        _isObject(event) &&
+        isObject(event) &&
         event.type === PLUGIN_EVENT_TYPE &&
-        _isObject(event.data) &&
+        isObject(event.data) &&
         event.data.plugin === CONSOLE_LOG_PLUGIN_NAME
     ) {
         // Note: event.data.payload.payload comes from rr-web, and is an array of strings

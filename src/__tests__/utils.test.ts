@@ -7,10 +7,10 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, loadScript, isCrossDomainCookie, _base64Encode } from '../utils'
-import { _info } from '../utils/event-utils'
+import { copyAndTruncateStrings, loadScript, isCrossDomainCookie, _base64Encode } from '../utils'
+import { Info } from '../utils/event-utils'
 import { document } from '../utils/globals'
-import { _isBlockedUA, DEFAULT_BLOCKED_UA_STRS } from '../utils/blocked-uas'
+import { isBlockedUA, DEFAULT_BLOCKED_UA_STRS } from '../utils/blocked-uas'
 
 function userAgentFor(botString: string) {
     const randOne = (Math.random() + 1).toString(36).substring(7)
@@ -33,7 +33,7 @@ describe('utils', () => {
         })
 
         it('truncates objects', () => {
-            expect(_copyAndTruncateStrings(target, 5)).toEqual({
+            expect(copyAndTruncateStrings(target, 5)).toEqual({
                 key: 'value',
                 [5]: 'looon',
                 nested: {
@@ -43,7 +43,7 @@ describe('utils', () => {
         })
 
         it('makes a copy', () => {
-            const copy = _copyAndTruncateStrings(target, 5)
+            const copy = copyAndTruncateStrings(target, 5)
 
             target.foo = 'bar'
 
@@ -51,7 +51,7 @@ describe('utils', () => {
         })
 
         it('does not truncate when passed null', () => {
-            expect(_copyAndTruncateStrings(target, null)).toEqual(target)
+            expect(copyAndTruncateStrings(target, null)).toEqual(target)
         })
 
         it('handles recursive objects', () => {
@@ -59,12 +59,12 @@ describe('utils', () => {
             recursiveObject.values.push(recursiveObject)
             recursiveObject.ref = recursiveObject
 
-            expect(_copyAndTruncateStrings(recursiveObject, 5)).toEqual({ key: 'vaaaa', values: ['fooob', undefined] })
+            expect(copyAndTruncateStrings(recursiveObject, 5)).toEqual({ key: 'vaaaa', values: ['fooob', undefined] })
         })
 
         it('handles frozen objects', () => {
             const original = Object.freeze({ key: 'vaaaaalue' })
-            expect(_copyAndTruncateStrings(original, 5)).toEqual({ key: 'vaaaa' })
+            expect(copyAndTruncateStrings(original, 5)).toEqual({ key: 'vaaaa' })
         })
     })
 
@@ -92,12 +92,12 @@ describe('utils', () => {
             }
 
             for (const [userAgent, deviceType] of Object.entries(deviceTypes)) {
-                expect(_info.deviceType(userAgent)).toEqual(deviceType)
+                expect(Info.deviceType(userAgent)).toEqual(deviceType)
             }
         })
 
         it('properties', () => {
-            const properties = _info.properties()
+            const properties = Info.properties()
 
             expect(properties['$lib']).toEqual('web')
             expect(properties['$device_type']).toEqual('Desktop')
@@ -151,7 +151,7 @@ describe('utils', () => {
             (botString) => {
                 const randomisedUserAgent = userAgentFor(botString)
 
-                expect(_isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
+                expect(isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
             }
         )
 
@@ -165,9 +165,9 @@ describe('utils', () => {
                 'Mozilla/5.0 (Linux; Android 5.0) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36 (compatible; Bytespider; spider-feedback@bytedance.com)',
             ],
         ])('blocks based on user agent', (botString) => {
-            expect(_isBlockedUA(botString, [])).toBe(true)
-            expect(_isBlockedUA(botString.toLowerCase(), [])).toBe(true)
-            expect(_isBlockedUA(botString.toUpperCase(), [])).toBe(true)
+            expect(isBlockedUA(botString, [])).toBe(true)
+            expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)
+            expect(isBlockedUA(botString.toUpperCase(), [])).toBe(true)
         })
     })
 

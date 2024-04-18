@@ -11,7 +11,7 @@ module.exports = {
                     if (node.operator === '===' || node.operator === '!==') {
                         context.report({
                             node,
-                            message: 'Use _isNull() instead of direct null checks.',
+                            message: 'Use isNull() instead of direct null checks.',
                         })
                     }
                 }

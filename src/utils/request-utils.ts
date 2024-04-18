@@ -1,6 +1,6 @@
-import { _each, _isValidRegex } from './'
+import { each, isValidRegex } from './'
 
-import { _isArray, _isFile, _isUndefined } from './type-utils'
+import { isArray, isFile, isUndefined } from './type-utils'
 import { logger } from './logger'
 import { document } from './globals'
 
@@ -14,7 +14,7 @@ const localDomains = ['localhost', '127.0.0.1']
  */
 export const convertToURL = (url: string): HTMLAnchorElement | null => {
     const location = document?.createElement('a')
-    if (_isUndefined(location)) {
+    if (isUndefined(location)) {
         return null
     }
 
@@ -22,23 +22,23 @@ export const convertToURL = (url: string): HTMLAnchorElement | null => {
     return location
 }
 
-export const _isUrlMatchingRegex = function (url: string, pattern: string): boolean {
-    if (!_isValidRegex(pattern)) return false
+export const isUrlMatchingRegex = function (url: string, pattern: string): boolean {
+    if (!isValidRegex(pattern)) return false
     return new RegExp(pattern).test(url)
 }
 
-export const _formDataToQuery = function (formdata: Record<string, any> | FormData, arg_separator = '&'): string {
+export const formDataToQuery = function (formdata: Record<string, any> | FormData, arg_separator = '&'): string {
     let use_val: string
     let use_key: string
     const tph_arr: string[] = []
 
-    _each(formdata, function (val: File | string | undefined, key: string | undefined) {
+    each(formdata, function (val: File | string | undefined, key: string | undefined) {
         // the key might be literally the string undefined for e.g. if {undefined: 'something'}
-        if (_isUndefined(val) || _isUndefined(key) || key === 'undefined') {
+        if (isUndefined(val) || isUndefined(key) || key === 'undefined') {
             return
         }
 
-        use_val = encodeURIComponent(_isFile(val) ? val.name : val.toString())
+        use_val = encodeURIComponent(isFile(val) ? val.name : val.toString())
         use_key = encodeURIComponent(key)
         tph_arr[tph_arr.length] = use_key + '=' + use_val
     })
@@ -46,7 +46,7 @@ export const _formDataToQuery = function (formdata: Record<string, any> | FormDa
     return tph_arr.join(arg_separator)
 }
 
-export const _getQueryParam = function (url: string, param: string): string {
+export const getQueryParam = function (url: string, param: string): string {
     const withoutHash: string = url.split('#')[0] || ''
     const queryParams: string = withoutHash.split('?')[1] || ''
 
@@ -61,7 +61,7 @@ export const _getQueryParam = function (url: string, param: string): string {
         }
     }
 
-    if (!_isArray(keyValuePair) || keyValuePair.length < 2) {
+    if (!isArray(keyValuePair) || keyValuePair.length < 2) {
         return ''
     } else {
         let result = keyValuePair[1]

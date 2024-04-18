@@ -15,7 +15,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isDocument instead of direct document checks.',
+                        message: 'Use isDocument instead of direct document checks.',
                     })
                 }
 
@@ -27,7 +27,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isDocument instead of direct document checks.',
+                        message: 'Use isDocument instead of direct document checks.',
                     })
                 }
             },

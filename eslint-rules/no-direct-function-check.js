@@ -15,7 +15,7 @@ module.exports = {
                 if (isFunctionPatternRegex && isTestCall) {
                     context.report({
                         node,
-                        message: 'Do not use regex to check for functions. Use _isFunction instead.',
+                        message: 'Do not use regex to check for functions. Use isFunction instead.',
                     })
                 }
             },
@@ -28,7 +28,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: "Do not use 'instanceof Function' to check for functions. Use _isFunction instead.",
+                        message: "Do not use 'instanceof Function' to check for functions. Use isFunction instead.",
                     })
                 }
 
@@ -43,7 +43,7 @@ module.exports = {
                     context.report({
                         node,
                         message:
-                            'Do not use \'typeof x === "function"\' to check for functions. Use _isFunction instead.',
+                            'Do not use \'typeof x === "function"\' to check for functions. Use isFunction instead.',
                     })
                 }
             },

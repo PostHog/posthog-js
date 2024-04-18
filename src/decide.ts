@@ -2,7 +2,7 @@ import { loadScript } from './utils'
 import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
-import { _isUndefined } from './utils/type-utils'
+import { isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window, document, assignableWindow } from './utils/globals'
 import type { PostHogExtended } from './posthog-extended'
@@ -74,7 +74,7 @@ export class Decide {
         if (
             response['autocaptureExceptions'] &&
             !!response['autocaptureExceptions'] &&
-            _isUndefined(exceptionAutoCaptureAddedToWindow)
+            isUndefined(exceptionAutoCaptureAddedToWindow)
         ) {
             loadScript(this.instance.requestRouter.endpointFor('assets', '/static/exception-autocapture.js'), (err) => {
                 if (err) {

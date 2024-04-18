@@ -1,7 +1,6 @@
 import { SESSION_RECORDING_IS_SAMPLED } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Toolbar } from './extensions/toolbar'
-import { userOptedOut } from './gdpr-utils'
 import { RequestRouter } from './utils/request-router'
 import {
     DecideResponse,
@@ -12,13 +11,14 @@ import {
     ToolbarParams,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
-import { createSegmentIntegration } from './extensions/segment-integration'
 import { PostHogSurveys } from './posthog-surveys'
 import { SurveyCallback } from './posthog-surveys-types'
-import { _isObject, _isString, _isUndefined } from './utils/type-utils'
+import { isObject, isString } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { Autocapture } from './autocapture'
 import { POSTHOG_INSTANCES, PostHogCore } from './posthog-core'
+import { Heatmaps } from './heatmaps'
+import { setupSegmentIntegration } from './extensions/segment-integration'
 
 class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
@@ -44,11 +44,11 @@ export class PostHogExtended extends PostHogCore {
     surveys: PostHogSurveys
     toolbar: Toolbar
     autocapture?: Autocapture
+    heatmaps?: Heatmaps
     sessionRecording?: SessionRecording
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     SentryIntegration = SentryIntegration
-    segmentIntegration: () => any
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -58,7 +58,6 @@ export class PostHogExtended extends PostHogCore {
 
     constructor() {
         super()
-        this.segmentIntegration = () => createSegmentIntegration(this)
         this.toolbar = new Toolbar(this)
         this.surveys = new PostHogSurveys(this)
         this.requestRouter = new RequestRouter(this)
@@ -66,12 +65,12 @@ export class PostHogExtended extends PostHogCore {
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = _isString(prop) ? { [prop]: to } : prop
+                const setProps = isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(setProps)
                 callback?.({} as any)
             },
             set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
-                const setProps = _isString(prop) ? { [prop]: to } : prop
+                const setProps = isString(prop) ? { [prop]: to } : prop
                 this.setPersonProperties(undefined, setProps)
                 callback?.({} as any)
             },
@@ -103,9 +102,23 @@ export class PostHogExtended extends PostHogCore {
             this.autocapture.startIfEnabled()
             this.surveys.loadIfEnabled()
             this.toolbar.maybeLoadToolbar()
+
+            this.heatmaps = new Heatmaps(this)
+            this.heatmaps.startIfEnabled()
         }
 
         return this
+    }
+
+    _loaded(): void {
+        // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
+        if (this.config.segment) {
+            setupSegmentIntegration(this, () => super._loaded())
+        } else {
+            super._loaded()
+        }
+
+        super._loaded()
     }
 
     /*
@@ -167,9 +180,10 @@ export class PostHogExtended extends PostHogCore {
     set_config(config: Partial<PostHogConfig>): void {
         super.set_config(config)
 
-        if (_isObject(config)) {
+        if (isObject(config)) {
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
+            this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
         }
     }

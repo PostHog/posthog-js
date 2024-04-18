@@ -1,7 +1,7 @@
-import { _base64Encode, _each } from './utils'
+import { _base64Encode, each } from './utils'
 import Config from './config'
 import { Compression, RequestOptions, RequestResponse } from './types'
-import { _formDataToQuery } from './utils/request-utils'
+import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
 import { fetch, document, XMLHttpRequest, AbortController, navigator } from './utils/globals'
@@ -58,7 +58,7 @@ export const extendURLParams = (url: string, params: Record<string, any>): strin
         delete newParams[key]
     })
 
-    let newSearch = _formDataToQuery(newParams)
+    let newSearch = formDataToQuery(newParams)
     newSearch = newSearch ? (search ? search + '&' : '') + newSearch : search
 
     return `${baseUrl}?${newSearch}`
@@ -101,7 +101,7 @@ const xhr = (options: RequestOptions) => {
     req.open(options.method || 'GET', options.url, true)
     const { contentType, body } = encodePostData(options) ?? {}
 
-    _each(options.headers, function (headerValue, headerName) {
+    each(options.headers, function (headerValue, headerName) {
         req.setRequestHeader(headerName, headerValue)
     })
 
@@ -141,7 +141,7 @@ const _fetch = (options: RequestOptions) => {
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
-    _each(headers, function (headerValue, headerName) {
+    each(headers, function (headerValue, headerName) {
         headers.append(headerName, headerValue)
     })
 

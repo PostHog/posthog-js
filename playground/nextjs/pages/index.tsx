@@ -32,7 +32,11 @@ export default function Home() {
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
             </Head>
             <main>
-                <h1>PostHog React</h1>
+                <div className="sticky top-0 bg-white border-b mb-4">
+                    <h1 className="m-0">
+                        <b>PostHog</b> React
+                    </h1>
+                </div>
 
                 <p>The current time is {time}</p>
 

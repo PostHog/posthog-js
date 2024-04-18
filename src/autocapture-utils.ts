@@ -1,12 +1,12 @@
 import { AutocaptureConfig, Properties } from './types'
-import { _each, _entries, _includes, _trim } from './utils'
+import { each, entries, includes, trim } from './utils'
 
-import { _isArray, _isNullish, _isString, _isUndefined } from './utils/type-utils'
+import { isArray, isNullish, isString, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 
 export function splitClassString(s: string): string[] {
-    return s ? _trim(s).split(/\s+/) : []
+    return s ? trim(s).split(/\s+/) : []
 }
 
 /*
@@ -34,12 +34,12 @@ export function getClassNames(el: Element): string[] {
 }
 
 export function makeSafeText(s: string | null | undefined): string | null {
-    if (_isNullish(s)) {
+    if (isNullish(s)) {
         return null
     }
 
     return (
-        _trim(s)
+        trim(s)
             // scrub potentially sensitive values
             .split(/(\s+)/)
             .filter((s) => shouldCaptureValue(s))
@@ -65,14 +65,14 @@ export function getSafeText(el: Element): string {
     let elText = ''
 
     if (shouldCaptureElement(el) && !isSensitiveElement(el) && el.childNodes && el.childNodes.length) {
-        _each(el.childNodes, function (child) {
+        each(el.childNodes, function (child) {
             if (isTextNode(child) && child.textContent) {
                 elText += makeSafeText(child.textContent) ?? ''
             }
         })
     }
 
-    return _trim(elText)
+    return trim(elText)
 }
 
 /*
@@ -128,7 +128,7 @@ function checkIfElementTreePassesElementAllowList(
     autocaptureConfig: AutocaptureConfig | undefined
 ): boolean {
     const allowlist = autocaptureConfig?.element_allowlist
-    if (_isUndefined(allowlist)) {
+    if (isUndefined(allowlist)) {
         // everything is allowed, when there is no allow list
         return true
     }
@@ -156,7 +156,7 @@ function checkIfElementTreePassesCSSSelectorAllowList(
     autocaptureConfig: AutocaptureConfig | undefined
 ): boolean {
     const allowlist = autocaptureConfig?.css_selector_allowlist
-    if (_isUndefined(allowlist)) {
+    if (isUndefined(allowlist)) {
         // everything is allowed, when there is no allow list
         return true
     }
@@ -173,7 +173,7 @@ function checkIfElementTreePassesCSSSelectorAllowList(
     return false
 }
 
-function getParentElement(curEl: Element): Element | false {
+export function getParentElement(curEl: Element): Element | false {
     const parentNode = curEl.parentNode
     if (!parentNode || !isElementNode(parentNode)) return false
     return parentNode
@@ -282,18 +282,18 @@ export function shouldCaptureDomEvent(
 export function shouldCaptureElement(el: Element): boolean {
     for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
         const classes = getClassNames(curEl)
-        if (_includes(classes, 'ph-sensitive') || _includes(classes, 'ph-no-capture')) {
+        if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
             return false
         }
     }
 
-    if (_includes(getClassNames(el), 'ph-include')) {
+    if (includes(getClassNames(el), 'ph-include')) {
         return true
     }
 
     // don't include hidden or password fields
     const type = (el as HTMLInputElement).type || ''
-    if (_isString(type)) {
+    if (isString(type)) {
         // it's possible for el.type to be a DOM element if el is a form with a child input[name="type"]
         switch (type.toLowerCase()) {
             case 'hidden':
@@ -308,7 +308,7 @@ export function shouldCaptureElement(el: Element): boolean {
     // See https://github.com/posthog/posthog-js/issues/165
     // Under specific circumstances a bug caused .replace to be called on a DOM element
     // instead of a string, removing the element from the page. Ensure this issue is mitigated.
-    if (_isString(name)) {
+    if (isString(name)) {
         // it's possible for el.name or el.id to be a DOM element if el is a form with a child input[name="name"]
         const sensitiveNameRegex =
             /^cc|cardnum|ccnum|creditcard|csc|cvc|cvv|exp|pass|pwd|routing|seccode|securitycode|securitynum|socialsec|socsec|ssn/i
@@ -362,12 +362,12 @@ const unanchoredSSNRegex = new RegExp(`(${coreSSNPattern})`)
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureValue(value: string, anchorRegexes = true): boolean {
-    if (_isNullish(value)) {
+    if (isNullish(value)) {
         return false
     }
 
-    if (_isString(value)) {
-        value = _trim(value)
+    if (isString(value)) {
+        value = trim(value)
 
         // check to see if input value looks like a credit card number
         // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
@@ -394,7 +394,7 @@ export function shouldCaptureValue(value: string, anchorRegexes = true): boolean
  * @returns {boolean} whether the element is an angular tag
  */
 export function isAngularStyleAttr(attributeName: string): boolean {
-    if (_isString(attributeName)) {
+    if (isString(attributeName)) {
         return attributeName.substring(0, 10) === '_ngcontent' || attributeName.substring(0, 7) === '_nghost'
     }
     return false
@@ -422,7 +422,7 @@ export function getDirectAndNestedSpanText(target: Element): string {
 export function getNestedSpanText(target: Element): string {
     let text = ''
     if (target && target.childNodes && target.childNodes.length) {
-        _each(target.childNodes, function (child) {
+        each(target.childNodes, function (child) {
             if (child && child.tagName?.toLowerCase() === 'span') {
                 try {
                     const spanText = getSafeText(child)
@@ -491,13 +491,13 @@ function elementsToString(elements: PHElement[]): string {
             ...element.attributes,
         }
         const sortedAttributes: Record<string, any> = {}
-        _entries(attributes)
+        entries(attributes)
             .sort(([a], [b]) => a.localeCompare(b))
             .forEach(
                 ([key, value]) => (sortedAttributes[escapeQuotes(key.toString())] = escapeQuotes(value.toString()))
             )
         el_string += ':'
-        el_string += _entries(attributes)
+        el_string += entries(attributes)
             .map(([key, value]) => `${key}="${value}"`)
             .join('')
         return el_string
@@ -518,7 +518,7 @@ function extractElements(elements: Properties[]): PHElement[] {
             attributes: {} as { [id: string]: any },
         }
 
-        _entries(el)
+        entries(el)
             .filter(([key]) => key.indexOf('attr__') === 0)
             .forEach(([key, value]) => (response.attributes[key] = value))
         return response
@@ -529,7 +529,7 @@ function extractAttrClass(el: Properties): PHElement['attr_class'] {
     const attr_class = el['attr__class']
     if (!attr_class) {
         return undefined
-    } else if (_isArray(attr_class)) {
+    } else if (isArray(attr_class)) {
         return attr_class
     } else {
         return splitClassString(attr_class)

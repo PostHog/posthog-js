@@ -20,17 +20,17 @@ import { PostHogExtended } from '../../posthog-extended'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
-import { _timestamp, loadScript } from '../../utils'
+import { timestamp, loadScript } from '../../utils'
 
 import {
-    _isBoolean,
-    _isFunction,
-    _isNull,
-    _isNullish,
-    _isNumber,
-    _isObject,
-    _isString,
-    _isUndefined,
+    isBoolean,
+    isFunction,
+    isNull,
+    isNullish,
+    isNumber,
+    isObject,
+    isString,
+    isUndefined,
 } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 import { document, assignableWindow, window } from '../../utils/globals'
@@ -163,7 +163,7 @@ export class SessionRecording {
 
     private get isSampled(): boolean | null {
         const currentValue = this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        return _isBoolean(currentValue) ? currentValue : null
+        return isBoolean(currentValue) ? currentValue : null
     }
 
     private get sessionDuration(): number | null {
@@ -219,12 +219,12 @@ export class SessionRecording {
 
     private get sampleRate(): number | null {
         const rate = this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
-        return _isNumber(rate) ? rate : null
+        return isNumber(rate) ? rate : null
     }
 
     private get minimumDuration(): number | null {
         const duration = this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
-        return _isNumber(duration) ? duration : null
+        return isNumber(duration) ? duration : null
     }
 
     /**
@@ -240,11 +240,11 @@ export class SessionRecording {
             return 'disabled'
         }
 
-        if (!_isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
+        if (!isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
             return 'buffering'
         }
 
-        if (_isBoolean(this.isSampled)) {
+        if (isBoolean(this.isSampled)) {
             return this.isSampled ? 'sampled' : 'disabled'
         } else {
             return 'active'
@@ -316,7 +316,7 @@ export class SessionRecording {
         // and the bundler won't minimise any of the references
         const currentSampleRate = this.sampleRate
 
-        if (!_isNumber(currentSampleRate)) {
+        if (!isNumber(currentSampleRate)) {
             this.instance.persistence?.register({
                 [SESSION_RECORDING_IS_SAMPLED]: null,
             })
@@ -333,7 +333,7 @@ export class SessionRecording {
          * Otherwise, we should use the stored decision.
          */
         let shouldSample: boolean
-        const makeDecision = sessionIdChanged || !_isBoolean(storedIsSampled)
+        const makeDecision = sessionIdChanged || !isBoolean(storedIsSampled)
         if (makeDecision) {
             const randomNumber = Math.random()
             shouldSample = randomNumber < currentSampleRate
@@ -367,11 +367,11 @@ export class SessionRecording {
 
         this._setupSampling()
 
-        if (!_isNullish(this._linkedFlag)) {
-            const linkedFlag = _isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
-            const linkedVariant = _isString(this._linkedFlag) ? null : this._linkedFlag.variant
+        if (!isNullish(this._linkedFlag)) {
+            const linkedFlag = isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
+            const linkedVariant = isString(this._linkedFlag) ? null : this._linkedFlag.variant
             this.instance.onFeatureFlags((_flags, variants) => {
-                const flagIsPresent = _isObject(variants) && linkedFlag in variants
+                const flagIsPresent = isObject(variants) && linkedFlag in variants
                 const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
                 if (linkedFlagMatches) {
                     const payload = {
@@ -396,7 +396,7 @@ export class SessionRecording {
      * This might be called more than once so needs to be idempotent
      */
     private _setupSampling() {
-        if (_isNumber(this.sampleRate) && _isNull(this._samplingSessionListener)) {
+        if (isNumber(this.sampleRate) && isNull(this._samplingSessionListener)) {
             this._samplingSessionListener = this.sessionManager.onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
@@ -410,7 +410,7 @@ export class SessionRecording {
             const persistResponse = () => {
                 const receivedSampleRate = response.sessionRecording?.sampleRate
 
-                const parsedSampleRate = _isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+                const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
                 const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
 
                 persistence.register({
@@ -426,7 +426,7 @@ export class SessionRecording {
                         quality: response.sessionRecording?.canvasQuality,
                     },
                     [SESSION_RECORDING_SAMPLE_RATE]: parsedSampleRate,
-                    [SESSION_RECORDING_MINIMUM_DURATION]: _isUndefined(receivedMinimumDuration)
+                    [SESSION_RECORDING_MINIMUM_DURATION]: isUndefined(receivedMinimumDuration)
                         ? null
                         : receivedMinimumDuration,
                 })
@@ -449,11 +449,11 @@ export class SessionRecording {
                     payload: [JSON.stringify(message)],
                 },
             },
-            timestamp: _timestamp(),
+            timestamp: timestamp(),
         })
     }
     private _startCapture() {
-        if (_isUndefined(Object.assign)) {
+        if (isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
             // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
             // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
@@ -492,7 +492,7 @@ export class SessionRecording {
         }
     }
 
-    private _isInteractiveEvent(event: eventWithTime) {
+    private isInteractiveEvent(event: eventWithTime) {
         return (
             event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
             ACTIVE_SOURCES.indexOf(event.data?.source as IncrementalSource) !== -1
@@ -504,7 +504,7 @@ export class SessionRecording {
         // We don't want to extend the session or trigger a new session in these cases. These events are designated by event
         // type -> incremental update, and source -> mutation.
 
-        const isUserInteraction = this._isInteractiveEvent(event)
+        const isUserInteraction = this.isInteractiveEvent(event)
 
         if (!isUserInteraction && !this.isIdle) {
             // We check if the lastActivityTimestamp is old enough to go idle
@@ -706,7 +706,7 @@ export class SessionRecording {
             plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
         }
 
-        if (this.networkPayloadCapture && _isFunction(assignableWindow.getRecordNetworkPlugin)) {
+        if (this.networkPayloadCapture && isFunction(assignableWindow.getRecordNetworkPlugin)) {
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
@@ -726,7 +726,7 @@ export class SessionRecording {
     onRRwebEmit(rawEvent: eventWithTime) {
         this._processQueuedEvents()
 
-        if (!rawEvent || !_isObject(rawEvent)) {
+        if (!rawEvent || !isObject(rawEvent)) {
             return
         }
 
@@ -870,9 +870,9 @@ export class SessionRecording {
         const sessionDuration = this.sessionDuration
         // if we have old data in the buffer but the session has rotated then the
         // session duration might be negative, in that case we want to flush the buffer
-        const isPositiveSessionDuration = _isNumber(sessionDuration) && sessionDuration >= 0
+        const isPositiveSessionDuration = isNumber(sessionDuration) && sessionDuration >= 0
         const isBelowMinimumDuration =
-            _isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
+            isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
         if (this.status === 'buffering' || isBelowMinimumDuration) {
             this.flushBufferTimer = setTimeout(() => {
@@ -905,7 +905,7 @@ export class SessionRecording {
             this.buffer = this._flushBuffer()
         }
 
-        if (_isNull(this.buffer.sessionId) && !_isNull(this.sessionId)) {
+        if (isNull(this.buffer.sessionId) && !isNull(this.sessionId)) {
             // session id starts null but has now been assigned, update the buffer
             this.buffer.sessionId = this.sessionId
             this.buffer.windowId = this.windowId
@@ -927,6 +927,7 @@ export class SessionRecording {
             _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
+            _noHeatmaps: true, // Session Replay ingestion can't handle heatamap data
         })
     }
 }

@@ -15,7 +15,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isString instead of direct string checks.',
+                        message: 'Use isString instead of direct string checks.',
                     })
                 }
 
@@ -27,7 +27,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isString instead of direct string checks.',
+                        message: 'Use isString instead of direct string checks.',
                     })
                 }
             },

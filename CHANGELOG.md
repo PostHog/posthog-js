@@ -1,3 +1,12 @@
+## 1.128.0 - 2024-04-18
+
+- feat: Heatmaps instrumentation (#1131)
+
+## 1.127.0 - 2024-04-18
+
+- feat: Added client side capture rate limiting (#1051)
+- chore: add a test (#1144)
+
 ## 1.126.0 - 2024-04-17
 
 - fix: Reacting to config changes (#1138)

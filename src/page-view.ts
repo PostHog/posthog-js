@@ -1,22 +1,9 @@
 import { window } from './utils/globals'
-import type { PostHogCore } from './posthog-core'
-import { _isArray } from './utils/type-utils'
+import { PostHogCore } from './posthog-core'
+import { isUndefined } from './utils/type-utils'
 
-interface PageViewData {
-    pathname: string
-    // scroll is how far down the page the user has scrolled,
-    // content is how far down the page the user can view content
-    // (e.g. if the page is 1000 tall, but the user's screen is only 500 tall,
-    // and they don't scroll at all, then scroll is 0 and content is 500)
-    maxScrollHeight?: number
-    maxScrollY?: number
-    lastScrollY?: number
-    maxContentHeight?: number
-    maxContentY?: number
-    lastContentY?: number
-}
-
-interface ScrollProperties {
+interface PageViewEventProperties {
+    $prev_pageview_pathname?: string
     $prev_pageview_last_scroll?: number
     $prev_pageview_last_scroll_percentage?: number
     $prev_pageview_max_scroll?: number
@@ -27,69 +14,45 @@ interface ScrollProperties {
     $prev_pageview_max_content_percentage?: number
 }
 
-interface PageViewEventProperties extends ScrollProperties {
-    $prev_pageview_pathname?: string
-}
-
 export class PageViewManager {
-    _pageViewData: PageViewData | undefined
-    _hasSeenPageView = false
+    _currentPath?: string
 
     constructor(private _instance: PostHogCore) {}
 
-    _createPageViewData(): PageViewData {
-        return {
-            pathname: window?.location.pathname ?? '',
-        }
-    }
-
     doPageView(): PageViewEventProperties {
-        let prevPageViewData: PageViewData | undefined
-        // if there were events created before the first PageView, we would have created a
-        // pageViewData for them. If this happened, we don't want to create a new pageViewData
-        if (!this._hasSeenPageView) {
-            this._hasSeenPageView = true
-            prevPageViewData = undefined
-            if (!this._pageViewData) {
-                this._pageViewData = this._createPageViewData()
-            }
-        } else {
-            prevPageViewData = this._pageViewData
-            this._pageViewData = this._createPageViewData()
-        }
+        const response = this._previousScrollProperties()
 
-        // update the scroll properties for the new page, but wait until the next tick
-        // of the event loop
-        setTimeout(this._updateScrollData, 0)
+        // On a pageview we reset the contexts
+        this._currentPath = window?.location.pathname ?? ''
+        this._instance.scrollManager.resetContext()
 
-        return {
-            $prev_pageview_pathname: prevPageViewData?.pathname,
-            ...this._calculatePrevPageScrollProperties(prevPageViewData),
-        }
+        return response
     }
 
     doPageLeave(): PageViewEventProperties {
-        const prevPageViewData = this._pageViewData
-        return {
-            $prev_pageview_pathname: prevPageViewData?.pathname,
-            ...this._calculatePrevPageScrollProperties(prevPageViewData),
-        }
+        return this._previousScrollProperties()
     }
 
-    _calculatePrevPageScrollProperties(prevPageViewData: PageViewData | undefined): ScrollProperties {
-        if (
-            !prevPageViewData ||
-            prevPageViewData.maxScrollHeight == null ||
-            prevPageViewData.lastScrollY == null ||
-            prevPageViewData.maxScrollY == null ||
-            prevPageViewData.maxContentHeight == null ||
-            prevPageViewData.lastContentY == null ||
-            prevPageViewData.maxContentY == null
-        ) {
+    private _previousScrollProperties(): PageViewEventProperties {
+        const previousPath = this._currentPath
+        const scrollContext = this._instance.scrollManager.getContext()
+
+        if (!previousPath || !scrollContext) {
             return {}
         }
 
-        let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } = prevPageViewData
+        let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } = scrollContext
+
+        if (
+            isUndefined(maxScrollHeight) ||
+            isUndefined(lastScrollY) ||
+            isUndefined(maxScrollY) ||
+            isUndefined(maxContentHeight) ||
+            isUndefined(lastContentY) ||
+            isUndefined(maxContentY)
+        ) {
+            return {}
+        }
 
         // Use ceil, so that e.g. scrolling 999.5px of a 1000px page is considered 100% scrolled
         maxScrollHeight = Math.ceil(maxScrollHeight)
@@ -106,6 +69,7 @@ export class PageViewManager {
         const maxContentPercentage = maxContentHeight <= 1 ? 1 : clamp(maxContentY / maxContentHeight, 0, 1)
 
         return {
+            $prev_pageview_pathname: previousPath,
             $prev_pageview_last_scroll: lastScrollY,
             $prev_pageview_last_scroll_percentage: lastScrollPercentage,
             $prev_pageview_max_scroll: maxScrollY,
@@ -115,83 +79,6 @@ export class PageViewManager {
             $prev_pageview_max_content: maxContentY,
             $prev_pageview_max_content_percentage: maxContentPercentage,
         }
-    }
-
-    _updateScrollData = () => {
-        if (!this._pageViewData) {
-            this._pageViewData = this._createPageViewData()
-        }
-        const pageViewData = this._pageViewData
-
-        const scrollY = this._scrollY()
-        const scrollHeight = this._scrollHeight()
-        const contentY = this._contentY()
-        const contentHeight = this._contentHeight()
-
-        pageViewData.lastScrollY = scrollY
-        pageViewData.maxScrollY = Math.max(scrollY, pageViewData.maxScrollY ?? 0)
-        pageViewData.maxScrollHeight = Math.max(scrollHeight, pageViewData.maxScrollHeight ?? 0)
-
-        pageViewData.lastContentY = contentY
-        pageViewData.maxContentY = Math.max(contentY, pageViewData.maxContentY ?? 0)
-        pageViewData.maxContentHeight = Math.max(contentHeight, pageViewData.maxContentHeight ?? 0)
-    }
-
-    startMeasuringScrollPosition() {
-        // setting the third argument to `true` means that we will receive scroll events for other scrollable elements
-        // on the page, not just the window
-        // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
-        window?.addEventListener('scroll', this._updateScrollData, true)
-        window?.addEventListener('scrollend', this._updateScrollData, true)
-        window?.addEventListener('resize', this._updateScrollData)
-    }
-
-    stopMeasuringScrollPosition() {
-        window?.removeEventListener('scroll', this._updateScrollData)
-        window?.removeEventListener('scrollend', this._updateScrollData)
-        window?.removeEventListener('resize', this._updateScrollData)
-    }
-
-    _scrollElement(): Element | null | undefined {
-        if (this._instance.config.scroll_root_selector) {
-            const selectors = _isArray(this._instance.config.scroll_root_selector)
-                ? this._instance.config.scroll_root_selector
-                : [this._instance.config.scroll_root_selector]
-            for (const selector of selectors) {
-                const element = window?.document.querySelector(selector)
-                if (element) {
-                    return element
-                }
-            }
-            return undefined
-        } else {
-            return window?.document.documentElement
-        }
-    }
-
-    _scrollHeight(): number {
-        const element = this._scrollElement()
-        return element ? Math.max(0, element.scrollHeight - element.clientHeight) : 0
-    }
-
-    _scrollY(): number {
-        if (this._instance.config.scroll_root_selector) {
-            const element = this._scrollElement()
-            return (element && element.scrollTop) || 0
-        } else {
-            return window ? window.scrollY || window.pageYOffset || window.document.documentElement.scrollTop || 0 : 0
-        }
-    }
-
-    _contentHeight(): number {
-        const element = this._scrollElement()
-        return element?.scrollHeight || 0
-    }
-
-    _contentY(): number {
-        const element = this._scrollElement()
-        const clientHeight = element?.clientHeight || 0
-        return this._scrollY() + clientHeight
     }
 }
 

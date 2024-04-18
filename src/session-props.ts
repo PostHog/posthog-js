@@ -7,7 +7,7 @@
  * These have the same lifespan as a session_id
  */
 import { location } from './utils/globals'
-import { _info } from './utils/event-utils'
+import { Info } from './utils/event-utils'
 import { SessionIdManager } from './sessionid'
 import { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
@@ -30,8 +30,8 @@ interface StoredSessionSourceProps {
 const generateSessionSourceParams = (): SessionSourceProps => {
     return {
         initialPathName: location?.pathname || '',
-        referringDomain: _info.referringDomain(),
-        ..._info.campaignParams(),
+        referringDomain: Info.referringDomain(),
+        ...Info.campaignParams(),
     }
 }
 
