@@ -1,3 +1,7 @@
+## 1.128.1 - 2024-04-18
+
+- fix: Remove underscores from all functions (#1140)
+
 ## 1.128.0 - 2024-04-18
 
 - feat: Heatmaps instrumentation (#1131)
