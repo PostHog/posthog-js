@@ -1,6 +1,6 @@
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
-import { _isUndefined } from './utils/type-utils'
+import { isUndefined } from './utils/type-utils'
 
 interface PageViewEventProperties {
     $prev_pageview_pathname?: string
@@ -47,12 +47,12 @@ export class PageViewManager {
         let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } = scrollContext
 
         if (
-            _isUndefined(maxScrollHeight) ||
-            _isUndefined(lastScrollY) ||
-            _isUndefined(maxScrollY) ||
-            _isUndefined(maxContentHeight) ||
-            _isUndefined(lastContentY) ||
-            _isUndefined(maxContentY)
+            isUndefined(maxScrollHeight) ||
+            isUndefined(lastScrollY) ||
+            isUndefined(maxScrollY) ||
+            isUndefined(maxContentHeight) ||
+            isUndefined(lastContentY) ||
+            isUndefined(maxContentY)
         ) {
             return {}
         }

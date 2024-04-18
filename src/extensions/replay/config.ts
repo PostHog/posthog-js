@@ -1,9 +1,9 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../types'
-import { _isFunction, _isNullish, _isString, _isUndefined } from '../../utils/type-utils'
+import { isFunction, isNullish, isString, isUndefined } from '../../utils/type-utils'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 import { shouldCaptureValue } from '../../autocapture-utils'
-import { _each } from '../../utils'
+import { each } from '../../utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 
@@ -80,7 +80,7 @@ const PAYLOAD_CONTENT_DENY_LIST = [
 
 // we always remove headers on the deny list because we never want to capture this sensitive data
 const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
-    _each(Object.keys(data.requestHeaders ?? {}), (header) => {
+    each(Object.keys(data.requestHeaders ?? {}), (header) => {
         if (HEADER_DENY_LIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
     })
     return data
@@ -107,12 +107,12 @@ function enforcePayloadSizeLimit(
     limit: number,
     description: string
 ): string | null | undefined {
-    if (_isNullish(payload)) {
+    if (isNullish(payload)) {
         return payload
     }
 
     let requestContentLength: string | number = headers?.['content-length'] || estimateBytes(payload)
-    if (_isString(requestContentLength)) {
+    if (isString(requestContentLength)) {
         requestContentLength = parseInt(requestContentLength)
     }
 
@@ -144,7 +144,7 @@ const limitPayloadSize = (
 }
 
 function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Response'): string | null | undefined {
-    if (_isNullish(payload)) {
+    if (isNullish(payload)) {
         return payload
     }
     let scrubbed = payload
@@ -152,7 +152,7 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     if (!shouldCaptureValue(scrubbed, false)) {
         scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted'
     }
-    _each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
+    each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
         if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
             scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted as might contain: ' + text
         }
@@ -162,7 +162,7 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
 }
 
 function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): CapturedNetworkRequest | undefined {
-    if (_isUndefined(capturedRequest)) {
+    if (isUndefined(capturedRequest)) {
         return undefined
     }
 
@@ -199,9 +199,9 @@ export const buildNetworkRequestOptions = (
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
         payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d)))
 
-    const hasDeprecatedMaskFunction = _isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
+    const hasDeprecatedMaskFunction = isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
 
-    if (hasDeprecatedMaskFunction && _isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)) {
+    if (hasDeprecatedMaskFunction && isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)) {
         logger.warn(
             'Both `maskNetworkRequestFn` and `maskCapturedNetworkRequestFn` are defined. `maskNetworkRequestFn` will be ignored.'
         )
@@ -217,7 +217,7 @@ export const buildNetworkRequestOptions = (
         }
     }
 
-    config.maskRequestFn = _isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
+    config.maskRequestFn = isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
         ? (data) => {
               const cleanedRequest = enforcedCleaningFn(data)
               return cleanedRequest

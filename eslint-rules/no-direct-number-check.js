@@ -15,7 +15,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isNumber instead of direct number checks.',
+                        message: 'Use isNumber instead of direct number checks.',
                     })
                 }
 
@@ -29,7 +29,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isNumber instead of direct number checks.',
+                        message: 'Use isNumber instead of direct number checks.',
                     })
                 }
             },

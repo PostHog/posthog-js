@@ -11,7 +11,7 @@
 // polyfill for IE11
 import { window } from './utils/globals'
 
-import { _isNumber, _isUndefined } from './utils/type-utils'
+import { isNumber, isUndefined } from './utils/type-utils'
 
 if (!Math.trunc) {
     Math.trunc = function (v) {
@@ -22,7 +22,7 @@ if (!Math.trunc) {
 // polyfill for IE11
 if (!Number.isInteger) {
     Number.isInteger = function (value) {
-        return _isNumber(value) && isFinite(value) && Math.floor(value) === value
+        return isNumber(value) && isFinite(value) && Math.floor(value) === value
     }
 }
 
@@ -144,13 +144,13 @@ class V7Generator {
      */
     generate(): UUID {
         const value = this.generateOrAbort()
-        if (!_isUndefined(value)) {
+        if (!isUndefined(value)) {
             return value
         } else {
             // reset state and resume
             this.timestamp = 0
             const valueAfterReset = this.generateOrAbort()
-            if (_isUndefined(valueAfterReset)) {
+            if (isUndefined(valueAfterReset)) {
                 throw new Error('Could not generate UUID after timestamp reset')
             }
             return valueAfterReset
@@ -207,7 +207,7 @@ declare const UUIDV7_DENY_WEAK_RNG: boolean
 /** Stores `crypto.getRandomValues()` available in the environment. */
 let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buffer) => {
     // fall back on Math.random() unless the flag is set to true
-    // TRICKY: don't use the _isUndefined method here as can't pass the reference
+    // TRICKY: don't use the isUndefined method here as can't pass the reference
     if (typeof UUIDV7_DENY_WEAK_RNG !== 'undefined' && UUIDV7_DENY_WEAK_RNG) {
         throw new Error('no cryptographically strong RNG available')
     }
@@ -219,7 +219,7 @@ let getRandomValues: <T extends Uint8Array | Uint32Array>(buffer: T) => T = (buf
 }
 
 // detect Web Crypto API
-if (window && !_isUndefined(window.crypto) && crypto.getRandomValues) {
+if (window && !isUndefined(window.crypto) && crypto.getRandomValues) {
     getRandomValues = (buffer) => crypto.getRandomValues(buffer)
 }
 

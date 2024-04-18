@@ -13,112 +13,112 @@ const { RuleTester } = require('eslint')
 const ruleTester = new RuleTester()
 
 ruleTester.run('no-direct-null-check', noDirectNullCheck, {
-    valid: [{ code: `_isNull(x)` }],
-    invalid: [{ code: `x === null`, errors: [{ message: 'Use _isNull() instead of direct null checks.' }] }],
+    valid: [{ code: `isNull(x)` }],
+    invalid: [{ code: `x === null`, errors: [{ message: 'Use isNull() instead of direct null checks.' }] }],
 })
 
 ruleTester.run('no-direct-undefined-check', noDirectUndefinedCheck, {
-    valid: [{ code: `_isUndefined(x)` }],
+    valid: [{ code: `isUndefined(x)` }],
     invalid: [
         {
             code: `typeof x === undefined`,
-            errors: [{ message: 'Use _isUndefined() instead of direct undefined checks.' }],
+            errors: [{ message: 'Use isUndefined() instead of direct undefined checks.' }],
         },
     ],
 })
 
 ruleTester.run('no-direct-array-check', noDirectArrayCheck, {
-    valid: [{ code: `_isArray(x)` }],
+    valid: [{ code: `isArray(x)` }],
     invalid: [
         {
             code: `Array.isArray(x)`,
-            errors: [{ message: 'Use _isArray() instead of direct array checks.' }],
+            errors: [{ message: 'Use isArray() instead of direct array checks.' }],
         },
     ],
 })
 
 ruleTester.run('no-direct-is-function-check', noDirectIsFunctionCheck, {
-    valid: [{ code: `_isFunction(x)` }],
+    valid: [{ code: `isFunction(x)` }],
     invalid: [
         {
             code: `/^\\s*\\bfunction\\b/.test(x)`,
-            errors: [{ message: 'Do not use regex to check for functions. Use _isFunction instead.' }],
+            errors: [{ message: 'Do not use regex to check for functions. Use isFunction instead.' }],
         },
         {
             code: `x instanceof Function`,
-            errors: [{ message: "Do not use 'instanceof Function' to check for functions. Use _isFunction instead." }],
+            errors: [{ message: "Do not use 'instanceof Function' to check for functions. Use isFunction instead." }],
         },
         {
             code: `typeof x === "function"`,
             errors: [
-                { message: 'Do not use \'typeof x === "function"\' to check for functions. Use _isFunction instead.' },
+                { message: 'Do not use \'typeof x === "function"\' to check for functions. Use isFunction instead.' },
             ],
         },
     ],
 })
 
 ruleTester.run('no-direct-object-check', noDirectObjectCheck, {
-    valid: [{ code: `_isObject(x)` }],
+    valid: [{ code: `isObject(x)` }],
     invalid: [
         {
             code: `obj === Object(obj)`,
-            errors: [{ message: "Do not use 'obj === Object(obj)'. Use _isObject instead." }],
+            errors: [{ message: "Do not use 'obj === Object(obj)'. Use isObject instead." }],
         },
     ],
 })
 
 ruleTester.run('no-direct-string-check', noDirectStringCheck, {
-    valid: [{ code: `_isString(x)` }],
+    valid: [{ code: `isString(x)` }],
     invalid: [
         {
             code: `toString.call(x) == '[object String]'`,
-            errors: [{ message: 'Use _isString instead of direct string checks.' }],
+            errors: [{ message: 'Use isString instead of direct string checks.' }],
         },
         {
             code: `x instanceof String`,
-            errors: [{ message: 'Use _isString instead of direct string checks.' }],
+            errors: [{ message: 'Use isString instead of direct string checks.' }],
         },
     ],
 })
 
 ruleTester.run('no-direct-date-check', noDirectDateCheck, {
-    valid: [{ code: `_isDate(x)` }],
+    valid: [{ code: `isDate(x)` }],
     invalid: [
         {
             code: `toString.call(obj) == '[object Date]'`,
-            errors: [{ message: 'Use _isDate instead of direct date checks.' }],
+            errors: [{ message: 'Use isDate instead of direct date checks.' }],
         },
         {
             code: `x instanceof Date`,
-            errors: [{ message: 'Use _isDate instead of direct date checks.' }],
+            errors: [{ message: 'Use isDate instead of direct date checks.' }],
         },
     ],
 })
 
 ruleTester.run('no-direct-number-check', noDirectNumberCheck, {
-    valid: [{ code: `_isNumber(x)` }],
+    valid: [{ code: `isNumber(x)` }],
     invalid: [
         {
             code: `toString.call(obj) == '[object Number]'`,
-            errors: [{ message: 'Use _isNumber instead of direct number checks.' }],
+            errors: [{ message: 'Use isNumber instead of direct number checks.' }],
         },
         {
             code: `typeof x === 'number'`,
-            errors: [{ message: 'Use _isNumber instead of direct number checks.' }],
+            errors: [{ message: 'Use isNumber instead of direct number checks.' }],
         },
     ],
 })
 
 ruleTester.run('no-direct-boolean-check', noDirectBooleanCheck, {
-    valid: [{ code: `_isBoolean(x)` }],
+    valid: [{ code: `isBoolean(x)` }],
     invalid: [
         {
             code: `toString.call(obj) == '[object Boolean]'`,
-            errors: [{ message: 'Use _isBoolean instead of direct boolean checks.' }],
+            errors: [{ message: 'Use isBoolean instead of direct boolean checks.' }],
         },
         {
             code: `typeof x === 'boolean'`,
-            errors: [{ message: 'Use _isBoolean instead of direct boolean checks.' }],
+            errors: [{ message: 'Use isBoolean instead of direct boolean checks.' }],
         },
     ],
 })

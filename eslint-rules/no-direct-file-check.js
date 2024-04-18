@@ -15,7 +15,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isFile instead of direct type checks.',
+                        message: 'Use isFile instead of direct type checks.',
                     })
                 }
 
@@ -23,7 +23,7 @@ module.exports = {
                 if (node.operator === 'instanceof' && node.right.type === 'Identifier' && node.right.name === 'File') {
                     context.report({
                         node,
-                        message: 'Use _isFile instead of direct checks.',
+                        message: 'Use isFile instead of direct checks.',
                     })
                 }
             },

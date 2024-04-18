@@ -10,7 +10,7 @@ import {
 } from './type-checking'
 import { defaultStackParser, StackFrame } from './stack-trace'
 
-import { _isNumber, _isString, _isUndefined } from '../../utils/type-utils'
+import { isNumber, isString, isUndefined } from '../../utils/type-utils'
 
 /**
  * based on the very wonderful MIT licensed Sentry SDK
@@ -44,7 +44,7 @@ const reactMinifiedRegexp = /Minified React error #\d+;/i
 
 function getPopSize(ex: Error & { framesToPop?: number }): number {
     if (ex) {
-        if (_isNumber(ex.framesToPop)) {
+        if (isNumber(ex.framesToPop)) {
             return ex.framesToPop
         }
 
@@ -131,7 +131,7 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         $exception_message?: string
     } = {}
 
-    if (_isUndefined(error) && _isString(event)) {
+    if (isUndefined(error) && isString(event)) {
         let name = 'Error'
         let message = event
         const groups = event.match(ERROR_TYPES_PATTERN)

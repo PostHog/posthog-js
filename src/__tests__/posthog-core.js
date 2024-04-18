@@ -2,7 +2,7 @@ import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
 
-import { _info } from '../utils/event-utils'
+import { Info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
@@ -395,7 +395,7 @@ describe('posthog core', () => {
         given('property_blacklist', () => [])
 
         beforeEach(() => {
-            jest.spyOn(_info, 'properties').mockReturnValue({ $lib: 'web' })
+            jest.spyOn(Info, 'properties').mockReturnValue({ $lib: 'web' })
         })
 
         it('returns calculated properties', () => {

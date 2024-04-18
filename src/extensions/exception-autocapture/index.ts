@@ -4,7 +4,7 @@ import { DecideResponse, Properties } from '../../types'
 import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
 import { isPrimitive } from './type-checking'
 
-import { _isArray, _isObject, _isUndefined } from '../../utils/type-utils'
+import { isArray, isObject, isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 
 export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
@@ -72,13 +72,13 @@ export class ExceptionObserver {
         if (!window) {
             return
         }
-        if (!_isUndefined(this.originalOnErrorHandler)) {
+        if (!isUndefined(this.originalOnErrorHandler)) {
             window.onerror = this.originalOnErrorHandler
             this.originalOnErrorHandler = null
         }
         delete (window.onerror as any)?.__POSTHOG_INSTRUMENTED__
 
-        if (!_isUndefined(this.originalOnUnhandledRejectionHandler)) {
+        if (!isUndefined(this.originalOnUnhandledRejectionHandler)) {
             window.onunhandledrejection = this.originalOnUnhandledRejectionHandler
             this.originalOnUnhandledRejectionHandler = null
         }
@@ -99,7 +99,7 @@ export class ExceptionObserver {
         if (
             !isPrimitive(autocaptureExceptionsResponse) &&
             'errors_to_ignore' in autocaptureExceptionsResponse &&
-            _isArray(autocaptureExceptionsResponse.errors_to_ignore)
+            isArray(autocaptureExceptionsResponse.errors_to_ignore)
         ) {
             const dropRules = autocaptureExceptionsResponse.errors_to_ignore
 
@@ -112,7 +112,7 @@ export class ExceptionObserver {
             this.startCapturing()
             logger.info(
                 '[Exception Capture] Remote config for exception autocapture is enabled, starting with config: ',
-                _isObject(autocaptureExceptionsResponse) ? autocaptureExceptionsResponse : {}
+                isObject(autocaptureExceptionsResponse) ? autocaptureExceptionsResponse : {}
             )
         }
     }

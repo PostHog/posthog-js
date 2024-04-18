@@ -19,7 +19,7 @@ module.exports = {
                     if (isLeftIdentifier && isRightObjectCall) {
                         context.report({
                             node,
-                            message: "Do not use 'obj === Object(obj)'. Use _isObject instead.",
+                            message: "Do not use 'obj === Object(obj)'. Use isObject instead.",
                         })
                     }
                 }

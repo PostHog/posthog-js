@@ -1,6 +1,6 @@
 import { RetriableRequestOptions } from './types'
 
-import { _isNumber, _isUndefined } from './utils/type-utils'
+import { isNumber, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
@@ -43,7 +43,7 @@ export class RetryQueue {
         this.queue = []
         this.areWeOnline = true
 
-        if (!_isUndefined(window) && 'onLine' in window.navigator) {
+        if (!isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
             window.addEventListener('online', () => {
                 this.areWeOnline = true
@@ -56,7 +56,7 @@ export class RetryQueue {
     }
 
     retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestOptions): void {
-        if (_isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
+        if (isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 

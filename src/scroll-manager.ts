@@ -1,6 +1,6 @@
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
-import { _isArray } from './utils/type-utils'
+import { isArray } from './utils/type-utils'
 
 export interface ScrollContext {
     // scroll is how far down the page the user has scrolled,
@@ -67,7 +67,7 @@ export class ScrollManager {
 
     public scrollElement(): Element | undefined {
         if (this.instance.config.scroll_root_selector) {
-            const selectors = _isArray(this.instance.config.scroll_root_selector)
+            const selectors = isArray(this.instance.config.scroll_root_selector)
                 ? this.instance.config.scroll_root_selector
                 : [this.instance.config.scroll_root_selector]
             for (const selector of selectors) {

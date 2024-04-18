@@ -1,8 +1,8 @@
-import { _extend } from './utils'
+import { extend } from './utils'
 import { PersistentStore, Properties } from './types'
 import { DISTINCT_ID, ENABLE_PERSON_PROCESSING, SESSION_ID, SESSION_RECORDING_IS_SAMPLED } from './constants'
 
-import { _isNull, _isUndefined } from './utils/type-utils'
+import { isNull, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window, document } from './utils/globals'
 import { uuidv7 } from './uuidv7'
@@ -178,12 +178,12 @@ let _localStorage_supported: boolean | null = null
 
 export const localStore: PersistentStore = {
     is_supported: function () {
-        if (!_isNull(_localStorage_supported)) {
+        if (!isNull(_localStorage_supported)) {
             return _localStorage_supported
         }
 
         let supported = true
-        if (!_isUndefined(window)) {
+        if (!isUndefined(window)) {
             try {
                 const key = '__mplssupport__',
                     val = 'xyz'
@@ -254,12 +254,12 @@ export const localPlusCookieStore: PersistentStore = {
     ...localStore,
     parse: function (name) {
         try {
-            let extend: Properties = {}
+            let cookieProperties: Properties = {}
             try {
                 // See if there's a cookie stored with data.
-                extend = cookieStore.parse(name) || {}
+                cookieProperties = cookieStore.parse(name) || {}
             } catch (err) {}
-            const value = _extend(extend, JSON.parse(localStore.get(name) || '{}'))
+            const value = extend(cookieProperties, JSON.parse(localStore.get(name) || '{}'))
             localStore.set(name, value)
             return value
         } catch (err) {
@@ -332,11 +332,11 @@ export const resetSessionStorageSupported = () => {
 // Storage that only lasts the length of a tab/window. Survives page refreshes
 export const sessionStore: PersistentStore = {
     is_supported: function () {
-        if (!_isNull(sessionStorageSupported)) {
+        if (!isNull(sessionStorageSupported)) {
             return sessionStorageSupported
         }
         sessionStorageSupported = true
-        if (!_isUndefined(window)) {
+        if (!isUndefined(window)) {
             try {
                 const key = '__support__',
                     val = 'xyz'

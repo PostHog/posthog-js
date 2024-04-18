@@ -1,7 +1,7 @@
 import { QueuedRequestOptions } from './types'
-import { _each } from './utils'
+import { each } from './utils'
 
-import { _isArray, _isUndefined } from './utils/type-utils'
+import { isArray, isUndefined } from './utils/type-utils'
 
 export class RequestQueue {
     // We start in a paused state and only start flushing when enabled by the parent
@@ -55,8 +55,8 @@ export class RequestQueue {
                     const req = requests[key]
                     const now = new Date().getTime()
 
-                    if (req.data && _isArray(req.data)) {
-                        _each(req.data, (data) => {
+                    if (req.data && isArray(req.data)) {
+                        each(req.data, (data) => {
                             data['offset'] = Math.abs(data['timestamp'] - now)
                             delete data['timestamp']
                         })
@@ -74,10 +74,10 @@ export class RequestQueue {
 
     private formatQueue(): Record<string, QueuedRequestOptions> {
         const requests: Record<string, QueuedRequestOptions> = {}
-        _each(this.queue, (request: QueuedRequestOptions) => {
+        each(this.queue, (request: QueuedRequestOptions) => {
             const req = request
             const key = (req ? req.batchKey : null) || req.url
-            if (_isUndefined(requests[key])) {
+            if (isUndefined(requests[key])) {
                 // TODO: What about this -it seems to batch data into an array - do we always want that?
                 requests[key] = { ...req, data: [] }
             }

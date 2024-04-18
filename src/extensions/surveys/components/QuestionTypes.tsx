@@ -8,7 +8,7 @@ import {
 } from '../../../posthog-surveys-types'
 import { RefObject } from 'preact'
 import { useRef, useState } from 'preact/hooks'
-import { _isNull, _isArray } from '../../../utils/type-utils'
+import { isNull, isArray } from '../../../utils/type-utils'
 import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import {
     checkSVG,
@@ -164,7 +164,7 @@ export function RatingQuestion({
             </div>
             <BottomSection
                 text={question.buttonText || appearance?.submitButtonText || 'Submit'}
-                submitDisabled={_isNull(rating) && !question.optional}
+                submitDisabled={isNull(rating) && !question.optional}
                 appearance={appearance}
                 onSubmit={() => onSubmit(rating)}
             />
@@ -263,7 +263,7 @@ export function MultipleChoiceQuestion({
                                     }
                                     if (
                                         question.type === SurveyQuestionType.MultipleChoice &&
-                                        _isArray(selectedChoices)
+                                        isArray(selectedChoices)
                                     ) {
                                         if (selectedChoices.includes(val)) {
                                             // filter out values because clicking on a selected choice should deselect it
@@ -290,7 +290,7 @@ export function MultipleChoiceQuestion({
                                                 }
                                                 if (
                                                     question.type === SurveyQuestionType.MultipleChoice &&
-                                                    _isArray(selectedChoices)
+                                                    isArray(selectedChoices)
                                                 ) {
                                                     return setOpenEndedInput(userValue)
                                                 }
@@ -311,9 +311,9 @@ export function MultipleChoiceQuestion({
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={
-                    (_isNull(selectedChoices) ||
-                        (_isArray(selectedChoices) && !openChoiceSelected && selectedChoices.length === 0) ||
-                        (_isArray(selectedChoices) &&
+                    (isNull(selectedChoices) ||
+                        (isArray(selectedChoices) && !openChoiceSelected && selectedChoices.length === 0) ||
+                        (isArray(selectedChoices) &&
                             openChoiceSelected &&
                             !openEndedInput &&
                             selectedChoices.length === 0 &&
@@ -323,7 +323,7 @@ export function MultipleChoiceQuestion({
                 appearance={appearance}
                 onSubmit={() => {
                     if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                        if (_isArray(selectedChoices)) {
+                        if (isArray(selectedChoices)) {
                             onSubmit([...selectedChoices, openEndedInput])
                         }
                     } else {

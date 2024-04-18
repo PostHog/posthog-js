@@ -1,4 +1,4 @@
-import { _each, _extend, _includes, _register_event } from './utils'
+import { each, extend, includes, registerEvent } from './utils'
 import {
     autocaptureCompatibleElements,
     getClassNames,
@@ -22,7 +22,7 @@ import { AutocaptureConfig, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { _isBoolean, _isFunction, _isNull, _isObject, _isUndefined } from './utils/type-utils'
+import { isBoolean, isFunction, isNull, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { document, window } from './utils/globals'
 
@@ -47,7 +47,7 @@ export class Autocapture {
     }
 
     private get config(): AutocaptureConfig {
-        const config = _isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
+        const config = isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
         // precompile the regex
         config.url_allowlist = config.url_allowlist?.map((url) => new RegExp(url))
         return config
@@ -76,13 +76,13 @@ export class Autocapture {
             this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
         }
 
-        _register_event(document, 'submit', handler, false, true)
-        _register_event(document, 'change', handler, false, true)
-        _register_event(document, 'click', handler, false, true)
+        registerEvent(document, 'submit', handler, false, true)
+        registerEvent(document, 'change', handler, false, true)
+        registerEvent(document, 'click', handler, false, true)
 
         if (this.config.capture_copied_text) {
-            _register_event(document, 'copy', copiedTextHandler, false, true)
-            _register_event(document, 'cut', copiedTextHandler, false, true)
+            registerEvent(document, 'copy', copiedTextHandler, false, true)
+            registerEvent(document, 'cut', copiedTextHandler, false, true)
         }
     }
 
@@ -113,8 +113,8 @@ export class Autocapture {
         const memoryDisabled = this._isDisabledServerSide
 
         if (
-            _isNull(memoryDisabled) &&
-            !_isBoolean(persistedServerDisabled) &&
+            isNull(memoryDisabled) &&
+            !isBoolean(persistedServerDisabled) &&
             !this.instance.config.advanced_disable_decide
         ) {
             // We only enable if we know that the server has not disabled it (unless decide is disabled)
@@ -145,7 +145,7 @@ export class Autocapture {
 
         const props: Properties = {}
 
-        _each(elem.attributes, function (attr: Attr) {
+        each(elem.attributes, function (attr: Attr) {
             if (attr.name && attr.name.indexOf('data-ph-capture-attribute') === 0) {
                 const propertyKey = attr.name.replace('data-ph-capture-attribute-', '')
                 const propertyValue = attr.value
@@ -178,7 +178,7 @@ export class Autocapture {
 
         // capture the deny list here because this not-a-class class makes it tricky to use this.config in the function below
         const elementAttributeIgnorelist = this.config?.element_attribute_ignorelist
-        _each(elem.attributes, function (attr: Attr) {
+        each(elem.attributes, function (attr: Attr) {
             // Only capture attributes we know are safe
             if (isSensitiveElement(elem) && ['name', 'id', 'class', 'aria-label'].indexOf(attr.name) === -1) return
 
@@ -221,7 +221,7 @@ export class Autocapture {
 
     private _getEventTarget(e: Event): Element | null {
         // https://developer.mozilla.org/en-US/docs/Web/API/Event/target#Compatibility_notes
-        if (_isUndefined(e.target)) {
+        if (isUndefined(e.target)) {
             return (e.srcElement as Element) || null
         } else {
             if ((e.target as HTMLElement)?.shadowRoot) {
@@ -284,7 +284,7 @@ export class Autocapture {
             let href,
                 explicitNoCapture = false
 
-            _each(targetElementList, (el) => {
+            each(targetElementList, (el) => {
                 const shouldCaptureEl = shouldCaptureElement(el)
 
                 // if the element or a parent element is an anchor tag
@@ -296,7 +296,7 @@ export class Autocapture {
 
                 // allow users to programmatically prevent capturing of elements by adding class 'ph-no-capture'
                 const classes = getClassNames(el)
-                if (_includes(classes, 'ph-no-capture')) {
+                if (includes(classes, 'ph-no-capture')) {
                     explicitNoCapture = true
                 }
 
@@ -309,7 +309,7 @@ export class Autocapture {
                 )
 
                 const augmentProperties = this._getAugmentPropertiesFromElement(el)
-                _extend(autocaptureAugmentProperties, augmentProperties)
+                extend(autocaptureAugmentProperties, augmentProperties)
             })
 
             if (!this.instance.config.mask_all_text) {
@@ -330,7 +330,7 @@ export class Autocapture {
                 return false
             }
 
-            const props = _extend(
+            const props = extend(
                 this._getDefaultProperties(e.type),
                 this._elementsChainAsString
                     ? {
@@ -361,6 +361,6 @@ export class Autocapture {
     }
 
     isBrowserSupported(): boolean {
-        return _isFunction(document?.querySelectorAll)
+        return isFunction(document?.querySelectorAll)
     }
 }

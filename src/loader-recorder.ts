@@ -19,21 +19,21 @@ import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugin
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from './types'
 import {
-    _isArray,
-    _isBoolean,
-    _isDocument,
-    _isFormData,
-    _isFunction,
-    _isNull,
-    _isNullish,
-    _isObject,
-    _isString,
-    _isUndefined,
+    isArray,
+    isBoolean,
+    isDocument,
+    isFormData,
+    isFunction,
+    isNull,
+    isNullish,
+    isObject,
+    isString,
+    isUndefined,
 } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { defaultNetworkOptions } from './extensions/replay/config'
-import { _formDataToQuery } from './utils/request-utils'
+import { formDataToQuery } from './utils/request-utils'
 
 export type NetworkData = {
     requests: CapturedNetworkRequest[]
@@ -70,7 +70,7 @@ export function patch(
 
         // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
         // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
-        if (_isFunction(wrapped)) {
+        if (isFunction(wrapped)) {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             wrapped.prototype = wrapped.prototype || {}
             Object.defineProperties(wrapped, {
@@ -166,7 +166,7 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
 }
 
 function shouldRecordHeaders(type: 'request' | 'response', recordHeaders: NetworkRecordOptions['recordHeaders']) {
-    return !!recordHeaders && (_isBoolean(recordHeaders) || recordHeaders[type])
+    return !!recordHeaders && (isBoolean(recordHeaders) || recordHeaders[type])
 }
 
 function shouldRecordBody(
@@ -181,10 +181,10 @@ function shouldRecordBody(
     }
 
     if (!recordBody) return false
-    if (_isBoolean(recordBody)) return true
-    if (_isArray(recordBody)) return matchesContentType(recordBody)
+    if (isBoolean(recordBody)) return true
+    if (isArray(recordBody)) return matchesContentType(recordBody)
     const recordBodyType = recordBody[type]
-    if (_isBoolean(recordBodyType)) return recordBodyType
+    if (isBoolean(recordBodyType)) return recordBodyType
     return matchesContentType(recordBodyType)
 }
 
@@ -224,23 +224,23 @@ async function getRequestPerformanceEntry(
  * XHR request body is Document | XMLHttpRequestBodyInit | null | undefined
  */
 function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | any | null | undefined): string | null {
-    if (_isNullish(body)) {
+    if (isNullish(body)) {
         return null
     }
 
-    if (_isString(body)) {
+    if (isString(body)) {
         return body
     }
 
-    if (_isDocument(body)) {
+    if (isDocument(body)) {
         return body.textContent
     }
 
-    if (_isFormData(body)) {
-        return _formDataToQuery(body)
+    if (isFormData(body)) {
+        return formDataToQuery(body)
     }
 
-    if (_isObject(body)) {
+    if (isObject(body)) {
         try {
             return JSON.stringify(body)
         } catch (e) {
@@ -298,7 +298,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 const originalSend = xhr.send.bind(xhr)
                 xhr.send = (body) => {
                     if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
-                        if (_isUndefined(body) || _isNull(body)) {
+                        if (isUndefined(body) || isNull(body)) {
                             networkRequest.requestBody = null
                         } else {
                             networkRequest.requestBody = _tryReadXHRBody(body)
@@ -328,7 +328,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                         networkRequest.responseHeaders = responseHeaders
                     }
                     if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                        if (_isNullish(xhr.response)) {
+                        if (isNullish(xhr.response)) {
                             networkRequest.responseBody = null
                         } else {
                             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -337,7 +337,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     }
                     getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
                         .then((entry) => {
-                            if (_isNull(entry)) {
+                            if (isNull(entry)) {
                                 return
                             }
                             const requests = prepareRequest(entry, req.method, xhr?.status, networkRequest)
@@ -454,7 +454,7 @@ function _tryReadBody(r: Request | Response): Promise<string> {
 
 async function _tryReadResponseBody(r: Response): Promise<string> {
     const cannotReadBodyReason: string | null = _checkForCannotReadResponseBody(r)
-    if (!_isNull(cannotReadBodyReason)) {
+    if (!isNull(cannotReadBodyReason)) {
         return Promise.resolve(cannotReadBodyReason)
     }
 
@@ -515,7 +515,7 @@ function initFetchObserver(
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, after, before)
                     .then((entry) => {
-                        if (_isNull(entry)) {
+                        if (isNull(entry)) {
                             return
                         }
                         const requests = prepareRequest(entry, req.method, res?.status, networkRequest)

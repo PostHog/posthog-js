@@ -1,4 +1,4 @@
-import { _includes, _register_event } from './utils'
+import { includes, registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
 import { Properties } from './types'
 import { PostHog } from './posthog-core'
@@ -20,7 +20,7 @@ function elementOrParentPositionMatches(el: Element, matches: string[], breakOnE
             return false
         }
 
-        if (_includes(matches, window?.getComputedStyle(curEl).position)) {
+        if (includes(matches, window?.getComputedStyle(curEl).position)) {
             return true
         }
 
@@ -65,14 +65,8 @@ export class Heatmaps {
             return
         }
 
-        _register_event(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), false, true)
-        _register_event(
-            document,
-            'mousemove',
-            (e) => this._onMouseMove((e || window?.event) as MouseEvent),
-            false,
-            true
-        )
+        registerEvent(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), false, true)
+        registerEvent(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), false, true)
 
         this._initialized = true
     }

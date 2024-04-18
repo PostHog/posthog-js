@@ -52,7 +52,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 /**
  * Block various web spiders from executing our JS and sending false capturing data
  */
-export const _isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
+export const isBlockedUA = function (ua: string, customBlockedUserAgents: string[]): boolean {
     if (!ua) {
         return false
     }

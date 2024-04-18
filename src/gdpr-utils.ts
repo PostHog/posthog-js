@@ -11,13 +11,13 @@
  * These functions are used internally by the SDK and are not intended to be publicly exposed.
  */
 
-import { _each, _includes } from './utils'
+import { each, includes } from './utils'
 import { window } from './utils/globals'
 import { cookieStore, localStore, localPlusCookieStore } from './storage'
 import { GDPROptions, PersistentStore } from './types'
 import { PostHog } from './posthog-core'
 
-import { _isNumber, _isString } from './utils/type-utils'
+import { isNumber, isString } from './utils/type-utils'
 import { logger } from './utils/logger'
 
 /**
@@ -160,14 +160,14 @@ function _hasDoNotTrackFlagOn(options: GDPROptions) {
         const win = (options && options.window) || window
         const nav = win?.navigator
         let hasDntOn = false
-        _each(
+        each(
             [
                 nav?.doNotTrack, // standard
                 (nav as any)['msDoNotTrack'],
                 (win as any)['doNotTrack'],
             ],
             function (dntValue) {
-                if (_includes([true, 1, '1', 'yes'], dntValue)) {
+                if (includes([true, 1, '1', 'yes'], dntValue)) {
                     hasDntOn = true
                 }
             }
@@ -191,7 +191,7 @@ function _hasDoNotTrackFlagOn(options: GDPROptions) {
  * @param {boolean} [options.secureCookie] - whether the opt-in cookie is set as secure or not
  */
 function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
-    if (!_isString(token) || !token.length) {
+    if (!isString(token) || !token.length) {
         logger.error('gdpr.' + (optValue ? 'optIn' : 'optOut') + ' called with an invalid token')
         return
     }
@@ -201,7 +201,7 @@ function _optInOut(optValue: boolean, token: string, options: GDPROptions) {
     _getStorage(options).set(
         _getStorageKey(token, options),
         optValue ? 1 : 0,
-        _isNumber(options.cookieExpiration) ? options.cookieExpiration : null,
+        isNumber(options.cookieExpiration) ? options.cookieExpiration : null,
         options.crossSubdomainCookie,
         options.secureCookie
     )

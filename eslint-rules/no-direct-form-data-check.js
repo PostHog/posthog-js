@@ -15,7 +15,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isFormData instead of direct type checks.',
+                        message: 'Use isFormData instead of direct type checks.',
                     })
                 }
 
@@ -27,7 +27,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isFormData instead of direct checks.',
+                        message: 'Use isFormData instead of direct checks.',
                     })
                 }
             },

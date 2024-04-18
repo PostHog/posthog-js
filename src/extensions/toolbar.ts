@@ -1,4 +1,4 @@
-import { _register_event, _try, loadScript } from '../utils'
+import { registerEvent, trySafe, loadScript } from '../utils'
 import { PostHog } from '../posthog-core'
 import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
@@ -65,8 +65,8 @@ export class Toolbar {
 
             let toolbarParams: ToolbarParams
             const state = stateHash
-                ? _try(() => JSON.parse(atob(decodeURIComponent(stateHash)))) ||
-                  _try(() => JSON.parse(decodeURIComponent(stateHash)))
+                ? trySafe(() => JSON.parse(atob(decodeURIComponent(stateHash)))) ||
+                  trySafe(() => JSON.parse(decodeURIComponent(stateHash)))
                 : null
 
             const parseFromUrl = state && state['action'] === 'ph_authorize'
@@ -161,7 +161,7 @@ export class Toolbar {
 
             // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
             // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
-            _register_event(window, 'turbolinks:load', () => {
+            registerEvent(window, 'turbolinks:load', () => {
                 this._toolbarScriptLoaded = false
                 this.loadToolbar(toolbarParams)
             })

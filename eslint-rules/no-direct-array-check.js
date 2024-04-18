@@ -11,7 +11,7 @@ module.exports = {
                 ) {
                     context.report({
                         node,
-                        message: 'Use _isArray() instead of direct array checks.',
+                        message: 'Use isArray() instead of direct array checks.',
                     })
                 }
             },

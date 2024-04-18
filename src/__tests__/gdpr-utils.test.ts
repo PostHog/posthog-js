@@ -2,7 +2,7 @@ import sinon from 'sinon'
 
 import * as gdpr from '../gdpr-utils'
 
-import { _isNull } from '../utils/type-utils'
+import { isNull } from '../utils/type-utils'
 import { document, assignableWindow } from '../utils/globals'
 import { GDPROptions } from '../types'
 
@@ -38,13 +38,13 @@ function assertPersistenceValue(
     persistencePrefix = DEFAULT_PERSISTENCE_PREFIX
 ) {
     if (persistenceType === `cookie`) {
-        if (_isNull(value)) {
+        if (isNull(value)) {
             expect(document.cookie).not.toContain(token)
         } else {
             expect(document.cookie).toContain(token + `=${value}`)
         }
     } else {
-        if (_isNull(value)) {
+        if (isNull(value)) {
             expect(assignableWindow.localStorage.getItem(persistencePrefix + token)).toBeNull()
         } else {
             expect(assignableWindow.localStorage.getItem(persistencePrefix + token)).toBe(`${value}`)
