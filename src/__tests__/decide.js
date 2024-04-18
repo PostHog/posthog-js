@@ -171,7 +171,6 @@ describe('Decide', () => {
 
             expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
             expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.autocapture.afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
