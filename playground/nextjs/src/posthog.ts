@@ -42,7 +42,7 @@ if (typeof window !== 'undefined') {
         debug: true,
         scroll_root_selector: ['#scroll_element', 'html'],
         // persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
-        process_person: 'identified_only',
+        person_profiles: 'identified_only',
         __preview_heatmaps: true,
         ...configForConsent(),
     })
