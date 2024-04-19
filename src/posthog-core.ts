@@ -1373,9 +1373,6 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        if (!this._requirePersonProcessing('posthog.setPersonPropertiesForFlags')) {
-            return
-        }
         this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
@@ -1392,9 +1389,6 @@ export class PostHog {
      *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
-        if (!this._requirePersonProcessing('posthog.setGroupPropertiesForFlags')) {
-            return
-        }
         this.featureFlags.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 

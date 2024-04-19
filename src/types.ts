@@ -152,8 +152,8 @@ export interface PostHogConfig {
 
     /** You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting. There are three options:
      * - `person_profiles: 'always'` _(default)_ - we will process persons data for all events
+     * - `person_profiles: 'identified_only'` - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`. Anonymous users won't get person profiles.
      * - `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`.
-     * - `person_profiles: 'identified_only'` - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.
      */
     person_profiles?: 'always' | 'never' | 'identified_only'
     /** @deprecated - use `person_profiles` instead  */
