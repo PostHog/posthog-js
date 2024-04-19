@@ -764,6 +764,19 @@ export class PostHog {
             this.persistence.set_initial_referrer_info()
         }
 
+        if (
+            event_name === `$set` ||
+            event_name === '$set_once' ||
+            properties?.$set ||
+            properties?.$set_once ||
+            options?.$set ||
+            options?.$set_once
+        ) {
+            if (!this._requirePersonProcessing('$set/$set_once')) {
+                return
+            }
+        }
+
         let data: CaptureResult = {
             uuid: uuidv7(),
             event: event_name,
@@ -1818,9 +1831,7 @@ export class PostHog {
      */
     _requirePersonProcessing(function_name: string): boolean {
         if (this.config.person_profiles === 'never') {
-            logger.error(
-                function_name + ' was called, but process_person is set to "never". This call will be ignored.'
-            )
+            logger.error(function_name + ' was used, but process_person is set to "never". This call will be ignored.')
             return false
         }
         this._register_single(ENABLE_PERSON_PROCESSING, true)
