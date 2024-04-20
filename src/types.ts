@@ -403,6 +403,10 @@ export type InitiatorType =
 
 export type NetworkRecordOptions = {
     initiatorTypes?: InitiatorType[]
+    /**
+     * NB if you want to mask captured URLs you need to mask `name` and `currentURL` properties of CapturedNetworkRequest
+     * @param data
+     */
     maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined
     recordHeaders?: boolean | { request: boolean; response: boolean }
     recordBody?: boolean | string[] | { request: boolean | string[]; response: boolean | string[] }
@@ -451,4 +455,6 @@ export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     responseBody?: string | null
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
+    // the page this network request was made on (for navigations this should match the name prop)
+    currentUrl?: string
 }

@@ -4,31 +4,31 @@ import { CapturedNetworkRequest } from '../../../types'
 
 describe('config', () => {
     describe('network request options', () => {
+        it('can enable header recording remotely', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true })
+            expect(networkOptions.recordHeaders).toBe(true)
+            expect(networkOptions.recordBody).toBe(undefined)
+        })
+
+        it('can enable body recording remotely', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordBody: true })
+            expect(networkOptions.recordHeaders).toBe(undefined)
+            expect(networkOptions.recordBody).toBe(true)
+        })
+
+        it('client can force disable recording', () => {
+            const posthogConfig = defaultConfig()
+            posthogConfig.session_recording.recordHeaders = false
+            posthogConfig.session_recording.recordBody = false
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {
+                recordHeaders: true,
+                recordBody: true,
+            })
+            expect(networkOptions.recordHeaders).toBe(false)
+            expect(networkOptions.recordBody).toBe(false)
+        })
+
         describe('maskRequestFn', () => {
-            it('can enable header recording remotely', () => {
-                const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordHeaders: true })
-                expect(networkOptions.recordHeaders).toBe(true)
-                expect(networkOptions.recordBody).toBe(undefined)
-            })
-
-            it('can enable body recording remotely', () => {
-                const networkOptions = buildNetworkRequestOptions(defaultConfig(), { recordBody: true })
-                expect(networkOptions.recordHeaders).toBe(undefined)
-                expect(networkOptions.recordBody).toBe(true)
-            })
-
-            it('client can force disable recording', () => {
-                const posthogConfig = defaultConfig()
-                posthogConfig.session_recording.recordHeaders = false
-                posthogConfig.session_recording.recordBody = false
-                const networkOptions = buildNetworkRequestOptions(posthogConfig, {
-                    recordHeaders: true,
-                    recordBody: true,
-                })
-                expect(networkOptions.recordHeaders).toBe(false)
-                expect(networkOptions.recordBody).toBe(false)
-            })
-
             it('should cope with no headers when even if no other config is set', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({

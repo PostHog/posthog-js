@@ -395,6 +395,7 @@ function prepareRequest(
             responseHeaders: networkRequest.responseHeaders,
             responseBody: networkRequest.responseBody,
             isInitial,
+            currentUrl: window ? window.location.href : undefined,
         },
     ]
 
