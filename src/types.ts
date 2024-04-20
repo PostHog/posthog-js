@@ -405,7 +405,6 @@ export type NetworkRecordOptions = {
     initiatorTypes?: InitiatorType[]
     /**
      * NB if you want to mask captured URLs you need to mask `name` and `currentURL` properties of CapturedNetworkRequest
-     * @param data
      */
     maskRequestFn?: (data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined
     recordHeaders?: boolean | { request: boolean; response: boolean }
