@@ -60,6 +60,22 @@ export default function Home() {
                     >
                         Set user properties
                     </button>
+                    <button
+                        onClick={() =>
+                            posthog?.capture('$set', {
+                                'event property': 'value',
+                            })
+                        }
+                    >
+                        Send a $set event
+                    </button>
+                    <button
+                        onClick={() =>
+                            posthog?.capture('custom event', { $set: { email: `user-${randomID()}@posthog.com` } })
+                        }
+                    >
+                        Send a custom event with $set property
+                    </button>
 
                     <button onClick={() => posthog?.reset()}>Reset</button>
                 </div>
