@@ -272,6 +272,28 @@ describe('person processing', () => {
                 $initial_utm_source: 'foo',
             })
         })
+
+        it('should enable person processing for identified_only users if the event name is $set', async () => {
+            const { posthog, onCapture } = await setup('identified_only')
+
+            // act
+            posthog.capture('$set')
+
+            // assert
+            const event = onCapture.mock.calls[0]
+            expect(event[1].properties.$process_person_profile).toEqual(true)
+        })
+
+        it('should enable person processing for identified_only users if an event property is $set', async () => {
+            const { posthog, onCapture } = await setup('identified_only')
+
+            // act
+            posthog.capture('custom event', { $set: { prop: 'value' } })
+
+            // assert
+            const event = onCapture.mock.calls[0]
+            expect(event[1].properties.$process_person_profile).toEqual(true)
+        })
     })
 
     describe('group', () => {
