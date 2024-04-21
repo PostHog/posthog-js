@@ -2,7 +2,7 @@
     "compilerOptions": {
         "outDir": "./lib",
         "target": "ES5",
-        "lib": ["dom", "dom.iterable", "esnext"],
+        "lib": ["dom", "dom.iterable", "esnext", "es2015.promise"],
         "allowJs": true,
         "checkJs": true,
         "skipLibCheck": false,
