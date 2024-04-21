@@ -104,7 +104,7 @@ describe('person processing', () => {
             // assert
             expect(jest.mocked(logger).error).toBeCalledTimes(1)
             expect(jest.mocked(logger).error).toHaveBeenCalledWith(
-                'posthog.identify was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.identify was used, but process_person is set to "never". This call will be ignored.'
             )
             expect(onCapture).toBeCalledTimes(0)
         })
@@ -306,7 +306,7 @@ describe('person processing', () => {
             // assert
             expect(jest.mocked(logger).error).toBeCalledTimes(1)
             expect(jest.mocked(logger).error).toHaveBeenCalledWith(
-                'posthog.group was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.group was used, but process_person is set to "never". This call will be ignored.'
             )
 
             expect(onCapture).toBeCalledTimes(2)
@@ -329,7 +329,7 @@ describe('person processing', () => {
             expect(onCapture).toBeCalledTimes(0)
             expect(jest.mocked(logger).error).toBeCalledTimes(1)
             expect(jest.mocked(logger).error).toHaveBeenCalledWith(
-                'posthog.setPersonProperties was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.setPersonProperties was used, but process_person is set to "never". This call will be ignored.'
             )
         })
 
@@ -396,7 +396,7 @@ describe('person processing', () => {
             expect(onCapture).toBeCalledTimes(0)
             expect(jest.mocked(logger).error).toBeCalledTimes(1)
             expect(jest.mocked(logger).error).toHaveBeenCalledWith(
-                'posthog.alias was called, but process_person is set to "never". This call will be ignored.'
+                'posthog.alias was used, but process_person is set to "never". This call will be ignored.'
             )
         })
     })
