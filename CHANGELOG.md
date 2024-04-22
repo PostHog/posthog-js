@@ -1,3 +1,7 @@
+## 1.128.3 - 2024-04-22
+
+- chore: upgrade rrweb to alpha-13 (#1149)
+
 ## 1.128.2 - 2024-04-22
 
 - feat: add deepscan agent (#1145)
