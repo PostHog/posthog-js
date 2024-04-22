@@ -1,13 +1,13 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  rrweb@2.0.0-alpha.12:
-    hash: tvatazbysybcdte3poiroo42za
-    path: patches/rrweb@2.0.0-alpha.12.patch
+  rrweb@2.0.0-alpha.13:
+    hash: xzot57gbh2vywrm2w2dzrqlgli
+    path: patches/rrweb@2.0.0-alpha.13.patch
 
 dependencies:
   fflate:
@@ -49,8 +49,8 @@ devDependencies:
     specifier: ^11.1.6
     version: 11.1.6(rollup@4.9.6)(tslib@2.5.0)(typescript@4.9.5)
   '@rrweb/types':
-    specifier: 2.0.0-alpha.12
-    version: 2.0.0-alpha.12
+    specifier: 2.0.0-alpha.13
+    version: 2.0.0-alpha.13
   '@sentry/types':
     specifier: 7.37.2
     version: 7.37.2
@@ -172,11 +172,11 @@ devDependencies:
     specifier: ^5.12.0
     version: 5.12.0(rollup@4.9.6)
   rrweb:
-    specifier: 2.0.0-alpha.12
-    version: 2.0.0-alpha.12(patch_hash=tvatazbysybcdte3poiroo42za)
+    specifier: 2.0.0-alpha.13
+    version: 2.0.0-alpha.13(patch_hash=xzot57gbh2vywrm2w2dzrqlgli)
   rrweb-snapshot:
-    specifier: 2.0.0-alpha.12
-    version: 2.0.0-alpha.12
+    specifier: 2.0.0-alpha.13
+    version: 2.0.0-alpha.13
   sinon:
     specifier: 9.0.2
     version: 9.0.2
@@ -2652,10 +2652,10 @@ packages:
     dev: true
     optional: true
 
-  /@rrweb/types@2.0.0-alpha.12:
-    resolution: {integrity: sha512-dHFMvVBA9JD8MBV+waHtJs8lIeTPCVeT3h+WZ5s8a+EX42TQ08t+ObFMK0OYEszvWgJMJ5WZi5lXTvF46P27Hg==}
+  /@rrweb/types@2.0.0-alpha.13:
+    resolution: {integrity: sha512-ytq+MeVm/vP2ybw+gTAN3Xvt7HN2yS+wlbfnwHpQMftxrwzq0kEZHdw+Jp5WUvvpONWzXriNAUU9dW0qLGkzNg==}
     dependencies:
-      rrweb-snapshot: 2.0.0-alpha.12
+      rrweb-snapshot: 2.0.0-alpha.13
     dev: true
 
   /@sentry/types@7.37.2:
@@ -9192,27 +9192,27 @@ packages:
       fsevents: 2.3.3
     dev: true
 
-  /rrdom@2.0.0-alpha.12:
-    resolution: {integrity: sha512-xdl51tE/ruN+zO0iEalEyyaQtbb4lb2HLULA6ug/zyApQjIVevaDc3BJnyXbDhd0eYgY9flBXTZ2gM64htUwHQ==}
+  /rrdom@2.0.0-alpha.13:
+    resolution: {integrity: sha512-GJD3L2MPbIg3+VgCwwfujB4HRXyMfDdg8o3djPjSB9rMX2b52Hx2tBUmwmdnWfgWKtYGDJ2wVX9Dng3tZEBHVA==}
     dependencies:
-      rrweb-snapshot: 2.0.0-alpha.12
+      rrweb-snapshot: 2.0.0-alpha.13
     dev: true
 
-  /rrweb-snapshot@2.0.0-alpha.12:
-    resolution: {integrity: sha512-i4sz9469dbsEGFiBzCkq+7I7M+imPeC3NrKgrrdJ2tXu9H+/eegNe4SrQgCsLBeSZHZDHU0o9L5rxTAiapWbGg==}
+  /rrweb-snapshot@2.0.0-alpha.13:
+    resolution: {integrity: sha512-slbhNBCYjxLGCeH95a67ECCy5a22nloXp1F5wF7DCzUNw80FN7tF9Lef1sRGLNo32g3mNqTc2sWLATlKejMxYw==}
     dev: true
 
-  /rrweb@2.0.0-alpha.12(patch_hash=tvatazbysybcdte3poiroo42za):
-    resolution: {integrity: sha512-lUGwBV7gmbwz1dIgzo9EEayIVyxoTIF6NBF6+Jctqs4Uy45QkyARtikpQlCUfxVCGTCQ0FOee9jeVYsG39oq1g==}
+  /rrweb@2.0.0-alpha.13(patch_hash=xzot57gbh2vywrm2w2dzrqlgli):
+    resolution: {integrity: sha512-a8GXOCnzWHNaVZPa7hsrLZtNZ3CGjiL+YrkpLo0TfmxGLhjNZbWY2r7pE06p+FcjFNlgUVTmFrSJbK3kO7yxvw==}
     dependencies:
-      '@rrweb/types': 2.0.0-alpha.12
+      '@rrweb/types': 2.0.0-alpha.13
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
       base64-arraybuffer: 1.0.2
       fflate: 0.4.8
       mitt: 3.0.0
-      rrdom: 2.0.0-alpha.12
-      rrweb-snapshot: 2.0.0-alpha.12
+      rrdom: 2.0.0-alpha.13
+      rrweb-snapshot: 2.0.0-alpha.13
     dev: true
     patched: true
 
