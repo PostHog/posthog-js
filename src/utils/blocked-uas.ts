@@ -8,6 +8,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'bot.htm',
     'bot.php',
     'crawler',
+    'deepscan',
     'duckduckbot',
     'facebookexternal',
     'facebookcatalog',
