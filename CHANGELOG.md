@@ -1,3 +1,7 @@
+## 1.128.2 - 2024-04-22
+
+- feat: add deepscan agent (#1145)
+
 ## 1.128.1 - 2024-04-18
 
 - fix: Remove underscores from all functions (#1140)
