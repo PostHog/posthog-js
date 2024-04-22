@@ -777,7 +777,7 @@ export class PostHog {
             }
         })
         if (usesSetProp) {
-            if (!this._requirePersonProcessing('$set/$set_once')) {
+            if (!this._requirePersonProcessing('$set/$set_once', 'property')) {
                 properties = extend({}, properties || {})
                 delete properties.$set
                 delete properties.$set_once
@@ -1838,10 +1838,16 @@ export class PostHog {
      * Enables person processing if possible, returns true if it does so or already enabled, false otherwise
      *
      * @param function_name
+     * @param noun
      */
-    _requirePersonProcessing(function_name: string): boolean {
+    _requirePersonProcessing(function_name: string, noun?: string): boolean {
         if (this.config.person_profiles === 'never') {
-            logger.error(function_name + ' was used, but process_person is set to "never". This call will be ignored.')
+            logger.error(
+                function_name +
+                    ' was used, but process_person is set to "never". This ' +
+                    (noun || 'call') +
+                    ' will be ignored.'
+            )
             return false
         }
         this._register_single(ENABLE_PERSON_PROCESSING, true)

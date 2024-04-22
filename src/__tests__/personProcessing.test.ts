@@ -282,6 +282,7 @@ describe('person processing', () => {
             // assert
             const event = onCapture.mock.calls[0]
             expect(event[1].properties.$process_person_profile).toEqual(true)
+            expect(jest.mocked(logger).error).toBeCalledTimes(0)
         })
 
         it('should enable person processing for identified_only users if an event property is $set', async () => {
@@ -293,6 +294,7 @@ describe('person processing', () => {
             // assert
             const event = onCapture.mock.calls[0]
             expect(event[1].properties.$process_person_profile).toEqual(true)
+            expect(jest.mocked(logger).error).toBeCalledTimes(0)
         })
 
         it('should not enable person processing for identified_only users if an event property is $set, IF the object is empty', async () => {
@@ -304,6 +306,7 @@ describe('person processing', () => {
             // assert
             const event = onCapture.mock.calls[0]
             expect(event[1].properties.$process_person_profile).toEqual(false)
+            expect(jest.mocked(logger).error).toBeCalledTimes(0)
         })
 
         it('should drop $set events when set to "never"', async () => {
@@ -314,6 +317,10 @@ describe('person processing', () => {
 
             // assert
             expect(onCapture).toBeCalledTimes(0)
+            expect(jest.mocked(logger).error).toBeCalledTimes(1)
+            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+                '$set/$set_once was used, but process_person is set to "never". This call will be ignored.'
+            )
         })
 
         it('should drop $set properties when set to "never" but still send the event', async () => {
@@ -326,6 +333,10 @@ describe('person processing', () => {
             const event = onCapture.mock.calls[0]
             expect(event[1].properties.$process_person_profile).toEqual(false)
             expect(event[1].properties.$set).toEqual(undefined)
+            expect(jest.mocked(logger).error).toBeCalledTimes(1)
+            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+                '$set/$set_once was used, but process_person is set to "never". This property will be ignored.'
+            )
         })
     })
 
