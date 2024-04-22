@@ -294,6 +294,39 @@ describe('person processing', () => {
             const event = onCapture.mock.calls[0]
             expect(event[1].properties.$process_person_profile).toEqual(true)
         })
+
+        it('should not enable person processing for identified_only users if an event property is $set, IF the object is empty', async () => {
+            const { posthog, onCapture } = await setup('identified_only')
+
+            // act
+            posthog.capture('custom event', { $set: {} })
+
+            // assert
+            const event = onCapture.mock.calls[0]
+            expect(event[1].properties.$process_person_profile).toEqual(false)
+        })
+
+        it('should drop $set events when set to "never"', async () => {
+            const { posthog, onCapture } = await setup('never')
+
+            // act
+            posthog.capture('$set', { $set: {} })
+
+            // assert
+            expect(onCapture).toBeCalledTimes(0)
+        })
+
+        it('should drop $set properties when set to "never" but still send the event', async () => {
+            const { posthog, onCapture } = await setup('never')
+
+            // act
+            posthog.capture('custom event', { $set: { prop: 'value' } })
+
+            // assert
+            const event = onCapture.mock.calls[0]
+            expect(event[1].properties.$process_person_profile).toEqual(false)
+            expect(event[1].properties.$set).toEqual(undefined)
+        })
     })
 
     describe('group', () => {

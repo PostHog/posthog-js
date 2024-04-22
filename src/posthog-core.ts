@@ -764,16 +764,26 @@ export class PostHog {
             this.persistence.set_initial_referrer_info()
         }
 
-        if (
-            event_name === `$set` ||
-            event_name === '$set_once' ||
-            properties?.$set ||
-            properties?.$set_once ||
-            options?.$set ||
-            options?.$set_once
-        ) {
+        if (event_name === `$set` || event_name === '$set_once') {
             if (!this._requirePersonProcessing('$set/$set_once')) {
                 return
+            }
+        }
+
+        let usesSetProp = false
+        eachArray([properties?.$set, properties?.$set_once, options?.$set, options?.$set_once], (prop) => {
+            if (prop && !isEmptyObject(prop)) {
+                usesSetProp = true
+            }
+        })
+        if (usesSetProp) {
+            if (!this._requirePersonProcessing('$set/$set_once')) {
+                properties = extend({}, properties || {})
+                delete properties.$set
+                delete properties.$set_once
+                options = extend({}, options || {})
+                delete options.$set
+                delete options.$set_once
             }
         }
 
