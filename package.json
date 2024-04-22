@@ -109,6 +109,8 @@
         "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
     ],
     "pnpm": {
-        "patchedDependencies": {}
+        "patchedDependencies": {
+            "rrweb@2.0.0-alpha.13": "patches/rrweb@2.0.0-alpha.13.patch"
+        }
     }
 }
