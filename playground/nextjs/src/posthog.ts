@@ -73,12 +73,15 @@ export const posthogHelpers = {
     },
     setUser: (user: User) => {
         if (PERSON_PROCESSING_MODE === 'never') {
-            posthog.register({
+            const eventProperties = {
                 person_id: user.email,
                 person_email: user.email,
                 team_id: user.team?.id,
                 team_name: user.team?.name,
-            })
+            }
+            posthog.register(eventProperties)
+            posthog.setPersonPropertiesForFlags(user)
+
         } else {
             // NOTE: Would this always get set?
             if (user.team) {
