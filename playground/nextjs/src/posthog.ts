@@ -81,8 +81,8 @@ export const posthogHelpers = {
             })
         } else {
             // NOTE: Would this always get set?
-            if (user.team?.id) {
-                posthog.group('team', user.team?.id)
+            if (user.team) {
+                posthog.group('team', user.team.id, user.team)
             }
         }
     },
