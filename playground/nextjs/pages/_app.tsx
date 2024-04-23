@@ -10,9 +10,19 @@ import { CookieBanner } from '@/src/CookieBanner'
 import '@/src/posthog'
 import Head from 'next/head'
 import { PageHeader } from '@/src/Header'
+import { useUser } from '@/src/auth'
+import { posthogHelpers } from '@/src/posthog'
 
 export default function App({ Component, pageProps }: AppProps) {
     const router = useRouter()
+
+    const user = useUser()
+
+    useEffect(() => {
+        if (user) {
+            posthogHelpers.setUser(user)
+        }
+    }, [user])
 
     useEffect(() => {
         // Track page views

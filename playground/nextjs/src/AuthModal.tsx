@@ -1,6 +1,7 @@
 /* eslint-disable compat/compat */
 import { useState } from 'react'
 import { getUser, TEAMS, User, useUser } from './auth'
+import { posthogHelpers } from './posthog'
 
 export const AuthModal = ({ onClose }: { onClose: () => void }) => {
     const actualUser = useUser()
@@ -14,6 +15,7 @@ export const AuthModal = ({ onClose }: { onClose: () => void }) => {
         })
 
         if (response.ok) {
+            posthogHelpers.onLogin(user as User)
             onClose()
         } else {
             alert('Login failed')
@@ -29,6 +31,7 @@ export const AuthModal = ({ onClose }: { onClose: () => void }) => {
         })
 
         if (response.ok) {
+            posthogHelpers.onLogout()
             onClose()
         } else {
             alert('Logout failed')
