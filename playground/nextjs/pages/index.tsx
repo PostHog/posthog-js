@@ -1,13 +1,11 @@
-import Head from 'next/head'
-import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
+import { useActiveFeatureFlags, usePostHog } from 'posthog-js/react'
 import React, { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { cookieConsentGiven } from '@/src/posthog'
 
 export default function Home() {
     const posthog = usePostHog()
     const [isClient, setIsClient] = useState(false)
-    const result = useFeatureFlagEnabled('test')
+    const flags = useActiveFeatureFlags()
 
     const [time, setTime] = useState('')
     const consentGiven = cookieConsentGiven()
@@ -27,80 +25,64 @@ export default function Home() {
 
     return (
         <>
-            <Head>
-                <title>PostHog</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-            </Head>
-            <main>
-                <div className="sticky top-0 bg-white border-b mb-4">
-                    <h1 className="m-0">
-                        <b>PostHog</b> React
-                    </h1>
-                </div>
+            <p className="italic my-2 text-gray-500">The current time is {time}</p>
 
-                <p>The current time is {time}</p>
+            <h2>Trigger posthog events</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
+                <button data-attr="autocapture-button">Autocapture buttons</button>
+                <a className="Button" data-attr="autocapture-button" href="#">
+                    <span>Autocapture a &gt; span</span>
+                </a>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
-                    <button data-attr="autocapture-button">Autocapture buttons</button>
-                    <a className="Button" data-attr="autocapture-button" href="#">
-                        <span>Autocapture a &gt; span</span>
-                    </a>
+                <button className="ph-no-capture">Ignore certain elements</button>
 
-                    <button className="ph-no-capture">Ignore certain elements</button>
+                <button onClick={() => posthog?.identify('user-' + randomID())}>Identify</button>
 
-                    <button onClick={() => posthog?.identify('user-' + randomID())}>Identify</button>
+                <button
+                    onClick={() =>
+                        posthog?.setPersonProperties({
+                            email: `user-${randomID()}@posthog.com`,
+                        })
+                    }
+                >
+                    Set user properties
+                </button>
 
-                    <button
-                        onClick={() =>
-                            posthog?.setPersonProperties({
-                                email: `user-${randomID()}@posthog.com`,
-                            })
-                        }
-                    >
-                        Set user properties
-                    </button>
+                <button onClick={() => posthog?.reset()}>Reset</button>
+            </div>
 
-                    <button onClick={() => posthog?.reset()}>Reset</button>
-                </div>
+            {isClient && (
+                <>
+                    {!consentGiven && (
+                        <p className="border border-red-900 bg-red-200 rounded p-2">
+                            <b>Consent not given!</b> Session recording, surveys, and autocapture are disabled.
+                        </p>
+                    )}
 
-                <div className="flex items-center gap-2">
-                    <Link href="/animations">Animations</Link>
-                    <Link href="/iframe">Iframe</Link>
-                    <Link href="/canvas">Canvas</Link>
-                    <Link href="/media">Media</Link>
-                    <Link href="/long">Long</Link>
-                    <Link href="/longmain">Long Main</Link>
-                </div>
+                    <h2 className="mt-4">PostHog info</h2>
+                    <ul className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4">
+                        <li className="font-mono">
+                            DistinctID: <b>{posthog.get_distinct_id()}</b>
+                        </li>
+                        <li className="font-mono">
+                            SessionID: <b>{posthog.get_session_id()}</b>
+                        </li>
 
-                <p>Feature flag response: {JSON.stringify(result)}</p>
+                        <li className="font-mono">
+                            Active flags:
+                            <pre className="text-xs">
+                                <code>{JSON.stringify(flags, null, 2)}</code>
+                            </pre>
+                        </li>
+                    </ul>
 
-                {isClient && (
-                    <>
-                        {!consentGiven && (
-                            <p className="border border-red-900 bg-red-200 rounded p-2">
-                                <b>Consent not given!</b> Session recording, surveys, and autocapture are disabled.
-                            </p>
-                        )}
-
-                        <h2 className="mt-4">PostHog info</h2>
-                        <ul className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4">
-                            <li className="font-mono">
-                                DistinctID: <b>{posthog.get_distinct_id()}</b>
-                            </li>
-                            <li className="font-mono">
-                                SessionID: <b>{posthog.get_session_id()}</b>
-                            </li>
-                            <code></code>
-                        </ul>
-
-                        <h2 className="mt-4">PostHog config</h2>
-                        <pre className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4">
-                            <code>{JSON.stringify(posthog.config, null, 2)}</code>
-                        </pre>
-                    </>
-                )}
-            </main>
+                    <h2 className="mt-4">PostHog config</h2>
+                    <pre className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4">
+                        <code>{JSON.stringify(posthog.config, null, 2)}</code>
+                    </pre>
+                </>
+            )}
         </>
     )
 }

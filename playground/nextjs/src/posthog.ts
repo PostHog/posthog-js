@@ -43,7 +43,7 @@ if (typeof window !== 'undefined') {
         scroll_root_selector: ['#scroll_element', 'html'],
         // persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
         person_profiles: 'identified_only',
-        __preview_heatmaps: true,
+        __preview_heatmaps: false,
         ...configForConsent(),
     })
     ;(window as any).posthog = posthog

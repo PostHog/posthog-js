@@ -8,6 +8,8 @@ import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 import { CookieBanner } from '@/src/CookieBanner'
 import '@/src/posthog'
+import Head from 'next/head'
+import { PageHeader } from '@/src/Header'
 
 export default function App({ Component, pageProps }: AppProps) {
     const router = useRouter()
@@ -24,9 +26,16 @@ export default function App({ Component, pageProps }: AppProps) {
 
     return (
         <PostHogProvider client={posthog}>
-            <Component {...pageProps} />
+            <Head>
+                <title>PostHog</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+            </Head>
 
-            <CookieBanner />
+            <main>
+                <PageHeader />
+                <Component {...pageProps} />
+                <CookieBanner />
+            </main>
         </PostHogProvider>
     )
 }
