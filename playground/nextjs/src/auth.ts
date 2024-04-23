@@ -9,7 +9,7 @@ export type Team = {
 export type User = {
     email: string
     name: string
-    team: Team
+    team?: Team
 }
 
 export const TEAMS: Team[] = [
@@ -27,9 +27,10 @@ export const TEAMS: Team[] = [
     },
 ]
 
-export const getUser = () => {
+export const getUser = (): User | null | undefined => {
     if (typeof document !== 'undefined') {
-        return JSON.parse(parse(document.cookie).session)
+        const sessionCookie = parse(document.cookie)?.session
+        return sessionCookie ? (JSON.parse(sessionCookie) as User) : null
     }
 
     return undefined

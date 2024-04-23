@@ -1,14 +1,12 @@
 /* eslint-disable compat/compat */
-import { FormEvent, useState } from 'react'
-import { getUser, TEAMS, useUser } from './auth'
+import { useState } from 'react'
+import { getUser, TEAMS, User, useUser } from './auth'
 
 export const AuthModal = ({ onClose }: { onClose: () => void }) => {
     const actualUser = useUser()
-    const [user, setUser] = useState(getUser() ?? {})
+    const [user, setUser] = useState<Partial<User>>(getUser() ?? {})
 
-    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault()
-
+    async function handleLogin() {
         const response = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -45,7 +43,7 @@ export const AuthModal = ({ onClose }: { onClose: () => void }) => {
             <div className="mx-auto w-[30rem] bg-white rounded shadow-md p-4">
                 <h2>User account</h2>
 
-                <form className="flex flex-col gap-2" onSubmit={handleSubmit}>
+                <form className="flex flex-col gap-2" onSubmit={(e) => e.preventDefault()}>
                     <input
                         className="border rounded p-2"
                         type="email"
@@ -83,7 +81,7 @@ export const AuthModal = ({ onClose }: { onClose: () => void }) => {
                         {actualUser ? <button onClick={() => handleLogout()}>Logout</button> : null}
                         <div className="flex-1" />
                         <button onClick={() => onClose()}>Cancel</button>
-                        <button className="button" type="submit">
+                        <button className="button" onClick={() => handleLogin()}>
                             {actualUser ? 'Update' : 'Login'}
                         </button>
                     </div>
