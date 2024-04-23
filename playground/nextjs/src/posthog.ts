@@ -1,7 +1,8 @@
 import posthog, { PostHogConfig } from 'posthog-js'
 import { User } from './auth'
 
-const PERSON_PROCESSING_MODE: "always" | "identified_only" | "avoid" = (process.env.NEXT_PUBLIC_POSTHOG_PERSON_PROCESSING_MODE as any) || 'always'
+const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
+    (process.env.NEXT_PUBLIC_POSTHOG_PERSON_PROCESSING_MODE as any) || 'identified_only'
 
 /**
  * Below is an example of a consent-driven config for PostHog
@@ -45,19 +46,19 @@ if (typeof window !== 'undefined') {
         debug: true,
         scroll_root_selector: ['#scroll_element', 'html'],
         // persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
-        person_profiles: PERSON_PROCESSING_MODE === "avoid" ? "identified_only" : (PERSON_PROCESSING_MODE ?? "identified_only"),
+        person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         __preview_heatmaps: false,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         ...configForConsent(),
     })
-    
-    // Help with debugging
-    ;(window as any).posthog = posthog
+
+    // Help with debugging(window as any).posthog = posthog
 }
 
 export const posthogHelpers = {
     onLogin: (user: User) => {
-        if (PERSON_PROCESSING_MODE === 'avoid') {
+        if (PERSON_PROCESSING_MODE === 'never') {
+            // We just set the user properties instead of identifying them
             posthogHelpers.setUser(user)
         } else {
             posthog.identify(user.email, user)
@@ -70,7 +71,7 @@ export const posthogHelpers = {
         posthog.reset()
     },
     setUser: (user: User) => {
-        if (PERSON_PROCESSING_MODE === 'avoid') {
+        if (PERSON_PROCESSING_MODE === 'never') {
             posthog.register({
                 person_id: user.email,
                 person_email: user.email,
