@@ -76,6 +76,7 @@ export const posthogHelpers = {
             const eventProperties = {
                 person_id: user.email,
                 person_email: user.email,
+                person_name: user.name,
                 team_id: user.team?.id,
                 team_name: user.team?.name,
             }
