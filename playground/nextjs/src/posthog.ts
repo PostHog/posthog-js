@@ -48,7 +48,7 @@ if (typeof window !== 'undefined') {
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
-        __preview_heatmaps: false,
+        __preview_heatmaps: true,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         ...configForConsent(),
     })
