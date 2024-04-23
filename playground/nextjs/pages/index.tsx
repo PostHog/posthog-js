@@ -37,8 +37,6 @@ export default function Home() {
 
                 <button className="ph-no-capture">Ignore certain elements</button>
 
-                <button onClick={() => posthog?.identify('user-' + randomID())}>Identify</button>
-
                 <button
                     onClick={() =>
                         posthog?.setPersonProperties({
