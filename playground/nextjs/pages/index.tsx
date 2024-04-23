@@ -1,6 +1,6 @@
 import { useActiveFeatureFlags, usePostHog } from 'posthog-js/react'
 import React, { useEffect, useState } from 'react'
-import { cookieConsentGiven } from '@/src/posthog'
+import { PERSON_PROCESSING_MODE, cookieConsentGiven } from '@/src/posthog'
 
 export default function Home() {
     const posthog = usePostHog()
@@ -59,7 +59,10 @@ export default function Home() {
                     )}
 
                     <h2 className="mt-4">PostHog info</h2>
-                    <ul className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4">
+                    <ul className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4 space-y-2">
+                        <li className="font-mono">
+                            Person Mode: <b>{PERSON_PROCESSING_MODE}</b>
+                        </li>
                         <li className="font-mono">
                             DistinctID: <b>{posthog.get_distinct_id()}</b>
                         </li>

@@ -1,7 +1,7 @@
 import posthog, { PostHogConfig } from 'posthog-js'
 import { User } from './auth'
 
-const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
+export const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
     (process.env.NEXT_PUBLIC_POSTHOG_PERSON_PROCESSING_MODE as any) || 'identified_only'
 
 /**
