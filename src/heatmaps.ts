@@ -5,7 +5,7 @@ import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE, HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
+import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 
 type HeatmapEventBuffer =
     | {
@@ -59,7 +59,11 @@ export class Heatmaps {
     }
 
     public get isEnabled(): boolean {
-        return !!this.instance.config.__preview_heatmaps || !!this._enabledServerSide
+        return (
+            !!this.instance.config.__preview_heatmaps ||
+            !!this._enabledServerSide ||
+            !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
+        )
     }
 
     public afterDecideResponse(response: DecideResponse) {
