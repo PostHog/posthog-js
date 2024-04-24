@@ -11,7 +11,7 @@ export const PageHeader = () => {
         <>
             <div className="sticky top-0 bg-white border-b mb-4 z-10">
                 <div className="flex items-center gap-2">
-                    <Link href="/" onClick={() => alert('yo!')}>
+                    <Link href="/">
                         <h1 className="m-0">
                             <b>PostHog</b> React
                         </h1>
