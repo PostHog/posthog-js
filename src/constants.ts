@@ -11,6 +11,7 @@ export const ALIAS_ID_KEY = '__alias'
 export const CAMPAIGN_IDS_KEY = '__cmpns'
 export const EVENT_TIMERS_KEY = '__timers'
 export const AUTOCAPTURE_DISABLED_SERVER_SIDE = '$autocapture_disabled_server_side'
+export const HEATMAPS_ENABLED_SERVER_SIDE = '$heatmaps_enabled_server_side'
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
 export const SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE = '$session_recording_network_payload_capture'
@@ -39,6 +40,7 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     CAMPAIGN_IDS_KEY,
     EVENT_TIMERS_KEY,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
+    HEATMAPS_ENABLED_SERVER_SIDE,
     SESSION_ID,
     ENABLED_FEATURE_FLAGS,
     USER_STATE,

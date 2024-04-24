@@ -1,6 +1,7 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
+import { DecideResponse } from '../types'
 jest.mock('../utils/logger')
 
 describe('heatmaps', () => {
@@ -104,5 +105,39 @@ describe('heatmaps', () => {
             })
         )
         expect(posthog.heatmaps?.['buffer']).not.toEqual(undefined)
+    })
+
+    describe('afterDecideResponse()', () => {
+        it('should not be enabled before the decide response', () => {
+            expect(posthog.heatmaps!.isEnabled).toBe(false)
+        })
+
+        it('should be enabled if client config option is enabled', () => {
+            posthog.config.__preview_heatmaps = true
+            expect(posthog.heatmaps!.isEnabled).toBe(true)
+        })
+
+        it.each([
+            // Client not defined
+            [undefined, false, false],
+            [undefined, true, true],
+            [undefined, false, false],
+            // Client false
+            [false, false, false],
+            [false, true, false],
+
+            // Client true
+            [true, false, true],
+            [true, true, true],
+        ])(
+            'when client side config is %p and remote opt in is %p - heatmaps enabled should be %p',
+            (clientSideOptIn, serverSideOptIn, expected) => {
+                posthog.config.__preview_heatmaps = clientSideOptIn
+                posthog.heatmaps!.afterDecideResponse({
+                    heatmaps: serverSideOptIn,
+                } as DecideResponse)
+                expect(posthog.heatmaps!.isEnabled).toBe(expected)
+            }
+        )
     })
 })

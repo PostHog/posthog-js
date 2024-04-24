@@ -1,10 +1,12 @@
 import { includes, registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
-import { Properties } from './types'
+import { DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
+import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
+import { isUndefined } from './utils/type-utils'
 
 type HeatmapEventBuffer =
     | {
@@ -40,7 +42,7 @@ function elementInToolbar(el: Element): boolean {
 export class Heatmaps {
     instance: PostHog
     rageclicks = new RageClick()
-    _isDisabledServerSide: boolean | null = null
+    _enabledServerSide: boolean = false
     _initialized = false
     _mouseMoveTimeout: number | undefined
 
@@ -49,6 +51,7 @@ export class Heatmaps {
 
     constructor(instance: PostHog) {
         this.instance = instance
+        this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
     }
 
     public startIfEnabled(): void {
@@ -58,7 +61,22 @@ export class Heatmaps {
     }
 
     public get isEnabled(): boolean {
-        return !!this.instance.config.__preview_heatmaps
+        return !isUndefined(this.instance.config.__preview_heatmaps)
+            ? this.instance.config.__preview_heatmaps
+            : this._enabledServerSide
+    }
+
+    public afterDecideResponse(response: DecideResponse) {
+        const optIn = !!response['heatmaps']
+
+        if (this.instance.persistence) {
+            this.instance.persistence.register({
+                [HEATMAPS_ENABLED_SERVER_SIDE]: optIn,
+            })
+        }
+        // store this in-memory in case persistence is disabled
+        this._enabledServerSide = optIn
+        this.startIfEnabled()
     }
 
     public getAndClearBuffer(): HeatmapEventBuffer {

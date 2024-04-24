@@ -303,6 +303,7 @@ export interface DecideResponse {
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
+    heatmaps?: boolean
 }
 
 export type FeatureFlagsCallback = (

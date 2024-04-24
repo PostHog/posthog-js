@@ -499,6 +499,7 @@ export class PostHog {
 
         this.sessionRecording?.afterDecideResponse(response)
         this.autocapture?.afterDecideResponse(response)
+        this.heatmaps?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
     }
 
