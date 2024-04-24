@@ -1,3 +1,8 @@
+## 1.128.5 - 2024-04-24
+
+- chore: Fix duplicate string (#1153)
+- chore: Update nextjs project to have more realistic controls (#1151)
+
 ## 1.128.4 - 2024-04-24
 
 - fix: Don't track heatmaps of toolbar (#1152)
