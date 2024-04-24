@@ -34,7 +34,7 @@ const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
 
 function elementInToolbar(el: Element): boolean {
     // NOTE: .closest is not supported in IE11 hence the operator check
-    return el.id === TOOLBAR_ID || !!el.closest?.('#__POSTHOG_TOOLBAR__')
+    return el.id === TOOLBAR_ID || !!el.closest?.('#' + TOOLBAR_ID)
 }
 
 export class Heatmaps {
