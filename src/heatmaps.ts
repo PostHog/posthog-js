@@ -33,7 +33,7 @@ function elementOrParentPositionMatches(el: Element, matches: string[], breakOnE
 const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
 
 function elementInToolbar(el: Element): boolean {
-    return el.id === TOOLBAR_ID || !!el.closest('__POSTHOG_TOOLBAR__')
+    return el.id === TOOLBAR_ID || !!el.closest('#__POSTHOG_TOOLBAR__')
 }
 
 export class Heatmaps {
