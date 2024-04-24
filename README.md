@@ -49,23 +49,15 @@ You can use the create react app setup in `playground/nextjs` to test posthog-js
 
 ## Developing together with another project
 
-Install Yalc to link a local version of `posthog-js` in another JS project: `npm install -g yalc` 
+Install pnpm to link a local version of `posthog-js` in another JS project: `npm install -g pnpm` 
 
 #### Run this to link the local version
 
-- In the `posthog-js` directory: `yalc publish`
-- In the other directory: `yalc add posthog-js`, then install dependencies  
-  (for `posthog` this means: `yalc add posthog-js && pnpm i && pnpm copy-scripts`)
 
-#### Run this to update the linked local version
+- In the `posthog-js` directory: `pnpm link --global`
+- (for `posthog` this means: `pnpm link --global posthog-js && pnpm i && pnpm copy-scripts`)
+- You can then remove the link with `pnpm link --global posthog-js
 
-- In the other directory: `yalc update`, then install dependencies  
-  (for `posthog` this means: `yalc update && pnpm i && pnpm copy-scripts`)
-
-#### Run this to unlink the local version
-
-- In the other directory: `yalc remove posthog-js`, then install dependencies  
-  (for `posthog` this means: `yalc remove posthog-js && pnpm i && pnpm copy-scripts`)
 
 ## Releasing a new version
 
