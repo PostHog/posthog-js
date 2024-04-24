@@ -1,3 +1,7 @@
+## 1.129.0 - 2024-04-24
+
+- feat: Remotely enable heatmaps via decide (#1154)
+
 ## 1.128.5 - 2024-04-24
 
 - chore: Fix duplicate string (#1153)
