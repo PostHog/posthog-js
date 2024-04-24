@@ -30,6 +30,12 @@ function elementOrParentPositionMatches(el: Element, matches: string[], breakOnE
     return false
 }
 
+const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
+
+function elementInToolbar(el: Element): boolean {
+    return el.id === TOOLBAR_ID || !!el.closest('__POSTHOG_TOOLBAR__')
+}
+
 export class Heatmaps {
     instance: PostHog
     rageclicks = new RageClick()
@@ -91,6 +97,9 @@ export class Heatmaps {
     }
 
     private _onClick(e: MouseEvent): void {
+        if (elementInToolbar(e.target as Element)) {
+            return
+        }
         const properties = this._getProperties(e, 'click')
 
         if (this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
@@ -106,6 +115,9 @@ export class Heatmaps {
     }
 
     private _onMouseMove(e: Event): void {
+        if (elementInToolbar(e.target as Element)) {
+            return
+        }
         clearTimeout(this._mouseMoveTimeout)
 
         this._mouseMoveTimeout = setTimeout(() => {
