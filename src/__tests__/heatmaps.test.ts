@@ -7,17 +7,11 @@ describe('heatmaps', () => {
     let posthog: PostHog
     let onCapture = jest.fn()
 
-    const mockClickEvent = {
-        target: document.body,
-        clientX: 10,
-        clientY: 20,
-    } as unknown as MouseEvent
-
     const createMockMouseEvent = (props: Partial<MouseEvent> = {}) =>
         ({
             target: document.body,
             clientX: 10,
-            clientY: 10,
+            clientY: 20,
             ...props,
         } as unknown as MouseEvent)
 
@@ -27,7 +21,7 @@ describe('heatmaps', () => {
     })
 
     it('should include generated heatmap data', async () => {
-        posthog.heatmaps?.['_onClick']?.(mockClickEvent as MouseEvent)
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.capture('test event')
 
         expect(onCapture).toBeCalledTimes(1)
@@ -87,5 +81,28 @@ describe('heatmaps', () => {
         expect(onCapture).toBeCalledTimes(1)
         expect(onCapture.mock.lastCall).toMatchObject(['$snapshot', {}])
         expect(onCapture.mock.lastCall[1].properties).not.toHaveProperty('$heatmap_data')
+    })
+
+    it('should ignore clicks if they come from the toolbar', async () => {
+        posthog.heatmaps?.['_onClick']?.(
+            createMockMouseEvent({
+                target: { id: '__POSTHOG_TOOLBAR__' } as Element,
+            })
+        )
+        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+
+        posthog.heatmaps?.['_onClick']?.(
+            createMockMouseEvent({
+                target: { closest: () => ({}) } as unknown as Element,
+            })
+        )
+        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+
+        posthog.heatmaps?.['_onClick']?.(
+            createMockMouseEvent({
+                target: document.body,
+            })
+        )
+        expect(posthog.heatmaps?.['buffer']).not.toEqual(undefined)
     })
 })
