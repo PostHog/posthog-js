@@ -1,3 +1,7 @@
+## 1.128.4 - 2024-04-24
+
+- fix: Don't track heatmaps of toolbar (#1152)
+
 ## 1.128.3 - 2024-04-22
 
 - chore: upgrade rrweb to alpha-13 (#1149)
