@@ -1,5 +1,4 @@
 import React from 'react'
-import Head from 'next/head'
 import { useEffect, useRef } from 'react'
 
 export default function Canvas() {
@@ -110,15 +109,9 @@ export default function Canvas() {
 
     return (
         <>
-            <Head>
-                <title>PostHog</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-            </Head>
-            <main>
-                <h1>Canvas</h1>
+            <h1>Canvas</h1>
 
-                <canvas ref={ref} style={{ width: '200px', height: '200px', display: 'block' }}></canvas>
-            </main>
+            <canvas ref={ref} style={{ width: '200px', height: '200px', display: 'block' }}></canvas>
         </>
     )
 }

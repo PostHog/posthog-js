@@ -1,4 +1,8 @@
 import posthog, { PostHogConfig } from 'posthog-js'
+import { User } from './auth'
+
+export const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
+    (process.env.NEXT_PUBLIC_POSTHOG_PERSON_PROCESSING_MODE as any) || 'identified_only'
 
 /**
  * Below is an example of a consent-driven config for PostHog
@@ -33,6 +37,7 @@ export const updatePostHogConsent = (consentGiven: boolean) => {
     posthog.set_config(configForConsent())
 }
 
+
 if (typeof window !== 'undefined') {
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
@@ -41,10 +46,48 @@ if (typeof window !== 'undefined') {
         },
         debug: true,
         scroll_root_selector: ['#scroll_element', 'html'],
-        // persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
-        person_profiles: 'identified_only',
+        persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
+        person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         __preview_heatmaps: true,
+        persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         ...configForConsent(),
     })
-    ;(window as any).posthog = posthog
+
+    // Help with debugging(window as any).posthog = posthog
+}
+
+export const posthogHelpers = {
+    onLogin: (user: User) => {
+        if (PERSON_PROCESSING_MODE === 'never') {
+            // We just set the user properties instead of identifying them
+            posthogHelpers.setUser(user)
+        } else {
+            posthog.identify(user.email, user)
+        }
+
+        posthog.capture('Logged in')
+    },
+    onLogout: () => {
+        posthog.capture('Logged out')
+        posthog.reset()
+    },
+    setUser: (user: User) => {
+        if (PERSON_PROCESSING_MODE === 'never') {
+            const eventProperties = {
+                person_id: user.email,
+                person_email: user.email,
+                person_name: user.name,
+                team_id: user.team?.id,
+                team_name: user.team?.name,
+            }
+            posthog.register(eventProperties)
+            posthog.setPersonPropertiesForFlags(user)
+
+        } else {
+            // NOTE: Would this always get set?
+            if (user.team) {
+                posthog.group('team', user.team.id, user.team)
+            }
+        }
+    },
 }
