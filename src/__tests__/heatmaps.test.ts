@@ -1,7 +1,6 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
-import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { DecideResponse } from '../types'
 jest.mock('../utils/logger')
 
