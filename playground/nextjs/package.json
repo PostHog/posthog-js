@@ -8,7 +8,7 @@
         "build": "pnpm run build-posthog-js && pnpm run link-posthog-js && pnpm run clean-react && next build",
         "start": "next start",
         "lint": "next lint",
-        "build-posthog-js": "cd ../../ && pnpm i && pnpm run build",
+        "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build",
         "link-posthog-js": "cd ../../ && pnpm link --global && cd playground/nextjs && pnpm link --global posthog-js"
     },
     "dependencies": {
