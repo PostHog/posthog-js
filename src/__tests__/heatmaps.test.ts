@@ -113,7 +113,7 @@ describe('heatmaps', () => {
         })
 
         it('should be enabled if client config option is enabled', () => {
-            posthog.config.__preview_heatmaps = true
+            posthog.config.enable_heatmaps = true
             expect(posthog.heatmaps!.isEnabled).toBe(true)
         })
 
@@ -132,7 +132,7 @@ describe('heatmaps', () => {
         ])(
             'when client side config is %p and remote opt in is %p - heatmaps enabled should be %p',
             (clientSideOptIn, serverSideOptIn, expected) => {
-                posthog.config.__preview_heatmaps = clientSideOptIn
+                posthog.config.enable_heatmaps = clientSideOptIn
                 posthog.heatmaps!.afterDecideResponse({
                     heatmaps: serverSideOptIn,
                 } as DecideResponse)
