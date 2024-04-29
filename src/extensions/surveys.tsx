@@ -21,7 +21,6 @@ import {
     SurveyContext,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
-import { render } from 'preact-render-to-string'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { useState, useEffect, useRef, useContext } from 'preact/hooks'
 import { isNumber } from '../utils/type-utils'
@@ -118,7 +117,8 @@ export const renderSurveysPreview = (
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
     )
-    const surveyHtml = render(
+
+    Preact.render(
         <Surveys
             key={'surveys-render-preview'}
             survey={survey}
@@ -132,21 +132,16 @@ export const renderSurveysPreview = (
                 borderRadius: 10,
                 color: textColor,
             }}
-        />
+        />,
+        root
     )
-    const surveyDiv = document.createElement('div')
-    surveyDiv.innerHTML = surveyHtml
-    root.appendChild(surveyDiv)
 }
 
 export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement) => {
     const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
     const styleElement = Object.assign(document.createElement('style'), { innerText: widgetStyleSheet })
     root.appendChild(styleElement)
-    const widgetHtml = render(<FeedbackWidget key={'feedback-render-preview'} survey={survey} readOnly={true} />)
-    const widgetDiv = document.createElement('div')
-    widgetDiv.innerHTML = widgetHtml
-    root.appendChild(widgetDiv)
+    Preact.render(<FeedbackWidget key={'feedback-render-preview'} survey={survey} readOnly={true} />, root)
 }
 
 // This is the main exported function
@@ -320,40 +315,66 @@ export function Questions({
             setCurrentQuestion(idx + 1)
         }
     }
-    const isMultipleQuestion = survey.questions.length > 1
+
+    const questionToDisplay = readOnly ? previewQuestionIndex : currentQuestion
+    const hasMultipleQuestions = survey.questions.length > 1
+    const isPreviewThankYouMessage = readOnly && questionToDisplay === survey.questions.length
 
     return (
         <form
             // TODO: BEMify classes
             className="survey-form"
-            style={{ color: textColor, borderColor: survey.appearance?.borderColor, ...styleOverrides }}
+            style={{
+                color: textColor,
+                borderColor: survey.appearance?.borderColor,
+                ...styleOverrides,
+                ...(isPreviewThankYouMessage ? { border: 'none', borderBottom: 'solid 1px rgb(201, 198, 198)' } : {}),
+            }}
         >
-            {survey.questions.map((question, idx) => {
-                if (isMultipleQuestion) {
-                    return (
-                        <>
-                            {currentQuestion === idx && (
-                                <div className={`tab question-${idx} ${question.type}`}>
-                                    {questionTypeMap(
-                                        question,
-                                        idx,
-                                        survey.appearance || defaultSurveyAppearance,
-                                        (res) => onNextClick(res, idx),
-                                        () => closeSurveyPopup(survey, posthog, readOnly)
+            {isPreviewThankYouMessage ? (
+                <ConfirmationMessage
+                    confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
+                    confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
+                    appearance={survey.appearance || defaultSurveyAppearance}
+                    styleOverrides={{
+                        ...style,
+                        position: 'relative',
+                        right: '0px',
+                        borderRadius: '10px',
+                        border: 'solid 1px rgb(201, 198, 198)',
+                    }}
+                    onClose={() => {}}
+                />
+            ) : (
+                <>
+                    {survey.questions.map((question, idx) => {
+                        if (hasMultipleQuestions) {
+                            return (
+                                <>
+                                    {questionToDisplay === idx && (
+                                        <div className={`tab question-${idx} ${question.type}`}>
+                                            {questionTypeMap(
+                                                question,
+                                                idx,
+                                                survey.appearance || defaultSurveyAppearance,
+                                                (res) => onNextClick(res, idx),
+                                                () => closeSurveyPopup(survey, posthog, readOnly)
+                                            )}
+                                        </div>
                                     )}
-                                </div>
-                            )}
-                        </>
-                    )
-                }
-                return questionTypeMap(
-                    survey.questions[idx],
-                    idx,
-                    survey.appearance || defaultSurveyAppearance,
-                    (res) => onNextClick(res, idx),
-                    () => closeSurveyPopup(survey, posthog, readOnly)
-                )
-            })}
+                                </>
+                            )
+                        }
+                        return questionTypeMap(
+                            survey.questions[idx],
+                            idx,
+                            survey.appearance || defaultSurveyAppearance,
+                            (res) => onNextClick(res, idx),
+                            () => closeSurveyPopup(survey, posthog, readOnly)
+                        )
+                    })}
+                </>
+            )}
         </form>
     )
 }

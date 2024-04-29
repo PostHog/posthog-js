@@ -63,8 +63,8 @@ export class Heatmaps {
     }
 
     public get isEnabled(): boolean {
-        return !isUndefined(this.instance.config.__preview_heatmaps)
-            ? this.instance.config.__preview_heatmaps
+        return !isUndefined(this.instance.config.enable_heatmaps)
+            ? this.instance.config.enable_heatmaps
             : this._enabledServerSide
     }
 
