@@ -1,3 +1,7 @@
+## 1.130.1 - 2024-04-29
+
+- fix(surveys): use correct render method (#1157)
+
 ## 1.130.0 - 2024-04-26
 
 - feat: Move heatmaps out of preview (#1156)
