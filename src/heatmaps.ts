@@ -7,6 +7,7 @@ import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
 
 type HeatmapEventBuffer =
     | {
@@ -56,6 +57,7 @@ export class Heatmaps {
 
     public startIfEnabled(): void {
         if (this.isEnabled && !this._initialized) {
+            logger.info('[heatmaps] Heatmaps enabled, starting...')
             this._setupListeners()
         }
     }
