@@ -746,7 +746,7 @@ export class PostHog {
         }
 
         const clientRateLimitContext = !options?.skip_client_rate_limiting
-            ? this.rateLimiter.isCaptureClientSideRateLimited()
+            ? this.rateLimiter.clientRateLimitContext()
             : undefined
 
         if (clientRateLimitContext?.isRateLimited) {
@@ -783,7 +783,7 @@ export class PostHog {
         }
 
         if (clientRateLimitContext) {
-            data.properties['$lib_rate_limit_tokens'] = clientRateLimitContext.remainingTokens
+            data.properties['$lib_rate_limit_remaining_tokens'] = clientRateLimitContext.remainingTokens
         }
 
         const setProperties = options?.$set

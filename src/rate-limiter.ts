@@ -27,10 +27,10 @@ export class RateLimiter {
             this.captureEventsPerSecond
         )
 
-        this.lastEventRateLimited = this.isCaptureClientSideRateLimited(true).isRateLimited
+        this.lastEventRateLimited = this.clientRateLimitContext(true).isRateLimited
     }
 
-    public isCaptureClientSideRateLimited(checkOnly = false): {
+    public clientRateLimitContext(checkOnly = false): {
         isRateLimited: boolean
         remainingTokens: number
     } {

@@ -40,7 +40,7 @@ describe('posthog core', () => {
 
                 expect(onCapture.mock.calls[0][1]).toMatchObject({
                     properties: {
-                        $lib_rate_limit_tokens: 99,
+                        $lib_rate_limit_remaining_tokens: 99,
                     },
                 })
             })
