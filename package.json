@@ -20,7 +20,8 @@
         "test:functional": "jest functional_tests",
         "test-watch": "jest --watch src",
         "cypress": "cypress open",
-        "prepare": "husky install"
+        "prepare": "husky install",
+        "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs"
     },
     "main": "dist/module.js",
     "module": "dist/es.js",
@@ -58,8 +59,10 @@
         "@typescript-eslint/parser": "^6.19.0",
         "babel-eslint": "10.1.0",
         "babel-jest": "^26.6.3",
+        "compare-versions": "^6.1.0",
         "cypress": "13.6.3",
         "cypress-localstorage-commands": "^2.2.5",
+        "date-fns": "^3.6.0",
         "eslint": "8.56.0",
         "eslint-config-posthog-js": "link:eslint-rules",
         "eslint-config-prettier": "^8.5.0",
