@@ -46,6 +46,9 @@ describe('posthog core', () => {
             })
 
             it('does not capture if rate limit is in place', () => {
+                jest.useFakeTimers()
+                jest.setSystemTime(Date.now())
+
                 console.error = jest.fn()
                 const { posthog, onCapture } = setup()
 
