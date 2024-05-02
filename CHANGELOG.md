@@ -1,3 +1,8 @@
+## 1.130.2 - 2024-05-02
+
+- feat: Add rate limit info to events (#1160)
+- chore: logging on start (#1158)
+
 ## 1.130.1 - 2024-04-29
 
 - fix(surveys): use correct render method (#1157)
