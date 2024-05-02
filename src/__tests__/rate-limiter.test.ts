@@ -48,17 +48,17 @@ describe('Rate Limiter', () => {
 
     describe('client side', () => {
         it('starts with the max tokens', () => {
-            rateLimiter.isCaptureClientSideRateLimited(true)
+            rateLimiter.clientRateLimitContext(true)
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 100,
                 last: systemTime,
             })
-            expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
+            expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
         })
 
         it('subtracts a token with each call', () => {
             range(5).forEach(() => {
-                expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
+                expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
             })
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 95,
@@ -68,7 +68,7 @@ describe('Rate Limiter', () => {
 
         it('adds tokens if time has passed ', () => {
             range(50).forEach(() => {
-                expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
+                expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
             })
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 50,
@@ -76,7 +76,7 @@ describe('Rate Limiter', () => {
             })
 
             moveTimeForward(2000) // 2 seconds = 20 tokens
-            expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
+            expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 69, // 50 + 20 - 1
                 last: systemTime,
@@ -85,10 +85,10 @@ describe('Rate Limiter', () => {
 
         it('rate limits when past the threshold ', () => {
             range(100).forEach(() => {
-                expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
+                expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
             })
             range(200).forEach(() => {
-                expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(true)
+                expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(true)
             })
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 0,
@@ -96,7 +96,7 @@ describe('Rate Limiter', () => {
             })
 
             moveTimeForward(2000) // 2 seconds = 20 tokens
-            expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
+            expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 19, // 20 - 1
                 last: systemTime,
@@ -105,19 +105,19 @@ describe('Rate Limiter', () => {
 
         it('refills up to the maximum amount ', () => {
             range(100).forEach(() => {
-                expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
+                expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
             })
-            expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(true)
+            expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(true)
             expect(persistedBucket['$capture_rate_limit'].tokens).toEqual(0)
 
             moveTimeForward(1000000)
-            expect(rateLimiter.isCaptureClientSideRateLimited()).toBe(false)
+            expect(rateLimiter.clientRateLimitContext().isRateLimited).toBe(false)
             expect(persistedBucket['$capture_rate_limit'].tokens).toEqual(99) // limit - 1
         })
 
         it('captures a rate limit event the first time it is rate limited', () => {
             range(200).forEach(() => {
-                rateLimiter.isCaptureClientSideRateLimited()
+                rateLimiter.clientRateLimitContext()
             })
 
             expect(mockPostHog.capture).toBeCalledTimes(1)
@@ -135,7 +135,7 @@ describe('Rate Limiter', () => {
 
         it('does not capture a rate limit event if the persisted config was already rate limited', () => {
             range(200).forEach(() => {
-                rateLimiter.isCaptureClientSideRateLimited()
+                rateLimiter.clientRateLimitContext()
             })
 
             expect(mockPostHog.capture).toBeCalledTimes(1)
@@ -144,7 +144,7 @@ describe('Rate Limiter', () => {
             const newRateLimiter = new RateLimiter(mockPostHog as any)
 
             range(200).forEach(() => {
-                newRateLimiter.isCaptureClientSideRateLimited()
+                newRateLimiter.clientRateLimitContext()
             })
 
             expect(mockPostHog.capture).toBeCalledTimes(0)

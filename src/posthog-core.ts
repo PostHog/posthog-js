@@ -731,11 +731,6 @@ export class PostHog {
             return
         }
 
-        if (!options?.skip_client_rate_limiting && this.rateLimiter.isCaptureClientSideRateLimited()) {
-            logger.critical('This capture call is ignored due to client rate limiting.')
-            return
-        }
-
         // typing doesn't prevent interesting data
         if (isUndefined(event_name) || !isString(event_name)) {
             logger.error('No event name provided to posthog.capture')
@@ -747,6 +742,15 @@ export class PostHog {
             !this.config.opt_out_useragent_filter &&
             isBlockedUA(userAgent, this.config.custom_blocked_useragents)
         ) {
+            return
+        }
+
+        const clientRateLimitContext = !options?.skip_client_rate_limiting
+            ? this.rateLimiter.clientRateLimitContext()
+            : undefined
+
+        if (clientRateLimitContext?.isRateLimited) {
+            logger.critical('This capture call is ignored due to client rate limiting.')
             return
         }
 
@@ -776,6 +780,10 @@ export class PostHog {
             if (heatmapsBuffer) {
                 data.properties['$heatmap_data'] = heatmapsBuffer
             }
+        }
+
+        if (clientRateLimitContext) {
+            data.properties['$lib_rate_limit_remaining_tokens'] = clientRateLimitContext.remainingTokens
         }
 
         const setProperties = options?.$set
