@@ -97,6 +97,11 @@ const main = async () => {
         }
     }
     if (highestVersionToDeprecate) {
+        if (compare(currentVersion, highestVersionToDeprecate, '<=')) {
+            // should never be able to hit this, but be defensive
+            throw new Error("Dev error")
+        }
+
         console.log(`Deprecating up to and including version ${highestVersionToDeprecate} released on ${format(highestVersionToDeprecateDate, 'yyyy-MM-dd')} ...`)
         runNpmDeprecateBeforeOrEqualVersion(highestVersionToDeprecate)
     }
