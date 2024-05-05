@@ -81,7 +81,7 @@ export class Toolbar {
                         // hash that was in the url before the redirect
                         location.hash = state['desiredHash']
                     } else if (history) {
-                        history.replaceState('', document.title, location.pathname + location.search) // completely remove hash
+                        history.replaceState(history.state, document.title, location.pathname + location.search) // completely remove hash
                     } else {
                         location.hash = '' // clear hash (but leaves # unfortunately)
                     }
