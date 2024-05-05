@@ -466,7 +466,10 @@ export class PostHog {
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
         window?.addEventListener?.('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
 
-        this.toolbar.maybeLoadToolbar()
+        // If decide is disabled, toolbar won't work anyway
+        if (!this.config.advanced_disable_decide) {
+            this.toolbar.maybeLoadToolbar()
+        }
 
         // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
