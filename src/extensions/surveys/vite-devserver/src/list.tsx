@@ -10,7 +10,7 @@ import {
 
 const surveys = [
     {
-        id: 'some_id',
+        id: 'survey-1',
         name: 'some_name',
         type: SurveyType.Popover,
         description: 'Some description',
@@ -28,7 +28,7 @@ const surveys = [
         end_date: null,
     },
     {
-        id: 'some_id',
+        id: 'survey-2',
         name: 'some_name',
         description: 'Some description',
         type: SurveyType.Popover,
@@ -48,7 +48,7 @@ const surveys = [
         end_date: null,
     },
     {
-        id: 'some_id',
+        id: 'survey-3',
         name: 'some_name',
         description: 'Some description',
         type: SurveyType.Popover,
@@ -71,7 +71,7 @@ const surveys = [
         end_date: null,
     },
     {
-        id: 'some_id',
+        id: 'survey-4',
         name: 'some_name',
         description: 'Some description',
         type: SurveyType.Popover,
@@ -90,7 +90,7 @@ const surveys = [
         end_date: null,
     },
     {
-        id: 'some_id',
+        id: 'survey-5',
         name: 'some_name',
         description: 'Some description',
         type: SurveyType.Popover,
@@ -113,7 +113,7 @@ const surveys = [
         end_date: null,
     },
     {
-        id: 'some_id',
+        id: 'survey-6',
         name: 'some_name',
         description: 'Some description',
         type: SurveyType.Popover,
@@ -136,7 +136,7 @@ const surveys = [
         end_date: null,
     },
     {
-        id: 'some_id',
+        id: 'survey-7',
         name: 'some_name',
         description: 'Some description',
         type: SurveyType.Popover,
