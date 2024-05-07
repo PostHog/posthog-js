@@ -174,7 +174,6 @@ export function List() {
                             left: 'initial',
                             top: 'initial',
                             bottom: 'initial',
-                            borderBottom: 'solid 1px rgb(201, 198, 198)',
                         }}
                         survey={survey}
                     />
