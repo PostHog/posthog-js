@@ -1,6 +1,6 @@
 ## Running Instructions
 
-`cd src/extensions/surveys/vite-devserver`
+`cd playground/vite-surveys`
 
 `pnpm install`
 
