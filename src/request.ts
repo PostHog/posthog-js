@@ -4,7 +4,7 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, document, XMLHttpRequest, AbortController, navigator } from './utils/globals'
+import { fetch, XMLHttpRequest, AbortController, navigator } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
@@ -183,19 +183,6 @@ const _sendBeacon = (options: RequestOptions) => {
     }
 }
 
-const scriptRequest = (options: RequestOptions) => {
-    if (!document) {
-        return
-    }
-    const script = document.createElement('script')
-    script.type = 'text/javascript'
-    script.async = true
-    script.defer = true
-    script.src = options.url
-    const s = document.getElementsByTagName('script')[0]
-    s.parentNode?.insertBefore(script, s)
-}
-
 const AVAILABLE_TRANSPORTS: { transport: RequestOptions['transport']; method: (options: RequestOptions) => void }[] = []
 
 // We add the transports in order of preference
@@ -220,11 +207,6 @@ if (navigator?.sendBeacon) {
         method: _sendBeacon,
     })
 }
-
-AVAILABLE_TRANSPORTS.push({
-    transport: undefined,
-    method: scriptRequest,
-})
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
 export const request = (_options: RequestOptions) => {
