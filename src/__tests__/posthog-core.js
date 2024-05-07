@@ -504,13 +504,13 @@ describe('posthog core', () => {
         }))
 
         given('config', () => ({
-            capture_pageview: given.capturePageviews,
+            capture_pageview: given.capturePageview,
             capture_pageleave: given.capturePageleave,
             request_batching: given.batching,
         }))
 
-        given('capturePageviews', () => true)
-        given('capturePageleave', () => true)
+        given('capturePageview', () => true)
+        given('capturePageleave', () => 'if_capture_pageview')
         given('batching', () => true)
 
         it('captures $pageleave', () => {
@@ -519,12 +519,31 @@ describe('posthog core', () => {
             expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave')
         })
 
-        it('does not capture $pageleave when capture_pageview=false', () => {
-            given('capturePageviews', () => false)
+        it('does not capture $pageleave when capture_pageview=false and capture_pageleave=if_capture_pageview', () => {
+            given('capturePageleave', () => 'if_capture_pageview')
+            given('capturePageview', () => false)
 
             given.subject()
 
             expect(given.overrides.capture).not.toHaveBeenCalled()
+        })
+
+        it('does capture $pageleave when capture_pageview=true and capture_pageleave=if_capture_pageview', () => {
+            given('capturePageleave', () => 'if_capture_pageview')
+            given('capturePageview', () => true)
+
+            given.subject()
+
+            expect(given.overrides.capture).toHaveBeenCalled()
+        })
+
+        it('does capture $pageleave when capture_pageview=false and capture_pageleave=true', () => {
+            given('capturePageleave', () => true)
+            given('capturePageview', () => false)
+
+            given.subject()
+
+            expect(given.overrides.capture).toHaveBeenCalled()
         })
 
         it('calls requestQueue unload', () => {
@@ -543,7 +562,7 @@ describe('posthog core', () => {
             })
 
             it('does not capture $pageleave when capture_pageview=false', () => {
-                given('capturePageviews', () => false)
+                given('capturePageview', () => false)
 
                 given.subject()
 
