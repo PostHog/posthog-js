@@ -81,7 +81,8 @@ export class Toolbar {
                         // hash that was in the url before the redirect
                         location.hash = state['desiredHash']
                     } else if (history) {
-                        history.replaceState(history.state, document.title, location.pathname + location.search) // completely remove hash
+                        // second param is unused see https://developer.mozilla.org/en-US/docs/Web/API/History/replaceState
+                        history.replaceState(history.state, "", location.pathname + location.search) // completely remove hash
                     } else {
                         location.hash = '' // clear hash (but leaves # unfortunately)
                     }
