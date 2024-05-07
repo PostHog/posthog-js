@@ -93,7 +93,7 @@ export interface PostHogConfig {
     save_referrer: boolean
     verbose: boolean
     capture_pageview: boolean
-    capture_pageleave: boolean
+    capture_pageleave: boolean | 'if_capture_pageview'
     debug: boolean
     cookie_expiration: number
     upgrade: boolean
