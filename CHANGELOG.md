@@ -1,3 +1,8 @@
+## 1.131.0 - 2024-05-07
+
+- feat: Allow sending automatic pageleave with manual pageview (#1165)
+- chore: Add script to deprecate old versions (#1161)
+
 ## 1.130.2 - 2024-05-02
 
 - feat: Add rate limit info to events (#1160)
