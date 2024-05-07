@@ -82,7 +82,7 @@ export class Toolbar {
                         location.hash = state['desiredHash']
                     } else if (history) {
                         // second param is unused see https://developer.mozilla.org/en-US/docs/Web/API/History/replaceState
-                        history.replaceState(history.state, "", location.pathname + location.search) // completely remove hash
+                        history.replaceState(history.state, '', location.pathname + location.search) // completely remove hash
                     } else {
                         location.hash = '' // clear hash (but leaves # unfortunately)
                     }
