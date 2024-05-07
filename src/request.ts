@@ -1,4 +1,4 @@
-import { _base64Encode, each } from './utils'
+import { _base64Encode, each, find } from './utils'
 import Config from './config'
 import { Compression, RequestOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
@@ -241,7 +241,7 @@ export const request = (_options: RequestOptions) => {
     const transport = options.transport ?? 'XHR'
 
     const transportMethod =
-        AVAILABLE_TRANSPORTS.find((t) => t.transport === transport)?.method ?? AVAILABLE_TRANSPORTS[0].method
+        find(AVAILABLE_TRANSPORTS, (t) => t.transport === transport)?.method ?? AVAILABLE_TRANSPORTS[0].method
 
     if (!transportMethod) {
         throw new Error('No available transport method')

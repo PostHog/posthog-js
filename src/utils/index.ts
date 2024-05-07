@@ -444,3 +444,12 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
 export function isDistinctIdStringLike(value: string): boolean {
     return ['distinct_id', 'distinctid'].includes(value.toLowerCase())
 }
+
+export function find<T>(value: T[], predicate: (value: T) => boolean): T | undefined {
+    for (let i = 0; i < value.length; i++) {
+        if (predicate(value[i])) {
+            return value[i]
+        }
+    }
+    return undefined
+}
