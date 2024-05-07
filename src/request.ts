@@ -19,36 +19,6 @@ type EncodedBody = {
     body: string | BlobPart
 }
 
-// This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
-export const request = (_options: RequestOptions) => {
-    // Clone the options so we don't modify the original object
-    const options = { ..._options }
-    options.timeout = options.timeout || 60000
-
-    options.url = extendURLParams(options.url, {
-        _: new Date().getTime().toString(),
-        ver: Config.LIB_VERSION,
-        compression: options.compression,
-    })
-
-    if (options.transport === 'sendBeacon' && navigator?.sendBeacon) {
-        return _sendBeacon(options)
-    }
-
-    // NOTE: Until we are confident with it, we only use fetch if explicitly told so
-    // At some point we will make it the default over xhr
-    if (options.transport === 'fetch' && fetch) {
-        return _fetch(options)
-    }
-
-    if (XMLHttpRequest || !document) {
-        return xhr(options)
-    }
-
-    // Final fallback if everything else fails...
-    scriptRequest(options)
-}
-
 export const extendURLParams = (url: string, params: Record<string, any>): string => {
     const [baseUrl, search] = url.split('?')
     const newParams = { ...params }
@@ -224,4 +194,58 @@ const scriptRequest = (options: RequestOptions) => {
     script.src = options.url
     const s = document.getElementsByTagName('script')[0]
     s.parentNode?.insertBefore(script, s)
+}
+
+const AVAILABLE_TRANSPORTS: { transport: RequestOptions['transport']; method: (options: RequestOptions) => void }[] = []
+
+// We add the transports in order of preference
+
+if (XMLHttpRequest) {
+    AVAILABLE_TRANSPORTS.push({
+        transport: 'XHR',
+        method: xhr,
+    })
+}
+
+if (fetch) {
+    AVAILABLE_TRANSPORTS.push({
+        transport: 'fetch',
+        method: _fetch,
+    })
+}
+
+if (navigator?.sendBeacon) {
+    AVAILABLE_TRANSPORTS.push({
+        transport: 'sendBeacon',
+        method: _sendBeacon,
+    })
+}
+
+AVAILABLE_TRANSPORTS.push({
+    transport: undefined,
+    method: scriptRequest,
+})
+
+// This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
+export const request = (_options: RequestOptions) => {
+    // Clone the options so we don't modify the original object
+    const options = { ..._options }
+    options.timeout = options.timeout || 60000
+
+    options.url = extendURLParams(options.url, {
+        _: new Date().getTime().toString(),
+        ver: Config.LIB_VERSION,
+        compression: options.compression,
+    })
+
+    const transport = options.transport ?? 'XHR'
+
+    const transportMethod =
+        AVAILABLE_TRANSPORTS.find((t) => t.transport === transport)?.method ?? AVAILABLE_TRANSPORTS[0].method
+
+    if (!transportMethod) {
+        throw new Error('No available transport method')
+    }
+
+    transportMethod(options)
 }
