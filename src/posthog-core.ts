@@ -385,7 +385,7 @@ export class PostHog {
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
-        this._requestQueue = new RequestQueue((req) => this._send_request(req))
+        this._requestQueue = new RequestQueue((req) => this._send_retriable_request(req))
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
