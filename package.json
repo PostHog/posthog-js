@@ -25,6 +25,18 @@
     },
     "main": "dist/module.js",
     "module": "dist/es.js",
+    "exports": {
+        ".": {
+            "types": "./dist/module.d.ts",
+            "import": "./dist/es.mjs",
+            "require": "./dist/module.js"
+        },
+        "./react": {
+            "types": "./react/dist/types/index.d.ts",
+            "import": "./react/dist/esm/index.mjs",
+            "require": "./react/dist/umd/index.js"
+        }
+    },
     "types": "dist/module.d.ts",
     "files": [
         "lib/*",
