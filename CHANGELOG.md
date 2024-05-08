@@ -1,3 +1,8 @@
+## 1.131.3 - 2024-05-08
+
+- feat: Added global state check for toolbar (#1173)
+- fix: Retriable queued requests (#1171)
+
 ## 1.131.2 - 2024-05-08
 
 - fix: remove transport method that doesn't work (#1167)
