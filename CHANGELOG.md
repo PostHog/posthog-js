@@ -1,3 +1,7 @@
+## 1.131.2 - 2024-05-08
+
+- fix: remove transport method that doesn't work (#1167)
+
 ## 1.131.1 - 2024-05-08
 
 - feat: Refactor request to make sure we only use available transports (#1166)
