@@ -4,6 +4,7 @@ import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { logger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
+import { TOOLBAR_ID } from '../constants'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
@@ -16,10 +17,18 @@ const LOCALSTORAGE_KEY = '_postHogToolbarParams'
 export class Toolbar {
     instance: PostHog
 
-    private _toolbarScriptLoaded = false
-
     constructor(instance: PostHog) {
         this.instance = instance
+    }
+
+    // NOTE: We store the state of the toolbar in the global scope to avoid multiple instances of the SDK loading the toolbar
+    private setToolbarState(state: number) {
+        assignableWindow['ph_toolbar_state'] = state
+    }
+
+    // 0 = uninitiated, 1 = loading script, 2 = script loaded
+    private getToolbarState(): number {
+        return assignableWindow['ph_toolbar_state'] ?? 0
     }
 
     /**
@@ -89,6 +98,7 @@ export class Toolbar {
                 }
             } else {
                 // get credentials from localStorage from a previous initialization
+
                 toolbarParams = JSON.parse(localStorage.getItem(LOCALSTORAGE_KEY) || '{}')
                 toolbarParams.source = 'localstorage'
 
@@ -113,7 +123,9 @@ export class Toolbar {
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
-        if (!window || (window.localStorage.getItem(LOCALSTORAGE_KEY) && this._toolbarScriptLoaded)) {
+        const toolbarRunning = !!document?.getElementById(TOOLBAR_ID)
+
+        if (!window || toolbarRunning) {
             // The toolbar will clear the localStorage key when it's done with it. If it is present that indicates the toolbar is already open and running
             return false
         }
@@ -135,11 +147,11 @@ export class Toolbar {
             })
         )
 
-        if (this._toolbarScriptLoaded) {
+        if (this.getToolbarState() === 2) {
             this._callLoadToolbar(toolbarParams)
-        } else {
+        } else if (this.getToolbarState() === 0) {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
-            this._toolbarScriptLoaded = true
+            this.setToolbarState(1)
 
             // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
             // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
@@ -154,16 +166,17 @@ export class Toolbar {
             loadScript(toolbarUrl, (err) => {
                 if (err) {
                     logger.error('Failed to load toolbar', err)
-                    this._toolbarScriptLoaded = false
+                    this.setToolbarState(0)
                     return
                 }
+                this.setToolbarState(2)
                 this._callLoadToolbar(toolbarParams)
             })
 
             // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
             // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
             registerEvent(window, 'turbolinks:load', () => {
-                this._toolbarScriptLoaded = false
+                this.setToolbarState(0)
                 this.loadToolbar(toolbarParams)
             })
         }
