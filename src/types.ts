@@ -236,7 +236,6 @@ export interface RequestOptions {
     urlQueryArgs?: { compression: Compression }
     callback?: RequestCallback
     timeout?: number
-    noRetries?: boolean
     compression?: Compression | 'best-available'
 }
 

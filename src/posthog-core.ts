@@ -256,13 +256,15 @@ export class PostHog {
 
     _triggered_notifs: any
     compression?: Compression
-    __request_queue: QueuedRequestOptions[]
+
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
 
     SentryIntegration: typeof SentryIntegration
 
     private _debugEventEmitter = new SimpleEventEmitter()
+    private __inflight_requests: QueuedRequestOptions[]
+    private __request_queue: QueuedRequestOptions[]
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -275,6 +277,7 @@ export class PostHog {
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.__request_queue = []
+        this.__inflight_requests = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
 
@@ -597,9 +600,13 @@ export class PostHog {
         options.headers = this.config.request_headers
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
 
+        this.__inflight_requests.push(options)
+
         request({
             ...options,
             callback: (response) => {
+                this.__inflight_requests.splice(this.__inflight_requests.indexOf(options), 1)
+
                 this.rateLimiter.checkForLimiting(response)
 
                 if (response.statusCode >= 400) {
@@ -686,7 +693,7 @@ export class PostHog {
     }
 
     /**
-     * Used to forecefully flush any queued requests to the server.
+     * Used to forcefully flush any queued requests to the server.
      */
     flush(): Promise<void> {
         if (typeof Promise === 'undefined') {
