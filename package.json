@@ -23,13 +23,14 @@
         "prepare": "husky install",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs"
     },
-    "main": "dist/module.js",
-    "module": "dist/es.js",
+    "main": "dist/umd/index.js",
+    "module": "dist/esm/index.mjs",
+    "types": "dist/types/index.d.ts",
     "exports": {
         ".": {
-            "types": "./dist/module.d.ts",
-            "import": "./dist/es.mjs",
-            "require": "./dist/module.js"
+            "types": "./dist/types/index.d.ts",
+            "import": "./dist/esm/index.mjs",
+            "require": "./dist/umd/index.js"
         },
         "./react": {
             "types": "./react/dist/types/index.d.ts",
@@ -37,7 +38,6 @@
             "require": "./react/dist/umd/index.js"
         }
     },
-    "types": "dist/module.d.ts",
     "files": [
         "lib/*",
         "dist/*",

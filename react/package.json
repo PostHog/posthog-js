@@ -20,7 +20,7 @@
         "prepublishOnly": "pnpm test && pnpm build"
     },
     "main": "dist/umd/index.js",
-    "module": "dist/esm/index.js",
+    "module": "dist/esm/index.mjs",
     "types": "dist/types",
     "exports": {
        ".": {
