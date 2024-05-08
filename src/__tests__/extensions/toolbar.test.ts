@@ -4,6 +4,7 @@ import { PostHog } from '../../posthog-core'
 import { PostHogConfig, ToolbarParams } from '../../types'
 import { assignableWindow, window } from '../../utils/globals'
 import { RequestRouter } from '../../utils/request-router'
+import { TOOLBAR_ID } from '../../constants'
 
 jest.mock('../../utils', () => ({
     ...jest.requireActual('../../utils'),
@@ -34,7 +35,14 @@ describe('Toolbar', () => {
     })
 
     beforeEach(() => {
-        assignableWindow.ph_load_toolbar = jest.fn()
+        if (document.getElementById(TOOLBAR_ID)) {
+            document.body.removeChild(document.getElementById(TOOLBAR_ID)!)
+        }
+        assignableWindow.ph_load_toolbar = jest.fn(() => {
+            const mockToolbarElement = document.createElement('div')
+            mockToolbarElement.setAttribute('id', TOOLBAR_ID)
+            document.body.appendChild(mockToolbarElement)
+        })
     })
 
     describe('maybeLoadToolbar', () => {
@@ -176,10 +184,12 @@ describe('Toolbar', () => {
             expect(toolbar.loadToolbar(toolbarParams)).toBe(false)
         })
 
-        it('should load if previously loaded but closed via localstorage', () => {
+        it('should load if previously loaded but closed', () => {
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
             expect(toolbar.loadToolbar(toolbarParams)).toBe(false)
-            localStorage.removeItem('_postHogToolbarParams')
+
+            document.body.removeChild(document.getElementById(TOOLBAR_ID)!)
+
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
         })
     })
