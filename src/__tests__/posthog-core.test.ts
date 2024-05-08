@@ -1,30 +1,33 @@
-import _posthog, { PostHogConfig } from '../loader-module'
+import _posthog, { PostHog, PostHogConfig } from '../loader-module'
 import { uuidv7 } from '../uuidv7'
 
 describe('posthog core', () => {
+    const createPostHog = (config: Partial<PostHogConfig> = {}): PostHog => {
+        const posthog = _posthog.init('testtoken', { ...config, persistence_name: uuidv7() }, uuidv7())!
+        posthog.debug()
+        return posthog
+    }
+
+    let posthog: PostHog
+
+    beforeEach(() => {
+        posthog = createPostHog()
+    })
+
     describe('capture()', () => {
         const eventName = 'custom_event'
         const properties = {
             event: 'prop',
         }
-        const setup = (config: Partial<PostHogConfig> = {}) => {
-            const onCapture = jest.fn()
-            const posthog = _posthog.init('testtoken', { ...config, _onCapture: onCapture }, uuidv7())!
-            posthog.debug()
-            return { posthog, onCapture }
-        }
 
         it('respects property_denylist and property_blacklist', () => {
-            // arrange
-            const { posthog } = setup({
+            posthog = createPostHog({
                 property_denylist: ['$lib', 'persistent', '$is_identified'],
                 property_blacklist: ['token'],
             })
 
-            // act
             const actual = posthog._calculate_event_properties(eventName, properties)
 
-            // assert
             expect(actual['event']).toBe('prop')
             expect(actual['$lib']).toBeUndefined()
             expect(actual['persistent']).toBeUndefined()
@@ -33,9 +36,13 @@ describe('posthog core', () => {
         })
 
         describe('rate limiting', () => {
-            it('includes information about remaining rate limit', () => {
-                const { posthog, onCapture } = setup()
+            const onCapture = jest.fn()
+            beforeEach(() => {
+                onCapture.mockClear()
+                posthog = createPostHog({ _onCapture: onCapture })
+            })
 
+            it('includes information about remaining rate limit', () => {
                 posthog.capture(eventName, properties)
 
                 expect(onCapture.mock.calls[0][1]).toMatchObject({
@@ -50,7 +57,6 @@ describe('posthog core', () => {
                 jest.setSystemTime(Date.now())
 
                 console.error = jest.fn()
-                const { posthog, onCapture } = setup()
 
                 for (let i = 0; i < 100; i++) {
                     posthog.capture(eventName, properties)
@@ -66,6 +72,16 @@ describe('posthog core', () => {
                     'This capture call is ignored due to client rate limiting.'
                 )
             })
+        })
+    })
+
+    describe('flush', () => {
+        it('flushes the queue', () => {
+            posthog.capture('event1')
+            posthog.capture('event2')
+            posthog.capture('event3')
+
+            expect(posthog._requestQueue?.['queue']).toHaveLength(3)
         })
     })
 })

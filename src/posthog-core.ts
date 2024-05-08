@@ -702,7 +702,7 @@ export class PostHog {
         }
 
         // TODO:
-        // [ ] Track in flight queued requests
+        // [x] Track in flight queued requests
         // [ ] Wait for them to finish
         // [ ] Have a way to flush additional ones
 
