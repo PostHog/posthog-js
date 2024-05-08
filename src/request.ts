@@ -177,9 +177,12 @@ const _sendBeacon = (options: RequestOptions) => {
         // sendBeacon requires a blob so we convert it
         const sendBeaconBody = typeof body === 'string' ? new Blob([body], { type: contentType }) : body
         navigator!.sendBeacon!(url, sendBeaconBody)
+
+        options.callback?.({ statusCode: 200, text: 'sendBeacon successful' })
     } catch (e) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
+        options.callback?.({ statusCode: 0, text: 'sendBeacon failed' })
     }
 }
 

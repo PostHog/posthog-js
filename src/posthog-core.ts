@@ -385,7 +385,7 @@ export class PostHog {
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
-        this._requestQueue = new RequestQueue((req) => this._send_request(req))
+        this._requestQueue = new RequestQueue((req) => this._send_retriable_request(req))
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
@@ -693,6 +693,13 @@ export class PostHog {
             // If promises aren't supported then we just return
             return undefined as any
         }
+
+        // TODO:
+        // [ ] Track in flight queued requests
+        // [ ] Wait for them to finish
+        // [ ] Have a way to flush additional ones
+
+        // Ideally we would use promises here, but we want to support IE11
 
         // eslint-disable-next-line compat/compat
         return new Promise((resolve) => {
