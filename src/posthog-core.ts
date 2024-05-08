@@ -116,7 +116,6 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
-    api_transport: 'XHR',
     ui_host: null,
     token: '',
     autocapture: true,
