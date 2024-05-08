@@ -686,6 +686,21 @@ export class PostHog {
     }
 
     /**
+     * Used to forecefully flush any queued requests to the server.
+     */
+    flush(): Promise<void> {
+        if (typeof Promise === 'undefined') {
+            // If promises aren't supported then we just return
+            return undefined as any
+        }
+
+        // eslint-disable-next-line compat/compat
+        return new Promise((resolve) => {
+            resolve()
+        })
+    }
+
+    /**
      * push() keeps the standard async-array-push
      * behavior around after the lib is loaded.
      * This is only useful for external integrations that
