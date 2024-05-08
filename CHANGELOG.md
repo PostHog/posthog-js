@@ -1,3 +1,9 @@
+## 1.131.1 - 2024-05-08
+
+- feat: Refactor request to make sure we only use available transports (#1166)
+- fix: don't modify history state when loading toolbar (#1162)
+- feat(surveys): add Vite devserver (#1164)
+
 ## 1.131.0 - 2024-05-07
 
 - feat: Allow sending automatic pageleave with manual pageview (#1165)
