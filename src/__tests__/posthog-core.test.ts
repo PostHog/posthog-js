@@ -32,6 +32,8 @@ describe('posthog core', () => {
             expect(actual['token']).toBeUndefined()
         })
 
+        it('should capture stateless', () => {})
+
         describe('rate limiting', () => {
             it('includes information about remaining rate limit', () => {
                 const { posthog, onCapture } = setup()

@@ -33,6 +33,7 @@ import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import {
     CaptureOptions,
     CaptureResult,
+    CaptureStatelessOptions,
     Compression,
     DecideResponse,
     EarlyAccessFeatureCallback,
@@ -701,6 +702,28 @@ export class PostHog {
         this._execute_array([item])
     }
 
+    private _preCaptureChecks(event_name: string): boolean {
+        if (userOptedOut(this)) {
+            return false
+        }
+
+        // typing doesn't prevent interesting data
+        if (isUndefined(event_name) || !isString(event_name)) {
+            logger.error('No event name provided to posthog.capture')
+            return false
+        }
+
+        if (
+            userAgent &&
+            !this.config.opt_out_useragent_filter &&
+            isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+        ) {
+            return false
+        }
+
+        return true
+    }
+
     /**
      * Capture an event. This is the most important and
      * frequently used PostHog function.
@@ -722,34 +745,11 @@ export class PostHog {
     capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
-        if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
+        if (!this.__loaded || !this.persistence || !this.sessionPersistence) {
             return logger.uninitializedWarning('posthog.capture')
         }
 
-        if (userOptedOut(this)) {
-            return
-        }
-
-        // typing doesn't prevent interesting data
-        if (isUndefined(event_name) || !isString(event_name)) {
-            logger.error('No event name provided to posthog.capture')
-            return
-        }
-
-        if (
-            userAgent &&
-            !this.config.opt_out_useragent_filter &&
-            isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-        ) {
-            return
-        }
-
-        const clientRateLimitContext = !options?.skip_client_rate_limiting
-            ? this.rateLimiter.clientRateLimitContext()
-            : undefined
-
-        if (clientRateLimitContext?.isRateLimited) {
-            logger.critical('This capture call is ignored due to client rate limiting.')
+        if (!this._preCaptureChecks(event_name)) {
             return
         }
 
@@ -768,30 +768,83 @@ export class PostHog {
             this.persistence.set_initial_referrer_info()
         }
 
-        let data: CaptureResult = {
-            uuid: uuidv7(),
-            event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}),
-        }
+        const allProperties = this._calculate_event_properties(event_name, properties || {})
 
         if (!options?._noHeatmaps) {
             const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
             if (heatmapsBuffer) {
-                data.properties['$heatmap_data'] = heatmapsBuffer
+                allProperties['$heatmap_data'] = heatmapsBuffer
             }
+        }
+
+        const setProperties = options?.$set
+        // if (setProperties) {
+        //     data.$set = options?.$set
+        // }
+        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once)
+        // if (setOnceProperties) {
+        //     data.$set_once = setOnceProperties
+        // }
+
+        allProperties['$set_once'] = setOnceProperties
+        allProperties['$set'] = setProperties
+
+        // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
+        // This doesn't handle $set_once, because posthog-people doesn't either
+        const finalSet = { ...allProperties['$set'], ...(setProperties || {}) }
+        if (!isEmptyObject(finalSet)) {
+            this.setPersonPropertiesForFlags(finalSet)
+        }
+
+        return this.captureStateless(this.get_distinct_id(), event_name, allProperties, options)
+    }
+
+    captureStateless(
+        distinctId: string,
+        event_name: string,
+        properties?: Properties,
+        options?: CaptureStatelessOptions
+    ): CaptureResult | void {
+        // While developing, a developer might purposefully _not_ call init(),
+        // in this case, we would like capture to be a noop.
+        if (!this.__loaded || !this._requestQueue) {
+            return logger.uninitializedWarning('posthog.capture')
+        }
+
+        if (!this._preCaptureChecks(event_name)) {
+            return
+        }
+
+        // typing doesn't prevent interesting data
+        if (isUndefined(distinctId) || !isString(distinctId)) {
+            logger.error('No distinct_id provided to posthog.captureStateless')
+            return
+        }
+
+        const clientRateLimitContext = !options?.skip_client_rate_limiting
+            ? this.rateLimiter.clientRateLimitContext()
+            : undefined
+
+        if (clientRateLimitContext?.isRateLimited) {
+            logger.critical('This capture call is ignored due to client rate limiting.')
+            return
+        }
+
+        let data: CaptureResult = {
+            uuid: uuidv7(),
+            event: event_name,
+            properties: this._calculate_stateless_event_properties(event_name, properties || {}),
+        }
+
+        data.properties['distinct_id'] = distinctId
+
+        const sanitize_properties = this.config.sanitize_properties
+        if (sanitize_properties) {
+            data.properties = sanitize_properties(data.properties, event_name)
         }
 
         if (clientRateLimitContext) {
             data.properties['$lib_rate_limit_remaining_tokens'] = clientRateLimitContext.remainingTokens
-        }
-
-        const setProperties = options?.$set
-        if (setProperties) {
-            data.$set = options?.$set
-        }
-        const setOnceProperties = this._calculate_set_once_properties(options?.$set_once)
-        if (setOnceProperties) {
-            data.$set_once = setOnceProperties
         }
 
         data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
@@ -799,13 +852,6 @@ export class PostHog {
         if (!isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
             data.properties['$event_time_override_system_time'] = new Date()
-        }
-
-        // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
-        // This doesn't handle $set_once, because posthog-people doesn't either
-        const finalSet = { ...data.properties['$set'], ...data['$set'] }
-        if (!isEmptyObject(finalSet)) {
-            this.setPersonPropertiesForFlags(finalSet)
         }
 
         this._debugEventEmitter.emit('eventCaptured', data)
@@ -831,6 +877,57 @@ export class PostHog {
         this.on('eventCaptured', (data) => callback(data.event))
     }
 
+    /**
+     * Build all properties that are "stateless" - i.e. nothing to do with persisted properties or super properties
+     */
+    private _calculate_stateless_event_properties(event_name: string, event_properties: Properties): Properties {
+        let properties = { ...event_properties }
+        properties['token'] = this.config.token
+
+        if (event_name === '$snapshot') {
+            return properties
+        }
+
+        const infoProperties = Info.properties()
+
+        if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
+            properties['$lib_custom_api_host'] = this.config.api_host
+        }
+
+        if (event_name === '$pageview' && document) {
+            properties['title'] = document.title
+        }
+
+        // this is only added when this.config.opt_out_useragent_filter is true,
+        // or it would always add "browser"
+        if (userAgent && this.config.opt_out_useragent_filter) {
+            properties['$browser_type'] = isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+                ? 'bot'
+                : 'browser'
+        }
+
+        // update properties with pageview info and super-properties
+        properties = extend({}, infoProperties, properties)
+
+        if (isArray(this.config.property_denylist)) {
+            each(this.config.property_denylist, function (denylisted_prop) {
+                delete properties[denylisted_prop]
+            })
+        } else {
+            logger.error(
+                'Invalid value for property_denylist config: ' +
+                    this.config.property_denylist +
+                    ' or property_blacklist config: ' +
+                    this.config.property_blacklist
+            )
+        }
+
+        return properties
+    }
+
+    /**
+     * Calculates additional properties to be sent with an event that are stateful - i.e. depend on the current state of the user
+     */
     _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
@@ -839,7 +936,6 @@ export class PostHog {
         // set defaults
         const startTimestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
-        properties['token'] = this.config.token
 
         if (event_name === '$snapshot') {
             const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
@@ -847,16 +943,10 @@ export class PostHog {
             return properties
         }
 
-        const infoProperties = Info.properties()
-
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
-        }
-
-        if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
-            properties['$lib_custom_api_host'] = this.config.api_host
         }
 
         if (
@@ -878,22 +968,10 @@ export class PostHog {
             properties = extend(properties, performanceProperties)
         }
 
-        if (event_name === '$pageview' && document) {
-            properties['title'] = document.title
-        }
-
         // set $duration if time_event was previously called for this event
         if (!isUndefined(startTimestamp)) {
             const duration_in_ms = new Date().getTime() - startTimestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
-        }
-
-        // this is only added when this.config.opt_out_useragent_filter is true,
-        // or it would always add "browser"
-        if (userAgent && this.config.opt_out_useragent_filter) {
-            properties['$browser_type'] = isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-                ? 'bot'
-                : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -901,34 +979,8 @@ export class PostHog {
         // properties object by passing in a new object
 
         // update properties with pageview info and super-properties
-        properties = extend(
-            {},
-            infoProperties,
-            this.persistence.properties(),
-            this.sessionPersistence.properties(),
-            properties
-        )
-
+        properties = extend({}, this.persistence.properties(), this.sessionPersistence.properties(), properties)
         properties['$is_identified'] = this._isIdentified()
-
-        if (isArray(this.config.property_denylist)) {
-            each(this.config.property_denylist, function (denylisted_prop) {
-                delete properties[denylisted_prop]
-            })
-        } else {
-            logger.error(
-                'Invalid value for property_denylist config: ' +
-                    this.config.property_denylist +
-                    ' or property_blacklist config: ' +
-                    this.config.property_blacklist
-            )
-        }
-
-        const sanitize_properties = this.config.sanitize_properties
-        if (sanitize_properties) {
-            properties = sanitize_properties(properties, event_name)
-        }
-
         // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
         properties['$process_person_profile'] = this._hasPersonProcessing()
 
