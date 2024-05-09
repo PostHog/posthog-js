@@ -1,10 +1,10 @@
-import { _base64Encode, each } from './utils'
+import { _base64Encode, each, find } from './utils'
 import Config from './config'
 import { Compression, RequestOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, document, XMLHttpRequest, AbortController, navigator } from './utils/globals'
+import { fetch, XMLHttpRequest, AbortController, navigator } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
@@ -17,36 +17,6 @@ const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
 type EncodedBody = {
     contentType: string
     body: string | BlobPart
-}
-
-// This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
-export const request = (_options: RequestOptions) => {
-    // Clone the options so we don't modify the original object
-    const options = { ..._options }
-    options.timeout = options.timeout || 60000
-
-    options.url = extendURLParams(options.url, {
-        _: new Date().getTime().toString(),
-        ver: Config.LIB_VERSION,
-        compression: options.compression,
-    })
-
-    if (options.transport === 'sendBeacon' && navigator?.sendBeacon) {
-        return _sendBeacon(options)
-    }
-
-    // NOTE: Until we are confident with it, we only use fetch if explicitly told so
-    // At some point we will make it the default over xhr
-    if (options.transport === 'fetch' && fetch) {
-        return _fetch(options)
-    }
-
-    if (XMLHttpRequest || !document) {
-        return xhr(options)
-    }
-
-    // Final fallback if everything else fails...
-    scriptRequest(options)
 }
 
 export const extendURLParams = (url: string, params: Record<string, any>): string => {
@@ -213,15 +183,51 @@ const _sendBeacon = (options: RequestOptions) => {
     }
 }
 
-const scriptRequest = (options: RequestOptions) => {
-    if (!document) {
-        return
+const AVAILABLE_TRANSPORTS: { transport: RequestOptions['transport']; method: (options: RequestOptions) => void }[] = []
+
+// We add the transports in order of preference
+
+if (XMLHttpRequest) {
+    AVAILABLE_TRANSPORTS.push({
+        transport: 'XHR',
+        method: xhr,
+    })
+}
+
+if (fetch) {
+    AVAILABLE_TRANSPORTS.push({
+        transport: 'fetch',
+        method: _fetch,
+    })
+}
+
+if (navigator?.sendBeacon) {
+    AVAILABLE_TRANSPORTS.push({
+        transport: 'sendBeacon',
+        method: _sendBeacon,
+    })
+}
+
+// This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
+export const request = (_options: RequestOptions) => {
+    // Clone the options so we don't modify the original object
+    const options = { ..._options }
+    options.timeout = options.timeout || 60000
+
+    options.url = extendURLParams(options.url, {
+        _: new Date().getTime().toString(),
+        ver: Config.LIB_VERSION,
+        compression: options.compression,
+    })
+
+    const transport = options.transport ?? 'XHR'
+
+    const transportMethod =
+        find(AVAILABLE_TRANSPORTS, (t) => t.transport === transport)?.method ?? AVAILABLE_TRANSPORTS[0].method
+
+    if (!transportMethod) {
+        throw new Error('No available transport method')
     }
-    const script = document.createElement('script')
-    script.type = 'text/javascript'
-    script.async = true
-    script.defer = true
-    script.src = options.url
-    const s = document.getElementsByTagName('script')[0]
-    s.parentNode?.insertBefore(script, s)
+
+    transportMethod(options)
 }

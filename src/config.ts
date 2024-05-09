@@ -1,6 +1,6 @@
 import { version } from '../package.json'
 
-// overriden in posthog-core,
+// overridden in posthog-core,
 // e.g.     Config.DEBUG = Config.DEBUG || instance.config.debug
 const Config = {
     DEBUG: false,

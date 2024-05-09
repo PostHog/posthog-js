@@ -1,0 +1,6 @@
+{
+    "//": "see scripts/deprecate-old-versions.mjs",
+    "deprecateBeforeVersion": "1.127.0",
+    "deprecateOlderThanDays": 180,
+    "message": "This version of posthog-js is deprecated, please update posthog-js, and do not use this version! Check out our JS docs at https://posthog.com/docs/libraries/js"
+}

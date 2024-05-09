@@ -1,3 +1,28 @@
+## 1.131.3 - 2024-05-08
+
+- feat: Added global state check for toolbar (#1173)
+- fix: Retriable queued requests (#1171)
+
+## 1.131.2 - 2024-05-08
+
+- fix: remove transport method that doesn't work (#1167)
+
+## 1.131.1 - 2024-05-08
+
+- feat: Refactor request to make sure we only use available transports (#1166)
+- fix: don't modify history state when loading toolbar (#1162)
+- feat(surveys): add Vite devserver (#1164)
+
+## 1.131.0 - 2024-05-07
+
+- feat: Allow sending automatic pageleave with manual pageview (#1165)
+- chore: Add script to deprecate old versions (#1161)
+
+## 1.130.2 - 2024-05-02
+
+- feat: Add rate limit info to events (#1160)
+- chore: logging on start (#1158)
+
 ## 1.130.1 - 2024-04-29
 
 - fix(surveys): use correct render method (#1157)
