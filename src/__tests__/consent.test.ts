@@ -46,7 +46,7 @@ describe('consentManager', () => {
         expect(posthog.sessionPersistence?.disabled).toBe(false)
     })
 
-    it.skip('should start default opted out if setting given', () => {
+    it('should start default opted out if setting given', () => {
         posthog = createPostHog({ opt_out_capturing_by_default: true })
         expect(posthog.has_opted_in_capturing()).toBe(false)
         expect(posthog.has_opted_out_capturing()).toBe(true)
