@@ -5,6 +5,7 @@ import {
     RatingSurveyQuestion,
     MultipleSurveyQuestion,
     SurveyQuestionType,
+    getDisplayOrderChoices,
 } from '../../../posthog-surveys-types'
 import { RefObject } from 'preact'
 import { useRef, useState } from 'preact/hooks'
@@ -242,7 +243,7 @@ export function MultipleChoiceQuestion({
                 {/* Remove the "other" element from the choices, if hasOpenChoice is set */}
                 {/* shuffle all other options here if question.shuffleOptions is set */}
                 {/* Always ensure that the open ended choice is the last option */}
-                {question.choices.map((choice: string, idx: number) => {
+                {getDisplayOrderChoices(question).map((choice: string, idx: number) => {
                     let choiceClass = 'choice-option'
                     const val = choice
                     const option = choice
