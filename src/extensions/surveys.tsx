@@ -9,6 +9,8 @@ import {
     SurveyQuestion,
     SurveyQuestionType,
     SurveyType,
+    getDisplayOrderQuestions,
+    getDisplayOrderChoices,
 } from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
@@ -271,6 +273,7 @@ const questionTypeMap = (
         [SurveyQuestionType.SingleChoice]: (
             <MultipleChoiceQuestion
                 question={question as MultipleSurveyQuestion}
+                choices={getDisplayOrderChoices(question as MultipleSurveyQuestion)}
                 appearance={appearance}
                 questionIndex={questionIndex}
                 onSubmit={onSubmit}
@@ -280,6 +283,7 @@ const questionTypeMap = (
         [SurveyQuestionType.MultipleChoice]: (
             <MultipleChoiceQuestion
                 question={question as MultipleSurveyQuestion}
+                choices={getDisplayOrderChoices(question as MultipleSurveyQuestion)}
                 appearance={appearance}
                 questionIndex={questionIndex}
                 onSubmit={onSubmit}
@@ -305,6 +309,7 @@ export function Questions({
     const [questionsResponses, setQuestionsResponses] = useState({})
     const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
     const [currentQuestion, setCurrentQuestion] = useState(readOnly ? previewQuestionIndex : 0)
+    const surveyQuestions = getDisplayOrderQuestions(survey)
 
     const onNextClick = (res: string | string[] | number | null, idx: number) => {
         const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
@@ -347,7 +352,6 @@ export function Questions({
                 />
             ) : (
                 <>
-                    {(surveyQuestions = getDisplayOrderQuestions(surveyß))}
                     {surveyQuestions.map((question, idx) => {
                         if (hasMultipleQuestions) {
                             return (
