@@ -5,7 +5,7 @@ import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
-import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
+import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
 import { isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 
@@ -32,8 +32,6 @@ function elementOrParentPositionMatches(el: Element, matches: string[], breakOnE
 
     return false
 }
-
-const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
 
 function elementInToolbar(el: Element): boolean {
     // NOTE: .closest is not supported in IE11 hence the operator check

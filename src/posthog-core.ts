@@ -116,7 +116,6 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
-    api_transport: 'XHR',
     ui_host: null,
     token: '',
     autocapture: true,
@@ -130,7 +129,7 @@ export const defaultConfig = (): PostHogConfig => ({
     custom_blocked_useragents: [],
     save_referrer: true,
     capture_pageview: true,
-    capture_pageleave: true, // We'll only capture pageleave events if capture_pageview is also true
+    capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     verbose: false,
     cookie_expiration: 365,
@@ -386,7 +385,7 @@ export class PostHog {
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
-        this._requestQueue = new RequestQueue((req) => this._send_request(req))
+        this._requestQueue = new RequestQueue((req) => this._send_retriable_request(req))
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
@@ -562,13 +561,13 @@ export class PostHog {
 
     _handle_unload(): void {
         if (!this.config.request_batching) {
-            if (this.config.capture_pageview && this.config.capture_pageleave) {
+            if (this._shouldCapturePageleave()) {
                 this.capture('$pageleave', null, { transport: 'sendBeacon' })
             }
             return
         }
 
-        if (this.config.capture_pageview && this.config.capture_pageleave) {
+        if (this._shouldCapturePageleave()) {
             this.capture('$pageleave')
         }
 
@@ -731,11 +730,6 @@ export class PostHog {
             return
         }
 
-        if (!options?.skip_client_rate_limiting && this.rateLimiter.isCaptureClientSideRateLimited()) {
-            logger.critical('This capture call is ignored due to client rate limiting.')
-            return
-        }
-
         // typing doesn't prevent interesting data
         if (isUndefined(event_name) || !isString(event_name)) {
             logger.error('No event name provided to posthog.capture')
@@ -747,6 +741,15 @@ export class PostHog {
             !this.config.opt_out_useragent_filter &&
             isBlockedUA(userAgent, this.config.custom_blocked_useragents)
         ) {
+            return
+        }
+
+        const clientRateLimitContext = !options?.skip_client_rate_limiting
+            ? this.rateLimiter.clientRateLimitContext()
+            : undefined
+
+        if (clientRateLimitContext?.isRateLimited) {
+            logger.critical('This capture call is ignored due to client rate limiting.')
             return
         }
 
@@ -776,6 +779,10 @@ export class PostHog {
             if (heatmapsBuffer) {
                 data.properties['$heatmap_data'] = heatmapsBuffer
             }
+        }
+
+        if (clientRateLimitContext) {
+            data.properties['$lib_rate_limit_remaining_tokens'] = clientRateLimitContext.remainingTokens
         }
 
         const setProperties = options?.$set
@@ -1809,6 +1816,13 @@ export class PostHog {
                 isEmptyObject(this.getGroups()) &&
                 !this.persistence?.props?.[ALIAS_ID_KEY] &&
                 !this.persistence?.props?.[ENABLE_PERSON_PROCESSING])
+        )
+    }
+
+    _shouldCapturePageleave(): boolean {
+        return (
+            this.config.capture_pageleave === true ||
+            (this.config.capture_pageleave === 'if_capture_pageview' && this.config.capture_pageview)
         )
     }
 

@@ -27,10 +27,13 @@ export class RateLimiter {
             this.captureEventsPerSecond
         )
 
-        this.lastEventRateLimited = this.isCaptureClientSideRateLimited(true)
+        this.lastEventRateLimited = this.clientRateLimitContext(true).isRateLimited
     }
 
-    public isCaptureClientSideRateLimited(checkOnly = false): boolean {
+    public clientRateLimitContext(checkOnly = false): {
+        isRateLimited: boolean
+        remainingTokens: number
+    } {
         // This is primarily to prevent runaway loops from flooding capture with millions of events for a single user.
         // It's as much for our protection as theirs.
         const now = new Date().getTime()
@@ -67,7 +70,10 @@ export class RateLimiter {
         this.lastEventRateLimited = isRateLimited
         this.instance.persistence?.set_property(CAPTURE_RATE_LIMIT, bucket)
 
-        return isRateLimited
+        return {
+            isRateLimited,
+            remainingTokens: bucket.tokens,
+        }
     }
 
     public isServerRateLimited(batchKey: string | undefined): boolean {
