@@ -139,7 +139,7 @@ export const defaultConfig = (): PostHogConfig => ({
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
     opt_out_capturing_by_default: false,
-    opt_out_persistence_by_default: false,
+    opt_out_persistence_by_default: false, // TODO: What todo about this value??
     opt_out_useragent_filter: false,
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
@@ -1419,6 +1419,7 @@ export class PostHog {
             return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property('$device_id')
+        this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
         this.persistence?.set_property(USER_STATE, 'anonymous')
@@ -1853,6 +1854,9 @@ export class PostHog {
      * @param {boolean} [disabled] If true, will re-enable sdk persistence
      */
     private _enable_disable_persistence(enabled: boolean): void {
+        // TODO: I'm not sure about this - we set it based on the consent situation, but we don't
+        // check it in the `set_config` area?
+
         if (!this.config.disable_persistence && this.persistence?.disabled !== !enabled) {
             this.persistence?.set_disabled(!enabled)
         }
@@ -1887,7 +1891,6 @@ export class PostHog {
         captureEventName?: string /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
-        // TODO: Support overriding capture stuff
         this.consent.optInOut(true)
 
         if (options?.enable_persistence ?? true) {
