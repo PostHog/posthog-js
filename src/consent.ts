@@ -1,8 +1,7 @@
 import { PostHog } from './posthog-core'
 import { find, includes } from './utils'
 import { assignableWindow, navigator } from './utils/globals'
-import { cookieStore, localStore, localPlusCookieStore } from './storage'
-import { PostHogConfig } from './types'
+import { cookieStore, localStore } from './storage'
 
 const OPT_OUT_PREFIX = '__ph_opt_in_out_'
 
@@ -68,15 +67,10 @@ export class ConsentManager {
     }
 
     private get storage() {
-        const persistenceType: PostHogConfig['persistence'] =
-            this.config.opt_out_capturing_persistence_type || this.config.persistence
+        const persistenceType = this.config.opt_out_capturing_persistence_type
 
-        // TODO: Should localStorage be the default?
         if (persistenceType === 'localStorage') {
             return localStore
-        }
-        if (persistenceType === 'localStorage+cookie') {
-            return localPlusCookieStore
         }
         return cookieStore
     }
