@@ -314,24 +314,6 @@ export type FeatureFlagsCallback = (
     }
 ) => void
 
-export interface GDPROptions {
-    capture?: (
-        event: string,
-        properties: Properties,
-        options: CaptureOptions
-    ) => void /** function used for capturing a PostHog event to record the opt-in action */
-    captureEventName?: string /** event name to be used for capturing the opt-in action */
-    captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
-    /** persistence mechanism used */
-    persistenceType?: 'cookie' | 'localStorage' | 'localStorage+cookie'
-    persistencePrefix?: string /** [__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name */
-    cookieExpiration?: number /** number of days until the opt-in cookie expires */
-    crossSubdomainCookie?: boolean /** whether the opt-in cookie is set as cross-subdomain or not */
-    secureCookie?: boolean /** whether the opt-in cookie is set as secure or not */
-    respectDnt?: boolean
-    window?: Window
-}
-
 export interface PersistentStore {
     is_supported: () => boolean
     error: (error: any) => void
