@@ -32,6 +32,7 @@ export interface SurveyAppearance {
     // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
+    shuffleQuestions?: boolean
 }
 
 export enum SurveyType {
@@ -109,9 +110,9 @@ export interface Survey {
     end_date: string | null
 }
 
-// Use the Fisher-yates algorithm to shuffle this array of choices
+// Use the Fisher-yates algorithm to shuffle this array
 // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-const shuffle = (array: string[]) => {
+const shuffle = (array: Any[]) => {
     return array
         .map((a) => ({ sort: Math.random(), value: a }))
         .sort((a, b) => a.sort - b.sort)
@@ -135,4 +136,12 @@ export function getDisplayOrderChoices(question: MultipleSurveyQuestion): string
     }
 
     return displayOrderChoices
+}
+
+export function getDisplayOrderQuestions(survey: Survey): SurveyQuestion[] {
+    if (!survey.appearance.shuffleOptions) {
+        return survey.questions
+    }
+
+    return shuffle(survey.questions)
 }

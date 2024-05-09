@@ -347,7 +347,8 @@ export function Questions({
                 />
             ) : (
                 <>
-                    {survey.questions.map((question, idx) => {
+                    {(surveyQuestions = getDisplayOrderQuestions(surveyß))}
+                    {surveyQuestions.map((question, idx) => {
                         if (hasMultipleQuestions) {
                             return (
                                 <>
@@ -366,7 +367,7 @@ export function Questions({
                             )
                         }
                         return questionTypeMap(
-                            survey.questions[idx],
+                            surveyQuestions[idx],
                             idx,
                             survey.appearance || defaultSurveyAppearance,
                             (res) => onNextClick(res, idx),
