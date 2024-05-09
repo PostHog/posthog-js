@@ -239,6 +239,9 @@ export function MultipleChoiceQuestion({
                 backgroundColor={appearance.backgroundColor}
             />
             <div className="multiple-choice-options">
+                {/* Remove the "other" element from the choices, if hasOpenChoice is set */}
+                {/* shuffle all other options here if question.shuffleOptions is set */}
+                {/* Always ensure that the open ended choice is the last option */}
                 {question.choices.map((choice: string, idx: number) => {
                     let choiceClass = 'choice-option'
                     const val = choice

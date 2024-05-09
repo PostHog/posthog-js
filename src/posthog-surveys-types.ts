@@ -70,6 +70,7 @@ export interface MultipleSurveyQuestion extends SurveyQuestionBase {
     type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice
     choices: string[]
     hasOpenChoice?: boolean
+    shuffleOptions?: boolean
 }
 
 export enum SurveyQuestionType {
@@ -106,4 +107,17 @@ export interface Survey {
     } | null
     start_date: string | null
     end_date: string | null
+}
+
+export function getDisplayOrderChoices(question: SurveyQuestion):  string[] {
+    if !(!!question.shuffleOptions) {
+        return question.choices
+    }
+
+    const displayOrderChoices = question.choices.filter((choice) =>  !!question.hasOpenChoice && choice != "Other")
+    if (!!question.hasOpenChoice) {
+        displayOrderChoices = displayOrderChoices.push("Other")
+    }
+
+    return displayOrderChoices
 }
