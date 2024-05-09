@@ -718,6 +718,7 @@ export class PostHog {
             !this.config.opt_out_useragent_filter &&
             isBlockedUA(userAgent, this.config.custom_blocked_useragents)
         ) {
+            logger.warn('Not sending event because user agent is blocked')
             return false
         }
 
