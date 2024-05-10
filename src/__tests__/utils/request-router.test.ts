@@ -12,7 +12,7 @@ describe('request-router', () => {
 
     const testCases: [string, RequestRouterTarget, string][] = [
         // US domain
-        ['https://app.posthog.com', 'ui', 'https://app.posthog.com'],
+        ['https://app.posthog.com', 'ui', 'https://us.posthog.com'],
         ['https://app.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
         ['https://app.posthog.com', 'api', 'https://us.i.posthog.com'],
         // US domain via app domain
