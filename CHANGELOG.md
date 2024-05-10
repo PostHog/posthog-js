@@ -1,3 +1,7 @@
+## 1.131.4 - 2024-05-10
+
+- fix: Update ui_host if using old app one (#1179)
+
 ## 1.131.3 - 2024-05-08
 
 - feat: Added global state check for toolbar (#1173)
