@@ -105,11 +105,14 @@ export interface PostHogConfig {
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean
+    /** Starts the SDK in an opted out state requiring opt_in_capturing() to be called before events will b captured  */
     opt_out_capturing_by_default: boolean
-    opt_out_persistence_by_default: boolean
+    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
+    /** If set to true this will disable persistence if the user is opted out of capturing. @default false */
+    opt_out_persistence_by_default?: boolean
     /** Opt out of user agent filtering such as googlebot or other bots. Defaults to `false` */
     opt_out_useragent_filter: boolean
-    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
+
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean
     respect_dnt: boolean

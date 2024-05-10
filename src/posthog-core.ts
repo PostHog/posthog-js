@@ -410,7 +410,7 @@ export class PostHog {
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
 
-        this._consentInit()
+        this._sync_opt_out_with_persistence()
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
@@ -1703,6 +1703,7 @@ export class PostHog {
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
+            this._sync_opt_out_with_persistence()
         }
     }
 
@@ -1843,30 +1844,29 @@ export class PostHog {
         return true
     }
 
-    private _consentInit(): void {
-        // TODO: Do something to migrate the storage values from localstorage to cookie or vice versa
-        this._enable_disable_persistence(!this.consent.isOptedOut())
-    }
-
     /**
      * Enable or disable persistence based on options
      * only enable/disable if persistence is not already in this state
      * @param {boolean} [disabled] If true, will re-enable sdk persistence
      */
-    private _enable_disable_persistence(enabled: boolean): void {
-        // TODO: I'm not sure about this - we set it based on the consent situation, but we don't
-        // check it in the `set_config` area?
+    private _sync_opt_out_with_persistence(): void {
+        const isOptedOut = this.consent.isOptedOut()
+        const defaultPersistenceDisabled = this.config.opt_out_persistence_by_default
 
-        if (!this.config.disable_persistence && this.persistence?.disabled !== !enabled) {
-            this.persistence?.set_disabled(!enabled)
+        // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
+        const persistenceDisabled = this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
+
+        if (this.persistence?.disabled !== persistenceDisabled) {
+            this.persistence?.set_disabled(persistenceDisabled)
         }
-        if (!this.config.disable_persistence && this.sessionPersistence?.disabled !== !enabled) {
-            this.sessionPersistence?.set_disabled(!enabled)
+        if (this.sessionPersistence?.disabled !== persistenceDisabled) {
+            this.sessionPersistence?.set_disabled(persistenceDisabled)
         }
     }
 
     /**
      * Opt the user in to data capturing and cookies/localstorage for this PostHog instance
+     * If the config.opt_out_persistence_by_default is set to false, the SDK persistence will be enabled.
      *
      * ### Usage
      *
@@ -1884,40 +1884,30 @@ export class PostHog {
      * @param {Object} [config] A dictionary of config options to override
      * @param {string} [config.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action
      * @param {Object} [config.capture_properties] Set of properties to be captured along with the opt-in action
-     * @param {boolean} [config.enable_persistence=true] If true, will re-enable sdk persistence
      */
     opt_in_capturing(options?: {
-        enable_persistence?: boolean
         captureEventName?: string /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
         this.consent.optInOut(true)
-
-        if (options?.enable_persistence ?? true) {
-            this._enable_disable_persistence(true)
-        }
+        this._sync_opt_out_with_persistence()
 
         // TODO: Do we need it to be sent instantly?
         this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
     }
 
     /**
-     * Opt the user out of data capturing and cookies/localstorage for this PostHog instance
+     * Opt the user out of data capturing and cookies/localstorage for this PostHog instance.
+     * If the config.opt_out_persistence_by_default is set to true, the SDK persistence will be disabled.
      *
      * ### Usage
      *
      *     // opt user out
-     *     posthog.opt_out_capturing();
-     *
-     * @param {Object} [config] A dictionary of config options to override
-     * @param {boolean} [config.clear_persistence=true] If true, will delete all data stored by the sdk in persistence
+     *     posthog.opt_out_capturing()
      */
-    opt_out_capturing(options?: { clear_persistence?: boolean }): void {
+    opt_out_capturing(): void {
         this.consent.optInOut(false)
-
-        if (options?.clear_persistence ?? true) {
-            this._enable_disable_persistence(false)
-        }
+        this._sync_opt_out_with_persistence()
     }
 
     /**
@@ -1957,14 +1947,10 @@ export class PostHog {
      *     posthog.clear_opt_in_out_capturing();
      *     *
      * @param {Object} [config] A dictionary of config options to override
-     * @param {boolean} [config.enable_persistence=true] If true, will re-enable sdk persistence
      */
-    clear_opt_in_out_capturing(options?: { enable_persistence?: boolean }): void {
+    clear_opt_in_out_capturing(): void {
         this.consent.reset()
-
-        if (options?.enable_persistence ?? true) {
-            this._enable_disable_persistence(true)
-        }
+        this._sync_opt_out_with_persistence()
     }
 
     debug(debug?: boolean): void {

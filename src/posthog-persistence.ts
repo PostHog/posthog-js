@@ -321,11 +321,6 @@ export class PostHogPersistence {
     }
 
     set_secure(secure: boolean): void {
-        if (secure !== this.secure) {
-            this.secure = secure
-            this.remove()
-            this.save()
-        }
     }
 
     set_event_timer(event_name: string, timestamp: number): void {
