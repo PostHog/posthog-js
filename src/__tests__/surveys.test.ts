@@ -451,11 +451,11 @@ describe('surveys', () => {
         })
 
         it('shuffle should preserve all elements', () => {
+            const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
+
             const sortedQuestions = surveyWithShufflingQuestions.questions.sort(function (a, b) {
                 return a.question.localeCompare(b.question)
             })
-
-            const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
 
             expect(sortedQuestions.length).toEqual(shuffledQuestions.length)
             const sortedShuffledQuestions = shuffledQuestions.sort(function (a, b) {
@@ -516,7 +516,8 @@ describe('surveys', () => {
         })
 
         it('should keep open-ended coice as the last option', () => {
-            const shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
+            let shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
+            shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             expect(shuffledOptions).not.toEqual(questionWithOpenEndedChoice.choices)
             expect(shuffledOptions.pop()).toEqual('open-ended-choice')
         })
