@@ -2,6 +2,7 @@ import { PostHog } from './posthog-core'
 import { find, includes } from './utils'
 import { assignableWindow, navigator } from './utils/globals'
 import { cookieStore, localStore } from './storage'
+import { PersistentStore } from './types'
 
 const OPT_OUT_PREFIX = '__ph_opt_in_out_'
 
@@ -13,9 +14,10 @@ export enum ConsentStatus {
 
 /**
  * ConsentManager provides tools for managing user consent as configured by the application.
- *
  */
 export class ConsentManager {
+    private _storage?: PersistentStore
+
     constructor(private instance: PostHog) {}
 
     private get config() {
@@ -62,17 +64,26 @@ export class ConsentManager {
 
     private get storedConsent(): ConsentStatus {
         const value = this.storage.get(this.storageKey)
-
         return value === '1' ? ConsentStatus.GRANTED : value === '0' ? ConsentStatus.DENIED : ConsentStatus.PENDING
     }
 
     private get storage() {
-        const persistenceType = this.config.opt_out_capturing_persistence_type
+        if (!this._storage) {
+            const persistenceType = this.config.opt_out_capturing_persistence_type
+            this._storage = persistenceType === 'localStorage' ? localStore : cookieStore
+            const otherStorage = persistenceType === 'localStorage' ? cookieStore : localStore
 
-        if (persistenceType === 'localStorage') {
-            return localStore
+            if (otherStorage.get(this.storageKey)) {
+                if (!this._storage.get(this.storageKey)) {
+                    // This indicates we have moved to a new storage format so we migrate the value over
+                    this.optInOut(otherStorage.get(this.storageKey) === '1')
+                }
+
+                otherStorage.remove(this.storageKey, this.config.cross_subdomain_cookie)
+            }
         }
-        return cookieStore
+
+        return this._storage
     }
 
     private getDnt(): boolean {
