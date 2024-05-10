@@ -566,15 +566,17 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
     }
 
     let displayOrderChoices = question.choices
+    let openEndedChoice = ''
     if (question.hasOpenChoice) {
         // if the question has an open-ended choice, its always the last element in the choices array.
-        displayOrderChoices.pop()
+        openEndedChoice = displayOrderChoices.pop()!
     }
 
     displayOrderChoices = shuffle(displayOrderChoices)
 
     if (question.hasOpenChoice) {
-        displayOrderChoices.push(question.choices.pop()!)
+        question.choices.push(openEndedChoice)
+        displayOrderChoices.push(openEndedChoice)
     }
 
     return displayOrderChoices
