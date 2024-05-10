@@ -9,8 +9,6 @@ import {
     SurveyQuestion,
     SurveyQuestionType,
     SurveyType,
-    getDisplayOrderQuestions,
-    getDisplayOrderChoices,
 } from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
@@ -21,6 +19,7 @@ import {
     createShadow,
     getContrastingTextColor,
     SurveyContext,
+    getDisplayOrderQuestions,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -273,7 +272,6 @@ const questionTypeMap = (
         [SurveyQuestionType.SingleChoice]: (
             <MultipleChoiceQuestion
                 question={question as MultipleSurveyQuestion}
-                choices={getDisplayOrderChoices(question as MultipleSurveyQuestion)}
                 appearance={appearance}
                 questionIndex={questionIndex}
                 onSubmit={onSubmit}
@@ -283,7 +281,6 @@ const questionTypeMap = (
         [SurveyQuestionType.MultipleChoice]: (
             <MultipleChoiceQuestion
                 question={question as MultipleSurveyQuestion}
-                choices={getDisplayOrderChoices(question as MultipleSurveyQuestion)}
                 appearance={appearance}
                 questionIndex={questionIndex}
                 onSubmit={onSubmit}

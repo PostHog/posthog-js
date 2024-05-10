@@ -18,7 +18,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { defaultSurveyAppearance } from '../surveys-utils'
+import { defaultSurveyAppearance, getDisplayOrderChoices } from '../surveys-utils'
 import { BottomSection } from './BottomSection'
 import { Cancel, QuestionHeader } from './QuestionHeader'
 
@@ -210,17 +210,16 @@ export function MultipleChoiceQuestion({
     questionIndex,
     appearance,
     onSubmit,
-    choices,
     closeSurveyPopup,
 }: {
     question: MultipleSurveyQuestion
-    choices: string[]
     questionIndex: number
     appearance: SurveyAppearance
     onSubmit: (choices: string | string[] | null) => void
     closeSurveyPopup: () => void
 }) {
     const textRef = useRef(null)
+    const choicesRef = getDisplayOrderChoices(question)
     const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
         question.type === SurveyQuestionType.MultipleChoice ? [] : null
     )
@@ -241,10 +240,10 @@ export function MultipleChoiceQuestion({
                 backgroundColor={appearance.backgroundColor}
             />
             <div className="multiple-choice-options">
-                {/* Remove the "other" element from the choices, if hasOpenChoice is set */}
+                {/* Remove the last element from the choices, if hasOpenChoice is set */}
                 {/* shuffle all other options here if question.shuffleOptions is set */}
                 {/* Always ensure that the open ended choice is the last option */}
-                {choices.map((choice: string, idx: number) => {
+                {choicesRef.map((choice: string, idx: number) => {
                     let choiceClass = 'choice-option'
                     const val = choice
                     const option = choice

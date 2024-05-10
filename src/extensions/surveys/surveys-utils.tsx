@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import { Survey, SurveyAppearance } from '../../posthog-surveys-types'
+import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { createContext } from 'preact'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -549,6 +549,43 @@ export const sendSurveyEvent = (
         },
     })
     window.dispatchEvent(new Event('PHSurveySent'))
+}
+
+// Use the Fisher-yates algorithm to shuffle this array
+// https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+export const shuffle = (array: any[]) => {
+    return array
+        .map((a) => ({ sort: Math.random(), value: a }))
+        .sort((a, b) => a.sort - b.sort)
+        .map((a) => a.value)
+}
+
+export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string[] => {
+    if (!question.shuffleOptions) {
+        return question.choices
+    }
+
+    let displayOrderChoices = question.choices
+    if (question.hasOpenChoice) {
+        // if the question has an open-ended choice, its always the last element in the choices array.
+        displayOrderChoices.pop()
+    }
+
+    displayOrderChoices = shuffle(displayOrderChoices)
+
+    if (question.hasOpenChoice) {
+        displayOrderChoices.push(question.choices.pop()!)
+    }
+
+    return displayOrderChoices
+}
+
+export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
+    if (!survey.appearance || !survey.appearance.shuffleQuestions) {
+        return survey.questions
+    }
+
+    return shuffle(survey.questions)
 }
 
 export const SurveyContext = createContext<{

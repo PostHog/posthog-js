@@ -109,39 +109,3 @@ export interface Survey {
     start_date: string | null
     end_date: string | null
 }
-
-// Use the Fisher-yates algorithm to shuffle this array
-// https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-const shuffle = (array: any[]) => {
-    return array
-        .map((a) => ({ sort: Math.random(), value: a }))
-        .sort((a, b) => a.sort - b.sort)
-        .map((a) => a.value)
-}
-
-export function getDisplayOrderChoices(question: MultipleSurveyQuestion): string[] {
-    if (!question.shuffleOptions) {
-        return question.choices
-    }
-
-    let displayOrderChoices = question.choices
-    if (question.hasOpenChoice) {
-        displayOrderChoices = displayOrderChoices.filter((choice) => choice != 'Other')
-    }
-
-    displayOrderChoices = shuffle(displayOrderChoices)
-
-    if (question.hasOpenChoice) {
-        displayOrderChoices.push('Other')
-    }
-
-    return displayOrderChoices
-}
-
-export function getDisplayOrderQuestions(survey: Survey): SurveyQuestion[] {
-    if (!survey.appearance || !survey.appearance.shuffleQuestions) {
-        return survey.questions
-    }
-
-    return shuffle(survey.questions)
-}
