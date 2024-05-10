@@ -12,7 +12,7 @@ describe('request-router', () => {
 
     const testCases: [string, RequestRouterTarget, string][] = [
         // US domain
-        ['https://app.posthog.com', 'ui', 'https://us.posthog.com'],
+        ['https://app.posthog.com', 'ui', 'https://app.posthog.com'],
         ['https://app.posthog.com', 'assets', 'https://us-assets.i.posthog.com'],
         ['https://app.posthog.com', 'api', 'https://us.i.posthog.com'],
         // US domain via app domain
@@ -61,8 +61,12 @@ describe('request-router', () => {
     })
 
     it('should use the ui_host if provided', () => {
+        expect(router('https://my.domain.com/', 'https://eu.posthog.com/').endpointFor('ui')).toEqual(
+            'https://eu.posthog.com'
+        )
+
         expect(router('https://my.domain.com/', 'https://app.posthog.com/').endpointFor('ui')).toEqual(
-            'https://app.posthog.com'
+            'https://us.posthog.com'
         )
     })
 
