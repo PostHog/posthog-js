@@ -19,6 +19,7 @@ import {
     createShadow,
     getContrastingTextColor,
     SurveyContext,
+    getDisplayOrderQuestions,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -305,6 +306,7 @@ export function Questions({
     const [questionsResponses, setQuestionsResponses] = useState({})
     const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
     const [currentQuestion, setCurrentQuestion] = useState(readOnly ? previewQuestionIndex : 0)
+    const surveyQuestions = getDisplayOrderQuestions(survey)
 
     const onNextClick = (res: string | string[] | number | null, idx: number) => {
         const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
@@ -347,7 +349,7 @@ export function Questions({
                 />
             ) : (
                 <>
-                    {survey.questions.map((question, idx) => {
+                    {surveyQuestions.map((question, idx) => {
                         if (hasMultipleQuestions) {
                             return (
                                 <>
@@ -366,7 +368,7 @@ export function Questions({
                             )
                         }
                         return questionTypeMap(
-                            survey.questions[idx],
+                            surveyQuestions[idx],
                             idx,
                             survey.appearance || defaultSurveyAppearance,
                             (res) => onNextClick(res, idx),
