@@ -7,7 +7,7 @@ import {
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
 import { RefObject } from 'preact'
-import { useRef, useState } from 'preact/hooks'
+import { useRef, useState, useMemo } from 'preact/hooks'
 import { isNull, isArray } from '../../../utils/type-utils'
 import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import {
@@ -219,7 +219,7 @@ export function MultipleChoiceQuestion({
     closeSurveyPopup: () => void
 }) {
     const textRef = useRef(null)
-    const choicesRef = getDisplayOrderChoices(question)
+    const choices = useMemo(() => getDisplayOrderChoices(question), [question])
     const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
         question.type === SurveyQuestionType.MultipleChoice ? [] : null
     )
@@ -243,7 +243,7 @@ export function MultipleChoiceQuestion({
                 {/* Remove the last element from the choices, if hasOpenChoice is set */}
                 {/* shuffle all other options here if question.shuffleOptions is set */}
                 {/* Always ensure that the open ended choice is the last option */}
-                {choicesRef.map((choice: string, idx: number) => {
+                {choices.map((choice: string, idx: number) => {
                     let choiceClass = 'choice-option'
                     const val = choice
                     const option = choice
