@@ -23,7 +23,7 @@ import {
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
-import { useState, useEffect, useRef, useContext } from 'preact/hooks'
+import { useState, useEffect, useRef, useContext, useMemo } from 'preact/hooks'
 import { isNumber } from '../utils/type-utils'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import {
@@ -306,7 +306,7 @@ export function Questions({
     const [questionsResponses, setQuestionsResponses] = useState({})
     const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
     const [currentQuestion, setCurrentQuestion] = useState(readOnly ? previewQuestionIndex : 0)
-    const surveyQuestions = getDisplayOrderQuestions(survey)
+    const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
     const onNextClick = (res: string | string[] | number | null, idx: number) => {
         const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
