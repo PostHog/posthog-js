@@ -1,3 +1,7 @@
+## 1.131.5 - 2024-05-10
+
+- feat: Support shuffling questions within a survey and options within a question (#1177)
+
 ## 1.131.4 - 2024-05-10
 
 - fix: Update ui_host if using old app one (#1179)
