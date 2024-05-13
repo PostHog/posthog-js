@@ -1,3 +1,9 @@
+## 1.132.0 - 2024-05-13
+
+- chore: Bump release to 1.131.5 (#1183)
+- fix issue with shuffling questions on every render (#1182)
+- feat(survey): Randomize questions & choices in surveys (#1177)
+
 ## 1.131.5 - 2024-05-10
 
 - feat: Support shuffling questions within a survey and options within a question (#1177)
