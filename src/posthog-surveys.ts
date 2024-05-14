@@ -107,7 +107,7 @@ export class PostHogSurveys {
                     // as a result, we need to distinguish between undefined and false.
                     // where undefined means that the properties are not yet available.
                     const value = this.instance.featureFlags.getFeatureFlag(survey.internal_targeting_flag_key)
-                    if (value) {
+                    if (value != undefined) {
                         internalTargetingFlagCheck = this.instance.featureFlags.isFeatureEnabled(
                             survey.internal_targeting_flag_key
                         )

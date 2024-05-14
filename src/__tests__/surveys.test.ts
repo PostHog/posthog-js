@@ -24,6 +24,8 @@ describe('surveys', () => {
             'survey-targeting-flag-key': true,
             'linked-flag-key2': true,
             'survey-targeting-flag-key2': false,
+            'enabled-internal-targeting-flag-key': true,
+            'disabled-internal-targeting-flag-key': false,
         },
     } as unknown as DecideResponse
 
@@ -74,6 +76,7 @@ describe('surveys', () => {
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
+                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
                 isFeatureEnabled: jest
                     .fn()
                     .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
@@ -275,6 +278,36 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
+        const surveyWithMissingInternalFlag: Survey = {
+            name: 'survey with enabled internal flags',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key',
+            internal_targeting_flag_key: 'unknown-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
+        const surveyWithEnabledInternalFlag: Survey = {
+            name: 'survey with enabled internal flags',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key',
+            internal_targeting_flag_key: 'enabled-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
+        const surveyWithDisabledInternalFlag: Survey = {
+            name: 'survey with flags2',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key2',
+            internal_targeting_flag_key: 'disabled-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
         const surveyWithEverything: Survey = {
             name: 'survey with everything',
             description: 'survey with everything description',
@@ -388,6 +421,31 @@ describe('surveys', () => {
             surveysResponse = { surveys: [surveyWithFlags, surveyWithUnmatchedFlags] }
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithFlags])
+            })
+        })
+
+        it('returns surveys that match internal feature flags', () => {
+            surveysResponse = {
+                surveys: [surveyWithMissingInternalFlag, surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
+            }
+            surveys.getActiveMatchingSurveys((data) => {
+                // surveyWithMissingInternalFlag is returned because it has no flags aka there are no restrictions on flag enabled for it
+                expect(data).toEqual([surveyWithMissingInternalFlag, surveyWithEnabledInternalFlag])
+            })
+        })
+
+        it('returns surveys that have missing internal feature flags', () => {
+            surveysResponse = { surveys: [surveyWithMissingInternalFlag, surveyWithDisabledInternalFlag] }
+            surveys.getActiveMatchingSurveys((data) => {
+                // surveyWithMissingInternalFlag is returned because it has no flags aka there are no restrictions on flag enabled for it
+                expect(data).toEqual([surveyWithMissingInternalFlag])
+            })
+        })
+
+        it('does not return surveys that have internal flag keys but no matching internal flags', () => {
+            surveysResponse = { surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag] }
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
         })
 
