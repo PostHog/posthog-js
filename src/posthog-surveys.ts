@@ -90,7 +90,7 @@ export class PostHogSurveys {
                 return urlCheck && selectorCheck
             })
             const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
-                if (!survey.linked_flag_key && !survey.targeting_flag_key) {
+                if (!survey.linked_flag_key && !survey.targeting_flag_key && !survey.internal_targeting_flag_key) {
                     return true
                 }
                 const linkedFlagCheck = survey.linked_flag_key
@@ -99,7 +99,23 @@ export class PostHogSurveys {
                 const targetingFlagCheck = survey.targeting_flag_key
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
-                return linkedFlagCheck && targetingFlagCheck
+
+                let internalTargetingFlagCheck = undefined
+                if (survey.internal_targeting_flag_key) {
+                    // because this feature flag depends on user properties that might not be available yet,
+                    // the decide API will not return this flag when asked for it.
+                    // as a result, we need to distinguish between undefined and false.
+                    // where undefined means that the properties are not yet available.
+                    const value = this.instance.featureFlags.getFeatureFlag(survey.internal_targeting_flag_key)
+                    if (value) {
+                        internalTargetingFlagCheck = this.instance.featureFlags.isFeatureEnabled(
+                            survey.internal_targeting_flag_key
+                        )
+                    } else {
+                        internalTargetingFlagCheck = true
+                    }
+                }
+                return linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck
             })
 
             return callback(targetingMatchedSurveys)

@@ -47,6 +47,8 @@ export const parseFeatureFlagDecideResponse = (
     if (!flags) {
         return
     }
+    // eslint-disable-next-line no-console
+    console.log(`decide API response is `, flags)
     // using the v1 api
     if (isArray(flags)) {
         const $enabled_feature_flags: Record<string, boolean> = {}
@@ -244,6 +246,8 @@ export class PostHogFeatureFlags {
                 }
                 this.instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
+                // eslint-disable-next-line no-console
+                console.log(`$feature_flag_called : { $feature_flag: ${key}, $feature_flag_response: [${flagValue}] }`)
                 this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
             }
         }
