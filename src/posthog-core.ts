@@ -701,6 +701,10 @@ export class PostHog {
         this._execute_array([item])
     }
 
+    log(message: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
+        return this.capture('$log', { message, ...properties }, options)
+    }
+
     /**
      * Capture an event. This is the most important and
      * frequently used PostHog function.
