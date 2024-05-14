@@ -100,7 +100,7 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
 
-                let internalTargetingFlagCheck = undefined
+                let internalTargetingFlagCheck = true
                 if (survey.internal_targeting_flag_key) {
                     // because this feature flag depends on user properties that might not be available yet,
                     // the decide API will not return this flag when asked for it.
@@ -111,11 +111,11 @@ export class PostHogSurveys {
                         internalTargetingFlagCheck = this.instance.featureFlags.isFeatureEnabled(
                             survey.internal_targeting_flag_key
                         )
-                    } else {
-                        internalTargetingFlagCheck = true
                     }
                 }
+
                 return linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck
+                return linkedFlagCheck && targetingFlagCheck
             })
 
             return callback(targetingMatchedSurveys)
