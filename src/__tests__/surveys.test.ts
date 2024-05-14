@@ -506,18 +506,20 @@ describe('surveys', () => {
         } as unknown as MultipleSurveyQuestion
 
         it('should not shuffle if shuffleOptions is false', () => {
-            const unShuffledOptions = getDisplayOrderChoices(questionWithoutShufflingOptions)
-            expect(unShuffledOptions).toEqual(questionWithoutShufflingOptions.choices)
+            const shuffledOptions = getDisplayOrderChoices(questionWithoutShufflingOptions)
+            expect(shuffledOptions).toEqual(questionWithoutShufflingOptions.choices)
         })
 
-        it('should shuffle if shuffleOptions is true', () => {
+        it('should shuffle if shuffleOptions is false', () => {
             const shuffledOptions = getDisplayOrderChoices(questionWithShufflingOptions)
             expect(shuffledOptions).not.toEqual(questionWithShufflingOptions.choices)
         })
 
         it('should keep open-ended coice as the last option', () => {
-            const openEndedChoiceLastOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
-            expect(openEndedChoiceLastOptions.pop()).toEqual('open-ended-choice')
+            let shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
+            shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
+            expect(shuffledOptions).not.toEqual(questionWithOpenEndedChoice.choices)
+            expect(shuffledOptions.pop()).toEqual('open-ended-choice')
         })
 
         it('shuffle should preserve all elements', () => {
