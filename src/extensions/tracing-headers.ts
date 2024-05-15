@@ -2,6 +2,7 @@ import { PostHog } from '../posthog-core'
 import { patch } from './replay/rrweb-plugins/patch'
 import { window } from '../utils/globals'
 import { logger } from '../utils/logger'
+import { SessionIdManager } from '../sessionid'
 
 export class TracingHeaders {
     private _restoreXHRPatch: (() => void) | undefined = undefined
@@ -10,9 +11,10 @@ export class TracingHeaders {
     constructor(private readonly instance: PostHog) {}
 
     public startIfEnabledOrStop() {
-        if (this.instance.config.__add_tracing_headers) {
-            this._patchXHR()
-            this._patchFetch()
+        if (this.instance.config.__add_tracing_headers && this._canPatch()) {
+            // we can assert this is present because we've checked previously
+            this._patchXHR(this.instance.sessionManager!)
+            this._patchFetch(this.instance.sessionManager!)
         } else {
             if (this._restoreXHRPatch) {
                 this._restoreXHRPatch()
@@ -25,26 +27,7 @@ export class TracingHeaders {
         }
     }
 
-    private _patchFetch() {
-        if (!window) {
-            logger.warn('[TRACING-HEADERS] window is not available, skipping fetch patching')
-            return
-        }
-        if (!window.fetch) {
-            logger.warn('[TRACING-HEADERS] window.fetch is not available, skipping fetch patching')
-            return
-        }
-        if (this._restoreFetchPatch) {
-            logger.warn('[TRACING-HEADERS] fetch patching is already enabled, skipping')
-            return
-        }
-
-        const posthogInstanceSessionManager = this.instance.sessionManager
-        if (!posthogInstanceSessionManager) {
-            logger.warn('[TRACING-HEADERS] Session manager is not available, skipping fetch patching')
-            return
-        }
-
+    private _patchFetch(sessionManager: SessionIdManager) {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         this._restoreFetchPatch = patch(window, 'fetch', (originalFetch: typeof fetch) => {
@@ -52,7 +35,7 @@ export class TracingHeaders {
                 // check IE earlier than this, we only initialize if Request is present
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url, init)
-                const { sessionId, windowId } = posthogInstanceSessionManager.checkAndGetSessionAndWindowId(true)
+                const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
                 req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
                 req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
 
@@ -61,28 +44,10 @@ export class TracingHeaders {
         })
     }
 
-    private _patchXHR() {
-        if (!window) {
-            logger.warn('[TRACING-HEADERS] window is not available, skipping XHR patching')
-            return
-        }
-        if (!window.XMLHttpRequest) {
-            logger.warn('[TRACING-HEADERS] window.XMLHttpRequest is not available, skipping XHR patching')
-            return
-        }
-        if (this._restoreXHRPatch) {
-            logger.warn('[TRACING-HEADERS] XHR patching is already enabled, skipping')
-            return
-        }
-
-        const posthogInstanceSessionManager = this.instance.sessionManager
-        if (!posthogInstanceSessionManager) {
-            logger.warn('[TRACING-HEADERS] Session manager is not available, skipping XHR patching')
-            return
-        }
-
+    private _patchXHR(sessionManager: SessionIdManager) {
         this._restoreXHRPatch = patch(
-            window.XMLHttpRequest.prototype,
+            // we can assert this is present because we've checked previously
+            window!.XMLHttpRequest.prototype,
             'open',
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
@@ -98,7 +63,7 @@ export class TracingHeaders {
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
                     const xhr = this as XMLHttpRequest
-                    const { sessionId, windowId } = posthogInstanceSessionManager.checkAndGetSessionAndWindowId(true)
+                    const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
 
                     // check IE earlier than this, we only initialize if Request is present
                     // eslint-disable-next-line compat/compat
@@ -109,5 +74,30 @@ export class TracingHeaders {
                 }
             }
         )
+    }
+
+    private _canPatch() {
+        const skipping = 'skipping fetch patching'
+        const prefix = '[TRACING-HEADERS]'
+
+        if (!window) {
+            logger.warn(prefix + ' window is not available, ' + skipping)
+            return false
+        }
+        if (!window.fetch) {
+            logger.warn(prefix + ' window.fetch is not available, ' + skipping)
+            return false
+        }
+        if (this._restoreFetchPatch || this._restoreXHRPatch) {
+            logger.warn(prefix + ' already patched, ' + skipping)
+            return false
+        }
+
+        if (!this.instance.sessionManager) {
+            logger.warn(prefix + ' sessionManager is not available, ' + skipping)
+            return false
+        }
+
+        return true
     }
 }
