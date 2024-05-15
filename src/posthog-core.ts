@@ -75,6 +75,7 @@ import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
+import { TracingHeaders } from './extensions/tracing-headers'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -273,6 +274,7 @@ export class PostHog {
 
     constructor() {
         this.config = defaultConfig()
+
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.__request_queue = []
@@ -392,6 +394,8 @@ export class PostHog {
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+
+        new TracingHeaders(this).startIfEnabledOrStop()
 
         this.sessionRecording = new SessionRecording(this)
         this.sessionRecording.startIfEnabledOrStop()

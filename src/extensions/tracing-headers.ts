@@ -34,7 +34,7 @@ export class TracingHeaders {
             logger.warn('[TRACING-HEADERS] window.fetch is not available, skipping fetch patching')
             return
         }
-        if (this._restoreXHRPatch) {
+        if (this._restoreFetchPatch) {
             logger.warn('[TRACING-HEADERS] fetch patching is already enabled, skipping')
             return
         }
