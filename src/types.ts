@@ -102,6 +102,7 @@ export interface PostHogConfig {
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie?: boolean
     disable_surveys: boolean
+    disable_support_tickets: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean
@@ -383,6 +384,26 @@ export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeatur
 export interface EarlyAccessFeatureResponse {
     earlyAccessFeatures: EarlyAccessFeature[]
 }
+
+/** A user's support tickets */
+export interface SupportTicket {
+    // Sync this with the backend's SupportTicketSerializer!
+    id: number
+    created_at: Date
+    updated_at: Date
+    subject: string
+    description: string
+    status: 'open' | 'closed'
+}
+
+export type SupportTicketListCallback = (supportTickets: SupportTicket[]) => void
+
+export interface SupportTicketListResponse {
+    supportTickets: SupportTicket[]
+}
+
+// TODO: Add support ticket replies
+// TODO: Add support ticket create / reply
 
 export type Headers = Record<string, string>
 
