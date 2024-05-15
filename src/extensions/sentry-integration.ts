@@ -43,7 +43,7 @@ interface _SentryIntegration {
 // levels copied from Sentry to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below
 const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
-declare type _SeverityLevel = typeof severityLevels[number]
+declare type _SeverityLevel = (typeof severityLevels)[number]
 
 interface SentryExceptionProperties {
     $sentry_event_id: any
