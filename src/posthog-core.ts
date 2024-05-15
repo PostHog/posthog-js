@@ -701,8 +701,13 @@ export class PostHog {
         this._execute_array([item])
     }
 
-    log(message: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
-        return this.capture('$log', { message, ...properties }, options)
+    log(
+        message: string,
+        level: 'info' | 'warn' | 'error' | 'debug',
+        properties?: Properties | null,
+        options?: CaptureOptions
+    ): CaptureResult | void {
+        return this.capture('$log', { message, level, ...properties }, options)
     }
 
     /**

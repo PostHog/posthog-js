@@ -12,20 +12,22 @@ describe('posthog log', () => {
 
         it('captures manual logs', () => {
             const { posthog, onCapture } = setup()
-            posthog.log('test log')
+            posthog.log('test log', 'warn')
             expect(onCapture.mock.calls[0][0]).toBe('$log')
             expect(onCapture.mock.calls[0][1].properties).toMatchObject({
                 message: 'test log',
+                level: 'warn',
             })
         })
 
         it('captures logs properties', () => {
             const { posthog, onCapture } = setup()
-            posthog.log('test log', { wat: 'is this value' })
+            posthog.log('test log', 'info', { wat: 'is this value' })
             expect(onCapture.mock.calls[0][0]).toBe('$log')
             expect(onCapture.mock.calls[0][1].properties).toMatchObject({
                 message: 'test log',
                 wat: 'is this value',
+                level: 'info',
             })
         })
     })
