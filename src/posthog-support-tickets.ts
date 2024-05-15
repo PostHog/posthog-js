@@ -16,8 +16,13 @@ export class PostHogSupportTickets {
         if (this.instance.config.disable_support_tickets) {
             return []
         }
+
+        // Since this endpoint can be called for multiple users, we cache the tickets for each user.
+        // In persistence we store the tickets as an object with the user as the key and the tickets as the value.
         const allTickets = this.instance.get_property(SUPPORT_TICKETS)
         const existingTicketsForUser = allTickets?.[user]
+        // If existingTicketsForUser is undefined, or forceReload is true, we should fetch the tickets from the server
+        // but otherwise return cached values because we don't want to make unnecessary requests.
         if (!existingTicketsForUser || forceReload) {
             this.instance._send_request({
                 url: this.instance.requestRouter.endpointFor(
