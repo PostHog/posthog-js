@@ -16,14 +16,10 @@ export class TracingHeaders {
             this._patchXHR(this.instance.sessionManager!)
             this._patchFetch(this.instance.sessionManager!)
         } else {
-            if (this._restoreXHRPatch) {
-                this._restoreXHRPatch()
-                this._restoreXHRPatch = undefined
-            }
-            if (this._restoreFetchPatch) {
-                this._restoreFetchPatch()
-                this._restoreFetchPatch = undefined
-            }
+            this._restoreXHRPatch?.()
+            this._restoreFetchPatch?.()
+            this._restoreXHRPatch = undefined
+            this._restoreFetchPatch = undefined
         }
     }
 
@@ -35,9 +31,8 @@ export class TracingHeaders {
                 // check IE earlier than this, we only initialize if Request is present
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url, init)
-                const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
-                req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
-                req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
+
+                TracingHeaders._addTracingHeaders(sessionManager, req)
 
                 return originalFetch(req)
             }
@@ -63,17 +58,23 @@ export class TracingHeaders {
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
                     const xhr = this as XMLHttpRequest
-                    const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
 
                     // check IE earlier than this, we only initialize if Request is present
                     // eslint-disable-next-line compat/compat
                     const req = new Request(url)
-                    req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
-                    req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
+
+                    TracingHeaders._addTracingHeaders(sessionManager, req)
+
                     return originalOpen.call(xhr, method, req.url, async, username, password)
                 }
             }
         )
+    }
+
+    private static _addTracingHeaders(sessionManager: SessionIdManager, req: Request) {
+        const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
+        req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
+        req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
     }
 
     private _canPatch() {
