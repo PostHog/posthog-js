@@ -175,6 +175,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'always',
+    __add_tracing_headers: false,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
