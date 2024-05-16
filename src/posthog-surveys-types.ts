@@ -109,4 +109,5 @@ export interface Survey {
     } | null
     start_date: string | null
     end_date: string | null
+    current_iteration: number | null
 }
