@@ -397,6 +397,9 @@ export interface SupportTicket {
 }
 
 export type SupportTicketListCallback = (supportTickets: SupportTicket[]) => void
+export type SupportTicketReplyCallback = (supportTicket?: SupportTicket) => void
+export type SupportTicketCloseCallback = (success: boolean, err?: string) => void
+export type SupportTicketCreateCallback = (supportTicket?: SupportTicket) => void
 
 export interface SupportTicketListResponse {
     supportTickets: SupportTicket[]

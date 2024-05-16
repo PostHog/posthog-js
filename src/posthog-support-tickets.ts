@@ -1,6 +1,12 @@
 import { PostHog } from './posthog-core'
 import { SUPPORT_TICKETS } from './constants'
-import { SupportTicketListCallback } from './types'
+import {
+    Compression,
+    SupportTicketCloseCallback,
+    SupportTicketCreateCallback,
+    SupportTicketListCallback,
+    SupportTicketReplyCallback,
+} from './types'
 
 export class PostHogSupportTickets {
     instance: PostHog
@@ -10,7 +16,7 @@ export class PostHogSupportTickets {
     }
 
     getTicketsForUser(
-        { user, validationToken, forceReload = false }: { user: string; validationToken: string; forceReload: boolean },
+        { user, userHash, forceReload = false }: { user: string; userHash: string; forceReload: boolean },
         callback: SupportTicketListCallback
     ) {
         if (this.instance.config.disable_support_tickets) {
@@ -27,7 +33,7 @@ export class PostHogSupportTickets {
             this.instance._send_request({
                 url: this.instance.requestRouter.endpointFor(
                     'api',
-                    `/api/support_tickets/?token=${this.instance.config.token}&user=${user}&validation_token=${validationToken}`
+                    `/api/support_tickets/?token=${this.instance.config.token}&user=${user}&user_hash=${userHash}`
                 ),
                 method: 'GET',
                 transport: 'XHR',
@@ -45,5 +51,98 @@ export class PostHogSupportTickets {
         } else {
             return callback(existingTicketsForUser)
         }
+    }
+
+    replyToTicket(
+        { user, userHash, message, ticketId }: { user: string; userHash: string; message: string; ticketId: string },
+        callback: SupportTicketReplyCallback
+    ) {
+        // TODO: I'm not sure what this API should return
+        // or what the shape of the response is
+
+        const json_data = {
+            ticket_id: ticketId,
+            comment: {
+                body: message,
+            },
+            email: user,
+        }
+
+        this.instance._send_request({
+            url: this.instance.requestRouter.endpointFor(
+                'api',
+                `/api/support_tickets/reply?token=${this.instance.config.token}&user=${user}&user_hash=${userHash}`
+            ),
+            method: 'POST',
+            data: json_data,
+            transport: 'XHR',
+            compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
+            callback: (response) => {
+                if (response.statusCode !== 200 || !response.json) {
+                    return callback(undefined)
+                }
+                return callback(response.json)
+            },
+        })
+    }
+
+    // TODO: Lots of inconsistencies between user and email -> reconcile into one.
+    closeTicket(
+        { user, userHash, ticketId }: { user: string; userHash: string; ticketId: string },
+        callback: SupportTicketCloseCallback
+    ) {
+        const json_data = {
+            ticket_id: ticketId,
+            email: user,
+        }
+
+        this.instance._send_request({
+            url: this.instance.requestRouter.endpointFor(
+                'api',
+                `/api/support_tickets/close?token=${this.instance.config.token}&user=${user}&user_hash=${userHash}`
+            ),
+            method: 'POST',
+            data: json_data,
+            transport: 'XHR',
+            compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
+            callback: (response) => {
+                if (response.statusCode !== 200 || !response.json) {
+                    return callback(false, response.text)
+                }
+                // Not sure what this endpoint returns?
+                return callback(true, undefined)
+            },
+        })
+    }
+
+    createTicket(
+        { user, userHash, message }: { user: string; userHash: string; message: string },
+        callback: SupportTicketCreateCallback
+    ) {
+        // Janky for now, but we should always call getTickets after createTicket to update the cache.
+
+        const json_data = {
+            comment: {
+                body: message,
+            },
+            email: user,
+        }
+
+        this.instance._send_request({
+            url: this.instance.requestRouter.endpointFor(
+                'api',
+                `/api/support_tickets/create?token=${this.instance.config.token}&user=${user}&user_hash=${userHash}`
+            ),
+            method: 'POST',
+            data: json_data,
+            transport: 'XHR',
+            compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
+            callback: (response) => {
+                if (response.statusCode !== 200 || !response.json) {
+                    return callback(undefined)
+                }
+                return callback(response.json)
+            },
+        })
     }
 }
