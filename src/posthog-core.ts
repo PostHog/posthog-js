@@ -47,6 +47,10 @@ import {
     RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
+    SupportTicketCloseCallback,
+    SupportTicketCreateCallback,
+    SupportTicketListCallback,
+    SupportTicketReplyCallback,
     ToolbarParams,
 } from './types'
 import { SentryIntegration } from './extensions/sentry-integration'
@@ -75,6 +79,7 @@ import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
+import { PostHogSupportTickets } from './posthog-support-tickets'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -240,6 +245,7 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
+    supportTickets: PostHogSupportTickets
 
     // These are instance-specific state created after initialisation
     persistence?: PostHogPersistence
@@ -286,6 +292,7 @@ export class PostHog {
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
+        this.supportTickets = new PostHogSupportTickets(this)
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -1166,6 +1173,34 @@ export class PostHog {
     /** Get surveys that should be enabled for the current user. */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
+    }
+
+    getTicketsForUser(
+        { user, userHash, forceReload = false }: { user: string; userHash: string; forceReload: boolean },
+        callback: SupportTicketListCallback
+    ) {
+        this.supportTickets.getTicketsForUser({ user, userHash, forceReload }, callback)
+    }
+
+    replyToTicket(
+        { user, userHash, message, ticketId }: { user: string; userHash: string; message: string; ticketId: string },
+        callback: SupportTicketReplyCallback
+    ) {
+        this.supportTickets.replyToTicket({ user, userHash, message, ticketId }, callback)
+    }
+
+    closeTicket(
+        { user, userHash, ticketId }: { user: string; userHash: string; ticketId: string },
+        callback: SupportTicketCloseCallback
+    ) {
+        this.supportTickets.closeTicket({ user, userHash, ticketId }, callback)
+    }
+
+    createTicket(
+        { user, userHash, message }: { user: string; userHash: string; message: string },
+        callback: SupportTicketCreateCallback
+    ) {
+        this.supportTickets.createTicket({ user, userHash, message }, callback)
     }
 
     /**
