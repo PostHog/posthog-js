@@ -49,14 +49,24 @@ You can use the create react app setup in `playground/nextjs` to test posthog-js
 
 ## Developing together with another project
 
-Install pnpm to link a local version of `posthog-js` in another JS project: `npm install -g pnpm` 
+Install pnpm to link a local version of `posthog-js` in another JS project: `npm install -g pnpm`
 
-#### Run this to link the local version
+### Run this to link the local version
 
+We have 2 options for linking this project to your local version: via [pnpm link](https://docs.npmjs.com/cli/v8/commands/npm-link) or via [local paths](https://docs.npmjs.com/cli/v9/configuring-npm/package-json#local-paths)
+
+#### local paths (preferred)
+
+- from whichever repo needs to require `posthog-js`, go to the `package.json` of that file, and replace the `posthog-js` dependency version number with `file:<relative_or_absolute_path_to_local_module>`
+- e.g. from the `package.json` within `posthog`, replace `"posthog-js": "1.131.4"` with `"posthog-js": "file:../posthog-js"`
+
+Then, once this link has been created, any time you need to make a change to `posthog-js`, you can run `pnpm build` from the `posthog-js` root and the changes will appear in the other repo.  
+
+#### pnpm link
 
 - In the `posthog-js` directory: `pnpm link --global`
 - (for `posthog` this means: `pnpm link --global posthog-js && pnpm i && pnpm copy-scripts`)
-- You can then remove the link with `pnpm link --global posthog-js
+- You can then remove the link by, e.g., running `pnpm link --global posthog-js` from within `posthog`
 
 
 ## Releasing a new version
@@ -73,9 +83,11 @@ To release an alpha or beta version, you'll need to use the CLI locally:
 2. Make sure you're logged into the npm CLI (`npm login`).
 3. Check out your work-in-progress branch (do not release an alpha/beta from `main`).
 4. Run the following commands, using the same bump level (major/minor/patch) as your PR:
+
     ```bash
     npm version [premajor | preminor | prepatch] --preid=beta
     npm publish --tag beta
     git push --tags
     ```
+
 5. Enjoy the new prerelease version. You can now use it locally, in a dummy app, or in the [main repo](https://github.com/posthog/PostHog).
