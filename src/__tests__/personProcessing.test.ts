@@ -400,4 +400,22 @@ describe('person processing', () => {
             )
         })
     })
+
+    describe('enablePersonProcess', () => {
+        it('should start person processing for identified_only users', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+
+            // act
+            posthog.capture('custom event before enablePersonProcessing')
+            posthog.enablePersonProcessing()
+            posthog.capture('custom event after enablePersonProcessing')
+
+            // assert
+            const eventBeforeGroup = onCapture.mock.calls[0]
+            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
+            const eventAfterGroup = onCapture.mock.calls[1]
+            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
+        })
+    })
 })
