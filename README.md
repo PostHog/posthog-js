@@ -59,15 +59,15 @@ We have 2 options for linking this project to your local version: via [pnpm link
 
 - from whichever repo needs to require `posthog-js`, go to the `package.json` of that file, and replace the `posthog-js` dependency version number with `file:<relative_or_absolute_path_to_local_module>`
 - e.g. from the `package.json` within `posthog`, replace `"posthog-js": "1.131.4"` with `"posthog-js": "file:../posthog-js"`
+- run `pnpm install` from the root of the project in which you just created a local path
 
 Then, once this link has been created, any time you need to make a change to `posthog-js`, you can run `pnpm build` from the `posthog-js` root and the changes will appear in the other repo.  
 
-#### pnpm link
+#### `pnpm link`
 
 - In the `posthog-js` directory: `pnpm link --global`
 - (for `posthog` this means: `pnpm link --global posthog-js && pnpm i && pnpm copy-scripts`)
 - You can then remove the link by, e.g., running `pnpm link --global posthog-js` from within `posthog`
-
 
 ## Releasing a new version
 
