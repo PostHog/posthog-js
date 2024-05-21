@@ -1299,9 +1299,8 @@ export class PostHog {
     }
 
     /**
-     * Sets properties for the Person associated with the current distinct_id. If person processing is not active for
-     * this user (either due to have process_persons set to never, or set to identified_only and the user is anonymous),
-     * then the properties will be set locally for flags but will not trigger a $set event
+     * Sets properties for the Person associated with the current distinct_id. If config.person_profiles is set to
+     * identified_only, and a Person profile has not been created yet, this will create one.
      *
      *
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
@@ -1824,6 +1823,15 @@ export class PostHog {
             this.config.capture_pageleave === true ||
             (this.config.capture_pageleave === 'if_capture_pageview' && this.config.capture_pageview)
         )
+    }
+
+    /**
+     *  Enables person processing for the current user (future events will create a Person profile). Is a no-op if
+     *  config.person_profiles is not set to 'identified_only'. Produces a warning if config.person_profiles is set to
+     *  'never'.
+     */
+    enablePersonProcessing(): void {
+        this._requirePersonProcessing('posthog.enablePersonProcessing')
     }
 
     /**
