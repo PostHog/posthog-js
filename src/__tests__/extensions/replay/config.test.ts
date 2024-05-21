@@ -61,6 +61,7 @@ describe('config', () => {
                 expect(cleaned).toEqual({
                     name: 'edited',
                     requestHeaders: {
+                        Authorization: 'redacted',
                         'content-type': 'application/json',
                     },
                 })
@@ -197,6 +198,7 @@ describe('config', () => {
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
+                    Authorization: 'redacted',
                     'content-type': 'application/json',
                 },
             })
@@ -225,6 +227,7 @@ describe('config', () => {
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
+                    Authorization: 'redacted',
                     'content-type': 'edited',
                 },
             })
@@ -244,6 +247,7 @@ describe('config', () => {
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
+                    Authorization: 'redacted',
                     'content-type': 'application/json',
                 },
                 requestBody: '[SessionRecording] Request body redacted as might contain: password',
@@ -278,6 +282,7 @@ describe('config', () => {
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
+                    Authorization: 'redacted',
                     'content-type': 'edited',
                 },
                 requestBody: 'the provided function ran',
@@ -297,6 +302,7 @@ describe('config', () => {
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
+                    AuThOrIzAtIoN: 'redacted',
                     'content-type': 'application/json',
                 },
             })
@@ -316,6 +322,7 @@ describe('config', () => {
             expect(cleaned).toEqual({
                 name: 'something',
                 requestHeaders: {
+                    Authorization: 'redacted',
                     'content-type': 'application/json',
                 },
                 requestBody: '[SessionRecording] Request body redacted',
