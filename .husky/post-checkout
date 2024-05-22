@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+
+branch=$(git symbolic-ref --short HEAD)
+
+if [ "$branch" = "master" ]; then
+    echo "☢️☢️☢️☢️☢️☢️☢️☢️☢️☢️☢️☢️"
+    echo "Error: Switching to the 'master' branch is not allowed."
+    echo "☢️☢️☢️☢️☢️☢️☢️☢️☢️☢️☢️☢️"
+    git checkout -
+    exit 1
+fi
