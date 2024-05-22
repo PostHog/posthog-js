@@ -538,10 +538,16 @@ export const sendSurveyEvent = (
 ) => {
     if (!posthog) return
     localStorage.setItem(getSurveySeenKey(survey), 'true')
+    const surveyProperties = [getSurveyInteractionProperty(survey, 'responded')]
+    if (survey.current_iteration_start_date) {
+        surveyProperties.push()
+    }
+
     posthog.capture('survey sent', {
         $survey_name: survey.name,
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
+        $survey_iteration_start_date: survey.current_iteration_start_date,
         $survey_questions: survey.questions.map((question) => question.question),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
@@ -560,6 +566,8 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
     posthog.capture('survey dismissed', {
         $survey_name: survey.name,
         $survey_id: survey.id,
+        $survey_iteration: survey.current_iteration,
+        $survey_iteration_start_date: survey.current_iteration_start_date,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
@@ -608,10 +616,10 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     return shuffle(survey.questions)
 }
 
-const getSurveySeenKey = (survey: Survey): string => {
-    let surveySeenKey = `$seenSurvey_${survey.id}`
+export const getSurveySeenKey = (survey: Survey): string => {
+    let surveySeenKey = `seenSurvey_${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
-        surveySeenKey = `$seenSurvey_${survey.id}_${survey.current_iteration}`
+        surveySeenKey = `seenSurvey_${survey.id}_${survey.current_iteration}`
     }
 
     return surveySeenKey

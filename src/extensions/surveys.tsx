@@ -21,6 +21,7 @@ import {
     getContrastingTextColor,
     SurveyContext,
     getDisplayOrderQuestions,
+    getSurveySeenKey,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -98,7 +99,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
 
-                if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
+                if (!localStorage.getItem(getSurveySeenKey(survey))) {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
