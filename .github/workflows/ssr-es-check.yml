@@ -23,7 +23,7 @@ jobs:
         run: npx es-check@6.1.1 es5 dist/array.js
 
       - name: Run es-check to check if our bundle is ES5 compatible
-        run: npx es-check@6.1.1 es5 dist/esm/index.mjs
+        run: npx es-check@6.1.1 es5 dist/umd/index.js
 
       - name: Require module via node
-        run: cd dist; node -e "require('./esm'); node -e "require('./esm/index.mjs')"
+        run: cd dist; node -e "require('./umd'); node -e "require('./umd/index.mjs')"

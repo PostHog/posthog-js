@@ -8,8 +8,8 @@
     "scripts": {
         "start": "pnpm build-react && pnpm build-rollup -w",
         "build": "pnpm build-rollup && pnpm build-react",
-        "build-rollup": "rm -rf lib && tsc -b && rollup -c --bundleConfigAsCjs",
-        "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build;",
+        "build-rollup": "rm -rf lib && rm -rf dist && tsc -b && rollup -c --bundleConfigAsCjs",
+        "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build; cd ..; mkdir dist/react && cp -r react/dist/* dist/react",
         "lint": "eslint src && eslint cypress",
         "prettier": "prettier --write src/ functional_tests/",
         "prepublishOnly": "pnpm lint && pnpm test && pnpm build && pnpm test:react",
@@ -33,16 +33,14 @@
             "require": "./dist/umd/index.js"
         },
         "./react": {
-            "types": "./react/dist/types/index.d.ts",
-            "import": "./react/dist/esm/index.mjs",
-            "require": "./react/dist/umd/index.js"
+            "types": "./dist/react/types/index.d.ts",
+            "import": "./dist/react/esm/index.mjs",
+            "require": "./dist/react/umd/index.js"
         }
     },
     "files": [
         "lib/*",
-        "dist/*",
-        "react/dist/*",
-        "react/package.json"
+        "dist/*"
     ],
     "dependencies": {
         "fflate": "^0.4.8",
