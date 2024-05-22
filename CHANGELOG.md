@@ -1,3 +1,7 @@
+## 1.132.2 - 2024-05-22
+
+- feat(web-analytics): Add function for explictly enabling person processing (#1191)
+
 ## 1.132.1 - 2024-05-22
 
 - fix: redact not hide headers (#1190)
