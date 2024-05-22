@@ -26,4 +26,4 @@ jobs:
         run: npx es-check@6.1.1 es5 dist/umd/index.js
 
       - name: Require module via node
-        run: cd dist; node -e "require('./umd'); node -e "require('./umd/index.js')"
+        run: node -e "require('./dist/umd')"; node -e "require('./dist/umd/index.js')";
