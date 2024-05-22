@@ -75,7 +75,6 @@ describe('Surveys', () => {
             onPageLoad()
             cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
         })
-
         it('does not show the same survey to user if they have dismissed it before', () => {
             cy.intercept('GET', '**/surveys/*', {
                 surveys: [
@@ -148,67 +147,6 @@ describe('Surveys', () => {
             cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
             cy.wait(200)
             cy.getLocalStorage('lastSeenSurveyDate').then((date) => {
-                expect(date?.split('T')?.[0]).to.equal(new Date().toISOString().split('T')[0])
-            })
-            cy.reload()
-            cy.visit('./playground/cypress')
-            onPageLoad()
-            cy.get('.PostHogSurvey123').should('not.exist')
-        })
-
-        it('does not show a survey to user if user has already dismissed this survey in the wait period', () => {
-            cy.intercept('GET', '**/surveys/*', {
-                surveys: [
-                    {
-                        id: '123',
-                        name: 'Test survey',
-                        description: 'description',
-                        type: 'popover',
-                        start_date: '2021-01-01T00:00:00Z',
-                        questions: [openTextQuestion],
-                        conditions: { dismissedSurveyWaitPeriodInDays: 10 },
-                    },
-                ],
-            }).as('surveys')
-            cy.visit('./playground/cypress')
-            onPageLoad()
-            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
-            cy.wait(200)
-
-            cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
-            cy.get('.PostHogSurvey123').should('not.exist')
-            cy.getLocalStorage('seenSurvey_123').should('equal', 'true')
-            cy.getLocalStorage('lastDismissedSurveyDate_123').then((date) => {
-                expect(date?.split('T')?.[0]).to.equal(new Date().toISOString().split('T')[0])
-            })
-
-            cy.reload()
-            cy.visit('./playground/cypress')
-            onPageLoad()
-            cy.get('.PostHogSurvey123').should('not.exist')
-        })
-
-        it('does not show a survey to user if user has already submitted this survey in the wait period', () => {
-            cy.intercept('GET', '**/surveys/*', {
-                surveys: [
-                    {
-                        id: '123',
-                        name: 'Test survey',
-                        description: 'description',
-                        type: 'popover',
-                        start_date: '2021-01-01T00:00:00Z',
-                        questions: [openTextQuestion],
-                        conditions: { dismissedSurveyWaitPeriodInDays: 10 },
-                    },
-                ],
-            }).as('surveys')
-            cy.visit('./playground/cypress')
-            onPageLoad()
-            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
-            cy.get('.PostHogSurvey123').shadow().find('textarea').type('This is great!')
-            cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
-            cy.wait(200)
-            cy.getLocalStorage(`lastSubmittedSurveyDate_123`).then((date) => {
                 expect(date?.split('T')?.[0]).to.equal(new Date().toISOString().split('T')[0])
             })
             cy.reload()

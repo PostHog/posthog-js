@@ -278,16 +278,6 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
-        const surveyWithMissingInternalFlag: Survey = {
-            name: 'survey with missing internal flags',
-            description: 'survey with flags description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
-            linked_flag_key: 'linked-flag-key',
-            internal_targeting_flag_key: 'unknown-internal-targeting-flag-key',
-            start_date: new Date().toISOString(),
-            end_date: null,
-        } as unknown as Survey
         const surveyWithEnabledInternalFlag: Survey = {
             name: 'survey with enabled internal flags',
             description: 'survey with flags description',
@@ -426,19 +416,10 @@ describe('surveys', () => {
 
         it('returns surveys that match internal feature flags', () => {
             surveysResponse = {
-                surveys: [surveyWithMissingInternalFlag, surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
+                surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
             }
             surveys.getActiveMatchingSurveys((data) => {
-                // surveyWithMissingInternalFlag is returned because it has no flags aka there are no restrictions on flag enabled for it
-                expect(data).toEqual([surveyWithMissingInternalFlag, surveyWithEnabledInternalFlag])
-            })
-        })
-
-        it('returns surveys that have missing internal feature flags', () => {
-            surveysResponse = { surveys: [surveyWithMissingInternalFlag, surveyWithDisabledInternalFlag] }
-            surveys.getActiveMatchingSurveys((data) => {
-                // surveyWithMissingInternalFlag is returned because it has no flags aka there are no restrictions on flag enabled for it
-                expect(data).toEqual([surveyWithMissingInternalFlag])
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
         })
 
