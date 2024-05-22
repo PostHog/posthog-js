@@ -16,7 +16,6 @@ import {
     style,
     defaultSurveyAppearance,
     sendSurveyEvent,
-    dismissedSurveyEvent,
     createShadow,
     getContrastingTextColor,
     SurveyContext,
@@ -361,7 +360,7 @@ export function Questions({
                                                 idx,
                                                 survey.appearance || defaultSurveyAppearance,
                                                 (res) => onNextClick(res, idx),
-                                                () => dismissedSurveyEvent(survey, posthog, readOnly)
+                                                () => closeSurveyPopup(survey, posthog, readOnly)
                                             )}
                                         </div>
                                     )}
@@ -373,13 +372,30 @@ export function Questions({
                             idx,
                             survey.appearance || defaultSurveyAppearance,
                             (res) => onNextClick(res, idx),
-                            () => dismissedSurveyEvent(survey, posthog, readOnly)
+                            () => closeSurveyPopup(survey, posthog, readOnly)
                         )
                     })}
                 </>
             )}
         </form>
     )
+}
+
+const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
+    // TODO: state management and unit tests for this would be nice
+    if (readOnly || !posthog) {
+        return
+    }
+    posthog.capture('survey dismissed', {
+        $survey_name: survey.name,
+        $survey_id: survey.id,
+        sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        $set: {
+            [`$survey_dismissed/${survey.id}`]: true,
+        },
+    })
+    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
+    window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
 export function FeedbackWidget({
