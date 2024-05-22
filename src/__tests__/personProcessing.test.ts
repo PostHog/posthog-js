@@ -400,4 +400,52 @@ describe('person processing', () => {
             )
         })
     })
+
+    describe('createPersonProfile', () => {
+        it('should start person processing for identified_only users', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+
+            // act
+            posthog.capture('custom event before createPersonProfile')
+            posthog.createPersonProfile()
+            posthog.capture('custom event after createPersonProfile')
+
+            // assert
+            expect(onCapture.mock.calls.length).toEqual(3)
+            const eventBeforeGroup = onCapture.mock.calls[0]
+            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
+            const set = onCapture.mock.calls[1]
+            expect(set[0]).toEqual('$set')
+            expect(set[1].properties.$process_person_profile).toEqual(true)
+            const eventAfterGroup = onCapture.mock.calls[2]
+            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
+        })
+
+        it('should do nothing if already has person profiles', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+
+            // act
+            posthog.capture('custom event before createPersonProfile')
+            posthog.createPersonProfile()
+            posthog.capture('custom event after createPersonProfile')
+            posthog.createPersonProfile()
+
+            // assert
+            expect(onCapture.mock.calls.length).toEqual(3)
+        })
+
+        it("should not send an event if process_person is to set to 'always'", async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('always')
+
+            // act
+            posthog.createPersonProfile()
+
+            // assert
+            expect(onCapture).toBeCalledTimes(0)
+            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        })
+    })
 })
