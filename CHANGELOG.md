@@ -1,3 +1,7 @@
+## 1.132.3 - 2024-05-22
+
+- feat(survey): support internal_targeting_flag to show/hide survey popup (#1181)
+
 ## 1.132.2 - 2024-05-22
 
 - feat(web-analytics): Add function for explictly enabling person processing (#1191)
