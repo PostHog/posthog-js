@@ -279,7 +279,7 @@ describe('surveys', () => {
             end_date: null,
         } as unknown as Survey
         const surveyWithMissingInternalFlag: Survey = {
-            name: 'survey with enabled internal flags',
+            name: 'survey with missing internal flags',
             description: 'survey with flags description',
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
@@ -299,7 +299,7 @@ describe('surveys', () => {
             end_date: null,
         } as unknown as Survey
         const surveyWithDisabledInternalFlag: Survey = {
-            name: 'survey with flags2',
+            name: 'survey with disabled internal flag',
             description: 'survey with flags description',
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
