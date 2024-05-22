@@ -401,15 +401,15 @@ describe('person processing', () => {
         })
     })
 
-    describe('enablePersonProfile', () => {
+    describe('createPersonProfile', () => {
         it('should start person processing for identified_only users', async () => {
             // arrange
             const { posthog, onCapture } = await setup('identified_only')
 
             // act
-            posthog.capture('custom event before enablePersonProcessing')
-            posthog.enablePersonProfile()
-            posthog.capture('custom event after enablePersonProcessing')
+            posthog.capture('custom event before createPersonProfile')
+            posthog.createPersonProfile()
+            posthog.capture('custom event after createPersonProfile')
 
             // assert
             const eventBeforeGroup = onCapture.mock.calls[0]

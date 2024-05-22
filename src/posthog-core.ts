@@ -1826,12 +1826,12 @@ export class PostHog {
     }
 
     /**
-     *  Enables person processing for the current user (future events will create a Person profile) when
-     *  config.person_profiles is set to 'identified_only'. Produces a warning if config.person_profiles is set to
+     *  Creates a person profile for the current user, if they don't already have one and config.person_profiles is set
+     *  to 'identified_only'. Produces a warning and does not create a profile if config.person_profiles is set to
      *  'never'.
      */
-    enablePersonProfile(): void {
-        if (!this._requirePersonProcessing('posthog.enablePersonProfile')) {
+    createPersonProfile(): void {
+        if (!this._requirePersonProcessing('posthog.createPersonProfile')) {
             return
         }
         // sent a $set event. We don't set any properties here, but attribution props will be added later
