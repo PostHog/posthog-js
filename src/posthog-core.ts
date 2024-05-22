@@ -1831,6 +1831,10 @@ export class PostHog {
      *  'never'.
      */
     createPersonProfile(): void {
+        if (this._hasPersonProcessing()) {
+            // if a person profile already exists, don't send an event when we don't need to
+            return
+        }
         if (!this._requirePersonProcessing('posthog.createPersonProfile')) {
             return
         }
