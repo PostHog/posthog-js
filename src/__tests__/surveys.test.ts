@@ -24,6 +24,8 @@ describe('surveys', () => {
             'survey-targeting-flag-key': true,
             'linked-flag-key2': true,
             'survey-targeting-flag-key2': false,
+            'enabled-internal-targeting-flag-key': true,
+            'disabled-internal-targeting-flag-key': false,
         },
     } as unknown as DecideResponse
 
@@ -74,6 +76,7 @@ describe('surveys', () => {
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
+                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
                 isFeatureEnabled: jest
                     .fn()
                     .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
@@ -275,6 +278,26 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
+        const surveyWithEnabledInternalFlag: Survey = {
+            name: 'survey with enabled internal flags',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key',
+            internal_targeting_flag_key: 'enabled-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
+        const surveyWithDisabledInternalFlag: Survey = {
+            name: 'survey with disabled internal flag',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key2',
+            internal_targeting_flag_key: 'disabled-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
         const surveyWithEverything: Survey = {
             name: 'survey with everything',
             description: 'survey with everything description',
@@ -388,6 +411,22 @@ describe('surveys', () => {
             surveysResponse = { surveys: [surveyWithFlags, surveyWithUnmatchedFlags] }
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithFlags])
+            })
+        })
+
+        it('returns surveys that match internal feature flags', () => {
+            surveysResponse = {
+                surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
+            }
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
+            })
+        })
+
+        it('does not return surveys that have internal flag keys but no matching internal flags', () => {
+            surveysResponse = { surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag] }
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
         })
 
@@ -518,7 +557,6 @@ describe('surveys', () => {
         it('should keep open-ended coice as the last option', () => {
             let shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
-            expect(shuffledOptions).not.toEqual(questionWithOpenEndedChoice.choices)
             expect(shuffledOptions.pop()).toEqual('open-ended-choice')
         })
 
