@@ -1,3 +1,7 @@
+## 1.132.1 - 2024-05-22
+
+- fix: redact not hide headers (#1190)
+
 ## 1.132.0 - 2024-05-13
 
 - chore: Bump release to 1.131.5 (#1183)
