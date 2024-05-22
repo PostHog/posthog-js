@@ -435,5 +435,17 @@ describe('person processing', () => {
             // assert
             expect(onCapture.mock.calls.length).toEqual(3)
         })
+
+        it("should not send an event if process_person is to set to 'always'", async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('always')
+
+            // act
+            posthog.createPersonProfile()
+
+            // assert
+            expect(onCapture).toBeCalledTimes(0)
+            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+        })
     })
 })
