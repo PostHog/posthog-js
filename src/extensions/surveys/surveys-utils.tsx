@@ -555,9 +555,17 @@ export const sendSurveyEvent = (
 // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
 export const shuffle = (array: any[]) => {
     return array
-        .map((a) => ({ sort: Math.random(), value: a }))
+        .map((a) => ({ sort: Math.floor(Math.random() * 10), value: a }))
         .sort((a, b) => a.sort - b.sort)
         .map((a) => a.value)
+}
+
+const reverseIfUnshuffled = (unshuffled: string[], shuffled: string[]): string[] => {
+    if (unshuffled.length === shuffled.length && unshuffled.every((val, index) => val === shuffled[index])) {
+        return shuffled.reverse()
+    }
+
+    return shuffled
 }
 
 export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string[] => {
@@ -565,21 +573,21 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
         return question.choices
     }
 
-    let displayOrderChoices = question.choices
+    const displayOrderChoices = question.choices
     let openEndedChoice = ''
     if (question.hasOpenChoice) {
         // if the question has an open-ended choice, its always the last element in the choices array.
         openEndedChoice = displayOrderChoices.pop()!
     }
 
-    displayOrderChoices = shuffle(displayOrderChoices)
+    const shuffledOptions = reverseIfUnshuffled(displayOrderChoices, shuffle(displayOrderChoices))
 
     if (question.hasOpenChoice) {
         question.choices.push(openEndedChoice)
-        displayOrderChoices.push(openEndedChoice)
+        shuffledOptions.push(openEndedChoice)
     }
 
-    return displayOrderChoices
+    return shuffledOptions
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
