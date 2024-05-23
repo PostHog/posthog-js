@@ -1,5 +1,7 @@
-## 1.133.0 - 2024-05-22
+## 1.134.0 - 2024-05-23
+- fix(survey): Retain question index if questions are shuffled (#1198)
 
+## 1.133.0 - 2024-05-22
 
 
 ## 1.132.3 - 2024-05-22
