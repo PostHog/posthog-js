@@ -107,16 +107,16 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
         return MICROSOFT_EDGE
     } else if (includes(user_agent, 'FBIOS')) {
         return FACEBOOK + ' ' + MOBILE
+    } else if (includes(user_agent, 'UCWEB') || includes(user_agent, 'UCBrowser')) {
+        return 'UC Browser'
+    } else if (includes(user_agent, ANDROID) && includes(user_agent, SAFARI)) {
+        return ANDROID_MOBILE
     } else if (includes(user_agent, CHROME)) {
         return CHROME
     } else if (includes(user_agent, 'CriOS')) {
         return CHROME_IOS
-    } else if (includes(user_agent, 'UCWEB') || includes(user_agent, 'UCBrowser')) {
-        return 'UC Browser'
     } else if (includes(user_agent, 'FxiOS')) {
         return FIREFOX_IOS
-    } else if (includes(user_agent, ANDROID)) {
-        return ANDROID_MOBILE
     } else if (includes(user_agent.toLowerCase(), KONQUEROR.toLowerCase())) {
         return KONQUEROR
     } else if (safariCheck(user_agent, vendor)) {

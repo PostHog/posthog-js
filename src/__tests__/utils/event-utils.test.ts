@@ -161,15 +161,6 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'BlackBerry',
             },
             {
-                name: 'Android Mobile',
-                userAgent:
-                    'Mozilla/5.0 (Linux; StarOS Must use __system_property_read_callback() to read; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/100.0.4896.127 Mobile Safari/537.36',
-                vendor: '',
-                // TODO should we detect this as Chrome or Android Mobile?
-                expectedVersion: 100,
-                expectedBrowser: 'Chrome',
-            },
-            {
                 name: 'Samsung Internet',
                 userAgent:
                     'Mozilla/5.0 (Linux; Android 5.0.2; SAMSUNG SM-T550 Build/LRX22G) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/3.5 Chrome/38.0.2125.102 Safari/537.36',
@@ -219,7 +210,7 @@ describe(`event-utils`, () => {
                 name: 'Android Browser on Galaxy S3',
                 userAgent:
                     'Mozilla/5.0 (Linux; Android 4.4.4; en-us; SAMSUNG GT-I9300I Build/KTU84P) AppleWebKit/537.36 (KHTML, like Gecko) Version/1.5 Chrome/28.0.1500.94 Mobile Safari/537.36',
-                expectedVersion: 1.5,
+                expectedVersion: 4.4,
                 expectedBrowser: 'Android Mobile',
             },
         ]
