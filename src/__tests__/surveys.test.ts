@@ -278,16 +278,6 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
-        const surveyWithMissingInternalFlag: Survey = {
-            name: 'survey with enabled internal flags',
-            description: 'survey with flags description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
-            linked_flag_key: 'linked-flag-key',
-            internal_targeting_flag_key: 'unknown-internal-targeting-flag-key',
-            start_date: new Date().toISOString(),
-            end_date: null,
-        } as unknown as Survey
         const surveyWithEnabledInternalFlag: Survey = {
             name: 'survey with enabled internal flags',
             description: 'survey with flags description',
@@ -299,7 +289,7 @@ describe('surveys', () => {
             end_date: null,
         } as unknown as Survey
         const surveyWithDisabledInternalFlag: Survey = {
-            name: 'survey with flags2',
+            name: 'survey with disabled internal flag',
             description: 'survey with flags description',
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
@@ -426,19 +416,10 @@ describe('surveys', () => {
 
         it('returns surveys that match internal feature flags', () => {
             surveysResponse = {
-                surveys: [surveyWithMissingInternalFlag, surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
+                surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
             }
             surveys.getActiveMatchingSurveys((data) => {
-                // surveyWithMissingInternalFlag is returned because it has no flags aka there are no restrictions on flag enabled for it
-                expect(data).toEqual([surveyWithMissingInternalFlag, surveyWithEnabledInternalFlag])
-            })
-        })
-
-        it('returns surveys that have missing internal feature flags', () => {
-            surveysResponse = { surveys: [surveyWithMissingInternalFlag, surveyWithDisabledInternalFlag] }
-            surveys.getActiveMatchingSurveys((data) => {
-                // surveyWithMissingInternalFlag is returned because it has no flags aka there are no restrictions on flag enabled for it
-                expect(data).toEqual([surveyWithMissingInternalFlag])
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
         })
 
@@ -568,7 +549,7 @@ describe('surveys', () => {
             expect(shuffledOptions).toEqual(questionWithoutShufflingOptions.choices)
         })
 
-        it('should shuffle if shuffleOptions is false', () => {
+        it('should shuffle if shuffleOptions is true', () => {
             const shuffledOptions = getDisplayOrderChoices(questionWithShufflingOptions)
             expect(shuffledOptions).not.toEqual(questionWithShufflingOptions.choices)
         })

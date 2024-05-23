@@ -1,3 +1,19 @@
+## 1.133.0 - 2024-05-22
+
+
+
+## 1.132.3 - 2024-05-22
+
+- feat(survey): support internal_targeting_flag to show/hide survey popup (#1181)
+
+## 1.132.2 - 2024-05-22
+
+- feat(web-analytics): Add function for explictly enabling person processing (#1191)
+
+## 1.132.1 - 2024-05-22
+
+- fix: redact not hide headers (#1190)
+
 ## 1.132.0 - 2024-05-13
 
 - chore: Bump release to 1.131.5 (#1183)
