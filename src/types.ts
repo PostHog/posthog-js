@@ -69,6 +69,11 @@ export interface BootstrapConfig {
     featureFlagPayloads?: Record<string, JsonType>
 }
 
+export interface PerformanceCaptureConfig {
+    replay?: boolean
+    web_vitals?: boolean
+}
+
 export interface PostHogConfig {
     api_host: string
     /** @deprecated - This property is no longer supported */
@@ -139,7 +144,7 @@ export interface PostHogConfig {
     get_device_id: (uuid: string) => string
     name: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
-    capture_performance?: boolean
+    capture_performance?: boolean | PerformanceCaptureConfig
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
     bootstrap: BootstrapConfig
@@ -272,7 +277,15 @@ export interface DecideResponse {
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
-    capturePerformance?: boolean
+    /**
+     *     originally capturePerformance was replay only and so boolean true
+     *     is equivalent to { replay: true }
+     *     now capture performance can be separately enabled within replay
+     *     and as a standalone web vitals tracker
+     *     people can have them enabled separately
+     *     they work standalone but enhance each other
+     */
+    capturePerformance?: boolean | PerformanceCaptureConfig
     analytics?: {
         endpoint?: string
     }

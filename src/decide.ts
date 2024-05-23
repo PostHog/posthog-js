@@ -8,10 +8,7 @@ import { logger } from './utils/logger'
 import { window, document, assignableWindow } from './utils/globals'
 
 export class Decide {
-    instance: PostHog
-
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private readonly instance: PostHog) {
         // don't need to wait for `decide` to return if flags were provided on initialisation
         this.instance.decideEndpointWasHit = this.instance._hasBootstrappedFeatureFlags()
     }

@@ -68,6 +68,18 @@ export default [
         plugins: [...plugins],
     },
     {
+        input: 'src/loader-web-vitals.ts',
+        output: [
+            {
+                file: 'dist/web-vitals.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [...plugins],
+    },
+    {
         input: 'src/loader-exception-autocapture.ts',
         output: [
             {
