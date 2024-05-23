@@ -549,7 +549,7 @@ describe('surveys', () => {
             expect(shuffledOptions).toEqual(questionWithoutShufflingOptions.choices)
         })
 
-        it('should shuffle if shuffleOptions is false', () => {
+        it('should shuffle if shuffleOptions is true', () => {
             const shuffledOptions = getDisplayOrderChoices(questionWithShufflingOptions)
             expect(shuffledOptions).not.toEqual(questionWithShufflingOptions.choices)
         })
