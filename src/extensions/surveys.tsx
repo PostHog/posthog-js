@@ -359,7 +359,7 @@ export function Questions({
                                                 question,
                                                 idx,
                                                 survey.appearance || defaultSurveyAppearance,
-                                                (res) => onNextClick(res, idx),
+                                                (res) => onNextClick(res, question.questionIndex || idx),
                                                 () => closeSurveyPopup(survey, posthog, readOnly)
                                             )}
                                         </div>
