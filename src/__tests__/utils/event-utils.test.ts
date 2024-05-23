@@ -208,6 +208,20 @@ describe(`event-utils`, () => {
                 expectedVersion: 106.0,
                 expectedBrowser: 'Firefox iOS',
             },
+            {
+                name: 'Android Browser on Galaxy Nexus',
+                userAgent:
+                    'Mozilla/5.0 (Linux; U; Android 4.0.2; en-us; Galaxy Nexus Build/ICL53F) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
+                expectedVersion: 4.0,
+                expectedBrowser: 'Android Mobile',
+            },
+            {
+                name: 'Android Browser on Galaxy S3',
+                userAgent:
+                    'Mozilla/5.0 (Linux; Android 4.4.4; en-us; SAMSUNG GT-I9300I Build/KTU84P) AppleWebKit/537.36 (KHTML, like Gecko) Version/1.5 Chrome/28.0.1500.94 Mobile Safari/537.36',
+                expectedVersion: 1.5,
+                expectedBrowser: 'Android Mobile',
+            },
         ]
 
         test.each(browserTestcases)('browser version %s', ({ userAgent, vendor, expectedVersion }) => {
