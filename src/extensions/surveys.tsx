@@ -190,6 +190,8 @@ export function Surveys({
         posthog.capture('survey shown', {
             $survey_name: survey.name,
             $survey_id: survey.id,
+            $survey_iteration: survey.current_iteration,
+            $survey_iteration_start_date: survey.current_iteration_start_date,
             sessionRecordingUrl: posthog.get_session_replay_url?.(),
         })
         localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())

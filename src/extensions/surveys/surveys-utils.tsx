@@ -538,10 +538,6 @@ export const sendSurveyEvent = (
 ) => {
     if (!posthog) return
     localStorage.setItem(getSurveySeenKey(survey), 'true')
-    const surveyProperties = [getSurveyInteractionProperty(survey, 'responded')]
-    if (survey.current_iteration_start_date) {
-        surveyProperties.push()
-    }
 
     posthog.capture('survey sent', {
         $survey_name: survey.name,
