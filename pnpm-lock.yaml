@@ -16,6 +16,9 @@ dependencies:
   preact:
     specifier: ^10.19.3
     version: 10.19.3
+  web-vitals:
+    specifier: ^4.0.1
+    version: 4.0.1
 
 devDependencies:
   '@babel/core':
@@ -10559,6 +10562,10 @@ packages:
     optionalDependencies:
       '@zxing/text-encoding': 0.9.0
     dev: true
+
+  /web-vitals@4.0.1:
+    resolution: {integrity: sha512-AW6qT/vXK3pbf+WgVcEBXY//AWCpXjVKgdb6rt0cARSUdtT+NUtZCOeo+CSLUX7PjSQ275DmxfkAs7QlPbtR6w==}
+    dev: false
 
   /webauth@1.1.0:
     resolution: {integrity: sha512-BwbI3vESF7eVleIU6zYPnFuzT89IRswYoJ0C6xYLDpNSUpiw7pdX0HjebyYkFYt1IuYnQvx2Y1Lx+bGKz4Zi6w==}

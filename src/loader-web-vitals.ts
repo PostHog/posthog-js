@@ -1,9 +1,14 @@
-import { extendPostHog } from './extensions/web-vitals'
+import { onLCP, onINP, onCLS, onFCP } from 'web-vitals'
+import { assignableWindow } from './utils/globals'
 
-import { window } from './utils/globals'
+// TODO export types here as well?
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-window.extendPostHogWithWebVitals = extendPostHog
+const postHogWebVitalsCallbacks = {
+    onLCP,
+    onCLS,
+    onFCP,
+    onINP,
+}
+assignableWindow.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
-export default extendPostHog
+export default postHogWebVitalsCallbacks

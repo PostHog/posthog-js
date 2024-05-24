@@ -75,9 +75,9 @@ describe('heatmaps', () => {
         expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeUndefined()
     })
 
-    it('should not include generated heatmap data for $snapshot events with _noHeatmaps', async () => {
+    it('should not include generated heatmap data for $snapshot events with _noPassengerEvents', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.capture('$snapshot', undefined, { _noHeatmaps: true })
+        posthog.capture('$snapshot', undefined, { _noPassengerEvents: true })
 
         expect(onCapture).toBeCalledTimes(1)
         expect(onCapture.mock.lastCall).toMatchObject(['$snapshot', {}])

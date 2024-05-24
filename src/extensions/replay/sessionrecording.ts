@@ -927,7 +927,7 @@ export class SessionRecording {
             _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
-            _noHeatmaps: true, // Session Replay ingestion can't handle heatamap data
+            _noPassengerEvents: true,
         })
     }
 }

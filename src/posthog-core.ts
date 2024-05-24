@@ -409,7 +409,6 @@ export class PostHog {
         this.heatmaps.startIfEnabled()
 
         this.webVitalsAutocapture = new WebVitalsAutocapture(this)
-        this.webVitalsAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -780,10 +779,15 @@ export class PostHog {
             properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
-        if (!options?._noHeatmaps) {
+        if (!options?._noPassengerEvents) {
             const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
             if (heatmapsBuffer) {
                 data.properties['$heatmap_data'] = heatmapsBuffer
+            }
+
+            const webVitalsBuffer = this.webVitalsAutocapture?.getAndClearBuffer()
+            if (webVitalsBuffer) {
+                data.properties['$web_vitals_data'] = webVitalsBuffer
             }
         }
 

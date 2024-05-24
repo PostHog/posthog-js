@@ -1,23 +1,22 @@
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
 import { logger } from '../../utils/logger'
-import { isObject } from '../../utils/type-utils'
+import { isBoolean, isObject } from '../../utils/type-utils'
 import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { loadScript } from '../../utils'
-import { window } from '../../utils/globals'
+import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
 const LOGGER_PREFIX = '[Web Vitals]'
 
-export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
-    const webVitalsAutocapture = new WebVitalsAutocapture(instance)
-    webVitalsAutocapture.afterDecideResponse(response)
-    return webVitalsAutocapture
-}
+type WebVitalsEventBuffer = any[] | undefined
 
 export class WebVitalsAutocapture {
     private _enabledServerSide: boolean = false
     private _initialized = false
+
+    // TODO: Periodically flush this if no other event has taken care of it
+    private buffer: WebVitalsEventBuffer
 
     constructor(private readonly instance: PostHog) {
         //todo what downloads the script?
@@ -25,10 +24,17 @@ export class WebVitalsAutocapture {
         this.startIfEnabled()
     }
 
+    public getAndClearBuffer(): WebVitalsEventBuffer {
+        const buffer = this.buffer
+        this.buffer = undefined
+        return buffer
+    }
+
     public get isEnabled(): boolean {
-        return isObject(this.instance.config.capture_performance) && this.instance.config.capture_performance.web_vitals
+        const clientConfig = isObject(this.instance.config.capture_performance)
             ? this.instance.config.capture_performance.web_vitals
-            : this._enabledServerSide
+            : undefined
+        return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
     }
 
     public startIfEnabled(): void {
@@ -53,7 +59,7 @@ export class WebVitalsAutocapture {
     }
 
     private loadScript(cb: () => void): void {
-        if ((window as any).extendPostHogWithWebVitals) {
+        if ((window as any).postHogWebVitalsCallbacks) {
             // already loaded
             cb()
         }
@@ -69,5 +75,42 @@ export class WebVitalsAutocapture {
         )
     }
 
-    private startCapturing() {}
+    private _currentURL(): string | undefined {
+        // TODO you should be able to mask the URL here
+        const href = window ? window.location.href : undefined
+        if (!href) {
+            logger.error(LOGGER_PREFIX + 'Could not determine current URL')
+        }
+        return href
+    }
+
+    private _capture(metric: any) {
+        const sessionIds = this.instance.sessionManager?.checkAndGetSessionAndWindowId(true)
+        if (!sessionIds) {
+            logger.error(LOGGER_PREFIX + 'Could not determine session IDs. Dropping metrics')
+            return
+        }
+
+        this.buffer = this.buffer || []
+
+        this.buffer.push({
+            ...metric,
+            $current_url: this._currentURL(),
+            $session_id: sessionIds.sessionId,
+            timestamp: Date.now(),
+        })
+    }
+
+    private startCapturing = () => {
+        const { onLCP, onCLS, onFCP, onINP } = assignableWindow.postHogWebVitalsCallbacks
+
+        // register performance observers
+        const captureMetric = (metric: any) => this._capture(metric)
+        onLCP(captureMetric)
+        onCLS(captureMetric)
+        onFCP(captureMetric)
+        onINP(captureMetric)
+
+        this._initialized = true
+    }
 }

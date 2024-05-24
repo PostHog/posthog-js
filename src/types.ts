@@ -260,7 +260,8 @@ export interface CaptureOptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
     _url?: string /** Used to override the desired endpoint for the captured event */
-    _noHeatmaps?: boolean /** Used to ensure that heatmap data is not included with this event */
+    /** Some events are sent as passengers inside other events - e.g. heatmaps and web vitals, not all ingestion routes can process passengers */
+    _noPassengerEvents?: boolean
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     send_instantly?: boolean /** if set skips the batched queue */
