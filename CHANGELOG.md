@@ -1,3 +1,8 @@
+## 1.135.1 - 2024-05-24
+
+- fix: Add missing retry info and test (#1202)
+- fix: Pass `retriesPerformedSoFar` to keep count of retries (#1201)
+
 ## 1.135.0 - 2024-05-23
 
 
