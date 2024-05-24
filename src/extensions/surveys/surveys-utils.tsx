@@ -617,6 +617,11 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
         return survey.questions
     }
 
+    // retain the original questionIndex so we can correlate values in the webapp
+    survey.questions.forEach((element, idx) => {
+        element.questionIndex = idx
+    })
+
     return shuffle(survey.questions)
 }
 

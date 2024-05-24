@@ -44,12 +44,42 @@ describe(`event-utils`, () => {
             expectedBrowser: string
         }[] = [
             {
-                name: 'Chrome 91',
+                name: 'Chrome 91 on Windows',
                 userAgent:
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 vendor: '',
                 expectedVersion: 91.0,
                 expectedBrowser: 'Chrome',
+            },
+            {
+                name: 'Chrome 112 on mac',
+                userAgent:
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36',
+                expectedVersion: 112.0,
+                expectedBrowser: 'Chrome',
+            },
+            {
+                name: 'Chrome 111 on Linux',
+                userAgent:
+                    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36',
+
+                expectedVersion: 111.0,
+                expectedBrowser: 'Chrome',
+            },
+            {
+                name: 'Chrome 16 on Android',
+                userAgent:
+                    'Mozilla/5.0 (Linux; U; Android-4.0.3; en-us; Galaxy Nexus Build/IML74K) AppleWebKit/535.7 (KHTML, like Gecko) CrMo/16.0.912.75 Mobile Safari/535.7',
+                expectedVersion: 16.0,
+                expectedBrowser: 'Chrome',
+            },
+            {
+                name: 'Chrome 21 iOS',
+                userAgent:
+                    'Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; en) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/21.0.1180.82 Mobile/9B206 Safari/7534.48.3',
+                vendor: '',
+                expectedVersion: 21.0,
+                expectedBrowser: 'Chrome iOS',
             },
             {
                 name: 'Firefox 89',
@@ -88,14 +118,6 @@ describe(`event-utils`, () => {
                 vendor: '',
                 expectedVersion: 44.17763,
                 expectedBrowser: 'Microsoft Edge',
-            },
-            {
-                name: 'Chrome 21 iOS',
-                userAgent:
-                    'Mozilla/5.0 (iPhone; U; CPU iPhone OS 5_1_1 like Mac OS X; en) AppleWebKit/534.46.0 (KHTML, like Gecko) CriOS/21.0.1180.82 Mobile/9B206 Safari/7534.48.3',
-                vendor: '',
-                expectedVersion: 21.0,
-                expectedBrowser: 'Chrome iOS',
             },
             {
                 name: 'UC Browser',
@@ -161,15 +183,6 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'BlackBerry',
             },
             {
-                name: 'Android Mobile',
-                userAgent:
-                    'Mozilla/5.0 (Linux; StarOS Must use __system_property_read_callback() to read; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/100.0.4896.127 Mobile Safari/537.36',
-                vendor: '',
-                // TODO should we detect this as Chrome or Android Mobile?
-                expectedVersion: 100,
-                expectedBrowser: 'Chrome',
-            },
-            {
                 name: 'Samsung Internet',
                 userAgent:
                     'Mozilla/5.0 (Linux; Android 5.0.2; SAMSUNG SM-T550 Build/LRX22G) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/3.5 Chrome/38.0.2125.102 Safari/537.36',
@@ -207,6 +220,20 @@ describe(`event-utils`, () => {
                 vendor: '',
                 expectedVersion: 106.0,
                 expectedBrowser: 'Firefox iOS',
+            },
+            {
+                name: 'Android Browser on Galaxy Nexus',
+                userAgent:
+                    'Mozilla/5.0 (Linux; U; Android 4.0.2; en-us; Galaxy Nexus Build/ICL53F) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
+                expectedVersion: 4.0,
+                expectedBrowser: 'Android Mobile',
+            },
+            {
+                name: 'Android Browser on Galaxy S3',
+                userAgent:
+                    'Mozilla/5.0 (Linux; Android 4.4.4; en-us; SAMSUNG GT-I9300I Build/KTU84P) AppleWebKit/537.36 (KHTML, like Gecko) Version/1.5 Chrome/28.0.1500.94 Mobile Safari/537.36',
+                expectedVersion: 4.4,
+                expectedBrowser: 'Android Mobile',
             },
         ]
 

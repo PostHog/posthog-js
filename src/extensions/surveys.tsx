@@ -363,7 +363,7 @@ export function Questions({
                                                 question,
                                                 idx,
                                                 survey.appearance || defaultSurveyAppearance,
-                                                (res) => onNextClick(res, idx),
+                                                (res) => onNextClick(res, question.questionIndex || idx),
                                                 () => dismissedSurveyEvent(survey, posthog, readOnly)
                                             )}
                                         </div>
