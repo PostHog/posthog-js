@@ -107,16 +107,18 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
         return MICROSOFT_EDGE
     } else if (includes(user_agent, 'FBIOS')) {
         return FACEBOOK + ' ' + MOBILE
-    } else if (includes(user_agent, CHROME)) {
-        return CHROME
-    } else if (includes(user_agent, 'CriOS')) {
-        return CHROME_IOS
     } else if (includes(user_agent, 'UCWEB') || includes(user_agent, 'UCBrowser')) {
         return 'UC Browser'
+    } else if (includes(user_agent, 'CriOS')) {
+        return CHROME_IOS // why not just Chrome?
+    } else if (includes(user_agent, 'CrMo')) {
+        return CHROME
+    } else if (includes(user_agent, ANDROID) && includes(user_agent, SAFARI)) {
+        return ANDROID_MOBILE
+    } else if (includes(user_agent, CHROME)) {
+        return CHROME
     } else if (includes(user_agent, 'FxiOS')) {
         return FIREFOX_IOS
-    } else if (includes(user_agent, ANDROID)) {
-        return ANDROID_MOBILE
     } else if (includes(user_agent.toLowerCase(), KONQUEROR.toLowerCase())) {
         return KONQUEROR
     } else if (safariCheck(user_agent, vendor)) {
@@ -135,7 +137,7 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
 const versionRegexes: Record<string, RegExp[]> = {
     [INTERNET_EXPLORER_MOBILE]: [new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],
     [MICROSOFT_EDGE]: [new RegExp(EDGE + '?\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
-    [CHROME]: [new RegExp(CHROME + '/' + BROWSER_VERSION_REGEX_SUFFIX)],
+    [CHROME]: [new RegExp('(' + CHROME + '|CrMo)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
     [CHROME_IOS]: [new RegExp('CriOS\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
     'UC Browser': [new RegExp('(UCBrowser|UCWEB)\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
     [SAFARI]: [DEFAULT_BROWSER_VERSION_REGEX],
@@ -146,7 +148,7 @@ const versionRegexes: Record<string, RegExp[]> = {
     [KONQUEROR]: [new RegExp('Konqueror[:/]?' + BROWSER_VERSION_REGEX_SUFFIX, 'i')],
     // not every blackberry user agent has the version after the name
     [BLACKBERRY]: [new RegExp(BLACKBERRY + ' ' + BROWSER_VERSION_REGEX_SUFFIX), DEFAULT_BROWSER_VERSION_REGEX],
-    [ANDROID_MOBILE]: [new RegExp('android\\s' + BROWSER_VERSION_REGEX_SUFFIX)],
+    [ANDROID_MOBILE]: [new RegExp('android\\s' + BROWSER_VERSION_REGEX_SUFFIX, 'i')],
     [SAMSUNG_INTERNET]: [new RegExp(SAMSUNG_BROWSER + '\\/' + BROWSER_VERSION_REGEX_SUFFIX)],
     [INTERNET_EXPLORER]: [new RegExp('(rv:|MSIE )' + BROWSER_VERSION_REGEX_SUFFIX)],
     Mozilla: [new RegExp('rv:' + BROWSER_VERSION_REGEX_SUFFIX)],

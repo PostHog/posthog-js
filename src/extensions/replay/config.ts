@@ -6,6 +6,7 @@ import { shouldCaptureValue } from '../../autocapture-utils'
 import { each } from '../../utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
+const REDACTED = 'redacted'
 
 export const defaultNetworkOptions: NetworkRecordOptions = {
     initiatorTypes: [
@@ -80,9 +81,14 @@ const PAYLOAD_CONTENT_DENY_LIST = [
 
 // we always remove headers on the deny list because we never want to capture this sensitive data
 const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetworkRequest => {
-    each(Object.keys(data.requestHeaders ?? {}), (header) => {
-        if (HEADER_DENY_LIST.includes(header.toLowerCase())) delete data.requestHeaders?.[header]
-    })
+    const headers = data.requestHeaders
+    if (!isNullish(headers)) {
+        each(Object.keys(headers ?? {}), (header) => {
+            if (HEADER_DENY_LIST.includes(header.toLowerCase())) {
+                headers[header] = REDACTED
+            }
+        })
+    }
     return data
 }
 
@@ -150,11 +156,11 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     let scrubbed = payload
 
     if (!shouldCaptureValue(scrubbed, false)) {
-        scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted'
+        scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED
     }
     each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
         if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {
-            scrubbed = LOGGER_PREFIX + ' ' + label + ' body redacted as might contain: ' + text
+            scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED + ' as might contain: ' + text
         }
     })
 

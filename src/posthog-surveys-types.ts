@@ -52,6 +52,7 @@ interface SurveyQuestionBase {
     descriptionContentType?: 'html' | 'text'
     optional?: boolean
     buttonText?: string
+    questionIndex?: number
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -102,6 +103,7 @@ export interface Survey {
     type: SurveyType
     linked_flag_key: string | null
     targeting_flag_key: string | null
+    internal_targeting_flag_key: string | null
     questions: SurveyQuestion[]
     appearance: SurveyAppearance | null
     conditions: {

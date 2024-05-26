@@ -209,6 +209,23 @@ describe('RetryQueue', () => {
         expect(cb).toHaveBeenCalledWith({ statusCode: 500 })
     })
 
+    it('increments the retry count each attempt', () => {
+        const cb = jest.fn()
+        mockPosthog._send_request.mockImplementation(({ callback }) => {
+            callback?.({ statusCode: 500 })
+        })
+
+        retryQueue.retriableRequest({
+            url: '/e',
+            data: { event: 'maxretries', timestamp: now },
+            callback: cb,
+            retriesPerformedSoFar: 1,
+        })
+
+        expect(retryQueuePrivate.queue.length).toEqual(1)
+        expect(retryQueuePrivate.queue[0].requestOptions.retriesPerformedSoFar).toEqual(2)
+    })
+
     describe('backoff calculation', () => {
         const retryDelaysOne = Array.from({ length: 10 }, (_, i) => i).map((i) => {
             return pickNextRetryDelay(i + 1)

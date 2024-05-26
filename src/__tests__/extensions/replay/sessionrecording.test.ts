@@ -46,6 +46,12 @@ const EMPTY_BUFFER = {
     windowId: null,
 }
 
+const createMetaSnapshot = (event = {}) => ({
+    type: META_EVENT_TYPE,
+    data: {},
+    ...event,
+})
+
 const createFullSnapshot = (event = {}) => ({
     type: FULL_SNAPSHOT_EVENT_TYPE,
     data: {},
@@ -261,6 +267,54 @@ describe('SessionRecording', () => {
     describe('afterDecideResponse()', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording, 'startIfEnabledOrStop')
+        })
+
+        it('when the first event is a meta it does not take a manual full snapshot', () => {
+            sessionRecording.startIfEnabledOrStop()
+            expect(loadScript).toHaveBeenCalled()
+            expect(sessionRecording['status']).toBe('buffering')
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+
+            const metaSnapshot = createMetaSnapshot({ data: { href: 'https://example.com' } })
+            _emit(metaSnapshot)
+            expect(sessionRecording['buffer']).toEqual({
+                data: [metaSnapshot],
+                sessionId: sessionId,
+                size: 48,
+                windowId: 'windowId',
+            })
+        })
+
+        it('when the first event is a full snapshot it does not take a manual full snapshot', () => {
+            sessionRecording.startIfEnabledOrStop()
+            expect(loadScript).toHaveBeenCalled()
+            expect(sessionRecording['status']).toBe('buffering')
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+
+            const fullSnapshot = createFullSnapshot()
+            _emit(fullSnapshot)
+            expect(sessionRecording['buffer']).toEqual({
+                data: [fullSnapshot],
+                sessionId: sessionId,
+                size: 20,
+                windowId: 'windowId',
+            })
+        })
+
+        it('when the first event is an incremental it does take a manual full snapshot', () => {
+            sessionRecording.startIfEnabledOrStop()
+            expect(loadScript).toHaveBeenCalled()
+            expect(sessionRecording['status']).toBe('buffering')
+            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+
+            const incrementalSnapshot = createIncrementalSnapshot({ data: { source: 1 } })
+            _emit(incrementalSnapshot)
+            expect(sessionRecording['buffer']).toEqual({
+                data: [createFullSnapshot(), incrementalSnapshot],
+                sessionId: sessionId,
+                size: 50,
+                windowId: 'windowId',
+            })
         })
 
         it('buffers snapshots until decide is received and drops them if disabled', () => {

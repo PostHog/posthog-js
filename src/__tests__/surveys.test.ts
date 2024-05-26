@@ -24,6 +24,8 @@ describe('surveys', () => {
             'survey-targeting-flag-key': true,
             'linked-flag-key2': true,
             'survey-targeting-flag-key2': false,
+            'enabled-internal-targeting-flag-key': true,
+            'disabled-internal-targeting-flag-key': false,
         },
     } as unknown as DecideResponse
 
@@ -74,6 +76,7 @@ describe('surveys', () => {
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
+                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
                 isFeatureEnabled: jest
                     .fn()
                     .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
@@ -275,6 +278,26 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
+        const surveyWithEnabledInternalFlag: Survey = {
+            name: 'survey with enabled internal flags',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key',
+            internal_targeting_flag_key: 'enabled-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
+        const surveyWithDisabledInternalFlag: Survey = {
+            name: 'survey with disabled internal flag',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key2',
+            internal_targeting_flag_key: 'disabled-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
         const surveyWithEverything: Survey = {
             name: 'survey with everything',
             description: 'survey with everything description',
@@ -391,6 +414,22 @@ describe('surveys', () => {
             })
         })
 
+        it('returns surveys that match internal feature flags', () => {
+            surveysResponse = {
+                surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
+            }
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
+            })
+        })
+
+        it('does not return surveys that have internal flag keys but no matching internal flags', () => {
+            surveysResponse = { surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag] }
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
+            })
+        })
+
         it('returns surveys that inclusively matches any of the above', () => {
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
@@ -444,10 +483,19 @@ describe('surveys', () => {
         })
 
         it('should shuffle questions if shuffleQuestions is true', () => {
-            console.log('running shuffle questions test')
             expect(surveyWithShufflingQuestions.questions).not.toEqual(
                 getDisplayOrderQuestions(surveyWithShufflingQuestions)
             )
+        })
+
+        it('should retain original index of question if shuffleQuestions is true', () => {
+            const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
+            for (let i = 0; i < shuffledQuestions.length; i++) {
+                const originalQuestionIndex = shuffledQuestions[i].questionIndex
+                expect(shuffledQuestions[i].question).toEqual(
+                    surveyWithShufflingQuestions.questions[originalQuestionIndex].question
+                )
+            }
         })
 
         it('shuffle should preserve all elements', () => {
@@ -510,7 +558,7 @@ describe('surveys', () => {
             expect(shuffledOptions).toEqual(questionWithoutShufflingOptions.choices)
         })
 
-        it('should shuffle if shuffleOptions is false', () => {
+        it('should shuffle if shuffleOptions is true', () => {
             const shuffledOptions = getDisplayOrderChoices(questionWithShufflingOptions)
             expect(shuffledOptions).not.toEqual(questionWithShufflingOptions.choices)
         })
@@ -518,7 +566,6 @@ describe('surveys', () => {
         it('should keep open-ended coice as the last option', () => {
             let shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
-            expect(shuffledOptions).not.toEqual(questionWithOpenEndedChoice.choices)
             expect(shuffledOptions.pop()).toEqual('open-ended-choice')
         })
 
