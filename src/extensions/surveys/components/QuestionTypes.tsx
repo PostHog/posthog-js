@@ -46,6 +46,7 @@ export function OpenTextQuestion({
             <QuestionHeader
                 question={question.question}
                 description={question.description}
+                descriptionContentType={question.descriptionContentType}
                 backgroundColor={appearance.backgroundColor}
             />
             <textarea rows={4} placeholder={appearance?.placeholder} onInput={(e) => setText(e.currentTarget.value)} />
@@ -73,7 +74,11 @@ export function LinkQuestion({
     return (
         <div className="survey-box">
             <Cancel onClick={() => closeSurveyPopup()} />
-            <QuestionHeader question={question.question} description={question.description} />
+            <QuestionHeader
+                question={question.question}
+                description={question.description}
+                descriptionContentType={question.descriptionContentType}
+            />
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={false}
@@ -108,6 +113,7 @@ export function RatingQuestion({
             <QuestionHeader
                 question={question.question}
                 description={question.description}
+                descriptionContentType={question.descriptionContentType}
                 backgroundColor={appearance.backgroundColor}
             />
             <div className="rating-section">
@@ -237,6 +243,7 @@ export function MultipleChoiceQuestion({
             <QuestionHeader
                 question={question.question}
                 description={question.description}
+                descriptionContentType={question.descriptionContentType}
                 backgroundColor={appearance.backgroundColor}
             />
             <div className="multiple-choice-options">

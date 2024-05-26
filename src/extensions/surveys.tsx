@@ -226,6 +226,9 @@ export function Surveys({
                     <ConfirmationMessage
                         confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                         confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
+                        confirmationDescriptionContentType={
+                            survey.appearance?.thankYouMessageDescriptionContentType || 'text' // TODO if the survey is actually HTML but hasn't been updated in the DB, this will be wrong
+                        }
                         appearance={survey.appearance || defaultSurveyAppearance}
                         styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
                         onClose={() => setDisplayState('closed')}
@@ -337,6 +340,9 @@ export function Questions({
                 <ConfirmationMessage
                     confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                     confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
+                    confirmationDescriptionContentType={
+                        survey.appearance?.thankYouMessageDescriptionContentType || 'text' // TODO should text be the default?
+                    }
                     appearance={survey.appearance || defaultSurveyAppearance}
                     styleOverrides={{
                         ...style,

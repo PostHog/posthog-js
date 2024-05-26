@@ -21,6 +21,7 @@ export interface SurveyAppearance {
     displayThankYouMessage?: boolean
     thankYouMessageHeader?: string
     thankYouMessageDescription?: string
+    thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
     borderColor?: string
     position?: 'left' | 'right' | 'center'
     placeholder?: string
@@ -43,9 +44,12 @@ export enum SurveyType {
 
 export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
 
+export type SurveyQuestionDescriptionContentType = 'html' | 'text'
+
 interface SurveyQuestionBase {
     question: string
     description?: string | null
+    descriptionContentType?: 'html' | 'text'
     optional?: boolean
     buttonText?: string
 }
