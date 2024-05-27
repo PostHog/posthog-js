@@ -625,6 +625,20 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     return shuffle(survey.questions)
 }
 
+export const shouldShowSurveyInWaitPeriod = (seenSurveyWaitPeriodInDays: number): boolean => {
+  const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
+  if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
+      const today = new Date()
+      const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
+      const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
+      if (diffDaysFromToday < surveyWaitPeriodInDays) {
+          return false
+      }
+  }
+
+  return true
+}
+
 export const getSurveySeenKey = (survey: Survey): string => {
     let surveySeenKey = `seenSurvey_${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {

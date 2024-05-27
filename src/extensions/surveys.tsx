@@ -22,6 +22,7 @@ import {
     SurveyContext,
     getDisplayOrderQuestions,
     getSurveySeenKey,
+    shouldShowSurveyInWaitPeriod,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -86,17 +87,32 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
             }
             if (
                 survey.type === SurveyType.Popover &&
+                survey.conditions?.eventName == undefined &&
                 document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
             ) {
+                // eslint-disable-next-line no-console
+                console.log(`rendering survey now : `, survey)
                 const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
-                const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
-                if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
-                    const today = new Date()
-                    const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
-                    const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-                    if (diffDaysFromToday < surveyWaitPeriodInDays) {
+                if (surveyWaitPeriodInDays && !shouldShowSurveyInWaitPeriod(surveyWaitPeriodInDays)) {
                         return
-                    }
+                }
+
+                if (!localStorage.getItem(getSurveySeenKey(survey))) {
+                    const shadow = createShadow(style(survey?.appearance), survey.id)
+                    Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
+                }
+            }
+            
+            if (
+                survey.type === SurveyType.Popover &&
+                survey.conditions?.eventName != undefined &&
+                document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
+            ) {
+                // eslint-disable-next-line no-console
+                console.log(`rendering survey now : `, survey)
+                const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
+                if (surveyWaitPeriodInDays && !shouldShowSurveyInWaitPeriod(surveyWaitPeriodInDays)) {
+                        return
                 }
 
                 if (!localStorage.getItem(getSurveySeenKey(survey))) {

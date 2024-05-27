@@ -107,6 +107,7 @@ export interface Survey {
         selector?: string
         seenSurveyWaitPeriodInDays?: number
         urlMatchType?: SurveyUrlMatchType
+        eventName?: string
     } | null
     start_date: string | null
     end_date: string | null
