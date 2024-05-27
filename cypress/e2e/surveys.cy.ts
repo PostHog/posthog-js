@@ -19,6 +19,14 @@ describe('Surveys', () => {
         question: 'Book an interview with us',
         link: 'https://posthog.com',
         description: '<h2>html description</h2>',
+        descriptionContentType: 'html',
+    }
+    const linkQuestionWithTextContentType = {
+        type: 'link',
+        question: 'Book an interview with us',
+        link: 'https://posthog.com',
+        description: '<h2>html description</h2>',
+        descriptionContentType: 'text',
     }
     const npsRatingQuestion = { type: 'rating', display: 'number', scale: 10, question: 'Would you recommend surveys?' }
     const emojiRatingQuestion = {
@@ -419,6 +427,7 @@ describe('Surveys', () => {
                         appearance: {
                             ...appearanceWithThanks,
                             thankYouMessageDescription: '<h3>html thank you message!</h3>',
+                            thankYouMessageDescriptionContentType: 'html',
                         },
                     },
                 ],
@@ -437,6 +446,65 @@ describe('Surveys', () => {
                 .shadow()
                 .find('.thank-you-message-body')
                 .should('have.html', '<h3>html thank you message!</h3>')
+            cy.phCaptures().should('include', 'survey sent')
+        })
+
+        it('does not render html customization for question and thank you element description if the content type is not set', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [linkQuestionWithTextContentType],
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question')
+                .should('have.text', 'Book an interview with us')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.description')
+                .should('have.html', '&lt;h2&gt;html description&lt;/h2&gt;')
+        })
+
+        it('allows html customization for thank you message body', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                        appearance: {
+                            ...appearanceWithThanks,
+                            thankYouMessageDescription: '<h3>html thank you message!</h3>',
+                            thankYouMessageDescriptionContentType: 'text',
+                        },
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question')
+                .should('have.text', 'What feedback do you have for us?')
+            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.text', 'plain text description')
+            cy.get('.PostHogSurvey123').shadow().find('textarea').type('This is great!')
+            cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.thank-you-message-body')
+                .should('have.html', '&lt;h3&gt;html thank you message!&lt;/h3&gt;')
             cy.phCaptures().should('include', 'survey sent')
         })
     })
