@@ -1,3 +1,7 @@
+## 1.136.0 - 2024-05-28
+
+- feat: Refactor GDPR stuff into a more readable consent class (#1176)
+
 ## 1.135.2 - 2024-05-24
 
 - feat: Add tests and fix regex for some obscure android browsers (#1196)
