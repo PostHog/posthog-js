@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import { Survey, SurveyAppearance } from '../../posthog-surveys-types'
+import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { createContext } from 'preact'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -549,6 +549,58 @@ export const sendSurveyEvent = (
         },
     })
     window.dispatchEvent(new Event('PHSurveySent'))
+}
+
+// Use the Fisher-yates algorithm to shuffle this array
+// https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+export const shuffle = (array: any[]) => {
+    return array
+        .map((a) => ({ sort: Math.floor(Math.random() * 10), value: a }))
+        .sort((a, b) => a.sort - b.sort)
+        .map((a) => a.value)
+}
+
+const reverseIfUnshuffled = (unshuffled: string[], shuffled: string[]): string[] => {
+    if (unshuffled.length === shuffled.length && unshuffled.every((val, index) => val === shuffled[index])) {
+        return shuffled.reverse()
+    }
+
+    return shuffled
+}
+
+export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string[] => {
+    if (!question.shuffleOptions) {
+        return question.choices
+    }
+
+    const displayOrderChoices = question.choices
+    let openEndedChoice = ''
+    if (question.hasOpenChoice) {
+        // if the question has an open-ended choice, its always the last element in the choices array.
+        openEndedChoice = displayOrderChoices.pop()!
+    }
+
+    const shuffledOptions = reverseIfUnshuffled(displayOrderChoices, shuffle(displayOrderChoices))
+
+    if (question.hasOpenChoice) {
+        question.choices.push(openEndedChoice)
+        shuffledOptions.push(openEndedChoice)
+    }
+
+    return shuffledOptions
+}
+
+export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
+    if (!survey.appearance || !survey.appearance.shuffleQuestions) {
+        return survey.questions
+    }
+
+    // retain the original questionIndex so we can correlate values in the webapp
+    survey.questions.forEach((element, idx) => {
+        element.questionIndex = idx
+    })
+
+    return shuffle(survey.questions)
 }
 
 export const SurveyContext = createContext<{

@@ -1,7 +1,8 @@
 /// <reference lib="dom" />
 
 import { PostHogSurveys } from '../posthog-surveys'
-import { SurveyType, SurveyQuestionType, Survey } from '../posthog-surveys-types'
+import { SurveyType, SurveyQuestionType, Survey, MultipleSurveyQuestion } from '../posthog-surveys-types'
+import { getDisplayOrderChoices, getDisplayOrderQuestions } from '../extensions/surveys/surveys-utils'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
@@ -23,6 +24,8 @@ describe('surveys', () => {
             'survey-targeting-flag-key': true,
             'linked-flag-key2': true,
             'survey-targeting-flag-key2': false,
+            'enabled-internal-targeting-flag-key': true,
+            'disabled-internal-targeting-flag-key': false,
         },
     } as unknown as DecideResponse
 
@@ -73,6 +76,7 @@ describe('surveys', () => {
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
+                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
                 isFeatureEnabled: jest
                     .fn()
                     .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
@@ -274,6 +278,26 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
+        const surveyWithEnabledInternalFlag: Survey = {
+            name: 'survey with enabled internal flags',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key',
+            internal_targeting_flag_key: 'enabled-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
+        const surveyWithDisabledInternalFlag: Survey = {
+            name: 'survey with disabled internal flag',
+            description: 'survey with flags description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key2',
+            internal_targeting_flag_key: 'disabled-internal-targeting-flag-key',
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
         const surveyWithEverything: Survey = {
             name: 'survey with everything',
             description: 'survey with everything description',
@@ -390,6 +414,22 @@ describe('surveys', () => {
             })
         })
 
+        it('returns surveys that match internal feature flags', () => {
+            surveysResponse = {
+                surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
+            }
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
+            })
+        })
+
+        it('does not return surveys that have internal flag keys but no matching internal flags', () => {
+            surveysResponse = { surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag] }
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
+            })
+        })
+
         it('returns surveys that inclusively matches any of the above', () => {
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
@@ -399,6 +439,142 @@ describe('surveys', () => {
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([activeSurvey, surveyWithSelector, surveyWithEverything])
             })
+        })
+    })
+
+    describe('shuffling questions', () => {
+        const surveyWithoutShufflingQuestions: Survey = {
+            name: 'survey without shuffling questions',
+            description: 'survey without shuffling questions',
+            type: SurveyType.Popover,
+            questions: [
+                { type: SurveyQuestionType.Open, question: 'Question A' },
+                { type: SurveyQuestionType.Open, question: 'Question B' },
+            ],
+            start_date: new Date().toISOString(),
+            end_date: null,
+            appearance: {
+                shuffleQuestions: false,
+            },
+        } as unknown as Survey
+
+        const surveyWithShufflingQuestions: Survey = {
+            name: 'survey without shuffling questions',
+            description: 'survey without shuffling questions',
+            type: SurveyType.Popover,
+            questions: [
+                { type: SurveyQuestionType.Open, question: 'Question A' },
+                { type: SurveyQuestionType.Open, question: 'Question B' },
+                { type: SurveyQuestionType.Open, question: 'Question C' },
+                { type: SurveyQuestionType.Open, question: 'Question D' },
+                { type: SurveyQuestionType.Open, question: 'Question E' },
+            ],
+            start_date: new Date().toISOString(),
+            end_date: null,
+            appearance: {
+                shuffleQuestions: true,
+            },
+        } as unknown as Survey
+
+        it('should not shuffle questions if shuffleQuestions is false', () => {
+            expect(surveyWithoutShufflingQuestions.questions).toEqual(
+                getDisplayOrderQuestions(surveyWithoutShufflingQuestions)
+            )
+        })
+
+        it('should shuffle questions if shuffleQuestions is true', () => {
+            expect(surveyWithShufflingQuestions.questions).not.toEqual(
+                getDisplayOrderQuestions(surveyWithShufflingQuestions)
+            )
+        })
+
+        it('should retain original index of question if shuffleQuestions is true', () => {
+            const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
+            for (let i = 0; i < shuffledQuestions.length; i++) {
+                const originalQuestionIndex = shuffledQuestions[i].questionIndex
+                expect(shuffledQuestions[i].question).toEqual(
+                    surveyWithShufflingQuestions.questions[originalQuestionIndex].question
+                )
+            }
+        })
+
+        it('shuffle should preserve all elements', () => {
+            const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
+
+            const sortedQuestions = surveyWithShufflingQuestions.questions.sort(function (a, b) {
+                return a.question.localeCompare(b.question)
+            })
+
+            expect(sortedQuestions.length).toEqual(shuffledQuestions.length)
+            const sortedShuffledQuestions = shuffledQuestions.sort(function (a, b) {
+                return a.question.localeCompare(b.question)
+            })
+            expect(sortedQuestions).toEqual(sortedShuffledQuestions)
+        })
+    })
+
+    describe('shuffling options', () => {
+        const questionWithoutShufflingOptions: MultipleSurveyQuestion = {
+            type: SurveyQuestionType.MultipleChoice,
+            question: "We're sorry to see you go. What's your reason for unsubscribing?",
+            choices: [
+                'I no longer need the product',
+                'I found a better product',
+                'I found the product too difficult to use',
+                'Other',
+            ],
+            hasOpenChoice: true,
+            shuffleOptions: false,
+        } as unknown as MultipleSurveyQuestion
+
+        const questionWithShufflingOptions: MultipleSurveyQuestion = {
+            type: SurveyQuestionType.MultipleChoice,
+            question: "We're sorry to see you go. What's your reason for unsubscribing?",
+            choices: [
+                'I no longer need the product',
+                'I found a better product',
+                'I found the product too difficult to use',
+                'Other',
+            ],
+            hasOpenChoice: true,
+            shuffleOptions: true,
+        } as unknown as MultipleSurveyQuestion
+
+        const questionWithOpenEndedChoice: MultipleSurveyQuestion = {
+            type: SurveyQuestionType.MultipleChoice,
+            question: "We're sorry to see you go. What's your reason for unsubscribing?",
+            choices: [
+                'I no longer need the product',
+                'I found a better product',
+                'I found the product too difficult to use',
+                'open-ended-choice',
+            ],
+            hasOpenChoice: true,
+            shuffleOptions: true,
+        } as unknown as MultipleSurveyQuestion
+
+        it('should not shuffle if shuffleOptions is false', () => {
+            const shuffledOptions = getDisplayOrderChoices(questionWithoutShufflingOptions)
+            expect(shuffledOptions).toEqual(questionWithoutShufflingOptions.choices)
+        })
+
+        it('should shuffle if shuffleOptions is true', () => {
+            const shuffledOptions = getDisplayOrderChoices(questionWithShufflingOptions)
+            expect(shuffledOptions).not.toEqual(questionWithShufflingOptions.choices)
+        })
+
+        it('should keep open-ended coice as the last option', () => {
+            let shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
+            shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
+            expect(shuffledOptions.pop()).toEqual('open-ended-choice')
+        })
+
+        it('shuffle should preserve all elements', () => {
+            const shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
+            const sortedOptions = questionWithOpenEndedChoice.choices.sort()
+            const sortedShuffledOptions = shuffledOptions.sort()
+
+            expect(sortedOptions).toEqual(sortedShuffledOptions)
         })
     })
 
