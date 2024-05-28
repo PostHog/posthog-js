@@ -36,7 +36,6 @@ import { logger } from '../../utils/logger'
 import { document, assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
-import { userOptedOut } from '../../gdpr-utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -466,7 +465,11 @@ export class SessionRecording {
 
         // We do not switch recorder versions midway through a recording.
         // do not start if explicitly disabled or if the user has opted out
-        if (this._captureStarted || this.instance.config.disable_session_recording || userOptedOut(this.instance)) {
+        if (
+            this._captureStarted ||
+            this.instance.config.disable_session_recording ||
+            this.instance.consent.isOptedOut()
+        ) {
             return
         }
 

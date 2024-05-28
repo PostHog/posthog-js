@@ -166,6 +166,7 @@ describe('SessionRecording', () => {
             sessionManager: sessionManager,
             requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: jest.fn(),
+            consent: { isOptedOut: () => false },
         } as unknown as PostHog
 
         // defaults
