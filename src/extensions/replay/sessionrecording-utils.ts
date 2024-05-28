@@ -203,6 +203,13 @@ export class MutationRateLimiter {
         const data = event.data as Partial<mutationCallbackParam>
         const initialMutationCount = this.numberOfChanges(data)
 
+        // do not rate limit events that only remove nodes
+        const removes = data.removes?.length ?? 0
+        const adds = data.adds?.length ?? 0
+        if (removes != 0 && adds === 0) {
+            return
+        }
+
         if (data.attributes) {
             // Most problematic mutations come from attrs where the style or minor properties are changed rapidly
             data.attributes = data.attributes.filter((attr) => {
