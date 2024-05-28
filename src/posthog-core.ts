@@ -139,7 +139,7 @@ export const defaultConfig = (): PostHogConfig => ({
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
     opt_out_capturing_by_default: false,
-    opt_out_persistence_by_default: false, // TODO: What todo about this value??
+    opt_out_persistence_by_default: false,
     opt_out_useragent_filter: false,
     opt_out_capturing_persistence_type: 'localStorage',
     opt_out_capturing_cookie_prefix: null,
