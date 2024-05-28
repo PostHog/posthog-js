@@ -28,7 +28,12 @@ export class RequestRouter {
         return this.instance.config.api_host.trim().replace(/\/$/, '')
     }
     get uiHost(): string | undefined {
-        return this.instance.config.ui_host?.replace(/\/$/, '')
+        const host = this.instance.config.ui_host?.replace(/\/$/, '')
+
+        if (host === 'https://app.posthog.com') {
+            return 'https://us.posthog.com'
+        }
+        return host
     }
 
     get region(): RequestRouterRegion {

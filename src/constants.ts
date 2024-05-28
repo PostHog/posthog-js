@@ -32,6 +32,7 @@ export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
 export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
 export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
 export const ENABLE_PERSON_PROCESSING = '$epp'
+export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
 
 // These are properties that are reserved and will not be automatically included in events
 export const PERSISTENCE_RESERVED_PROPERTIES = [

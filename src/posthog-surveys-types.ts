@@ -32,6 +32,7 @@ export interface SurveyAppearance {
     // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
+    shuffleQuestions?: boolean
 }
 
 export enum SurveyType {
@@ -47,6 +48,7 @@ interface SurveyQuestionBase {
     description?: string | null
     optional?: boolean
     buttonText?: string
+    questionIndex?: number
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -70,6 +72,7 @@ export interface MultipleSurveyQuestion extends SurveyQuestionBase {
     type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice
     choices: string[]
     hasOpenChoice?: boolean
+    shuffleOptions?: boolean
 }
 
 export enum SurveyQuestionType {
@@ -96,6 +99,7 @@ export interface Survey {
     type: SurveyType
     linked_flag_key: string | null
     targeting_flag_key: string | null
+    internal_targeting_flag_key: string | null
     questions: SurveyQuestion[]
     appearance: SurveyAppearance | null
     conditions: {
