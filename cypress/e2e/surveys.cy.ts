@@ -14,12 +14,18 @@ describe('Surveys', () => {
         question: 'What feedback do you have for us?',
         description: 'plain text description',
     }
-    const linkQuestion = {
+    const linkQuestionWithHTMLContentType = {
         type: 'link',
         question: 'Book an interview with us',
         link: 'https://posthog.com',
         description: '<h2>html description</h2>',
         descriptionContentType: 'html',
+    }
+    const linkQuestionWithNoContentType = {
+        type: 'link',
+        question: 'Book an interview with us',
+        link: 'https://posthog.com',
+        description: '<h2>html description</h2>',
     }
     const linkQuestionWithTextContentType = {
         type: 'link',
@@ -401,7 +407,29 @@ describe('Surveys', () => {
                         name: 'Test survey',
                         type: 'popover',
                         start_date: '2021-01-01T00:00:00Z',
-                        questions: [linkQuestion],
+                        questions: [linkQuestionWithHTMLContentType],
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question')
+                .should('have.text', 'Book an interview with us')
+            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.html', '<h2>html description</h2>')
+        })
+
+        it('allows html customization for question missing the descriptionContentType field (backfilling against surveys made before we introduced this field)', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [linkQuestionWithNoContentType],
                     },
                 ],
             }).as('surveys')
@@ -449,7 +477,7 @@ describe('Surveys', () => {
             cy.phCaptures().should('include', 'survey sent')
         })
 
-        it('does not render html customization for question and thank you element description if the content type is not set', () => {
+        it('does not render html customization for question descriptions if the question.descriptionContentType does not permit it', () => {
             cy.intercept('GET', '**/surveys/*', {
                 surveys: [
                     {
@@ -474,7 +502,7 @@ describe('Surveys', () => {
                 .should('have.html', '&lt;h2&gt;html description&lt;/h2&gt;')
         })
 
-        it('allows html customization for thank you message body', () => {
+        it('does not render html customization for thank you message body if the appearance.thankYouMessageDescriptionContentType does not permit it', () => {
             cy.intercept('GET', '**/surveys/*', {
                 surveys: [
                     {
