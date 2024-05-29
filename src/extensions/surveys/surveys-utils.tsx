@@ -635,12 +635,12 @@ export const getSurveySeenKey = (survey: Survey): string => {
 }
 
 const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
-    let survey_property = `$survey_${action}/${survey.id}`
+    let surveyProperty = `$survey_${action}/${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
-        survey_property = `$survey_${action}/${survey.id}/${survey.current_iteration}`
+        surveyProperty = `$survey_${action}/${survey.id}/${survey.current_iteration}`
     }
 
-    return survey_property
+    return surveyProperty
 }
 
 export const SurveyContext = createContext<{
