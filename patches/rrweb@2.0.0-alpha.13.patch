@@ -167,7 +167,7 @@ index ea868845c4fad3276aa8e5f74abfd3568b466d11..965505de44975e718d431a4e9a62e753
  
  export { WorkerFactory as default };
 diff --git a/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js b/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
-index da2c103fe6b1408a5996f0eb3bf047571e434cc2..f04750556f6d509a16678a94dca5b615eb8d3a1d 100644
+index da2c103fe6b1408a5996f0eb3bf047571e434cc2..745c0bee7ca8d49d5c3f4102d71fe965df75318d 100644
 --- a/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
 +++ b/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
 @@ -91,11 +91,21 @@ class CanvasManager {
@@ -197,13 +197,16 @@ index da2c103fe6b1408a5996f0eb3bf047571e434cc2..f04750556f6d509a16678a94dca5b615
              return matchedCanvas;
          };
          const takeCanvasSnapshots = (timestamp) => {
-@@ -120,12 +130,19 @@ class CanvasManager {
+@@ -120,12 +130,22 @@ class CanvasManager {
                          context.clear(context.COLOR_BUFFER_BIT);
                      }
                  }
 -                const bitmap = yield createImageBitmap(canvas);
-+                const width = canvas.clientWidth;
-+                const height = canvas.clientHeight;
++
++                // createImageBitmap throws if resizing to 0
++                // Fallback to intrinsic size if canvas has not yet rendered
++                const width = canvas.clientWidth || client.width;
++                const height = canvas.clientHeight || client.height;
 +
 +                const bitmap = yield createImageBitmap(canvas, {
 +                    resizeWidth: width,
