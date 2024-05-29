@@ -28,19 +28,20 @@ export function ConfirmationMessage({
                     <h3 className="thank-you-message-header" style={{ color: textColor }}>
                         {confirmationHeader}
                     </h3>
-                    {confirmationDescription &&
-                    confirmationDescriptionContentType &&
-                    confirmationDescriptionContentType === 'html' ? (
-                        <div
-                            style={{ color: textColor }}
-                            className="thank-you-message-body"
-                            dangerouslySetInnerHTML={{ __html: confirmationDescription }}
-                        />
-                    ) : (
-                        <div style={{ color: textColor }} className="thank-you-message-body">
-                            {confirmationDescription}
-                        </div>
-                    )}
+                    {confirmationDescription ? (
+                        confirmationDescriptionContentType === 'text' ? (
+                            <div style={{ color: textColor }} className="thank-you-message-body">
+                                {confirmationDescription}
+                            </div>
+                        ) : (
+                            // Treat as HTML if content type is 'html' or not specified
+                            <div
+                                style={{ color: textColor }}
+                                className="thank-you-message-body"
+                                dangerouslySetInnerHTML={{ __html: confirmationDescription }}
+                            />
+                        )
+                    ) : null}
                     <BottomSection
                         text={'Close'}
                         submitDisabled={false}

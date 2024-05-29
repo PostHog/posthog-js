@@ -17,15 +17,14 @@ export function QuestionHeader({
     return (
         <div style={{ backgroundColor: backgroundColor || defaultSurveyAppearance.backgroundColor }}>
             <div className="survey-question">{question}</div>
-            {description && descriptionContentType && descriptionContentType === 'html' ? (
-                // at this point, description is guaranteed to be a string and descriptionContentType is guaranteed to be 'html'
-                // so we can just use dangerouslySetInnerHTML
-                <div className="description" dangerouslySetInnerHTML={{ __html: description }} />
-            ) : (
-                // at this point, description is guaranteed to be a string and descriptionContentType is guaranteed to be 'text'
-                // so we should just render it as text
-                <div className="description">{description}</div>
-            )}
+            {description ? (
+                descriptionContentType === 'text' ? (
+                    <div className="description">{description}</div>
+                ) : (
+                    // Treat as HTML if content type is 'html' or not specified
+                    <div className="description" dangerouslySetInnerHTML={{ __html: description }} />
+                )
+            ) : null}
         </div>
     )
 }
