@@ -1,3 +1,7 @@
+## 1.136.1 - 2024-05-29
+
+- fix: fallback size when resizing (#1208)
+
 ## 1.136.0 - 2024-05-28
 
 - feat: Refactor GDPR stuff into a more readable consent class (#1176)
