@@ -66,6 +66,7 @@ export class RetryQueue {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
                     if ((retriesPerformedSoFar ?? 0) < 10) {
                         this.enqueue({
+                            retriesPerformedSoFar,
                             ...options,
                         })
                         return

@@ -24,8 +24,7 @@ import {
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
-import { clearOptInOut, hasOptedIn, hasOptedOut, optIn, optOut, userOptedOut } from './gdpr-utils'
-import { cookieStore, localStore } from './storage'
+import { localStore } from './storage'
 import { RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
@@ -36,10 +35,8 @@ import {
     Compression,
     DecideResponse,
     EarlyAccessFeatureCallback,
-    GDPROptions,
     IsFeatureEnabledOptions,
     JsonType,
-    OptInOutCapturingOptions,
     PostHogConfig,
     Properties,
     Property,
@@ -76,6 +73,7 @@ import { ScrollManager } from './scroll-manager'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
 import { TracingHeaders } from './extensions/tracing-headers'
+import { ConsentManager } from './consent'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -241,6 +239,7 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
+    consent: ConsentManager
 
     // These are instance-specific state created after initialisation
     persistence?: PostHogPersistence
@@ -288,6 +287,7 @@ export class PostHog {
         this.surveys = new PostHogSurveys(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
+        this.consent = new ConsentManager(this)
 
         // NOTE: See the property definition for deprecation notice
         this.people = {
@@ -415,7 +415,7 @@ export class PostHog {
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
 
-        this._gdpr_init()
+        this._sync_opt_out_with_persistence()
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
@@ -720,9 +720,9 @@ export class PostHog {
      *
      * @param {String} event_name The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', 'Item Purchased', etc.
      * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
-     * @param {Object} [options] Optional configuration for this capture request.
-     * @param {String} [options.transport] Transport method for network request ('XHR' or 'sendBeacon').
-     * @param {Date} [options.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
+     * @param {Object} [config] Optional configuration for this capture request.
+     * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
+     * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
     capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
         // While developing, a developer might purposefully _not_ call init(),
@@ -731,7 +731,7 @@ export class PostHog {
             return logger.uninitializedWarning('posthog.capture')
         }
 
-        if (userOptedOut(this)) {
+        if (this.consent.isOptedOut()) {
             return
         }
 
@@ -1304,9 +1304,8 @@ export class PostHog {
     }
 
     /**
-     * Sets properties for the Person associated with the current distinct_id. If person processing is not active for
-     * this user (either due to have process_persons set to never, or set to identified_only and the user is anonymous),
-     * then the properties will be set locally for flags but will not trigger a $set event
+     * Sets properties for the Person associated with the current distinct_id. If config.person_profiles is set to
+     * identified_only, and a Person profile has not been created yet, this will create one.
      *
      *
      * @param {Object} [userPropertiesToSet] Optional: An associative array of properties to store about the user
@@ -1424,6 +1423,7 @@ export class PostHog {
             return logger.uninitializedWarning('posthog.reset')
         }
         const device_id = this.get_property('$device_id')
+        this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
         this.persistence?.set_property(USER_STATE, 'anonymous')
@@ -1707,6 +1707,7 @@ export class PostHog {
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
+            this._sync_opt_out_with_persistence()
         }
     }
 
@@ -1832,6 +1833,23 @@ export class PostHog {
     }
 
     /**
+     *  Creates a person profile for the current user, if they don't already have one and config.person_profiles is set
+     *  to 'identified_only'. Produces a warning and does not create a profile if config.person_profiles is set to
+     *  'never'.
+     */
+    createPersonProfile(): void {
+        if (this._hasPersonProcessing()) {
+            // if a person profile already exists, don't send an event when we don't need to
+            return
+        }
+        if (!this._requirePersonProcessing('posthog.createPersonProfile')) {
+            return
+        }
+        // sent a $set event. We don't set any properties here, but attribution props will be added later
+        this.setPersonProperties({}, {})
+    }
+
+    /**
      * Enables person processing if possible, returns true if it does so or already enabled, false otherwise
      *
      * @param function_name
@@ -1847,102 +1865,29 @@ export class PostHog {
         return true
     }
 
-    // perform some housekeeping around GDPR opt-in/out state
-    _gdpr_init(): void {
-        const is_localStorage_requested = this.config.opt_out_capturing_persistence_type === 'localStorage'
-
-        // try to convert opt-in/out cookies to localStorage if possible
-        if (is_localStorage_requested && localStore.is_supported()) {
-            if (!this.has_opted_in_capturing() && this.has_opted_in_capturing({ persistence_type: 'cookie' })) {
-                this.opt_in_capturing({ enable_persistence: false })
-            }
-            if (!this.has_opted_out_capturing() && this.has_opted_out_capturing({ persistence_type: 'cookie' })) {
-                this.opt_out_capturing({ clear_persistence: false })
-            }
-            this.clear_opt_in_out_capturing({
-                persistence_type: 'cookie',
-                enable_persistence: false,
-            })
-        }
-
-        // check whether the user has already opted out - if so, clear & disable persistence
-        if (this.has_opted_out_capturing()) {
-            this._gdpr_update_persistence({ clear_persistence: true })
-
-            // check whether we should opt out by default
-            // note: we don't clear persistence here by default since opt-out default state is often
-            //       used as an initial state while GDPR information is being collected
-        } else if (
-            !this.has_opted_in_capturing() &&
-            (this.config.opt_out_capturing_by_default || cookieStore.get('ph_optout'))
-        ) {
-            cookieStore.remove('ph_optout')
-            this.opt_out_capturing({
-                clear_persistence: this.config.opt_out_persistence_by_default,
-            })
-        }
-    }
-
     /**
      * Enable or disable persistence based on options
      * only enable/disable if persistence is not already in this state
-     * @param {boolean} [options.clear_persistence] If true, will delete all data stored by the sdk in persistence and disable it
-     * @param {boolean} [options.enable_persistence] If true, will re-enable sdk persistence
+     * @param {boolean} [disabled] If true, will re-enable sdk persistence
      */
-    _gdpr_update_persistence(options: Partial<OptInOutCapturingOptions>): void {
-        let disabled
-        if (options && options['clear_persistence']) {
-            disabled = true
-        } else if (options && options['enable_persistence']) {
-            disabled = false
-        } else {
-            return
-        }
+    private _sync_opt_out_with_persistence(): void {
+        const isOptedOut = this.consent.isOptedOut()
+        const defaultPersistenceDisabled = this.config.opt_out_persistence_by_default
 
-        if (!this.config.disable_persistence && this.persistence?.disabled !== disabled) {
-            this.persistence?.set_disabled(disabled)
-        }
-        if (!this.config.disable_persistence && this.sessionPersistence?.disabled !== disabled) {
-            this.sessionPersistence?.set_disabled(disabled)
-        }
-    }
+        // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
+        const persistenceDisabled = this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
 
-    // call a base gdpr function after constructing the appropriate token and options args
-    _gdpr_call_func<R = any>(
-        func: (token: string, options: GDPROptions) => R,
-        options?: Partial<OptInOutCapturingOptions>
-    ): R {
-        options = extend(
-            {
-                capture: this.capture.bind(this),
-                persistence_type: this.config.opt_out_capturing_persistence_type,
-                cookie_prefix: this.config.opt_out_capturing_cookie_prefix,
-                cookie_expiration: this.config.cookie_expiration,
-                cross_subdomain_cookie: this.config.cross_subdomain_cookie,
-                secure_cookie: this.config.secure_cookie,
-            },
-            options || {}
-        )
-
-        // check if localStorage can be used for recording opt out status, fall back to cookie if not
-        if (!localStore.is_supported() && options['persistence_type'] === 'localStorage') {
-            options['persistence_type'] = 'cookie'
+        if (this.persistence?.disabled !== persistenceDisabled) {
+            this.persistence?.set_disabled(persistenceDisabled)
         }
-
-        return func(this.config.token, {
-            capture: options['capture'],
-            captureEventName: options['capture_event_name'],
-            captureProperties: options['capture_properties'],
-            persistenceType: options['persistence_type'],
-            persistencePrefix: options['cookie_prefix'],
-            cookieExpiration: options['cookie_expiration'],
-            crossSubdomainCookie: options['cross_subdomain_cookie'],
-            secureCookie: options['secure_cookie'],
-        })
+        if (this.sessionPersistence?.disabled !== persistenceDisabled) {
+            this.sessionPersistence?.set_disabled(persistenceDisabled)
+        }
     }
 
     /**
      * Opt the user in to data capturing and cookies/localstorage for this PostHog instance
+     * If the config.opt_out_persistence_by_default is set to false, the SDK persistence will be enabled.
      *
      * ### Usage
      *
@@ -1953,67 +1898,37 @@ export class PostHog {
      *     posthog.opt_in_capturing({
      *         capture_event_name: 'User opted in',
      *         capture_event_properties: {
-     *             'Email': 'jdoe@example.com'
-     *         },
-     *         cookie_expiration: 30,
-     *         secure_cookie: true
+     *             'email': 'jdoe@example.com'
+     *         }
      *     });
      *
-     * @param {Object} [options] A dictionary of config options to override
-     * @param {function} [options.capture] Function used for capturing a PostHog event to record the opt-in action (default is this PostHog instance's capture method)
-     * @param {string} [options.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action
-     * @param {Object} [options.capture_properties] Set of properties to be captured along with the opt-in action
-     * @param {boolean} [options.enable_persistence=true] If true, will re-enable sdk persistence
-     * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
-     * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
-     * @param {Number} [options.cookie_expiration] Number of days until the opt-in cookie expires (overrides value specified in this PostHog instance's config)
-     * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
-     * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
+     * @param {Object} [config] A dictionary of config options to override
+     * @param {string} [config.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action
+     * @param {Object} [config.capture_properties] Set of properties to be captured along with the opt-in action
      */
-    opt_in_capturing(options?: Partial<OptInOutCapturingOptions>): void {
-        options = extend(
-            {
-                enable_persistence: true,
-            },
-            options || {}
-        )
+    opt_in_capturing(options?: {
+        captureEventName?: string /** event name to be used for capturing the opt-in action */
+        captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
+    }): void {
+        this.consent.optInOut(true)
+        this._sync_opt_out_with_persistence()
 
-        this._gdpr_call_func(optIn, options)
-        this._gdpr_update_persistence(options)
+        // TODO: Do we need it to be sent instantly?
+        this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
     }
 
     /**
-     * Opt the user out of data capturing and cookies/localstorage for this PostHog instance
+     * Opt the user out of data capturing and cookies/localstorage for this PostHog instance.
+     * If the config.opt_out_persistence_by_default is set to true, the SDK persistence will be disabled.
      *
      * ### Usage
      *
      *     // opt user out
-     *     posthog.opt_out_capturing();
-     *
-     *     // opt user out with different cookie configuration from PostHog instance
-     *     posthog.opt_out_capturing({
-     *         cookie_expiration: 30,
-     *         secure_cookie: true
-     *     });
-     *
-     * @param {Object} [options] A dictionary of config options to override
-     * @param {boolean} [options.clear_persistence=true] If true, will delete all data stored by the sdk in persistence
-     * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
-     * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
-     * @param {Number} [options.cookie_expiration] Number of days until the opt-in cookie expires (overrides value specified in this PostHog instance's config)
-     * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
-     * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
+     *     posthog.opt_out_capturing()
      */
-    opt_out_capturing(options?: Partial<OptInOutCapturingOptions>): void {
-        const _options = extend(
-            {
-                clear_persistence: true,
-            },
-            options || {}
-        )
-
-        this._gdpr_call_func(optOut, _options)
-        this._gdpr_update_persistence(_options)
+    opt_out_capturing(): void {
+        this.consent.optInOut(false)
+        this._sync_opt_out_with_persistence()
     }
 
     /**
@@ -2024,13 +1939,10 @@ export class PostHog {
      *     const has_opted_in = posthog.has_opted_in_capturing();
      *     // use has_opted_in value
      *
-     * @param {Object} [options] A dictionary of config options to override
-     * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
-     * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-in status
      */
-    has_opted_in_capturing(options?: Partial<OptInOutCapturingOptions>): boolean {
-        return this._gdpr_call_func(hasOptedIn, options)
+    has_opted_in_capturing(): boolean {
+        return this.consent.isOptedIn()
     }
 
     /**
@@ -2041,13 +1953,10 @@ export class PostHog {
      *     const has_opted_out = posthog.has_opted_out_capturing();
      *     // use has_opted_out value
      *
-     * @param {Object} [options] A dictionary of config options to override
-     * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
-     * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
      * @returns {boolean} current opt-out status
      */
-    has_opted_out_capturing(options?: Partial<OptInOutCapturingOptions>): boolean {
-        return this._gdpr_call_func(hasOptedOut, options)
+    has_opted_out_capturing(): boolean {
+        return this.consent.isOptedOut()
     }
 
     /**
@@ -2057,31 +1966,12 @@ export class PostHog {
      *
      *     // clear user's opt-in/out status
      *     posthog.clear_opt_in_out_capturing();
-     *
-     *     // clear user's opt-in/out status with specific cookie configuration - should match
-     *     // configuration used when opt_in_capturing/opt_out_capturing methods were called.
-     *     posthog.clear_opt_in_out_capturing({
-     *         cookie_expiration: 30,
-     *         secure_cookie: true
-     *     });
-     *
-     * @param {Object} [options] A dictionary of config options to override
-     * @param {boolean} [options.enable_persistence=true] If true, will re-enable sdk persistence
-     * @param {string} [options.persistence_type=localStorage] Persistence mechanism used - cookie or localStorage - falls back to cookie if localStorage is unavailable
-     * @param {string} [options.cookie_prefix=__ph_opt_in_out] Custom prefix to be used in the cookie/localstorage name
-     * @param {Number} [options.cookie_expiration] Number of days until the opt-in cookie expires (overrides value specified in this PostHog instance's config)
-     * @param {boolean} [options.cross_subdomain_cookie] Whether the opt-in cookie is set as cross-subdomain or not (overrides value specified in this PostHog instance's config)
-     * @param {boolean} [options.secure_cookie] Whether the opt-in cookie is set as secure or not (overrides value specified in this PostHog instance's config)
+     *     *
+     * @param {Object} [config] A dictionary of config options to override
      */
-    clear_opt_in_out_capturing(options?: Partial<OptInOutCapturingOptions>): void {
-        const _options: Partial<OptInOutCapturingOptions> = extend(
-            {
-                enable_persistence: true,
-            },
-            options ?? {}
-        )
-        this._gdpr_call_func(clearOptInOut, _options)
-        this._gdpr_update_persistence(_options)
+    clear_opt_in_out_capturing(): void {
+        this.consent.reset()
+        this._sync_opt_out_with_persistence()
     }
 
     debug(debug?: boolean): void {

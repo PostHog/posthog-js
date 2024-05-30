@@ -105,11 +105,14 @@ export interface PostHogConfig {
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean
+    /** Starts the SDK in an opted out state requiring opt_in_capturing() to be called before events will b captured  */
     opt_out_capturing_by_default: boolean
-    opt_out_persistence_by_default: boolean
+    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
+    /** If set to true this will disable persistence if the user is opted out of capturing. @default false */
+    opt_out_persistence_by_default?: boolean
     /** Opt out of user agent filtering such as googlebot or other bots. Defaults to `false` */
     opt_out_useragent_filter: boolean
-    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
+
     opt_out_capturing_cookie_prefix: string | null
     opt_in_site_apps: boolean
     respect_dnt: boolean
@@ -319,24 +322,6 @@ export type FeatureFlagsCallback = (
         errorsLoading?: boolean
     }
 ) => void
-
-export interface GDPROptions {
-    capture?: (
-        event: string,
-        properties: Properties,
-        options: CaptureOptions
-    ) => void /** function used for capturing a PostHog event to record the opt-in action */
-    captureEventName?: string /** event name to be used for capturing the opt-in action */
-    captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
-    /** persistence mechanism used */
-    persistenceType?: 'cookie' | 'localStorage' | 'localStorage+cookie'
-    persistencePrefix?: string /** [__ph_opt_in_out] - custom prefix to be used in the cookie/localstorage name */
-    cookieExpiration?: number /** number of days until the opt-in cookie expires */
-    crossSubdomainCookie?: boolean /** whether the opt-in cookie is set as cross-subdomain or not */
-    secureCookie?: boolean /** whether the opt-in cookie is set as secure or not */
-    respectDnt?: boolean
-    window?: Window
-}
 
 export interface PersistentStore {
     is_supported: () => boolean
