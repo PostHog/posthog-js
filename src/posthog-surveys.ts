@@ -2,7 +2,6 @@ import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
 import { SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
 import { isUrlMatchingRegex } from './utils/request-utils'
-import { isUndefined } from './utils/type-utils'
 import { window, document, assignableWindow } from './utils/globals'
 import { DecideResponse } from './types'
 import { loadScript } from './utils'
@@ -30,14 +29,6 @@ export class PostHogSurveys {
 
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
-        if (!isUndefined(this.instance._addCaptureHook)) {
-            // eslint-disable-next-line no-console
-            console.log(`loading event listener`)
-            this.instance._addCaptureHook((eventName) => {
-                // eslint-disable-next-line no-console
-                console.log(`in surveys event listener, eventName is :`, eventName)
-            })
-        }
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {

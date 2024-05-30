@@ -16,18 +16,16 @@ import {
     style,
     defaultSurveyAppearance,
     sendSurveyEvent,
-    dismissedSurveyEvent,
     createShadow,
     getContrastingTextColor,
     SurveyContext,
     getDisplayOrderQuestions,
-    getSurveySeenKey,
     shouldShowSurveyInWaitPeriod,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { useState, useEffect, useRef, useContext, useMemo } from 'preact/hooks'
-import { isNumber } from '../utils/type-utils'
+import { isNumber, isUndefined } from '../utils/type-utils'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import {
     OpenTextQuestion,
@@ -85,37 +83,30 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
             }
+
             if (
                 survey.type === SurveyType.Popover &&
-                survey.conditions?.eventName == undefined &&
                 document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
             ) {
-                // eslint-disable-next-line no-console
-                console.log(`rendering survey now : `, survey)
                 const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
                 if (surveyWaitPeriodInDays && !shouldShowSurveyInWaitPeriod(surveyWaitPeriodInDays)) {
-                        return
+                    return
+                }
+                const surveySeenKey = `seenSurvey_${survey.id}`
+                if (localStorage.getItem(surveySeenKey)) {
+                    return
                 }
 
-                if (!localStorage.getItem(getSurveySeenKey(survey))) {
-                    const shadow = createShadow(style(survey?.appearance), survey.id)
-                    Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
-                }
-            }
-            
-            if (
-                survey.type === SurveyType.Popover &&
-                survey.conditions?.eventName != undefined &&
-                document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
-            ) {
-                // eslint-disable-next-line no-console
-                console.log(`rendering survey now : `, survey)
-                const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
-                if (surveyWaitPeriodInDays && !shouldShowSurveyInWaitPeriod(surveyWaitPeriodInDays)) {
-                        return
-                }
-
-                if (!localStorage.getItem(getSurveySeenKey(survey))) {
+                if (survey.events && survey.events.length > 0 && !isUndefined(posthog._addCaptureHook)) {
+                    posthog._addCaptureHook((eventName) => {
+                        // since the event can fire at any time, we want to ensure that the survey show is idempotent,
+                        // check that surveySeenKey hasn't been set again in local storage here.
+                        if (survey.events.indexOf(eventName) >= 0 && !localStorage.getItem(surveySeenKey)) {
+                            const shadow = createShadow(style(survey?.appearance), survey.id)
+                            Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
+                        }
+                    })
+                } else {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
@@ -206,8 +197,6 @@ export function Surveys({
         posthog.capture('survey shown', {
             $survey_name: survey.name,
             $survey_id: survey.id,
-            $survey_iteration: survey.current_iteration,
-            $survey_iteration_start_date: survey.current_iteration_start_date,
             sessionRecordingUrl: posthog.get_session_replay_url?.(),
         })
         localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
@@ -380,7 +369,7 @@ export function Questions({
                                                 idx,
                                                 survey.appearance || defaultSurveyAppearance,
                                                 (res) => onNextClick(res, question.questionIndex || idx),
-                                                () => dismissedSurveyEvent(survey, posthog, readOnly)
+                                                () => closeSurveyPopup(survey, posthog, readOnly)
                                             )}
                                         </div>
                                     )}
@@ -392,13 +381,30 @@ export function Questions({
                             idx,
                             survey.appearance || defaultSurveyAppearance,
                             (res) => onNextClick(res, idx),
-                            () => dismissedSurveyEvent(survey, posthog, readOnly)
+                            () => closeSurveyPopup(survey, posthog, readOnly)
                         )
                     })}
                 </>
             )}
         </form>
     )
+}
+
+const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
+    // TODO: state management and unit tests for this would be nice
+    if (readOnly || !posthog) {
+        return
+    }
+    posthog.capture('survey dismissed', {
+        $survey_name: survey.name,
+        $survey_id: survey.id,
+        sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        $set: {
+            [`$survey_dismissed/${survey.id}`]: true,
+        },
+    })
+    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
+    window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
 export function FeedbackWidget({

@@ -537,40 +537,18 @@ export const sendSurveyEvent = (
     posthog?: PostHog
 ) => {
     if (!posthog) return
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
-
+    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
     posthog.capture('survey sent', {
         $survey_name: survey.name,
         $survey_id: survey.id,
-        $survey_iteration: survey.current_iteration,
-        $survey_iteration_start_date: survey.current_iteration_start_date,
         $survey_questions: survey.questions.map((question) => question.question),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
         $set: {
-            [getSurveyInteractionProperty(survey, 'responded')]: true,
+            [`$survey_responded/${survey.id}`]: true,
         },
     })
     window.dispatchEvent(new Event('PHSurveySent'))
-}
-
-export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
-    // TODO: state management and unit tests for this would be nice
-    if (readOnly || !posthog) {
-        return
-    }
-    posthog.capture('survey dismissed', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        $survey_iteration: survey.current_iteration,
-        $survey_iteration_start_date: survey.current_iteration_start_date,
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        $set: {
-            [getSurveyInteractionProperty(survey, 'dismissed')]: true,
-        },
-    })
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
-    window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
 // Use the Fisher-yates algorithm to shuffle this array
@@ -626,35 +604,17 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
 }
 
 export const shouldShowSurveyInWaitPeriod = (seenSurveyWaitPeriodInDays: number): boolean => {
-  const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
-  if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
-      const today = new Date()
-      const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
-      const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-      if (diffDaysFromToday < surveyWaitPeriodInDays) {
-          return false
-      }
-  }
-
-  return true
-}
-
-export const getSurveySeenKey = (survey: Survey): string => {
-    let surveySeenKey = `seenSurvey_${survey.id}`
-    if (survey.current_iteration && survey.current_iteration > 0) {
-        surveySeenKey = `seenSurvey_${survey.id}_${survey.current_iteration}`
+    const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
+    if (seenSurveyWaitPeriodInDays && lastSeenSurveyDate) {
+        const today = new Date()
+        const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
+        const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
+        if (diffDaysFromToday < seenSurveyWaitPeriodInDays) {
+            return false
+        }
     }
 
-    return surveySeenKey
-}
-
-const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
-    let survey_property = `$survey_${action}/${survey.id}`
-    if (survey.current_iteration && survey.current_iteration > 0) {
-        survey_property = `$survey_${action}/${survey.id}/${survey.current_iteration}`
-    }
-
-    return survey_property
+    return true
 }
 
 export const SurveyContext = createContext<{
