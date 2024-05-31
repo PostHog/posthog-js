@@ -99,6 +99,14 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
 export const renderSurveysPreview = (survey: Survey, root: HTMLElement, previewQuestionIndex: number) => {
     const surveyStyleSheet = style(survey.appearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
+
+    // Remove previously attached <style>
+    Array.from(root.children).forEach((child) => {
+        if (child instanceof HTMLStyleElement) {
+            root.removeChild(child)
+        }
+    })
+
     root.appendChild(styleElement)
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
@@ -154,7 +162,7 @@ export function SurveyPopup({
     posthog?: PostHog
     readOnly?: boolean
     style?: React.CSSProperties
-    previewQuestionIndex?: number
+    previewQuestionIndex?: number | undefined
 }) {
     const [isPopupVisible, setIsPopupVisible] = useState(true)
     const [isSurveySent, setIsSurveySent] = useState(false)
@@ -197,10 +205,8 @@ export function SurveyPopup({
         <SurveyContext.Provider
             value={{
                 readOnly: !!readOnly,
-                previewQuestionIndex: previewQuestionIndex ?? 0,
-                textColor: getContrastingTextColor(
-                    survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
-                ),
+                previewQuestionIndex: previewQuestionIndex,
+                handleCloseSurveyPopup: () => closeSurveyPopup(survey, posthog, readOnly),
             }}
         >
             {!shouldShowConfirmation ? (
@@ -225,7 +231,6 @@ interface GetQuestionComponentProps {
     questionIndex: number
     appearance: SurveyAppearance
     onSubmit: (res: string | string[] | number | null) => void
-    closeSurveyPopup: () => void
 }
 
 const getQuestionComponent = ({
@@ -233,13 +238,19 @@ const getQuestionComponent = ({
     questionIndex,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: GetQuestionComponentProps): JSX.Element => {
+    const questionComponents = {
+        [SurveyQuestionType.Open]: OpenTextQuestion,
+        [SurveyQuestionType.Link]: LinkQuestion,
+        [SurveyQuestionType.Rating]: RatingQuestion,
+        [SurveyQuestionType.SingleChoice]: MultipleChoiceQuestion,
+        [SurveyQuestionType.MultipleChoice]: MultipleChoiceQuestion,
+    }
+
     const commonProps = {
         question,
         appearance,
         onSubmit,
-        closeSurveyPopup,
     }
 
     const additionalProps: Record<SurveyQuestionType, any> = {
@@ -248,14 +259,6 @@ const getQuestionComponent = ({
         [SurveyQuestionType.Rating]: { questionIndex },
         [SurveyQuestionType.SingleChoice]: { questionIndex },
         [SurveyQuestionType.MultipleChoice]: { questionIndex },
-    }
-
-    const questionComponents = {
-        [SurveyQuestionType.Open]: OpenTextQuestion,
-        [SurveyQuestionType.Link]: LinkQuestion,
-        [SurveyQuestionType.Rating]: RatingQuestion,
-        [SurveyQuestionType.SingleChoice]: MultipleChoiceQuestion,
-        [SurveyQuestionType.MultipleChoice]: MultipleChoiceQuestion,
     }
 
     const Component = questionComponents[question.type]
@@ -277,13 +280,13 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
+    const { previewQuestionIndex } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewQuestionIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
     // Sync preview state
     useEffect(() => {
-        setCurrentQuestionIndex(previewQuestionIndex)
+        setCurrentQuestionIndex(previewQuestionIndex ?? 0)
     }, [previewQuestionIndex])
 
     const onNextButtonClick = (res: string | string[] | number | null, questionIndex: number) => {
@@ -318,7 +321,6 @@ export function Questions({
                                 questionIndex,
                                 appearance: survey.appearance || defaultSurveyAppearance,
                                 onSubmit: (res) => onNextButtonClick(res, questionIndex),
-                                closeSurveyPopup: () => closeSurveyPopup(survey, posthog, readOnly),
                             })}
                         </div>
                     )

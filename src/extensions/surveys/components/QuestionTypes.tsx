@@ -7,7 +7,7 @@ import {
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
 import { RefObject } from 'preact'
-import { useRef, useState, useMemo } from 'preact/hooks'
+import { useRef, useState, useMemo, useContext } from 'preact/hooks'
 import { isNull, isArray } from '../../../utils/type-utils'
 import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import {
@@ -18,7 +18,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { defaultSurveyAppearance, getDisplayOrderChoices } from '../surveys-utils'
+import { defaultSurveyAppearance, getDisplayOrderChoices, SurveyContext } from '../surveys-utils'
 import { BottomSection } from './BottomSection'
 import { Cancel, QuestionHeader } from './QuestionHeader'
 
@@ -26,15 +26,14 @@ export function OpenTextQuestion({
     question,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: {
     question: BasicSurveyQuestion
     appearance: SurveyAppearance
     onSubmit: (text: string) => void
-    closeSurveyPopup: () => void
 }) {
     const textRef = useRef(null)
     const [text, setText] = useState('')
+    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     return (
         <div
@@ -42,7 +41,7 @@ export function OpenTextQuestion({
             style={{ backgroundColor: appearance.backgroundColor || defaultSurveyAppearance.backgroundColor }}
             ref={textRef}
         >
-            <Cancel onClick={() => closeSurveyPopup()} />
+            <Cancel onClick={() => handleCloseSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -63,16 +62,16 @@ export function LinkQuestion({
     question,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: {
     question: LinkSurveyQuestion
     appearance: SurveyAppearance
     onSubmit: (clicked: string) => void
-    closeSurveyPopup: () => void
 }) {
+    const { handleCloseSurveyPopup } = useContext(SurveyContext)
+
     return (
         <div className="survey-box">
-            <Cancel onClick={() => closeSurveyPopup()} />
+            <Cancel onClick={() => handleCloseSurveyPopup()} />
             <QuestionHeader question={question.question} description={question.description} />
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -90,21 +89,20 @@ export function RatingQuestion({
     questionIndex,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: {
     question: RatingSurveyQuestion
     questionIndex: number
     appearance: SurveyAppearance
     onSubmit: (rating: number | null) => void
-    closeSurveyPopup: () => void
 }) {
     const scale = question.scale
     const starting = question.scale === 10 ? 0 : 1
     const [rating, setRating] = useState<number | null>(null)
+    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     return (
         <div className="survey-box">
-            <Cancel onClick={() => closeSurveyPopup()} />
+            <Cancel onClick={() => handleCloseSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -210,13 +208,11 @@ export function MultipleChoiceQuestion({
     questionIndex,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: {
     question: MultipleSurveyQuestion
     questionIndex: number
     appearance: SurveyAppearance
     onSubmit: (choices: string | string[] | null) => void
-    closeSurveyPopup: () => void
 }) {
     const textRef = useRef(null)
     const choices = useMemo(() => getDisplayOrderChoices(question), [question])
@@ -225,6 +221,7 @@ export function MultipleChoiceQuestion({
     )
     const [openChoiceSelected, setOpenChoiceSelected] = useState(false)
     const [openEndedInput, setOpenEndedInput] = useState('')
+    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
     return (
@@ -233,7 +230,7 @@ export function MultipleChoiceQuestion({
             style={{ backgroundColor: appearance.backgroundColor || defaultSurveyAppearance.backgroundColor }}
             ref={textRef}
         >
-            <Cancel onClick={() => closeSurveyPopup()} />
+            <Cancel onClick={() => handleCloseSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
