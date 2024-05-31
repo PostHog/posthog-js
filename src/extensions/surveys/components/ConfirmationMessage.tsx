@@ -13,7 +13,7 @@ export function ConfirmationMessage({
 }: {
     confirmationHeader: string
     confirmationDescription: string
-    confirmationDescriptionContentType: SurveyQuestionDescriptionContentType
+    confirmationDescriptionContentType?: SurveyQuestionDescriptionContentType
     appearance: SurveyAppearance
     onClose: () => void
     styleOverrides?: React.CSSProperties

@@ -226,9 +226,7 @@ export function Surveys({
                     <ConfirmationMessage
                         confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                         confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
-                        confirmationDescriptionContentType={
-                            survey.appearance?.thankYouMessageDescriptionContentType || 'text'
-                        }
+                        confirmationDescriptionContentType={survey.appearance?.thankYouMessageDescriptionContentType}
                         appearance={survey.appearance || defaultSurveyAppearance}
                         styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
                         onClose={() => setDisplayState('closed')}
@@ -340,9 +338,7 @@ export function Questions({
                 <ConfirmationMessage
                     confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                     confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
-                    confirmationDescriptionContentType={
-                        survey.appearance?.thankYouMessageDescriptionContentType || 'text'
-                    }
+                    confirmationDescriptionContentType={survey.appearance?.thankYouMessageDescriptionContentType}
                     appearance={survey.appearance || defaultSurveyAppearance}
                     styleOverrides={{
                         ...style,
