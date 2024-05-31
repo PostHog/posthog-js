@@ -34,7 +34,9 @@ export function ConfirmationMessage({
                                 {confirmationDescription}
                             </div>
                         ) : (
-                            // Treat as HTML if content type is 'html' or not specified
+                            // Treat as HTML if content type is 'html' or not specified,
+                            // this will let us backfill the content type for existing surveys
+                            // and not break popup surveys in production
                             <div
                                 style={{ color: textColor }}
                                 className="thank-you-message-body"
