@@ -166,6 +166,16 @@ export function SurveyPopup({
 }) {
     const [isPopupVisible, setIsPopupVisible] = useState(true)
     const [isSurveySent, setIsSurveySent] = useState(false)
+    const shouldShowConfirmation = isSurveySent || previewQuestionIndex === survey.questions.length
+    const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
+
+    // Ensure the popup stays in the same position for the preview
+    if (readOnly) {
+        style = style || {}
+        style.left = 'initial'
+        style.right = 'initial'
+        style.transform = 'initial'
+    }
 
     useEffect(() => {
         if (readOnly || !posthog) {
@@ -197,9 +207,6 @@ export function SurveyPopup({
             }
         })
     }, [])
-    const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
-
-    const shouldShowConfirmation = isSurveySent || previewQuestionIndex === survey.questions.length
 
     return isPopupVisible ? (
         <SurveyContext.Provider
