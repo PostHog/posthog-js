@@ -172,9 +172,9 @@ export function SurveyPopup({
     // Ensure the popup stays in the same position for the preview
     if (readOnly) {
         style = style || {}
-        style.left = 'initial'
-        style.right = 'initial'
-        style.transform = 'initial'
+        style.left = 'unset'
+        style.right = 'unset'
+        style.transform = 'unset'
     }
 
     useEffect(() => {
