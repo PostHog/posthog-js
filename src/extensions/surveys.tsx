@@ -84,30 +84,40 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                 }
             }
 
-            if (
-                survey.type === SurveyType.Popover &&
-                document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
-            ) {
+            if (survey.type === SurveyType.Popover) {
                 const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
                 if (surveyWaitPeriodInDays && !shouldShowSurveyInWaitPeriod(surveyWaitPeriodInDays)) {
                     return
                 }
+
                 const surveySeenKey = `seenSurvey_${survey.id}`
                 if (localStorage.getItem(surveySeenKey)) {
                     return
                 }
 
-                if (survey.events && survey.events.length > 0 && !isUndefined(posthog._addCaptureHook)) {
+                const shadow = createShadow(style(survey?.appearance), survey.id)
+                const hasEvents = survey.events && survey.events.length > 0
+                if (hasEvents && !isUndefined(posthog._addCaptureHook)) {
+                    const surveyEventRegisteredKey = `surveyEventRegistered_${survey.id}`
+                    // we use sessionStorage here because within the context of the current window,
+                    // we want to observe the events only once.
+                    // sessionStorage gets reset once the document reloads.
+                    if (sessionStorage.getItem(surveyEventRegisteredKey)) {
+                        return
+                    }
+
+                    // eslint-disable-next-line no-console
+                    console.log(`added event capture for survey`, survey.name)
+                    sessionStorage.setItem(surveyEventRegisteredKey, 'true')
+
                     posthog._addCaptureHook((eventName) => {
                         // since the event can fire at any time, we want to ensure that the survey show is idempotent,
                         // check that surveySeenKey hasn't been set again in local storage here.
                         if (survey.events.indexOf(eventName) >= 0 && !localStorage.getItem(surveySeenKey)) {
-                            const shadow = createShadow(style(survey?.appearance), survey.id)
                             Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                         }
                     })
-                } else {
-                    const shadow = createShadow(style(survey?.appearance), survey.id)
+                } else if (document.querySelectorAll("div[class^='PostHogSurvey']").length === 0) {
                     Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
             }
@@ -175,6 +185,7 @@ export function Surveys({
     style,
     initialDisplayState,
     previewQuestionIndex,
+    eventName,
 }: {
     survey: Survey
     posthog?: PostHog
@@ -182,6 +193,7 @@ export function Surveys({
     style?: React.CSSProperties
     initialDisplayState?: 'survey' | 'confirmation' | 'closed'
     previewQuestionIndex?: number
+    eventName?: string
 }) {
     const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>(
         initialDisplayState || 'survey'
@@ -230,7 +242,9 @@ export function Surveys({
                     ),
                 }}
             >
-                {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
+                {displayState === 'survey' && (
+                    <Questions survey={survey} posthog={posthog} styleOverrides={style} eventName={eventName} />
+                )}
                 {displayState === 'confirmation' && (
                     <ConfirmationMessage
                         confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
@@ -304,10 +318,12 @@ export function Questions({
     survey,
     posthog,
     styleOverrides,
+    eventName,
 }: {
     survey: Survey
     posthog?: PostHog
     styleOverrides?: React.CSSProperties
+    eventName?: string
 }) {
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
@@ -320,7 +336,7 @@ export function Questions({
     const onNextClick = (res: string | string[] | number | null, idx: number) => {
         const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
         if (idx === survey.questions.length - 1) {
-            return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+            return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, eventName, posthog)
         } else {
             setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
             setCurrentQuestion(idx + 1)
