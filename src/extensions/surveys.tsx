@@ -20,7 +20,7 @@ import {
     getContrastingTextColor,
     SurveyContext,
     getDisplayOrderQuestions,
-    shouldShowSurveyInWaitPeriod,
+    shouldHideSurveyInWaitPeriod,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -86,11 +86,9 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
 
             if (survey.type === SurveyType.Popover) {
                 const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
-                if (surveyWaitPeriodInDays && !shouldShowSurveyInWaitPeriod(surveyWaitPeriodInDays)) {
+                if (surveyWaitPeriodInDays && shouldHideSurveyInWaitPeriod(surveyWaitPeriodInDays)) {
                     return
                 }
-
-                const shadow = createShadow(style(survey?.appearance), survey.id)
                 const hasEvents = survey.events && survey.events.length > 0
                 if (hasEvents && !isUndefined(posthog._addCaptureHook)) {
                     const surveyEventRegisteredKey = `surveyEventRegistered_${survey.id}`
@@ -102,11 +100,11 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
 
                     sessionStorage.setItem(surveyEventRegisteredKey, 'true')
-
                     posthog._addCaptureHook((eventName) => {
                         // since the event can fire at any time, we want to ensure that the survey show is idempotent,
                         // check that surveySeenKey hasn't been set again in local storage here.
                         if (survey.events.indexOf(eventName) >= 0) {
+                            const shadow = createShadow(style(survey?.appearance), survey.id)
                             Preact.render(
                                 <Surveys
                                     key={`popover-survey-${Date.now()}`}
@@ -123,6 +121,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     if (localStorage.getItem(surveySeenKey)) {
                         return
                     }
+                    const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
             }
