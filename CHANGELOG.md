@@ -1,5 +1,33 @@
-## 1.133.0 - 2024-05-22
+## 1.136.2 - 2024-05-30
 
+- fix: reference canvas not client (#1212)
+- fix: Add auto approver for JS prs (#1209)
+
+## 1.136.1 - 2024-05-29
+
+- fix: fallback size when resizing (#1208)
+
+## 1.136.0 - 2024-05-28
+
+- feat: Refactor GDPR stuff into a more readable consent class (#1176)
+
+## 1.135.2 - 2024-05-24
+
+- feat: Add tests and fix regex for some obscure android browsers (#1196)
+
+## 1.135.1 - 2024-05-24
+
+- fix: Add missing retry info and test (#1202)
+- fix: Pass `retriesPerformedSoFar` to keep count of retries (#1201)
+
+## 1.135.0 - 2024-05-23
+
+
+
+## 1.134.0 - 2024-05-23
+- fix(survey): Retain question index if questions are shuffled (#1198)
+
+## 1.133.0 - 2024-05-22
 
 
 ## 1.132.3 - 2024-05-22

@@ -483,10 +483,19 @@ describe('surveys', () => {
         })
 
         it('should shuffle questions if shuffleQuestions is true', () => {
-            console.log('running shuffle questions test')
             expect(surveyWithShufflingQuestions.questions).not.toEqual(
                 getDisplayOrderQuestions(surveyWithShufflingQuestions)
             )
+        })
+
+        it('should retain original index of question if shuffleQuestions is true', () => {
+            const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
+            for (let i = 0; i < shuffledQuestions.length; i++) {
+                const originalQuestionIndex = shuffledQuestions[i].questionIndex
+                expect(shuffledQuestions[i].question).toEqual(
+                    surveyWithShufflingQuestions.questions[originalQuestionIndex].question
+                )
+            }
         })
 
         it('shuffle should preserve all elements', () => {
@@ -549,7 +558,7 @@ describe('surveys', () => {
             expect(shuffledOptions).toEqual(questionWithoutShufflingOptions.choices)
         })
 
-        it('should shuffle if shuffleOptions is false', () => {
+        it('should shuffle if shuffleOptions is true', () => {
             const shuffledOptions = getDisplayOrderChoices(questionWithShufflingOptions)
             expect(shuffledOptions).not.toEqual(questionWithShufflingOptions.choices)
         })
