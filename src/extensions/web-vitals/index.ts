@@ -1,31 +1,47 @@
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
 import { logger } from '../../utils/logger'
-import { isObject } from '../../utils/type-utils'
+import { isBoolean, isObject } from '../../utils/type-utils'
 import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { loadScript } from '../../utils'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
-import { PassengerEvents } from '../passenger-events'
-
 const LOGGER_PREFIX = '[Web Vitals]'
 
-type WebVitalsEventBuffer = any[]
+type WebVitalsEventBuffer = any[] | undefined
 
-export class WebVitalsAutocapture extends PassengerEvents<WebVitalsEventBuffer> {
-    constructor(instance: PostHog) {
-        super(
-            instance,
-            'web-vitals',
-            (x) => (isObject(x.config.capture_performance) ? x.config.capture_performance.web_vitals : undefined),
-            WEB_VITALS_ENABLED_SERVER_SIDE
-        )
+export class WebVitalsAutocapture {
+    private _enabledServerSide: boolean = false
+    private _initialized = false
+
+    // TODO: Periodically flush this if no other event has taken care of it
+    private buffer: WebVitalsEventBuffer
+
+    constructor(private readonly instance: PostHog) {
+        //todo what downloads the script?
+        this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
         this.startIfEnabled()
     }
 
-    protected onStart(): void {
-        this.loadScript(this.startCapturing)
+    public getAndClearBuffer(): WebVitalsEventBuffer {
+        const buffer = this.buffer
+        this.buffer = undefined
+        return buffer
+    }
+
+    public get isEnabled(): boolean {
+        const clientConfig = isObject(this.instance.config.capture_performance)
+            ? this.instance.config.capture_performance.web_vitals
+            : undefined
+        return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
+    }
+
+    public startIfEnabled(): void {
+        if (this.isEnabled && !this._initialized) {
+            logger.info(LOGGER_PREFIX + ' enabled, starting...')
+            this.loadScript(this.startCapturing)
+        }
     }
 
     public afterDecideResponse(response: DecideResponse) {

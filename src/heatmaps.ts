@@ -6,11 +6,14 @@ import { PostHog } from './posthog-core'
 import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
-import { PassengerEvents } from './extensions/passenger-events'
+import { isUndefined } from './utils/type-utils'
+import { logger } from './utils/logger'
 
-type HeatmapEventBuffer = {
-    [key: string]: Properties[]
-}
+type HeatmapEventBuffer =
+    | {
+          [key: string]: Properties[]
+      }
+    | undefined
 
 function elementOrParentPositionMatches(el: Element, matches: string[], breakOnElement?: Element): boolean {
     let curEl: Element | false = el
@@ -35,16 +38,32 @@ function elementInToolbar(el: Element): boolean {
     return el.id === TOOLBAR_ID || !!el.closest?.('#' + TOOLBAR_ID)
 }
 
-export class Heatmaps extends PassengerEvents<HeatmapEventBuffer> {
+export class Heatmaps {
+    instance: PostHog
     rageclicks = new RageClick()
+    _enabledServerSide: boolean = false
+    _initialized = false
     _mouseMoveTimeout: number | undefined
 
+    // TODO: Periodically flush this if no other event has taken care of it
+    private buffer: HeatmapEventBuffer
+
     constructor(instance: PostHog) {
-        super(instance, 'heatmaps', (x) => x.config.enable_heatmaps, HEATMAPS_ENABLED_SERVER_SIDE)
+        this.instance = instance
+        this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
     }
 
-    protected onStart(): void {
-        this._setupListeners()
+    public startIfEnabled(): void {
+        if (this.isEnabled && !this._initialized) {
+            logger.info('[heatmaps] Heatmaps enabled, starting...')
+            this._setupListeners()
+        }
+    }
+
+    public get isEnabled(): boolean {
+        return !isUndefined(this.instance.config.enable_heatmaps)
+            ? this.instance.config.enable_heatmaps
+            : this._enabledServerSide
     }
 
     public afterDecideResponse(response: DecideResponse) {
@@ -58,6 +77,12 @@ export class Heatmaps extends PassengerEvents<HeatmapEventBuffer> {
         // store this in-memory in case persistence is disabled
         this._enabledServerSide = optIn
         this.startIfEnabled()
+    }
+
+    public getAndClearBuffer(): HeatmapEventBuffer {
+        const buffer = this.buffer
+        this.buffer = undefined
+        return buffer
     }
 
     private _setupListeners(): void {
