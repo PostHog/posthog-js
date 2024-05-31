@@ -100,9 +100,10 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
 
-                const internalTargetingFlagCheck = survey.internal_targeting_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
-                    : true
+                const internalTargetingFlagCheck =
+                    survey.events.length === 0 && survey.internal_targeting_flag_key
+                        ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
+                        : true
 
                 return linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck
             })

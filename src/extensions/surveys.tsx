@@ -90,11 +90,6 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     return
                 }
 
-                const surveySeenKey = `seenSurvey_${survey.id}`
-                if (localStorage.getItem(surveySeenKey)) {
-                    return
-                }
-
                 const shadow = createShadow(style(survey?.appearance), survey.id)
                 const hasEvents = survey.events && survey.events.length > 0
                 if (hasEvents && !isUndefined(posthog._addCaptureHook)) {
@@ -106,18 +101,28 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                         return
                     }
 
-                    // eslint-disable-next-line no-console
-                    console.log(`added event capture for survey`, survey.name)
                     sessionStorage.setItem(surveyEventRegisteredKey, 'true')
 
                     posthog._addCaptureHook((eventName) => {
                         // since the event can fire at any time, we want to ensure that the survey show is idempotent,
                         // check that surveySeenKey hasn't been set again in local storage here.
-                        if (survey.events.indexOf(eventName) >= 0 && !localStorage.getItem(surveySeenKey)) {
-                            Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
+                        if (survey.events.indexOf(eventName) >= 0) {
+                            Preact.render(
+                                <Surveys
+                                    key={`popover-survey-${Date.now()}`}
+                                    posthog={posthog}
+                                    initialDisplayState="survey"
+                                    survey={survey}
+                                />,
+                                shadow
+                            )
                         }
                     })
                 } else if (document.querySelectorAll("div[class^='PostHogSurvey']").length === 0) {
+                    const surveySeenKey = `seenSurvey_${survey.id}`
+                    if (localStorage.getItem(surveySeenKey)) {
+                        return
+                    }
                     Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
             }
@@ -230,7 +235,6 @@ export function Surveys({
         })
     }, [])
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
-
     return (
         <>
             <SurveyContext.Provider
