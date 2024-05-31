@@ -31,6 +31,7 @@ export default function Home() {
             <div className="flex items-center gap-2 flex-wrap">
                 <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
                 <button onClick={() => posthog.capture('user_subscribed')}>Subscribe to newsletter</button>
+                <button onClick={() => posthog.capture('user_unsubscribed')}>Unsubscribe from newsletter</button>
                 <button data-attr="autocapture-button">Autocapture buttons</button>
                 <a className="Button" data-attr="autocapture-button" href="#">
                     <span>Autocapture a &gt; span</span>
