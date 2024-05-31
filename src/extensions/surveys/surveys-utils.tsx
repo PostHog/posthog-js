@@ -604,11 +604,11 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
 }
 
 export const SurveyContext = createContext<{
-    readOnly: boolean
-    previewQuestionIndex: number | undefined
+    isPreviewMode: boolean
+    previewPageIndex: number | undefined
     handleCloseSurveyPopup: () => void
 }>({
-    readOnly: false,
-    previewQuestionIndex: 0,
+    isPreviewMode: false,
+    previewPageIndex: 0,
     handleCloseSurveyPopup: () => {},
 })

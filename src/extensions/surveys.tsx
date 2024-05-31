@@ -96,7 +96,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     }, forceReload)
 }
 
-export const renderSurveysPreview = (survey: Survey, root: HTMLElement, previewQuestionIndex: number) => {
+export const renderSurveysPreview = (survey: Survey, root: HTMLElement, previewPageIndex: number) => {
     const surveyStyleSheet = style(survey.appearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
 
@@ -116,8 +116,6 @@ export const renderSurveysPreview = (survey: Survey, root: HTMLElement, previewQ
         <SurveyPopup
             key="surveys-render-preview"
             survey={survey}
-            readOnly={true}
-            previewQuestionIndex={previewQuestionIndex}
             style={{
                 position: 'relative',
                 right: 0,
@@ -125,6 +123,7 @@ export const renderSurveysPreview = (survey: Survey, root: HTMLElement, previewQ
                 borderRadius: 10,
                 color: textColor,
             }}
+            previewPageIndex={previewPageIndex}
         />,
         root
     )
@@ -154,23 +153,22 @@ export function generateSurveys(posthog: PostHog) {
 export function SurveyPopup({
     survey,
     posthog,
-    readOnly,
     style,
-    previewQuestionIndex,
+    previewPageIndex,
 }: {
     survey: Survey
     posthog?: PostHog
-    readOnly?: boolean
     style?: React.CSSProperties
-    previewQuestionIndex?: number | undefined
+    previewPageIndex?: number | undefined
 }) {
     const [isPopupVisible, setIsPopupVisible] = useState(true)
     const [isSurveySent, setIsSurveySent] = useState(false)
-    const shouldShowConfirmation = isSurveySent || previewQuestionIndex === survey.questions.length
+    const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
+    const isPreviewMode = Number.isInteger(previewPageIndex)
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
     // Ensure the popup stays in the same position for the preview
-    if (readOnly) {
+    if (isPreviewMode) {
         style = style || {}
         style.left = 'unset'
         style.right = 'unset'
@@ -178,7 +176,7 @@ export function SurveyPopup({
     }
 
     useEffect(() => {
-        if (readOnly || !posthog) {
+        if (isPreviewMode || !posthog) {
             return
         }
 
@@ -211,9 +209,9 @@ export function SurveyPopup({
     return isPopupVisible ? (
         <SurveyContext.Provider
             value={{
-                readOnly: !!readOnly,
-                previewQuestionIndex: previewQuestionIndex,
-                handleCloseSurveyPopup: () => closeSurveyPopup(survey, posthog, readOnly),
+                isPreviewMode,
+                previewPageIndex: previewPageIndex,
+                handleCloseSurveyPopup: () => closeSurveyPopup(survey, posthog, isPreviewMode),
             }}
         >
             {!shouldShowConfirmation ? (
@@ -287,14 +285,14 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { previewQuestionIndex } = useContext(SurveyContext)
-    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewQuestionIndex || 0)
+    const { previewPageIndex } = useContext(SurveyContext)
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
     // Sync preview state
     useEffect(() => {
-        setCurrentQuestionIndex(previewQuestionIndex ?? 0)
-    }, [previewQuestionIndex])
+        setCurrentQuestionIndex(previewPageIndex ?? 0)
+    }, [previewPageIndex])
 
     const onNextButtonClick = (res: string | string[] | number | null, questionIndex: number) => {
         const isFirstQuestion = questionIndex === 0
@@ -337,8 +335,8 @@ export function Questions({
     )
 }
 
-const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
-    if (readOnly || !posthog) {
+const closeSurveyPopup = (survey: Survey, posthog?: PostHog, isPreviewMode?: boolean) => {
+    if (isPreviewMode || !posthog) {
         return
     }
     posthog.capture('survey dismissed', {
