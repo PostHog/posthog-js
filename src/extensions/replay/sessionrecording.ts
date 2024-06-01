@@ -94,6 +94,32 @@ interface SnapshotBuffer {
     data: any[]
     sessionId: string | null
     windowId: string | null
+
+    readonly mostRecentSnapshot: any
+    add(properties: Properties): void
+}
+
+class InMemoryBuffer implements SnapshotBuffer {
+    size: number
+    data: any[]
+    sessionId: string
+    windowId: string
+
+    get mostRecentSnapshot(): any | null {
+        return this.data.length > 0 ? this.data[this.data.length - 1] : null
+    }
+
+    constructor(sessionId: string, windowId: string) {
+        this.size = 0
+        this.data = []
+        this.sessionId = sessionId
+        this.windowId = windowId
+    }
+
+    add(properties: Properties) {
+        this.size += properties.$snapshot_bytes
+        this.data.push(properties.$snapshot_data)
+    }
 }
 
 interface QueuedRRWebEvent {
@@ -112,12 +138,11 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 const LOGGER_PREFIX = '[SessionRecording]'
 
 export class SessionRecording {
-    private instance: PostHog
     private _endpoint: string
     private flushBufferTimer?: any
 
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
-    private buffer?: SnapshotBuffer
+    private buffer: SnapshotBuffer
     // and a queue - that contains rrweb events that we want to send to rrweb, but rrweb wasn't able to accept them yet
     private queuedRRWebEvents: QueuedRRWebEvent[] = []
 
@@ -250,8 +275,7 @@ export class SessionRecording {
         }
     }
 
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private readonly instance: PostHog) {
         this._captureStarted = false
         this._endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
@@ -847,14 +871,8 @@ export class SessionRecording {
     }
 
     private clearBuffer(): SnapshotBuffer {
-        this.buffer = undefined
-
-        return {
-            size: 0,
-            data: [],
-            sessionId: this.sessionId,
-            windowId: this.windowId,
-        }
+        this.buffer = new InMemoryBuffer(this.sessionId, this.windowId)
+        return this.buffer
     }
 
     // the intention is a buffer that (currently) is used only after a decide response enables session recording
@@ -884,7 +902,7 @@ export class SessionRecording {
             return this.buffer || this.clearBuffer()
         }
 
-        if (this.buffer && this.buffer.data.length !== 0) {
+        if (this.buffer.data.length > 0) {
             this._captureSnapshot({
                 $snapshot_bytes: this.buffer.size,
                 $snapshot_data: this.buffer.data,
@@ -901,22 +919,13 @@ export class SessionRecording {
     private _captureSnapshotBuffered(properties: Properties) {
         const additionalBytes = 2 + (this.buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
         if (
-            !this.buffer ||
             this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            (!!this.buffer.sessionId && this.buffer.sessionId !== this.sessionId)
+            this.buffer.sessionId !== this.sessionId
         ) {
             this.buffer = this._flushBuffer()
         }
 
-        if (isNull(this.buffer.sessionId) && !isNull(this.sessionId)) {
-            // session id starts null but has now been assigned, update the buffer
-            this.buffer.sessionId = this.sessionId
-            this.buffer.windowId = this.windowId
-        }
-
-        this.buffer.size += properties.$snapshot_bytes
-        this.buffer.data.push(properties.$snapshot_data)
-
+        this.buffer.add(properties)
         if (!this.flushBufferTimer) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
