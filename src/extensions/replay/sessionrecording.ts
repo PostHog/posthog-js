@@ -178,7 +178,6 @@ export class SessionRecording {
 
     private get sessionManager() {
         if (!this.instance.sessionManager) {
-            logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
