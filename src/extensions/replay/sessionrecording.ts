@@ -309,7 +309,7 @@ export class SessionRecording {
         this.sessionId = sessionId
         this.windowId = windowId
 
-        this.clearBuffer()
+        this.buffer = new InMemoryBuffer(this.sessionId, this.windowId)
 
         // on reload there might be an already sampled session that should be continued before decide response,
         // so we call this here _and_ in the decide response
