@@ -16,7 +16,7 @@ const plugins = [
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
     }),
-    terser({ toplevel: true }),
+    terser({ toplevel: true, compress: { passes: 3 } }),
     visualizer(),
 ]
 
