@@ -129,8 +129,8 @@ export class SessionRecording {
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
-    private windowId: string | null = null
-    private sessionId: string | null = null
+    private windowId: string
+    private sessionId: string
     private _linkedFlag: string | FlagVariant | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
