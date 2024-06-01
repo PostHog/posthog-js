@@ -891,6 +891,7 @@ export class SessionRecording {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
+
             return
         }
 
@@ -901,9 +902,8 @@ export class SessionRecording {
                 $session_id: this.buffer.sessionId,
                 $window_id: this.buffer.windowId,
             })
-
-            this.clearBuffer()
         }
+        this.clearBuffer()
     }
 
     private _captureSnapshotBuffered(properties: Properties) {
