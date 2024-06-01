@@ -96,18 +96,18 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     }, forceReload)
 }
 
-export const renderSurveysPreview = (survey: Survey, root: HTMLElement, previewPageIndex: number) => {
+export const renderSurveysPreview = (survey: Survey, parentElement: HTMLElement, previewPageIndex: number) => {
     const surveyStyleSheet = style(survey.appearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
 
     // Remove previously attached <style>
-    Array.from(root.children).forEach((child) => {
+    Array.from(parentElement.children).forEach((child) => {
         if (child instanceof HTMLStyleElement) {
-            root.removeChild(child)
+            parentElement.removeChild(child)
         }
     })
 
-    root.appendChild(styleElement)
+    parentElement.appendChild(styleElement)
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
     )
@@ -125,7 +125,7 @@ export const renderSurveysPreview = (survey: Survey, root: HTMLElement, previewP
             }}
             previewPageIndex={previewPageIndex}
         />,
-        root
+        parentElement
     )
 }
 
