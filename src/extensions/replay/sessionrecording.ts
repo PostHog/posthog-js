@@ -309,7 +309,7 @@ export class SessionRecording {
         this.sessionId = sessionId
         this.windowId = windowId
 
-        this.buffer = this.clearBuffer()
+        this.clearBuffer()
 
         // on reload there might be an already sampled session that should be continued before decide response,
         // so we call this here _and_ in the decide response
@@ -874,13 +874,7 @@ export class SessionRecording {
         return this.buffer
     }
 
-    // the intention is a buffer that (currently) is used only after a decide response enables session recording
-    // it is called ever X seconds using the flushBufferTimer so that we don't have to wait for the buffer to fill up
-    // when it is called on a timer it assumes that it can definitely flush
-    // it is flushed when the session id changes or the size of the buffered data gets too great (1mb by default)
-    // first change: if the recording is in buffering mode,
-    //  flush buffer simply resets the timer and returns the existing flush buffer
-    private _flushBuffer() {
+    private _flushBuffer(): void {
         if (this.flushBufferTimer) {
             clearTimeout(this.flushBufferTimer)
             this.flushBufferTimer = undefined
@@ -898,7 +892,7 @@ export class SessionRecording {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
-            return this.buffer || this.clearBuffer()
+            return
         }
 
         if (this.buffer.data.length > 0) {
@@ -909,9 +903,7 @@ export class SessionRecording {
                 $window_id: this.buffer.windowId,
             })
 
-            return this.clearBuffer()
-        } else {
-            return this.buffer || this.clearBuffer()
+            this.clearBuffer()
         }
     }
 
@@ -921,7 +913,7 @@ export class SessionRecording {
             this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
             this.buffer.sessionId !== this.sessionId
         ) {
-            this.buffer = this._flushBuffer()
+            this._flushBuffer()
         }
 
         this.buffer.add(properties)
