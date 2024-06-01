@@ -869,9 +869,8 @@ export class SessionRecording {
         return url
     }
 
-    private clearBuffer(): SnapshotBuffer {
+    private clearBuffer(): void {
         this.buffer = new InMemoryBuffer(this.sessionId, this.windowId)
-        return this.buffer
     }
 
     private _flushBuffer(): void {
