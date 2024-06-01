@@ -92,10 +92,10 @@ type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering'
 interface SnapshotBuffer {
     size: number
     data: any[]
-    sessionId: string | null
-    windowId: string | null
+    sessionId: string
+    windowId: string
 
-    readonly mostRecentSnapshot: any
+    readonly mostRecentSnapshotTimestamp: number | null
     add(properties: Properties): void
 }
 
@@ -105,8 +105,8 @@ class InMemoryBuffer implements SnapshotBuffer {
     sessionId: string
     windowId: string
 
-    get mostRecentSnapshot(): any | null {
-        return this.data.length > 0 ? this.data[this.data.length - 1] : null
+    get mostRecentSnapshotTimestamp(): number | null {
+        return this.data.length ? this.data[this.data.length - 1].timestamp : null
     }
 
     constructor(sessionId: string, windowId: string) {
@@ -191,9 +191,9 @@ export class SessionRecording {
     }
 
     private get sessionDuration(): number | null {
-        const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
+        const mostRecentSnapshotTimestamp = this.buffer.mostRecentSnapshotTimestamp
         const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
+        return mostRecentSnapshotTimestamp ? mostRecentSnapshotTimestamp - sessionStartTimestamp : null
     }
 
     private get isRecordingEnabled() {
