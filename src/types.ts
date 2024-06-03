@@ -70,7 +70,9 @@ export interface BootstrapConfig {
 }
 
 export interface PerformanceCaptureConfig {
-    replay?: boolean
+    /** works with session replay to use the browser's native performance observer to capture performance metrics */
+    network_timing?: boolean
+    /** works as a passenger event to use chrome's web vitals library to wrap fetch and capture web vitals */
     web_vitals?: boolean
 }
 
@@ -283,7 +285,7 @@ export interface DecideResponse {
     autocapture_opt_out?: boolean
     /**
      *     originally capturePerformance was replay only and so boolean true
-     *     is equivalent to { replay: true }
+     *     is equivalent to { network_timing: true }
      *     now capture performance can be separately enabled within replay
      *     and as a standalone web vitals tracker
      *     people can have them enabled separately
