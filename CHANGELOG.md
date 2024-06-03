@@ -1,3 +1,7 @@
+## 1.136.5 - 2024-06-03
+
+- feat: add an explicit in-memory buffer (#1217)
+
 ## 1.136.4 - 2024-06-03
 
 - fix: do not start recording buffer without id (#1215)
