@@ -1,17 +1,14 @@
 import { Survey } from '../posthog-surveys-types'
 
 export class SurveyEventReceiver {
-    public events: string[]
     private eventRegistry: Map<string, string[]>
     private surveysActivatedKey = 'surveysActivated'
 
     constructor() {
-        this.events = []
         this.eventRegistry = new Map<string, string[]>()
     }
 
     register(surveys: Survey[]): void {
-        // let eventRegistry: Map<string, string[]>
         surveys.forEach((survey) => {
             if (survey.events && survey.events.length > 0) {
                 this.eventRegistry.set(survey.id, survey.events)
@@ -22,12 +19,10 @@ export class SurveyEventReceiver {
     deRegister(survey: Survey): void {
         if (this.eventRegistry.has(survey.id)) {
             this.eventRegistry.delete(survey.id)
-            this.removeSurvey(survey.id)
         }
     }
 
     on(event: string): void {
-        this.events.push(event)
         const activatedSurveys: string[] = []
         this.eventRegistry.forEach((events, surveyID) => {
             if (events.includes(event)) {
@@ -48,7 +43,7 @@ export class SurveyEventReceiver {
         if (sessionStorage.getItem(this.surveysActivatedKey)) {
             surveys = JSON.parse(<string>sessionStorage.getItem(this.surveysActivatedKey)) as unknown as string[]
         }
-        return surveys.concat(this.events)
+        return surveys
     }
 
     removeSurvey(surveyID: string): void {
