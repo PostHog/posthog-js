@@ -771,14 +771,7 @@ export class PostHog {
         let data: CaptureResult = {
             uuid: uuidv7(),
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}),
-        }
-
-        if (!options?._noHeatmaps) {
-            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
-            if (heatmapsBuffer) {
-                data.properties['$heatmap_data'] = heatmapsBuffer
-            }
+            properties: this._calculate_event_properties(event_name, properties || {}, options),
         }
 
         if (clientRateLimitContext) {
@@ -831,7 +824,11 @@ export class PostHog {
         this.on('eventCaptured', (data) => callback(data.event))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
+    _calculate_event_properties(
+        event_name: string,
+        event_properties: Properties,
+        options?: CaptureOptions | undefined
+    ): Properties {
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
         }
@@ -910,6 +907,13 @@ export class PostHog {
         )
 
         properties['$is_identified'] = this._isIdentified()
+
+        if (!options?._noHeatmaps) {
+            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
+            if (heatmapsBuffer) {
+                properties['$heatmap_data'] = heatmapsBuffer
+            }
+        }
 
         if (isArray(this.config.property_denylist)) {
             each(this.config.property_denylist, function (denylisted_prop) {
