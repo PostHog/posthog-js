@@ -1,3 +1,7 @@
+## 1.136.3 - 2024-06-03
+
+- fix: heatmaps with segment integration (#1218)
+
 ## 1.136.2 - 2024-05-30
 
 - fix: reference canvas not client (#1212)
