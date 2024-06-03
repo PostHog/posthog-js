@@ -19,7 +19,6 @@ export class WebVitalsAutocapture {
     private buffer: WebVitalsEventBuffer
 
     constructor(private readonly instance: PostHog) {
-        //todo what downloads the script?
         this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
         this.startIfEnabled()
     }
@@ -87,7 +86,7 @@ export class WebVitalsAutocapture {
     private _capture(metric: any) {
         const sessionIds = this.instance.sessionManager?.checkAndGetSessionAndWindowId(true)
         if (!sessionIds) {
-            logger.error(LOGGER_PREFIX + 'Could not determine session IDs. Dropping metrics')
+            logger.error(LOGGER_PREFIX + 'Could not read session ID. Dropping metrics!')
             return
         }
 
@@ -97,6 +96,7 @@ export class WebVitalsAutocapture {
             ...metric,
             $current_url: this._currentURL(),
             $session_id: sessionIds.sessionId,
+            $window_id: sessionIds.windowId,
             timestamp: Date.now(),
         })
     }
