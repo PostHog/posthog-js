@@ -827,7 +827,7 @@ export class PostHog {
     _calculate_event_properties(
         event_name: string,
         event_properties: Properties,
-        options?: CaptureOptions | undefined
+        options?: CaptureOptions
     ): Properties {
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
