@@ -2,10 +2,12 @@ import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
 import { SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
 import { isUrlMatchingRegex } from './utils/request-utils'
-import { window, document, assignableWindow } from './utils/globals'
+import { SurveyEventReceiver } from './utils/survey-event-receiver'
+import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
 import { loadScript } from './utils'
 import { logger } from './utils/logger'
+import { isUndefined } from './utils/type-utils'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -75,6 +77,7 @@ export class PostHogSurveys {
             const activeSurveys = surveys.filter((survey) => {
                 return !!(survey.start_date && !survey.end_date)
             })
+
             const conditionMatchedSurveys = activeSurveys.filter((survey) => {
                 if (!survey.conditions) {
                     return true
@@ -89,6 +92,20 @@ export class PostHogSurveys {
                     : true
                 return urlCheck && selectorCheck
             })
+
+            const eventBasedSurveys = conditionMatchedSurveys.filter((survey) => {
+                return survey.events && survey.events.length > 0
+            })
+
+            const eventsReceiver = new SurveyEventReceiver()
+            // get all the surveys that have been activated so far with user actions.
+            const activatedSurveys: string[] = eventsReceiver.getSurveys()
+            // start watching for surveys that are eventBased now.
+            eventsReceiver.register(eventBasedSurveys)
+            if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
+                this.instance._addCaptureHook(eventsReceiver.on)
+            }
+
             const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
                 if (!survey.linked_flag_key && !survey.targeting_flag_key && !survey.internal_targeting_flag_key) {
                     return true
@@ -100,14 +117,27 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
 
-                const hasEvents = survey.events && survey.events.length > 0
-                let internalTargetingFlagCheck = survey.internal_targeting_flag_key
+                const internalTargetingFlagCheck = survey.internal_targeting_flag_key
                     ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
                     : true
 
-                internalTargetingFlagCheck ||= hasEvents
+                const hasEvents = survey.events && survey.events.length > 0
+                const eventBasedTargetingFlagCheck = hasEvents ? activatedSurveys.includes(survey.id) : true
+                if (eventBasedTargetingFlagCheck) {
+                    // TODO: think more of surveys that can be shown repeatedly on the same event.
+                    // an example is someone clicking a button and we want to show a survey every time
+                    // not just once.
+                    // unRegister will remove the survey from being watched.
+                    // The following mechanisms prevent us from showing the survey twice to the same user.
+                    // 1.`seenSurvey_{id}` check in local storage in the surveys.tsx file.
+                    // 2. internalTargetingFlagCheck will be false if a user has already seen a survey
+                    // need to override it here if a user can see the same survey multiple times.
+                    eventsReceiver.deRegister(survey)
+                }
 
-                return linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck
+                return (
+                    linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck
+                )
             })
 
             return callback(targetingMatchedSurveys)

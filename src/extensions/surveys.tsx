@@ -20,12 +20,11 @@ import {
     getContrastingTextColor,
     SurveyContext,
     getDisplayOrderQuestions,
-    shouldHideSurveyInWaitPeriod,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { useState, useEffect, useRef, useContext, useMemo } from 'preact/hooks'
-import { isNumber, isUndefined } from '../utils/type-utils'
+import { isNumber } from '../utils/type-utils'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import {
     OpenTextQuestion,
@@ -83,44 +82,22 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
             }
-
-            if (survey.type === SurveyType.Popover) {
+            if (
+                survey.type === SurveyType.Popover &&
+                document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
+            ) {
                 const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
-                if (surveyWaitPeriodInDays && shouldHideSurveyInWaitPeriod(surveyWaitPeriodInDays)) {
-                    return
+                const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
+                if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
+                    const today = new Date()
+                    const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
+                    const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
+                    if (diffDaysFromToday < surveyWaitPeriodInDays) {
+                        return
+                    }
                 }
-                const hasEvents = survey.events && survey.events.length > 0
-                if (hasEvents && !isUndefined(posthog._addCaptureHook)) {
-                    const surveyEventRegisteredKey = `surveyEventRegistered_${survey.id}`
-                    // we use sessionStorage here because within the context of the current window,
-                    // we want to observe the events only once.
-                    // sessionStorage gets reset once the document reloads.
-                    if (sessionStorage.getItem(surveyEventRegisteredKey)) {
-                        return
-                    }
 
-                    sessionStorage.setItem(surveyEventRegisteredKey, 'true')
-                    posthog._addCaptureHook((eventName) => {
-                        // since the event can fire at any time, we want to ensure that the survey show is idempotent,
-                        // check that surveySeenKey hasn't been set again in local storage here.
-                        if (survey.events.indexOf(eventName) >= 0) {
-                            const shadow = createShadow(style(survey?.appearance), survey.id)
-                            Preact.render(
-                                <Surveys
-                                    key={`popover-survey-${Date.now()}`}
-                                    posthog={posthog}
-                                    initialDisplayState="survey"
-                                    survey={survey}
-                                />,
-                                shadow
-                            )
-                        }
-                    })
-                } else if (document.querySelectorAll("div[class^='PostHogSurvey']").length === 0) {
-                    const surveySeenKey = `seenSurvey_${survey.id}`
-                    if (localStorage.getItem(surveySeenKey)) {
-                        return
-                    }
+                if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
@@ -189,7 +166,6 @@ export function Surveys({
     style,
     initialDisplayState,
     previewQuestionIndex,
-    eventName,
 }: {
     survey: Survey
     posthog?: PostHog
@@ -197,7 +173,6 @@ export function Surveys({
     style?: React.CSSProperties
     initialDisplayState?: 'survey' | 'confirmation' | 'closed'
     previewQuestionIndex?: number
-    eventName?: string
 }) {
     const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>(
         initialDisplayState || 'survey'
@@ -234,6 +209,7 @@ export function Surveys({
         })
     }, [])
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
+
     return (
         <>
             <SurveyContext.Provider
@@ -245,9 +221,7 @@ export function Surveys({
                     ),
                 }}
             >
-                {displayState === 'survey' && (
-                    <Questions survey={survey} posthog={posthog} styleOverrides={style} eventName={eventName} />
-                )}
+                {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
                 {displayState === 'confirmation' && (
                     <ConfirmationMessage
                         confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
@@ -321,12 +295,10 @@ export function Questions({
     survey,
     posthog,
     styleOverrides,
-    eventName,
 }: {
     survey: Survey
     posthog?: PostHog
     styleOverrides?: React.CSSProperties
-    eventName?: string
 }) {
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
@@ -339,7 +311,7 @@ export function Questions({
     const onNextClick = (res: string | string[] | number | null, idx: number) => {
         const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
         if (idx === survey.questions.length - 1) {
-            return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, eventName, posthog)
+            return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
             setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
             setCurrentQuestion(idx + 1)
