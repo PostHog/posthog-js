@@ -129,8 +129,8 @@ export class SessionRecording {
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
-    private windowId: string | null = null
-    private sessionId: string | null = null
+    private windowId: string
+    private sessionId: string
     private _linkedFlag: string | FlagVariant | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
@@ -280,6 +280,11 @@ export class SessionRecording {
             logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
+
+        // we know there's a sessionManager, so don't need to start without a session id
+        const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
+        this.sessionId = sessionId
+        this.windowId = windowId
 
         this.buffer = this.clearBuffer()
 
@@ -554,7 +559,7 @@ export class SessionRecording {
         if (
             returningFromIdle ||
             ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-                (windowIdChanged || sessionIdChanged))
+                (windowIdChanged || sessionIdChanged || isUndefined(this._fullSnapshotTimer)))
         ) {
             this._tryTakeFullSnapshot()
         }
@@ -644,11 +649,6 @@ export class SessionRecording {
                     this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
             })
-
-        // rrweb takes a snapshot on initialization,
-        // we want to take one in five minutes
-        // if nothing else happens to reset the timer
-        this._scheduleFullSnapshot()
 
         const activePlugins = this._gatherRRWebPlugins()
         this.stopRrweb = this.rrwebRecord({
