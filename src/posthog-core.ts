@@ -776,19 +776,7 @@ export class PostHog {
         let data: CaptureResult = {
             uuid: uuidv7(),
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}),
-        }
-
-        if (!options?._noPassengerEvents) {
-            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
-            if (heatmapsBuffer) {
-                data.properties['$heatmap_data'] = heatmapsBuffer
-            }
-
-            const webVitalsBuffer = this.webVitalsAutocapture?.getAndClearBuffer()
-            if (webVitalsBuffer) {
-                data.properties['$web_vitals_data'] = webVitalsBuffer
-            }
+            properties: this._calculate_event_properties(event_name, properties || {}, options),
         }
 
         if (clientRateLimitContext) {
@@ -841,7 +829,11 @@ export class PostHog {
         this.on('eventCaptured', (data) => callback(data.event))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
+    _calculate_event_properties(
+        event_name: string,
+        event_properties: Properties,
+        options?: CaptureOptions
+    ): Properties {
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
         }
@@ -920,6 +912,18 @@ export class PostHog {
         )
 
         properties['$is_identified'] = this._isIdentified()
+
+        if (!options?._noPassengerEvents) {
+            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
+            if (heatmapsBuffer) {
+                properties['$heatmap_data'] = heatmapsBuffer
+            }
+
+            const webVitalsBuffer = this.webVitalsAutocapture?.getAndClearBuffer()
+            if (webVitalsBuffer) {
+                properties['$web_vitals_data'] = webVitalsBuffer
+            }
+        }
 
         if (isArray(this.config.property_denylist)) {
             each(this.config.property_denylist, function (denylisted_prop) {
