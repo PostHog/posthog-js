@@ -534,7 +534,6 @@ export const createShadow = (styleSheet: string, surveyId: string) => {
 export const sendSurveyEvent = (
     responses: Record<string, string | number | string[] | null> = {},
     survey: Survey,
-    eventName: string | undefined,
     posthog?: PostHog
 ) => {
     if (!posthog) return
@@ -542,7 +541,6 @@ export const sendSurveyEvent = (
     posthog.capture('survey sent', {
         $survey_name: survey.name,
         $survey_id: survey.id,
-        $survey_event: eventName,
         $survey_questions: survey.questions.map((question) => question.question),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
