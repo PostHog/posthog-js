@@ -48,7 +48,7 @@
         "@rollup/plugin-terser": "^0.4.4",
         "@rollup/plugin-typescript": "^11.1.6",
         "@rrweb/types": "2.0.0-alpha.13",
-        "@sentry/types": "7.37.2",
+        "@sentry/types": "8.0.0",
         "@testing-library/dom": "^9.3.0",
         "@types/eslint": "^8.44.6",
         "@types/jest": "^29.5.1",

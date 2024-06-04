@@ -1,5 +1,5 @@
 <script
-  src="https://browser.sentry-cdn.com/5.25.0/bundle.min.js"
+  src="https://browser.sentry-cdn.com/8.0.0/bundle.min.js"
   integrity="sha384-2p7fXoWSRPG49ZgmmJlTEI/01BY1LgxCNFQFiWpImAERmS/bROOQm+cJMdq/kmWS"
   crossorigin="anonymous"
 ></script>
@@ -13,7 +13,7 @@
     Sentry.init({
         dsn: 'https://9946c76f89aa406da74bd05f66030c37@o344752.ingest.sentry.io/5455536',
         integrations: [
-            new posthog.SentryIntegration(posthog, 'posthog', 5455536)
+            posthog.sentryIntegration(posthog, 'posthog', 5455536)
         ]
     });
 </script>
