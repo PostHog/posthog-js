@@ -99,6 +99,15 @@ interface SnapshotBuffer {
     add(properties: Properties): void
 }
 
+/**
+ * local storage and session storage are limited to 5MB per origin (browsers vary but chrome is 5mb)
+ * easy for a full snapshot to be this larg on some sites so we would break even other use of local storage by the SDK
+ *
+ * indexdb can apparently be slow when writing individual items but would work as it has much higher storage limits
+ *
+ *
+ */
+
 class InMemoryBuffer implements SnapshotBuffer {
     size: number
     data: any[]
@@ -546,6 +555,8 @@ export class SessionRecording {
                     timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
                     threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
                 })
+                // don't take full snapshots while idle
+                clearTimeout(this._fullSnapshotTimer)
             }
         }
 
