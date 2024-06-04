@@ -1,3 +1,7 @@
+## 1.136.7 - 2024-06-04
+
+- fix: no full snapshot while idle (#1222)
+
 ## 1.136.6 - 2024-06-04
 
 - chore(surveys): refactor survey popup (vol. 1) (#1214)
