@@ -254,6 +254,7 @@ describe('SessionRecording', () => {
                     maskTextSelector: undefined,
                     recordCrossOriginIframes: false,
                     slimDOMOptions: {},
+                    checkoutEveryNms: 600_000,
                 },
             })
         })
@@ -590,6 +591,7 @@ describe('SessionRecording', () => {
                 plugins: [],
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
+                checkoutEveryNms: 600_000,
             })
         })
 
@@ -896,20 +898,28 @@ describe('SessionRecording', () => {
                 expect(assignableWindow.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
             })
 
-            it('does not send a full snapshot if there is not a new session or window id', () => {
+            it('does not send a full snapshot if there is not a new session or window id and the session has a snapshot', () => {
                 assignableWindow.rrweb.record.takeFullSnapshot.mockClear()
-
-                // we always take a full snapshot when there hasn't been one
-                // and use _fullSnapshotTimer to track that
-                // we want to avoid that behavior here, so we set it to any value
-                sessionRecording['_fullSnapshotTimer'] = 1
 
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
                 windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
                 sessionManager.resetSessionId()
+                sessionRecording['lastSessionFullSnapshot'] = sessionId
 
                 _emit(createIncrementalSnapshot())
                 expect(assignableWindow.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
+            })
+
+            it('does not send a full snapshot if the session has no full snapshot', () => {
+                assignableWindow.rrweb.record.takeFullSnapshot.mockClear()
+
+                sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
+                windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
+                sessionManager.resetSessionId()
+                sessionRecording['lastSessionFullSnapshot'] = null
+
+                _emit(createIncrementalSnapshot())
+                expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
             })
         })
 
@@ -1293,22 +1303,23 @@ describe('SessionRecording', () => {
                 windowId: expect.any(String),
             })
 
-            // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
-
             const fourthSnapshot = emitActiveEvent(fourthActivityTimestamp)
             expect(_addCustomEvent).toHaveBeenCalledWith('sessionNoLongerIdle', {
                 reason: 'user activity',
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
             })
             expect(sessionRecording['_lastActivityTimestamp']).toEqual(fourthActivityTimestamp)
-            expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(2)
+            // TRICKY: this used to trigger a manual snapshot but now we delegate to rrweb
+            // since rrweb isn't really running in these tests we can assert there is still only 1 manual snapshot calal
+            expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(1)
 
             // the fourth snapshot should not trigger a flush because the session id has not changed...
             expect(sessionRecording['buffer']).toEqual({
-                // as we return from idle we will capture a full snapshot _before_ the fourth snapshot
-                data: [createFullSnapshot(), firstSnapshotEvent, secondSnapshot, createFullSnapshot(), fourthSnapshot],
+                // as we return from idle we would in reality capture a full snapshot
+                // _before_ the fourth snapshot but rrweb isn't running here so we don'ts
+                data: [createFullSnapshot(), firstSnapshotEvent, secondSnapshot, fourthSnapshot],
                 sessionId: firstSessionId,
-                size: 244,
+                size: 224,
                 windowId: expect.any(String),
             })
 
@@ -1632,27 +1643,6 @@ describe('SessionRecording', () => {
 
             expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
             expect(sessionRecording['rrwebRecord']).not.toBeUndefined()
-        })
-    })
-
-    describe('scheduled full snapshots', () => {
-        it('starts out unscheduled', () => {
-            expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
-        })
-
-        it('does not schedule a snapshot on start', () => {
-            sessionRecording.startIfEnabledOrStop()
-            expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
-        })
-
-        it('schedules a snapshot, when we take a full snapshot', () => {
-            sessionRecording.startIfEnabledOrStop()
-            const startTimer = sessionRecording['_fullSnapshotTimer']
-
-            _emit(createFullSnapshot())
-
-            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
-            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(startTimer)
         })
     })
 
