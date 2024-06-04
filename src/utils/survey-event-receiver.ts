@@ -24,18 +24,18 @@ export class SurveyEventReceiver {
 
     on(event: string): void {
         const activatedSurveys: string[] = []
+
         this.eventRegistry.forEach((events, surveyID) => {
             if (events.includes(event)) {
                 activatedSurveys.push(surveyID)
             }
         })
 
-        let surveys: string[] = []
-        if (sessionStorage.getItem(this.surveysActivatedKey)) {
-            surveys = JSON.parse(<string>sessionStorage.getItem(this.surveysActivatedKey)) as unknown as string[]
-        }
-        surveys.concat(activatedSurveys)
-        sessionStorage.setItem(this.surveysActivatedKey, JSON.stringify(surveys))
+        const existingActivatedSurveys = sessionStorage.getItem(this.surveysActivatedKey)
+        const existingSurveys: string[] = existingActivatedSurveys ? JSON.parse(existingActivatedSurveys) : []
+
+        const updatedSurveys = existingSurveys.concat(activatedSurveys)
+        sessionStorage.setItem(this.surveysActivatedKey, JSON.stringify(updatedSurveys))
     }
 
     getSurveys(): string[] {
