@@ -20,7 +20,7 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
-import { timestamp, loadScript } from '../../utils'
+import { loadScript, timestamp } from '../../utils'
 
 import {
     isBoolean,
@@ -33,7 +33,7 @@ import {
     isUndefined,
 } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { document, assignableWindow, window } from '../../utils/globals'
+import { assignableWindow, document, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 
@@ -42,8 +42,10 @@ const BASE_ENDPOINT = '/s/'
 const FIVE_MINUTES = 1000 * 60 * 5
 const TWO_SECONDS = 2000
 export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = FIVE_MINUTES
+const TEN_MINUTES_IN_MILLISECONDS = FIVE_MINUTES * 2
+
 export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
-export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
+export const RECORDING_BUFFER_TIMEOUT = TWO_SECONDS
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 
 // NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
@@ -158,11 +160,14 @@ export class SessionRecording {
     private sessionId: string
     private _linkedFlag: string | FlagVariant | null = null
 
-    private _fullSnapshotTimer?: ReturnType<typeof setInterval>
-
     // if pageview capture is disabled
     // then we can manually track href changes
     private _lastHref?: string
+
+    /*
+     we want to track whether a session has seen a full snapshot
+    */
+    private lastSessionFullSnapshot: string | null = null
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -546,12 +551,9 @@ export class SessionRecording {
                     timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
                     threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
                 })
-                // don't take full snapshots while idle
-                clearTimeout(this._fullSnapshotTimer)
             }
         }
 
-        let returningFromIdle = false
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
@@ -561,7 +563,6 @@ export class SessionRecording {
                     reason: 'user activity',
                     type: event.type,
                 })
-                returningFromIdle = true
             }
         }
 
@@ -582,11 +583,10 @@ export class SessionRecording {
         this.sessionId = sessionId
 
         if (
-            returningFromIdle ||
-            ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-                (windowIdChanged || sessionIdChanged || isUndefined(this._fullSnapshotTimer)))
+            [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
+            (windowIdChanged || sessionIdChanged || isNull(this.lastSessionFullSnapshot))
         ) {
-            this._tryTakeFullSnapshot()
+            this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
         }
     }
 
@@ -613,11 +613,6 @@ export class SessionRecording {
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
         return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.addCustomEvent(tag, payload)))
     }
-
-    private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
-    }
-
     private _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
         const sessionRecordingOptions: recordOptions<eventWithTime> = {
@@ -636,6 +631,7 @@ export class SessionRecording {
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            checkoutEveryNms: TEN_MINUTES_IN_MILLISECONDS,
         }
 
         // only allows user to set our allow-listed options
@@ -696,7 +692,6 @@ export class SessionRecording {
                         return
                     }
                     this._tryAddCustomEvent('$pageview', { href })
-                    this._tryTakeFullSnapshot()
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)
@@ -715,16 +710,6 @@ export class SessionRecording {
         this._tryAddCustomEvent('$posthog_config', {
             config: this.instance.config,
         })
-    }
-
-    private _scheduleFullSnapshot(): void {
-        if (this._fullSnapshotTimer) {
-            clearInterval(this._fullSnapshotTimer)
-        }
-
-        this._fullSnapshotTimer = setInterval(() => {
-            this._tryTakeFullSnapshot()
-        }, FIVE_MINUTES) // 5 minutes
     }
 
     private _gatherRRWebPlugins() {
@@ -769,11 +754,6 @@ export class SessionRecording {
             this._pageViewFallBack()
         }
 
-        if (rawEvent.type === EventType.FullSnapshot) {
-            // we're processing a full snapshot, so we should reset the timer
-            this._scheduleFullSnapshot()
-        }
-
         const throttledEvent = this.mutationRateLimiter
             ? this.mutationRateLimiter.throttleMutations(rawEvent)
             : rawEvent
@@ -786,11 +766,18 @@ export class SessionRecording {
         const event = truncateLargeConsoleLogs(throttledEvent)
         const size = JSON.stringify(event).length
 
+        // we need to ensure we rotate the session id
+        // before recording that the session has seen a full snapshot
         this._updateWindowAndSessionIds(event)
 
-        // allow custom events even when idle
-        if (this.isIdle && event.type !== EventType.Custom) {
-            // When in an idle state we keep recording, but don't capture the events
+        if (rawEvent.type === EventType.FullSnapshot) {
+            this.lastSessionFullSnapshot = this.sessionId
+        }
+
+        // When in an idle state we keep recording, but don't capture the events
+        // however, we allow custom events which we use for debugging
+        // and full snapshots which upset rrweb when missing even when idle
+        if (this.isIdle && ![EventType.Custom, EventType.FullSnapshot].includes(event.type)) {
             return
         }
 
