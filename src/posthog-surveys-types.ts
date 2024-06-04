@@ -49,7 +49,7 @@ export type SurveyQuestionDescriptionContentType = 'html' | 'text'
 interface SurveyQuestionBase {
     question: string
     description?: string | null
-    descriptionContentType?: 'html' | 'text'
+    descriptionContentType?: SurveyQuestionDescriptionContentType
     optional?: boolean
     buttonText?: string
     questionIndex?: number
