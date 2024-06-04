@@ -490,8 +490,9 @@ describe('surveys', () => {
 
         it('should retain original index of question if shuffleQuestions is true', () => {
             const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
+            console.log('************************************', shuffledQuestions)
             for (let i = 0; i < shuffledQuestions.length; i++) {
-                const originalQuestionIndex = shuffledQuestions[i].questionIndex
+                const originalQuestionIndex = shuffledQuestions[i].originalQuestionIndex
                 expect(shuffledQuestions[i].question).toEqual(
                     surveyWithShufflingQuestions.questions[originalQuestionIndex].question
                 )
