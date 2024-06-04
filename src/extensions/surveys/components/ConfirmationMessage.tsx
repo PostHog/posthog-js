@@ -5,16 +5,16 @@ import { defaultSurveyAppearance, getContrastingTextColor, renderChildrenAsTextO
 import { h } from 'preact'
 
 export function ConfirmationMessage({
-    confirmationHeader,
-    confirmationDescription,
-    confirmationDescriptionContentType,
+    header,
+    description,
+    contentType,
     appearance,
     onClose,
     styleOverrides,
 }: {
-    confirmationHeader: string
-    confirmationDescription: string
-    confirmationDescriptionContentType?: SurveyQuestionDescriptionContentType
+    header: string
+    description: string
+    contentType?: SurveyQuestionDescriptionContentType
     appearance: SurveyAppearance
     onClose: () => void
     styleOverrides?: React.CSSProperties
@@ -27,13 +27,13 @@ export function ConfirmationMessage({
                 <div className="thank-you-message-container">
                     <Cancel onClick={() => onClose()} />
                     <h3 className="thank-you-message-header" style={{ color: textColor }}>
-                        {confirmationHeader}
+                        {header}
                     </h3>
-                    {confirmationDescription &&
+                    {description &&
                         renderChildrenAsTextOrHtml({
                             component: h('div', { className: 'thank-you-message-body' }),
-                            children: confirmationDescription,
-                            renderAsHtml: confirmationDescriptionContentType !== 'text',
+                            children: description,
+                            renderAsHtml: contentType !== 'text',
                             style: { color: textColor },
                         })}
                     <BottomSection

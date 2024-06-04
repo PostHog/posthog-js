@@ -52,7 +52,7 @@ interface SurveyQuestionBase {
     descriptionContentType?: SurveyQuestionDescriptionContentType
     optional?: boolean
     buttonText?: string
-    questionIndex?: number
+    originalQuestionIndex: number
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {

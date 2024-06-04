@@ -166,6 +166,7 @@ describe('SessionRecording', () => {
             sessionManager: sessionManager,
             requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: jest.fn(),
+            consent: { isOptedOut: () => false },
         } as unknown as PostHog
 
         // defaults
@@ -273,7 +274,11 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScript).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
-            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
 
             const metaSnapshot = createMetaSnapshot({ data: { href: 'https://example.com' } })
             _emit(metaSnapshot)
@@ -289,7 +294,11 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScript).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
-            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
 
             const fullSnapshot = createFullSnapshot()
             _emit(fullSnapshot)
@@ -305,7 +314,11 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScript).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
-            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
 
             const incrementalSnapshot = createIncrementalSnapshot({ data: { source: 1 } })
             _emit(incrementalSnapshot)
@@ -321,7 +334,11 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScript).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
-            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
 
             const incrementalSnapshot = createIncrementalSnapshot({ data: { source: 1 } })
             _emit(incrementalSnapshot)
@@ -334,7 +351,7 @@ describe('SessionRecording', () => {
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: undefined }))
             expect(sessionRecording['status']).toBe('disabled')
-            expect(sessionRecording['buffer']?.data.length).toEqual(undefined)
+            expect(sessionRecording['buffer'].data.length).toEqual(0)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
@@ -607,7 +624,7 @@ describe('SessionRecording', () => {
 
             // access private method 🤯so we don't need to wait for the timer
             sessionRecording['_flushBuffer']()
-            expect(sessionRecording['buffer']?.data.length).toEqual(undefined)
+            expect(sessionRecording['buffer'].data.length).toEqual(0)
 
             expect(posthog.capture).toHaveBeenCalledTimes(1)
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -683,7 +700,7 @@ describe('SessionRecording', () => {
             // Another big event means the old data will be flushed
             _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
             expect(posthog.capture).toHaveBeenCalled()
-            expect(sessionRecording['buffer']?.data.length).toEqual(1) // The new event
+            expect(sessionRecording['buffer'].data.length).toEqual(1) // The new event
             expect(sessionRecording['buffer']).toMatchObject({ size: 755017 })
         })
 
@@ -695,7 +712,7 @@ describe('SessionRecording', () => {
 
             _emit(createIncrementalSnapshot({ data: { source: 1, payload: bigData } }))
             expect(sessionRecording['buffer']).toMatchObject({ size: 755037 }) // the size of the big data event
-            expect(sessionRecording['buffer']?.data.length).toEqual(2) // full snapshot and a big event
+            expect(sessionRecording['buffer'].data.length).toEqual(2) // full snapshot and a big event
 
             _emit(createIncrementalSnapshot({ data: { source: 1, payload: 1 } }))
             _emit(createIncrementalSnapshot({ data: { source: 1, payload: 2 } }))
@@ -708,7 +725,7 @@ describe('SessionRecording', () => {
             // but the recording is still buffering
             expect(sessionRecording['status']).toBe('buffering')
             expect(posthog.capture).not.toHaveBeenCalled()
-            expect(sessionRecording['buffer']?.data.length).toEqual(5) // + the new event
+            expect(sessionRecording['buffer'].data.length).toEqual(5) // + the new event
             expect(sessionRecording['buffer']).toMatchObject({ size: 755037 + 755101 }) // the size of the big data event
         })
 
@@ -716,13 +733,13 @@ describe('SessionRecording', () => {
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
 
-            expect(sessionRecording['buffer']?.sessionId).toEqual(null)
+            expect(sessionRecording['buffer'].sessionId).toEqual(sessionId)
 
             _emit(createIncrementalSnapshot({ emit: 1 }))
 
             expect(posthog.capture).not.toHaveBeenCalled()
-            expect(sessionRecording['buffer']?.sessionId).not.toEqual(null)
-            expect(sessionRecording['buffer']?.data).toEqual([
+            expect(sessionRecording['buffer'].sessionId).not.toEqual(null)
+            expect(sessionRecording['buffer'].data).toEqual([
                 createFullSnapshot(),
                 { data: { source: 1 }, emit: 1, type: 3 },
             ])
@@ -881,6 +898,11 @@ describe('SessionRecording', () => {
 
             it('does not send a full snapshot if there is not a new session or window id', () => {
                 assignableWindow.rrweb.record.takeFullSnapshot.mockClear()
+
+                // we always take a full snapshot when there hasn't been one
+                // and use _fullSnapshotTimer to track that
+                // we want to avoid that behavior here, so we set it to any value
+                sessionRecording['_fullSnapshotTimer'] = 1
 
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
                 windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
@@ -1152,9 +1174,9 @@ describe('SessionRecording', () => {
             // the buffer starts out empty
             expect(sessionRecording['buffer']).toEqual({
                 data: [],
-                sessionId: null,
+                sessionId: sessionId,
                 size: 0,
-                windowId: null,
+                windowId: 'windowId',
             })
 
             // options will have been emitted
@@ -1163,22 +1185,32 @@ describe('SessionRecording', () => {
         })
 
         it('does not emit when idle', () => {
+            const emptyBuffer = {
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            }
+
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
-            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            expect(sessionRecording['buffer']).toEqual(emptyBuffer)
             // a plugin event doesn't count as returning from idle
             sessionRecording.onRRwebEmit(createPluginSnapshot({}) as unknown as eventWithTime)
 
             // buffer is still empty
-            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            expect(sessionRecording['buffer']).toEqual(emptyBuffer)
         })
 
         it('emits custom events even when idle', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
-            expect(sessionRecording['buffer']).toEqual(EMPTY_BUFFER)
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
 
             sessionRecording.onRRwebEmit(createCustomSnapshot({}) as unknown as eventWithTime)
 
@@ -1193,9 +1225,9 @@ describe('SessionRecording', () => {
                         type: 5,
                     },
                 ],
-                sessionId: null,
+                sessionId: sessionId,
                 size: 47,
-                windowId: null,
+                windowId: 'windowId',
             })
         })
 
@@ -1492,7 +1524,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['sessionDuration']).toBe(100)
             expect(sessionRecording['minimumDuration']).toBe(1500)
 
-            expect(sessionRecording['buffer']?.data.length).toBe(2) // full snapshot and the emitted incremental event
+            expect(sessionRecording['buffer'].data.length).toBe(2) // full snapshot and the emitted incremental event
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 
@@ -1517,7 +1549,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['sessionDuration']).toBe(-1000)
             expect(sessionRecording['minimumDuration']).toBe(1500)
 
-            expect(sessionRecording['buffer']?.data.length).toBe(2) // full snapshot and the emitted incremental event
+            expect(sessionRecording['buffer'].data.length).toBe(2) // full snapshot and the emitted incremental event
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 
@@ -1537,7 +1569,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['sessionDuration']).toBe(100)
             expect(sessionRecording['minimumDuration']).toBe(1500)
 
-            expect(sessionRecording['buffer']?.data.length).toBe(2) // full snapshot and the emitted incremental event
+            expect(sessionRecording['buffer'].data.length).toBe(2) // full snapshot and the emitted incremental event
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 
@@ -1545,21 +1577,21 @@ describe('SessionRecording', () => {
 
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1501 }))
 
-            expect(sessionRecording['buffer']?.data.length).toBe(3) // full snapshot and two emitted incremental events
+            expect(sessionRecording['buffer'].data.length).toBe(3) // full snapshot and two emitted incremental events
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalled()
-            expect(sessionRecording['buffer']?.data.length).toBe(undefined)
+            expect(sessionRecording['buffer'].data.length).toBe(0)
             expect(sessionRecording['sessionDuration']).toBe(null)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 1502 }))
-            expect(sessionRecording['buffer']?.data.length).toBe(1)
+            expect(sessionRecording['buffer'].data.length).toBe(1)
             expect(sessionRecording['sessionDuration']).toBe(1502)
             // call the private method to avoid waiting for the timer
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalled()
-            expect(sessionRecording['buffer']?.data.length).toBe(undefined)
+            expect(sessionRecording['buffer'].data.length).toBe(0)
         })
     })
 
@@ -1608,12 +1640,12 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
         })
 
-        it('schedules a snapshot on start', () => {
+        it('does not schedule a snapshot on start', () => {
             sessionRecording.startIfEnabledOrStop()
-            expect(sessionRecording['_fullSnapshotTimer']).not.toBe(undefined)
+            expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
         })
 
-        it('reschedules a snapshot, when we take a full snapshot', () => {
+        it('schedules a snapshot, when we take a full snapshot', () => {
             sessionRecording.startIfEnabledOrStop()
             const startTimer = sessionRecording['_fullSnapshotTimer']
 

@@ -3,10 +3,6 @@ import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { uuidv7 } from '../uuidv7'
 
-jest.mock('../gdpr-utils', () => ({
-    ...jest.requireActual('../gdpr-utils'),
-    addOptOutCheck: (fn) => fn,
-}))
 jest.mock('../decide')
 
 given('lib', () => {
