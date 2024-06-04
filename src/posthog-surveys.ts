@@ -72,7 +72,7 @@ export class PostHogSurveys {
                     const surveys = response.json.surveys || []
 
                     const eventBasedSurveys = surveys.filter(
-                        (survey: Survey) => survey.events && survey.events.length > 0
+                        (survey: Survey) => survey.conditions?.events && survey.conditions?.events.length > 0
                     )
 
                     if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
