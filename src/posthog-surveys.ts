@@ -131,7 +131,7 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
                     : true
 
-                const hasEvents = survey.events && survey.events.length > 0
+                const hasEvents = survey.conditions?.events && survey.conditions?.events.length > 0
                 const eventBasedTargetingFlagCheck = hasEvents ? activatedSurveys?.includes(survey.id) : true
 
                 return (
