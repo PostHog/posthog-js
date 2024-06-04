@@ -1,10 +1,13 @@
 import { Survey } from '../posthog-surveys-types'
+import { PostHogPersistence } from '../posthog-persistence'
+import { SURVEYS_ACTIVATED } from '../constants'
 
 export class SurveyEventReceiver {
-    private eventRegistry: Map<string, string[]>
-    private surveysActivatedKey = 'surveysActivated'
+    private readonly eventRegistry: Map<string, string[]>
+    private readonly persistence?: PostHogPersistence
 
-    constructor() {
+    constructor(persistence?: PostHogPersistence) {
+        this.persistence = persistence
         this.eventRegistry = new Map<string, string[]>()
     }
 
@@ -16,12 +19,6 @@ export class SurveyEventReceiver {
         })
     }
 
-    deRegister(survey: Survey): void {
-        if (this.eventRegistry.has(survey.id)) {
-            this.eventRegistry.delete(survey.id)
-        }
-    }
-
     on(event: string): void {
         const activatedSurveys: string[] = []
 
@@ -31,30 +28,21 @@ export class SurveyEventReceiver {
             }
         })
 
-        const existingActivatedSurveys = sessionStorage.getItem(this.surveysActivatedKey)
-        const existingSurveys: string[] = existingActivatedSurveys ? JSON.parse(existingActivatedSurveys) : []
-
+        const existingActivatedSurveys = this.persistence?.props[SURVEYS_ACTIVATED]
+        const existingSurveys: string[] = existingActivatedSurveys ? existingActivatedSurveys : []
         const updatedSurveys = existingSurveys.concat(activatedSurveys)
-        sessionStorage.setItem(this.surveysActivatedKey, JSON.stringify(updatedSurveys))
+        this._saveSurveysToStorage(updatedSurveys)
     }
 
     getSurveys(): string[] {
-        let surveys: string[] = []
-        if (sessionStorage.getItem(this.surveysActivatedKey)) {
-            surveys = JSON.parse(<string>sessionStorage.getItem(this.surveysActivatedKey)) as unknown as string[]
-        }
-        return surveys
+        const existingActivatedSurveys = this.persistence?.props[SURVEYS_ACTIVATED]
+        return existingActivatedSurveys ? existingActivatedSurveys : []
     }
 
-    removeSurvey(surveyID: string): void {
-        let surveys: string[] = []
-        if (sessionStorage.getItem(this.surveysActivatedKey)) {
-            surveys = JSON.parse(<string>sessionStorage.getItem(this.surveysActivatedKey)) as unknown as string[]
-        }
-
-        if (surveys.indexOf(surveyID) >= 0) {
-            surveys.splice(surveys.indexOf(surveyID), 1)
-            sessionStorage.setItem(this.surveysActivatedKey, JSON.stringify(surveys))
-        }
+    private _saveSurveysToStorage(surveys: string[]): void {
+        // we use a new Set here to remove duplicates.
+        this.persistence?.register({
+            [SURVEYS_ACTIVATED]: [...new Set(surveys)],
+        })
     }
 }
