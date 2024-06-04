@@ -46,7 +46,7 @@ import {
     SnippetArrayItem,
     ToolbarParams,
 } from './types'
-import { SentryIntegration } from './extensions/sentry-integration'
+import { SentryIntegration, SentryIntegrationOptions, sentryIntegration } from './extensions/sentry-integration'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
 import { PostHogSurveys } from './posthog-surveys'
@@ -260,6 +260,7 @@ export class PostHog {
     analyticsDefaultEndpoint: string
 
     SentryIntegration: typeof SentryIntegration
+    sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     private _debugEventEmitter = new SimpleEventEmitter()
 
@@ -273,6 +274,7 @@ export class PostHog {
         this.config = defaultConfig()
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
+        this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
