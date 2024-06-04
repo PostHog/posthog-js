@@ -1,7 +1,8 @@
-import { SurveyContext, defaultSurveyAppearance } from '../surveys-utils'
+import { SurveyContext, defaultSurveyAppearance, renderChildrenAsTextOrHtml } from '../surveys-utils'
 import { cancelSVG } from '../icons'
 import { useContext } from 'preact/hooks'
 import { SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
+import { h } from 'preact'
 
 export function QuestionHeader({
     question,
@@ -17,16 +18,12 @@ export function QuestionHeader({
     return (
         <div style={{ backgroundColor: backgroundColor || defaultSurveyAppearance.backgroundColor }}>
             <div className="survey-question">{question}</div>
-            {description ? (
-                descriptionContentType === 'text' ? (
-                    <div className="description">{description}</div>
-                ) : (
-                    // Treat as HTML if content type is 'html' or not specified,
-                    // this will let us backfill the content type for existing surveys
-                    // and not break popup surveys in production
-                    <div className="description" dangerouslySetInnerHTML={{ __html: description }} />
-                )
-            ) : null}
+            {description &&
+                renderChildrenAsTextOrHtml({
+                    component: h('div', { className: 'description' }),
+                    children: description,
+                    renderAsHtml: descriptionContentType !== 'text',
+                })}
         </div>
     )
 }

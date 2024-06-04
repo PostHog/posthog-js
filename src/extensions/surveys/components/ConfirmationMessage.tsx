@@ -1,7 +1,8 @@
 import { BottomSection } from './BottomSection'
 import { Cancel } from './QuestionHeader'
 import { SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
-import { defaultSurveyAppearance, getContrastingTextColor } from '../surveys-utils'
+import { defaultSurveyAppearance, getContrastingTextColor, renderChildrenAsTextOrHtml } from '../surveys-utils'
+import { h } from 'preact'
 
 export function ConfirmationMessage({
     confirmationHeader,
@@ -28,22 +29,13 @@ export function ConfirmationMessage({
                     <h3 className="thank-you-message-header" style={{ color: textColor }}>
                         {confirmationHeader}
                     </h3>
-                    {confirmationDescription ? (
-                        confirmationDescriptionContentType === 'text' ? (
-                            <div style={{ color: textColor }} className="thank-you-message-body">
-                                {confirmationDescription}
-                            </div>
-                        ) : (
-                            // Treat as HTML if content type is 'html' or not specified,
-                            // this will let us backfill the content type for existing surveys
-                            // and not break popup surveys in production
-                            <div
-                                style={{ color: textColor }}
-                                className="thank-you-message-body"
-                                dangerouslySetInnerHTML={{ __html: confirmationDescription }}
-                            />
-                        )
-                    ) : null}
+                    {confirmationDescription &&
+                        renderChildrenAsTextOrHtml({
+                            component: h('div', { className: 'thank-you-message-body' }),
+                            children: confirmationDescription,
+                            renderAsHtml: confirmationDescriptionContentType !== 'text',
+                            style: { color: textColor },
+                        })}
                     <BottomSection
                         text={'Close'}
                         submitDisabled={false}
