@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
-import { SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
+import { Survey, SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
@@ -19,9 +19,13 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
 export class PostHogSurveys {
     instance: PostHog
     private _decideServerResponse?: boolean
+    private _surveyEventReceiver?: SurveyEventReceiver
 
     constructor(instance: PostHog) {
         this.instance = instance
+        // we set this to undefined here because we need the persistence storage for this type
+        // but that's not initialized until loadIfEnabled is called.
+        this._surveyEventReceiver = undefined
     }
 
     afterDecideResponse(response: DecideResponse) {
@@ -31,7 +35,9 @@ export class PostHogSurveys {
 
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
-
+        if (this._surveyEventReceiver == null) {
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+        }
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
                 if (err) {
@@ -49,6 +55,7 @@ export class PostHogSurveys {
         if (this.instance.config.disable_surveys) {
             return callback([])
         }
+
         const existingSurveys = this.instance.get_property(SURVEYS)
         if (!existingSurveys || forceReload) {
             this.instance._send_request({
@@ -63,6 +70,19 @@ export class PostHogSurveys {
                         return callback([])
                     }
                     const surveys = response.json.surveys || []
+
+                    const eventBasedSurveys = surveys.filter(
+                        (survey: Survey) => survey.events && survey.events.length > 0
+                    )
+
+                    if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
+                        this._surveyEventReceiver?.register(eventBasedSurveys)
+                        const onEventName = (eventName: string) => {
+                            this._surveyEventReceiver?.on(eventName)
+                        }
+                        this.instance._addCaptureHook(onEventName)
+                    }
+
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
                     return callback(surveys)
                 },
@@ -93,18 +113,8 @@ export class PostHogSurveys {
                 return urlCheck && selectorCheck
             })
 
-            const eventBasedSurveys = conditionMatchedSurveys.filter((survey) => {
-                return survey.events && survey.events.length > 0
-            })
-
-            const eventsReceiver = new SurveyEventReceiver()
             // get all the surveys that have been activated so far with user actions.
-            const activatedSurveys: string[] = eventsReceiver.getSurveys()
-            // start watching for surveys that are eventBased now.
-            eventsReceiver.register(eventBasedSurveys)
-            if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
-                this.instance._addCaptureHook(eventsReceiver.on)
-            }
+            const activatedSurveys: string[] | undefined = this._surveyEventReceiver?.getSurveys()
 
             const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
                 if (!survey.linked_flag_key && !survey.targeting_flag_key && !survey.internal_targeting_flag_key) {
@@ -122,18 +132,7 @@ export class PostHogSurveys {
                     : true
 
                 const hasEvents = survey.events && survey.events.length > 0
-                const eventBasedTargetingFlagCheck = hasEvents ? activatedSurveys.includes(survey.id) : true
-                if (eventBasedTargetingFlagCheck) {
-                    // TODO: think more of surveys that can be shown repeatedly on the same event.
-                    // an example is someone clicking a button and we want to show a survey every time
-                    // not just once.
-                    // unRegister will remove the survey from being watched.
-                    // The following mechanisms prevent us from showing the survey twice to the same user.
-                    // 1.`seenSurvey_{id}` check in local storage in the surveys.tsx file.
-                    // 2. internalTargetingFlagCheck will be false if a user has already seen a survey
-                    // need to override it here if a user can see the same survey multiple times.
-                    eventsReceiver.deRegister(survey)
-                }
+                const eventBasedTargetingFlagCheck = hasEvents ? activatedSurveys?.includes(survey.id) : true
 
                 return (
                     linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck

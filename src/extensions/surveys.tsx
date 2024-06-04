@@ -82,10 +82,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
             }
-            if (
-                survey.type === SurveyType.Popover &&
-                document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
-            ) {
+            if (survey.type === SurveyType.Popover) {
                 const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
                 const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
                 if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
@@ -98,6 +95,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                 }
 
                 if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
+                    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
@@ -394,7 +392,6 @@ const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean)
             [`$survey_dismissed/${survey.id}`]: true,
         },
     })
-    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
     window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 

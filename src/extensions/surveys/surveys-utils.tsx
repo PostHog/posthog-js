@@ -537,7 +537,6 @@ export const sendSurveyEvent = (
     posthog?: PostHog
 ) => {
     if (!posthog) return
-    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
     posthog.capture('survey sent', {
         $survey_name: survey.name,
         $survey_id: survey.id,
@@ -601,20 +600,6 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     })
 
     return shuffle(survey.questions)
-}
-
-export const shouldHideSurveyInWaitPeriod = (seenSurveyWaitPeriodInDays: number): boolean => {
-    const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
-    if (seenSurveyWaitPeriodInDays && lastSeenSurveyDate) {
-        const today = new Date()
-        const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
-        const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-        if (diffDaysFromToday < seenSurveyWaitPeriodInDays) {
-            return true
-        }
-    }
-
-    return false
 }
 
 export const SurveyContext = createContext<{
