@@ -90,7 +90,7 @@ describe('preview renders', () => {
         }
         const surveyDiv = document.createElement('div')
         expect(surveyDiv.innerHTML).toBe('')
-        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 'survey', 0)
+        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 0)
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
