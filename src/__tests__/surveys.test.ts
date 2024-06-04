@@ -430,7 +430,7 @@ describe('surveys', () => {
             assignableWindow.location = originalWindowLocation
         })
 
-        it('returns surveys that based on exclusion conditions', () => {
+        it('returns surveys based on exclusion conditions', () => {
             surveysResponse = {
                 surveys: [surveyWithUrlDoesNotContain, surveyWithUrlNotExact, surveyWithUrlDoesNotContainRegex],
             }
