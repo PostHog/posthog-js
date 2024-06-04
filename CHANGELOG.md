@@ -1,3 +1,7 @@
+## 1.136.6 - 2024-06-04
+
+- chore(surveys): refactor survey popup (vol. 1) (#1214)
+
 ## 1.136.5 - 2024-06-03
 
 - feat: add an explicit in-memory buffer (#1217)
