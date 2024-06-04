@@ -546,6 +546,8 @@ export class SessionRecording {
                     timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
                     threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
                 })
+                // don't take full snapshots while idle
+                clearTimeout(this._fullSnapshotTimer)
             }
         }
 
