@@ -86,12 +86,12 @@ export function LinkQuestion({
 
 export function RatingQuestion({
     question,
-    questionIndex,
+    displayQuestionIndex,
     appearance,
     onSubmit,
 }: {
     question: RatingSurveyQuestion
-    questionIndex: number
+    displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (rating: number | null) => void
 }) {
@@ -116,7 +116,7 @@ export function RatingQuestion({
                                 const active = idx + 1 === rating
                                 return (
                                     <button
-                                        className={`ratings-emoji question-${questionIndex}-rating-${idx} ${
+                                        className={`ratings-emoji question-${displayQuestionIndex}-rating-${idx} ${
                                             active ? 'rating-active' : null
                                         }`}
                                         value={idx + 1}
@@ -142,7 +142,7 @@ export function RatingQuestion({
                                 return (
                                     <RatingButton
                                         key={idx}
-                                        questionIndex={questionIndex}
+                                        displayQuestionIndex={displayQuestionIndex}
                                         active={active}
                                         appearance={appearance}
                                         num={number}
@@ -173,13 +173,13 @@ export function RatingQuestion({
 export function RatingButton({
     num,
     active,
-    questionIndex,
+    displayQuestionIndex,
     appearance,
     setActiveNumber,
 }: {
     num: number
     active: boolean
-    questionIndex: number
+    displayQuestionIndex: number
     appearance: any
     setActiveNumber: (num: number) => void
 }) {
@@ -187,7 +187,9 @@ export function RatingButton({
     return (
         <button
             ref={ref as RefObject<HTMLButtonElement>}
-            className={`ratings-number question-${questionIndex}-rating-${num} ${active ? 'rating-active' : null}`}
+            className={`ratings-number question-${displayQuestionIndex}-rating-${num} ${
+                active ? 'rating-active' : null
+            }`}
             type="button"
             onClick={() => {
                 setActiveNumber(num)
@@ -205,12 +207,12 @@ export function RatingButton({
 
 export function MultipleChoiceQuestion({
     question,
-    questionIndex,
+    displayQuestionIndex,
     appearance,
     onSubmit,
 }: {
     question: MultipleSurveyQuestion
-    questionIndex: number
+    displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (choices: string | string[] | null) => void
 }) {
@@ -251,8 +253,8 @@ export function MultipleChoiceQuestion({
                         <div className={choiceClass}>
                             <input
                                 type={inputType}
-                                id={`surveyQuestion${questionIndex}Choice${idx}`}
-                                name={`question${questionIndex}`}
+                                id={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
+                                name={`question${displayQuestionIndex}`}
                                 value={val}
                                 disabled={!val}
                                 onInput={() => {
@@ -276,14 +278,17 @@ export function MultipleChoiceQuestion({
                                     }
                                 }}
                             />
-                            <label htmlFor={`surveyQuestion${questionIndex}Choice${idx}`} style={{ color: 'black' }}>
+                            <label
+                                htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
+                                style={{ color: 'black' }}
+                            >
                                 {question.hasOpenChoice && idx === question.choices.length - 1 ? (
                                     <>
                                         <span>{option}:</span>
                                         <input
                                             type="text"
-                                            id={`surveyQuestion${questionIndex}Choice${idx}Open`}
-                                            name={`question${questionIndex}`}
+                                            id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
+                                            name={`question${displayQuestionIndex}`}
                                             onInput={(e) => {
                                                 const userValue = e.currentTarget.value
                                                 if (question.type === SurveyQuestionType.SingleChoice) {

@@ -233,14 +233,14 @@ export function SurveyPopup({
 
 interface GetQuestionComponentProps {
     question: SurveyQuestion
-    questionIndex: number
+    displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (res: string | string[] | number | null) => void
 }
 
 const getQuestionComponent = ({
     question,
-    questionIndex,
+    displayQuestionIndex,
     appearance,
     onSubmit,
 }: GetQuestionComponentProps): JSX.Element => {
@@ -261,9 +261,9 @@ const getQuestionComponent = ({
     const additionalProps: Record<SurveyQuestionType, any> = {
         [SurveyQuestionType.Open]: {},
         [SurveyQuestionType.Link]: {},
-        [SurveyQuestionType.Rating]: { questionIndex },
-        [SurveyQuestionType.SingleChoice]: { questionIndex },
-        [SurveyQuestionType.MultipleChoice]: { questionIndex },
+        [SurveyQuestionType.Rating]: { displayQuestionIndex },
+        [SurveyQuestionType.SingleChoice]: { displayQuestionIndex },
+        [SurveyQuestionType.MultipleChoice]: { displayQuestionIndex },
     }
 
     const Component = questionComponents[question.type]
@@ -285,7 +285,7 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { previewPageIndex } = useContext(SurveyContext)
+    const { isPreviewMode, previewPageIndex } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -294,16 +294,25 @@ export function Questions({
         setCurrentQuestionIndex(previewPageIndex ?? 0)
     }, [previewPageIndex])
 
-    const onNextButtonClick = (res: string | string[] | number | null, questionIndex: number) => {
-        const isFirstQuestion = questionIndex === 0
-        const isLastQuestion = questionIndex === survey.questions.length - 1
+    const onNextButtonClick = ({
+        res,
+        originalQuestionIndex,
+        displayQuestionIndex,
+    }: {
+        res: string | string[] | number | null
+        originalQuestionIndex: number
+        displayQuestionIndex: number
+    }) => {
+        const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
 
-        const responseKey = isFirstQuestion ? `$survey_response` : `$survey_response_${questionIndex}`
-        if (isLastQuestion) {
+        const responseKey =
+            originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
+
+        if (isLastDisplayedQuestion) {
             return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
             setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
-            setCurrentQuestionIndex(questionIndex + 1)
+            setCurrentQuestionIndex(displayQuestionIndex + 1)
         }
     }
 
@@ -316,16 +325,25 @@ export function Questions({
                 ...styleOverrides,
             }}
         >
-            {surveyQuestions.map((question, questionIndex) => {
-                const isVisible = currentQuestionIndex === questionIndex
+            {surveyQuestions.map((question, displayQuestionIndex) => {
+                const { originalQuestionIndex } = question
+
+                const isVisible = isPreviewMode
+                    ? currentQuestionIndex === originalQuestionIndex
+                    : currentQuestionIndex === displayQuestionIndex
                 return (
                     isVisible && (
                         <div>
                             {getQuestionComponent({
                                 question,
-                                questionIndex,
+                                displayQuestionIndex,
                                 appearance: survey.appearance || defaultSurveyAppearance,
-                                onSubmit: (res) => onNextButtonClick(res, questionIndex),
+                                onSubmit: (res) =>
+                                    onNextButtonClick({
+                                        res,
+                                        originalQuestionIndex,
+                                        displayQuestionIndex,
+                                    }),
                             })}
                         </div>
                     )

@@ -591,14 +591,14 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
+    // retain the original questionIndex so we can correlate values in the webapp
+    survey.questions.forEach((question, idx) => {
+        question.originalQuestionIndex = idx
+    })
+
     if (!survey.appearance || !survey.appearance.shuffleQuestions) {
         return survey.questions
     }
-
-    // retain the original questionIndex so we can correlate values in the webapp
-    survey.questions.forEach((element, idx) => {
-        element.questionIndex = idx
-    })
 
     return shuffle(survey.questions)
 }
