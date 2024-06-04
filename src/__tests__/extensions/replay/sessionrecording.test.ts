@@ -904,7 +904,7 @@ describe('SessionRecording', () => {
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
                 windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
                 sessionManager.resetSessionId()
-                sessionRecording['lastSessionFullSnapshot'] = sessionId
+                sessionRecording['lastSessionFullSnapshot'] = 'old-session-id'
 
                 _emit(createIncrementalSnapshot())
                 expect(assignableWindow.rrweb.record.takeFullSnapshot).not.toHaveBeenCalled()
@@ -917,6 +917,18 @@ describe('SessionRecording', () => {
                 windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
                 sessionManager.resetSessionId()
                 sessionRecording['lastSessionFullSnapshot'] = null
+
+                _emit(createIncrementalSnapshot())
+                expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
+            })
+
+            it('sends a full snapshot if there is has a different tracked full snapshot', () => {
+                assignableWindow.rrweb.record.takeFullSnapshot.mockClear()
+
+                sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
+                windowIdGeneratorMock.mockImplementation(() => 'old-window-id')
+                sessionManager.resetSessionId()
+                sessionRecording['lastSessionFullSnapshot'] = 'some-other-value'
 
                 _emit(createIncrementalSnapshot())
                 expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalled()

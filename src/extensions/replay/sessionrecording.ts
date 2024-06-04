@@ -582,9 +582,11 @@ export class SessionRecording {
         this.windowId = windowId
         this.sessionId = sessionId
 
+        const hasNotHadAFullSnapshot =
+            isNull(this.lastSessionFullSnapshot) || this.lastSessionFullSnapshot !== this.sessionId
         if (
             [FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-            (windowIdChanged || sessionIdChanged || isNull(this.lastSessionFullSnapshot))
+            (windowIdChanged || sessionIdChanged || hasNotHadAFullSnapshot)
         ) {
             this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
         }
