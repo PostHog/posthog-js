@@ -8,10 +8,6 @@ import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
 import { USER_STATE } from '../constants'
 
-jest.mock('../gdpr-utils', () => ({
-    ...jest.requireActual('../gdpr-utils'),
-    addOptOutCheck: (fn) => fn,
-}))
 jest.mock('../decide')
 
 describe('posthog core', () => {
