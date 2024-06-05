@@ -15,7 +15,7 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
     regex: (conditionsUrl) => !!window && isUrlMatchingRegex(window.location.href, conditionsUrl),
     not_regex: (conditionsUrl) => !!window && !isUrlMatchingRegex(window.location.href, conditionsUrl),
     exact: (conditionsUrl) => window?.location.href === conditionsUrl,
-    not_exact: (conditionsUrl) => window?.location.href !== conditionsUrl,
+    is_not: (conditionsUrl) => window?.location.href !== conditionsUrl,
 }
 
 export class PostHogSurveys {

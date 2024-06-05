@@ -258,7 +258,7 @@ describe('surveys', () => {
             questions: [
                 { type: SurveyQuestionType.Open, question: 'what is a survey with url does not contain exact?' },
             ],
-            conditions: { url: 'https://example.com/exact', urlMatchType: 'not_exact' },
+            conditions: { url: 'https://example.com/exact', urlMatchType: 'is_not' },
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey

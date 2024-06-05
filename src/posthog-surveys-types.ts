@@ -89,7 +89,7 @@ export interface SurveyResponse {
 
 export type SurveyCallback = (surveys: Survey[]) => void
 
-export type SurveyUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'not_exact' | 'icontains' | 'not_icontains'
+export type SurveyUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 
 export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
