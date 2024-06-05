@@ -1,3 +1,7 @@
+## 1.136.8 - 2024-06-05
+
+- fix: flush on idle (#1225)
+
 ## 1.136.7 - 2024-06-04
 
 - fix: no full snapshot while idle (#1222)
