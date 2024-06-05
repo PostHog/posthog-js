@@ -39,6 +39,10 @@ export class SurveyEventReceiver {
         return existingActivatedSurveys ? existingActivatedSurveys : []
     }
 
+    getEventRegistry(): Map<string, string[]> {
+        return this.eventRegistry
+    }
+
     private _saveSurveysToStorage(surveys: string[]): void {
         // we use a new Set here to remove duplicates.
         this.persistence?.register({
