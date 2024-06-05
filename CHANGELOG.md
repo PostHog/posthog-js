@@ -1,5 +1,10 @@
 ## 1.137.0 - 2024-06-05
 
+- chore: Bump version to 1.137.0 (#1227)
+- feat(survey): Event based survey: Show survey popup based on custom event (#1213)
+
+## 1.137.0 - 2024-06-05
+
 - feat(survey): Event based survey: Show survey popup based on custom event #1213
 
 ## 1.136.8 - 2024-06-05
