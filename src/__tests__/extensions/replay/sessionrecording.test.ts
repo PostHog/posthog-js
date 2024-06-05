@@ -1289,6 +1289,21 @@ describe('SessionRecording', () => {
                 size: 0,
                 windowId: expect.any(String),
             })
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [createFullSnapshot(), firstSnapshotEvent, secondSnapshot],
+                    $session_id: firstSessionId,
+                    $snapshot_bytes: 156,
+                    $window_id: expect.any(String),
+                },
+                {
+                    _batchKey: 'recordings',
+                    _noTruncate: true,
+                    _noHeatmaps: true,
+                    _url: 'https://test.com/s/',
+                }
+            )
 
             // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
 
@@ -1376,7 +1391,21 @@ describe('SessionRecording', () => {
             })
 
             // the buffer is flushed on switch to idle
-            expect(posthog.capture).toHaveBeenCalled()
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [createFullSnapshot(), firstSnapshotEvent, secondSnapshot],
+                    $session_id: firstSessionId,
+                    $snapshot_bytes: 156,
+                    $window_id: expect.any(String),
+                },
+                {
+                    _batchKey: 'recordings',
+                    _noTruncate: true,
+                    _noHeatmaps: true,
+                    _url: 'https://test.com/s/',
+                }
+            )
 
             // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
 
