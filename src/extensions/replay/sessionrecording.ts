@@ -548,6 +548,8 @@ export class SessionRecording {
                 })
                 // don't take full snapshots while idle
                 clearTimeout(this._fullSnapshotTimer)
+                // proactively flush the buffer in case the session is idle for a long time
+                this._flushBuffer()
             }
         }
 
