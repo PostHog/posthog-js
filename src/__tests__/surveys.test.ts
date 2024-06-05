@@ -52,6 +52,35 @@ describe('surveys', () => {
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
         } as unknown as Survey,
     ]
+    const surveysWithEvents: Survey[] = [
+        {
+            name: 'first survey',
+            id: 'first-survey',
+            description: 'first survey description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
+            conditions: {
+                events: ['user_subscribed', 'user_unsubscribed', 'billing_changed', 'billing_removed'],
+            },
+        } as unknown as Survey,
+        {
+            name: 'second survey',
+            id: 'second-survey',
+            description: 'second survey description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
+        } as unknown as Survey,
+        {
+            name: 'third survey',
+            id: 'third-survey',
+            description: 'third survey description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
+            conditions: {
+                events: ['user_subscribed', 'user_unsubscribed', 'address_changed'],
+            },
+        } as unknown as Survey,
+    ]
 
     beforeEach(() => {
         surveysResponse = { surveys: firstSurveys }
@@ -124,6 +153,26 @@ describe('surveys', () => {
         })
         // request again, shouldn't call _send_request again, so 1 total call instead of 2
         expect(instance._send_request).toHaveBeenCalledTimes(1)
+    })
+
+    it('getSurveys registers the survey event receiver if a survey has events', () => {
+        surveysResponse = { surveys: surveysWithEvents }
+        surveys.getSurveys((data) => {
+            expect(data).toEqual(surveysWithEvents)
+        }, true)
+
+        const registry = surveys._surveyEventReceiver?.getEventRegistry()
+        expect(registry.has('second-survey')).toBeFalsy()
+        expect(registry.has('first-survey')).toBeTruthy()
+        expect(registry.get('first-survey')).toEqual([
+            'user_subscribed',
+            'user_unsubscribed',
+            'billing_changed',
+            'billing_removed',
+        ])
+
+        expect(registry.has('third-survey')).toBeTruthy()
+        expect(registry.get('third-survey')).toEqual(['user_subscribed', 'user_unsubscribed', 'address_changed'])
     })
 
     it('getSurveys force reloads when called with true', () => {
@@ -299,6 +348,19 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
+        const surveyWithEvents: Survey = {
+            name: 'survey with events',
+            description: 'survey with events description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
+            linked_flag_key: 'linked-flag-key',
+            internal_targeting_flag_key: 'enabled-internal-targeting-flag-key',
+            conditions: {
+                events: ['user_subscribed', 'user_unsubscribed'],
+            },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
         const surveyWithEverything: Survey = {
             name: 'survey with everything',
             description: 'survey with everything description',
@@ -424,6 +486,25 @@ describe('surveys', () => {
             })
         })
 
+        it('does not return event based surveys that didnt observe an event', () => {
+            surveysResponse = {
+                surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
+            }
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
+            })
+        })
+
+        it('returns event based surveys that observed an event', () => {
+            surveysResponse = {
+                surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
+            }
+
+            surveys._surveyEventReceiver?.on('user_subscribed')
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithEnabledInternalFlag])
+            })
+        })
         it('does not return surveys that have internal flag keys but no matching internal flags', () => {
             surveysResponse = { surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag] }
             surveys.getActiveMatchingSurveys((data) => {

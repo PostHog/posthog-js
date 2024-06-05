@@ -19,7 +19,7 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
 export class PostHogSurveys {
     instance: PostHog
     private _decideServerResponse?: boolean
-    private _surveyEventReceiver?: SurveyEventReceiver
+    public _surveyEventReceiver?: SurveyEventReceiver
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -54,6 +54,10 @@ export class PostHogSurveys {
         // then we shouldn't return survey data
         if (this.instance.config.disable_surveys) {
             return callback([])
+        }
+
+        if (this._surveyEventReceiver == null) {
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
