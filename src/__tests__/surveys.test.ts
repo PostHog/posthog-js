@@ -251,13 +251,11 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
-        const surveyWithUrlNotExact: Survey = {
-            name: 'survey with url does not contain exact',
-            description: 'survey with url does not contain exact description',
+        const surveyWithIsNotUrlMatch: Survey = {
+            name: 'survey with is not url match',
+            description: 'survey with is not url match description',
             type: SurveyType.Popover,
-            questions: [
-                { type: SurveyQuestionType.Open, question: 'what is a survey with url does not contain exact?' },
-            ],
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with is not url match?' }],
             conditions: { url: 'https://example.com/exact', urlMatchType: 'is_not' },
             start_date: new Date().toISOString(),
             end_date: null,
@@ -432,14 +430,14 @@ describe('surveys', () => {
 
         it('returns surveys based on exclusion conditions', () => {
             surveysResponse = {
-                surveys: [surveyWithUrlDoesNotContain, surveyWithUrlNotExact, surveyWithUrlDoesNotContainRegex],
+                surveys: [surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex],
             }
 
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthog.com') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
-                // returns surveyWithUrlNotExact and surveyWithUrlDoesNotContainRegex because they don't contain posthog.com
-                expect(data).toEqual([surveyWithUrlNotExact, surveyWithUrlDoesNotContainRegex])
+                // returns surveyWithIsNotUrlMatch and surveyWithUrlDoesNotContainRegex because they don't contain posthog.com
+                expect(data).toEqual([surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex])
             })
             assignableWindow.location = originalWindowLocation
 
@@ -454,8 +452,8 @@ describe('surveys', () => {
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
-                // returns surveyWithUrlDoesNotContain and surveyWithUrlNotExact because they are not regex matches
-                expect(data).toEqual([surveyWithUrlDoesNotContain, surveyWithUrlNotExact])
+                // returns surveyWithUrlDoesNotContain and surveyWithIsNotUrlMatch because they are not regex matches
+                expect(data).toEqual([surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch])
             })
             assignableWindow.location = originalWindowLocation
         })
