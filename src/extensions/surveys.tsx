@@ -96,12 +96,17 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     }, forceReload)
 }
 
-export const renderSurveysPreview = (
-    survey: Survey,
-    parentElement: HTMLElement,
-    previewPageIndex: number,
+export const renderSurveysPreview = ({
+    survey,
+    parentElement,
+    previewPageIndex,
+    forceDisableHtml,
+}: {
+    survey: Survey
+    parentElement: HTMLElement
+    previewPageIndex: number
     forceDisableHtml?: boolean
-) => {
+}) => {
     const surveyStyleSheet = style(survey.appearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
 
@@ -134,8 +139,15 @@ export const renderSurveysPreview = (
         parentElement
     )
 }
-
-export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement, forceDisableHtml?: boolean) => {
+export const renderFeedbackWidgetPreview = ({
+    survey,
+    root,
+    forceDisableHtml,
+}: {
+    survey: Survey
+    root: HTMLElement
+    forceDisableHtml?: boolean
+}) => {
     const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
     const styleElement = Object.assign(document.createElement('style'), { innerText: widgetStyleSheet })
     root.appendChild(styleElement)

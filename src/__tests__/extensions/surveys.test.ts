@@ -91,7 +91,7 @@ describe('preview renders', () => {
         }
         const surveyDiv = document.createElement('div')
         expect(surveyDiv.innerHTML).toBe('')
-        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 0)
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: 0 })
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
@@ -123,7 +123,7 @@ describe('preview renders', () => {
         }
         const surveyDiv = document.createElement('div')
         expect(surveyDiv.innerHTML).toBe('')
-        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 0)
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: 0 })
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
@@ -159,7 +159,7 @@ describe('preview renders', () => {
         }
         const surveyDiv = document.createElement('div')
         expect(surveyDiv.innerHTML).toBe('')
-        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 0)
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: 0 })
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
@@ -195,7 +195,7 @@ describe('preview renders', () => {
         }
         const surveyDiv = document.createElement('div')
         expect(surveyDiv.innerHTML).toBe('')
-        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 0)
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: 0 })
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
@@ -231,7 +231,12 @@ describe('preview renders', () => {
         }
         const surveyDiv = document.createElement('div')
         expect(surveyDiv.innerHTML).toBe('')
-        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 0, true)
+        renderSurveysPreview({
+            survey: mockSurvey as Survey,
+            parentElement: surveyDiv,
+            previewPageIndex: 0,
+            forceDisableHtml: true,
+        })
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
@@ -260,7 +265,7 @@ describe('preview renders', () => {
         }
         const root = document.createElement('div')
         expect(root.innerHTML).toBe('')
-        renderFeedbackWidgetPreview(mockSurvey as Survey, root)
+        renderFeedbackWidgetPreview({ survey: mockSurvey as Survey, root })
         expect(root.getElementsByTagName('style').length).toBe(1)
         expect(root.getElementsByClassName('ph-survey-widget-tab').length).toBe(1)
         expect(root.getElementsByClassName('ph-survey-widget-tab')[0].innerHTML).toContain('preview test')
