@@ -72,10 +72,19 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
             }
-            if (
-                survey.type === SurveyType.Popover &&
-                document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
-            ) {
+            // with event based surveys, we need to show the next survey without reloading the page.
+            // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
+            // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
+            // To alleviate this, we check the last div in the dom and see if it has any elements other than a Style node.
+            // if the last PostHogSurvey_xyz div has only one style node, we can show the next survey in the queue
+            // without reloading the page.
+            const surveyPopups = document.querySelectorAll(`div[class^=PostHogSurvey]`)
+            const canShowSurvey =
+                surveyPopups.length > 0
+                    ? surveyPopups[surveyPopups.length - 1].shadowRoot?.childElementCount === 1
+                    : true
+
+            if (survey.type === SurveyType.Popover && canShowSurvey) {
                 const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
                 const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
                 if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
@@ -357,6 +366,7 @@ const closeSurveyPopup = (survey: Survey, posthog?: PostHog, isPreviewMode?: boo
     if (isPreviewMode || !posthog) {
         return
     }
+
     posthog.capture('survey dismissed', {
         $survey_name: survey.name,
         $survey_id: survey.id,

@@ -537,6 +537,7 @@ export const sendSurveyEvent = (
     posthog?: PostHog
 ) => {
     if (!posthog) return
+
     localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
     posthog.capture('survey sent', {
         $survey_name: survey.name,
@@ -560,7 +561,7 @@ export const shuffle = (array: any[]) => {
         .map((a) => a.value)
 }
 
-const reverseIfUnshuffled = (unshuffled: string[], shuffled: string[]): string[] => {
+const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
     if (unshuffled.length === shuffled.length && unshuffled.every((val, index) => val === shuffled[index])) {
         return shuffled.reverse()
     }
@@ -600,7 +601,7 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
         return survey.questions
     }
 
-    return shuffle(survey.questions)
+    return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
 export const SurveyContext = createContext<{
