@@ -18,7 +18,22 @@ describe('survey-event-receiver', () => {
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
-                events: ['user_subscribed', 'user_unsubscribed', 'billing_changed', 'billing_removed'],
+                events: {
+                    values: [
+                        {
+                            name: 'user_subscribed',
+                        },
+                        {
+                            name: 'user_unsubscribed',
+                        },
+                        {
+                            name: 'billing_changed',
+                        },
+                        {
+                            name: 'billing_removed',
+                        },
+                    ],
+                },
             },
         } as unknown as Survey,
         {
@@ -35,7 +50,19 @@ describe('survey-event-receiver', () => {
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
-                events: ['user_subscribed', 'user_unsubscribed', 'address_changed'],
+                events: {
+                    values: [
+                        {
+                            name: 'user_subscribed',
+                        },
+                        {
+                            name: 'user_unsubscribed',
+                        },
+                        {
+                            name: 'address_changed',
+                        },
+                    ],
+                },
             },
         } as unknown as Survey,
     ]

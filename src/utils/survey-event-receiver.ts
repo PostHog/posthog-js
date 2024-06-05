@@ -13,8 +13,11 @@ export class SurveyEventReceiver {
 
     register(surveys: Survey[]): void {
         surveys.forEach((survey) => {
-            if (survey.conditions?.events && survey.conditions?.events.length > 0) {
-                this.eventRegistry.set(survey.id, survey.conditions?.events)
+            if (survey.conditions?.events && survey.conditions?.events.values.length > 0) {
+                this.eventRegistry.set(
+                    survey.id,
+                    survey.conditions?.events.values.map((e) => e.name)
+                )
             }
         })
     }

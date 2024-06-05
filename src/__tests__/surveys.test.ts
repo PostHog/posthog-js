@@ -60,7 +60,22 @@ describe('surveys', () => {
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
-                events: ['user_subscribed', 'user_unsubscribed', 'billing_changed', 'billing_removed'],
+                events: {
+                    values: [
+                        {
+                            name: 'user_subscribed',
+                        },
+                        {
+                            name: 'user_unsubscribed',
+                        },
+                        {
+                            name: 'billing_changed',
+                        },
+                        {
+                            name: 'billing_removed',
+                        },
+                    ],
+                },
             },
         } as unknown as Survey,
         {
@@ -77,7 +92,19 @@ describe('surveys', () => {
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
-                events: ['user_subscribed', 'user_unsubscribed', 'address_changed'],
+                events: {
+                    values: [
+                        {
+                            name: 'user_subscribed',
+                        },
+                        {
+                            name: 'user_unsubscribed',
+                        },
+                        {
+                            name: 'address_changed',
+                        },
+                    ],
+                },
             },
         } as unknown as Survey,
     ]
@@ -356,7 +383,16 @@ describe('surveys', () => {
             linked_flag_key: 'linked-flag-key',
             internal_targeting_flag_key: 'enabled-internal-targeting-flag-key',
             conditions: {
-                events: ['user_subscribed', 'user_unsubscribed'],
+                events: {
+                    values: [
+                        {
+                            name: 'user_subscribed',
+                        },
+                        {
+                            name: 'user_unsubscribed',
+                        },
+                    ],
+                },
             },
             start_date: new Date().toISOString(),
             end_date: null,
