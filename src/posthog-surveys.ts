@@ -19,13 +19,13 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
 export class PostHogSurveys {
     instance: PostHog
     private _decideServerResponse?: boolean
-    public _surveyEventReceiver?: SurveyEventReceiver
+    public _surveyEventReceiver: SurveyEventReceiver | null
 
     constructor(instance: PostHog) {
         this.instance = instance
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
-        this._surveyEventReceiver = undefined
+        this._surveyEventReceiver = null
     }
 
     afterDecideResponse(response: DecideResponse) {
@@ -35,10 +35,11 @@ export class PostHogSurveys {
 
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
-        if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
-        }
+
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
+            if (this._surveyEventReceiver == null) {
+                this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+            }
             loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)
@@ -76,7 +77,10 @@ export class PostHogSurveys {
                     const surveys = response.json.surveys || []
 
                     const eventBasedSurveys = surveys.filter(
-                        (survey: Survey) => survey.conditions?.events && survey.conditions?.events.values.length > 0
+                        (survey: Survey) =>
+                            survey.conditions?.events &&
+                            survey.conditions?.events?.values &&
+                            survey.conditions?.events?.values?.length > 0
                     )
 
                     if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
@@ -119,7 +123,6 @@ export class PostHogSurveys {
 
             // get all the surveys that have been activated so far with user actions.
             const activatedSurveys: string[] | undefined = this._surveyEventReceiver?.getSurveys()
-
             const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
                 if (!survey.linked_flag_key && !survey.targeting_flag_key && !survey.internal_targeting_flag_key) {
                     return true
@@ -135,9 +138,11 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
                     : true
 
-                const hasEvents = survey.conditions?.events && survey.conditions?.events.values.length > 0
+                const hasEvents =
+                    survey.conditions?.events &&
+                    survey.conditions?.events?.values &&
+                    survey.conditions?.events?.values.length > 0
                 const eventBasedTargetingFlagCheck = hasEvents ? activatedSurveys?.includes(survey.id) : true
-
                 return (
                     linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck
                 )
