@@ -537,6 +537,8 @@ export const sendSurveyEvent = (
     posthog?: PostHog
 ) => {
     if (!posthog) return
+
+    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
     posthog.capture('survey sent', {
         $survey_name: survey.name,
         $survey_id: survey.id,
