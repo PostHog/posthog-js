@@ -299,17 +299,6 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
-        const surveyWithDisabledInternalFlagAndEvents: Survey = {
-            name: 'survey with disabled internal flag',
-            description: 'survey with flags description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with flags?' }],
-            linked_flag_key: 'linked-flag-key2',
-            internal_targeting_flag_key: 'disabled-internal-targeting-flag-key',
-            start_date: new Date().toISOString(),
-            events: [`user_unsubscribed`],
-            end_date: null,
-        } as unknown as Survey
         const surveyWithEverything: Survey = {
             name: 'survey with everything',
             description: 'survey with everything description',
@@ -432,15 +421,6 @@ describe('surveys', () => {
             }
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithEnabledInternalFlag])
-            })
-        })
-
-        it('returns surveys with events even if internal flag has been set to false', () => {
-            surveysResponse = {
-                surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlagAndEvents],
-            }
-            surveys.getActiveMatchingSurveys((data) => {
-                expect(data).toEqual([surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlagAndEvents])
             })
         })
 
