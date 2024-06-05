@@ -8,12 +8,14 @@ export function ConfirmationMessage({
     header,
     description,
     contentType,
+    forceDisableHtml,
     appearance,
     onClose,
     styleOverrides,
 }: {
     header: string
     description: string
+    forceDisableHtml: boolean
     contentType?: SurveyQuestionDescriptionContentType
     appearance: SurveyAppearance
     onClose: () => void
@@ -33,7 +35,7 @@ export function ConfirmationMessage({
                         renderChildrenAsTextOrHtml({
                             component: h('div', { className: 'thank-you-message-body' }),
                             children: description,
-                            renderAsHtml: contentType !== 'text',
+                            renderAsHtml: !forceDisableHtml && contentType !== 'text',
                             style: { color: textColor },
                         })}
                     <BottomSection

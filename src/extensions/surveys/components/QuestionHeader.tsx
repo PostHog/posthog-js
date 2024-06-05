@@ -9,10 +9,12 @@ export function QuestionHeader({
     description,
     descriptionContentType,
     backgroundColor,
+    forceDisableHtml,
 }: {
     question: string
     description?: string | null
     descriptionContentType?: SurveyQuestionDescriptionContentType
+    forceDisableHtml: boolean
     backgroundColor?: string
 }) {
     return (
@@ -22,7 +24,7 @@ export function QuestionHeader({
                 renderChildrenAsTextOrHtml({
                     component: h('div', { className: 'description' }),
                     children: description,
-                    renderAsHtml: descriptionContentType !== 'text',
+                    renderAsHtml: !forceDisableHtml && descriptionContentType !== 'text',
                 })}
         </div>
     )

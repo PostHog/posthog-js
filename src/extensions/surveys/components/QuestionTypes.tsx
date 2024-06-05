@@ -24,10 +24,12 @@ import { Cancel, QuestionHeader } from './QuestionHeader'
 
 export function OpenTextQuestion({
     question,
+    forceDisableHtml,
     appearance,
     onSubmit,
 }: {
     question: BasicSurveyQuestion
+    forceDisableHtml: boolean
     appearance: SurveyAppearance
     onSubmit: (text: string) => void
 }) {
@@ -47,6 +49,7 @@ export function OpenTextQuestion({
                 description={question.description}
                 descriptionContentType={question.descriptionContentType}
                 backgroundColor={appearance.backgroundColor}
+                forceDisableHtml={forceDisableHtml}
             />
             <textarea rows={4} placeholder={appearance?.placeholder} onInput={(e) => setText(e.currentTarget.value)} />
             <BottomSection
@@ -61,10 +64,12 @@ export function OpenTextQuestion({
 
 export function LinkQuestion({
     question,
+    forceDisableHtml,
     appearance,
     onSubmit,
 }: {
     question: LinkSurveyQuestion
+    forceDisableHtml: boolean
     appearance: SurveyAppearance
     onSubmit: (clicked: string) => void
 }) {
@@ -77,6 +82,7 @@ export function LinkQuestion({
                 question={question.question}
                 description={question.description}
                 descriptionContentType={question.descriptionContentType}
+                forceDisableHtml={forceDisableHtml}
             />
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -91,11 +97,13 @@ export function LinkQuestion({
 
 export function RatingQuestion({
     question,
+    forceDisableHtml,
     displayQuestionIndex,
     appearance,
     onSubmit,
 }: {
     question: RatingSurveyQuestion
+    forceDisableHtml: boolean
     displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (rating: number | null) => void
@@ -112,6 +120,7 @@ export function RatingQuestion({
                 question={question.question}
                 description={question.description}
                 descriptionContentType={question.descriptionContentType}
+                forceDisableHtml={forceDisableHtml}
                 backgroundColor={appearance.backgroundColor}
             />
             <div className="rating-section">
@@ -213,11 +222,13 @@ export function RatingButton({
 
 export function MultipleChoiceQuestion({
     question,
+    forceDisableHtml,
     displayQuestionIndex,
     appearance,
     onSubmit,
 }: {
     question: MultipleSurveyQuestion
+    forceDisableHtml: boolean
     displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (choices: string | string[] | null) => void
@@ -243,6 +254,7 @@ export function MultipleChoiceQuestion({
                 question={question.question}
                 description={question.description}
                 descriptionContentType={question.descriptionContentType}
+                forceDisableHtml={forceDisableHtml}
                 backgroundColor={appearance.backgroundColor}
             />
             <div className="multiple-choice-options">
