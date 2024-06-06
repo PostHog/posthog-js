@@ -200,7 +200,7 @@ export function SurveyPopup({
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
 }) {
-    const [isPopupVisible, setIsPopupVisible] = useState(true)
+    const [isPopupVisible, setIsPopupVisible] = useState(false)
     const [isSurveySent, setIsSurveySent] = useState(false)
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const isPreviewMode = Number.isInteger(previewPageIndex)
@@ -219,33 +219,40 @@ export function SurveyPopup({
             return
         }
 
-        window.dispatchEvent(new Event('PHSurveyShown'))
-        posthog.capture('survey shown', {
-            $survey_name: survey.name,
-            $survey_id: survey.id,
-            $survey_iteration: survey.current_iteration,
-            $survey_iteration_start_date: survey.current_iteration_start_date,
-            sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        })
-        localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
+        const delay = survey.appearance?.surveyPopupDelay || 3000
 
-        window.addEventListener('PHSurveyClosed', () => {
-            setIsPopupVisible(false)
-        })
-        window.addEventListener('PHSurveySent', () => {
-            if (!survey.appearance?.displayThankYouMessage) {
-                return setIsPopupVisible(false)
-            }
+        const showPopup = () => {
+            setIsPopupVisible(true)
+            window.dispatchEvent(new Event('PHSurveyShown'))
+            posthog.capture('survey shown', {
+                $survey_name: survey.name,
+                $survey_id: survey.id,
+                $survey_iteration: survey.current_iteration,
+                $survey_iteration_start_date: survey.current_iteration_start_date,
+                sessionRecordingUrl: posthog.get_session_replay_url?.(),
+            })
+            localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
 
-            setIsSurveySent(true)
+            window.addEventListener('PHSurveyClosed', () => {
+                setIsPopupVisible(false)
+            })
+            window.addEventListener('PHSurveySent', () => {
+                if (!survey.appearance?.displayThankYouMessage) {
+                    return setIsPopupVisible(false)
+                }
 
-            if (survey.appearance?.autoDisappear) {
-                setTimeout(() => {
-                    setIsPopupVisible(false)
-                }, 5000)
-            }
-        })
-    }, [])
+                setIsSurveySent(true)
+
+                if (survey.appearance?.autoDisappear) {
+                    setTimeout(() => {
+                        setIsPopupVisible(false)
+                    }, 5000)
+                }
+            })
+        }
+
+        setTimeout(showPopup, delay)
+    }, [isPreviewMode, posthog, survey])
 
     return isPopupVisible ? (
         <SurveyContext.Provider

@@ -25,6 +25,8 @@ export interface SurveyAppearance {
     borderColor?: string
     position?: 'left' | 'right' | 'center'
     placeholder?: string
+    shuffleQuestions?: boolean
+    surveyPopupDelay?: number
     // widget options
     widgetType?: 'button' | 'tab' | 'selector'
     widgetSelector?: string
@@ -33,7 +35,6 @@ export interface SurveyAppearance {
     // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
-    shuffleQuestions?: boolean
 }
 
 export enum SurveyType {
