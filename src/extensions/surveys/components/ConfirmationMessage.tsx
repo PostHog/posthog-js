@@ -4,14 +4,14 @@ import { SurveyAppearance } from '../../../posthog-surveys-types'
 import { defaultSurveyAppearance, getContrastingTextColor } from '../surveys-utils'
 
 export function ConfirmationMessage({
-    confirmationHeader,
-    confirmationDescription,
+    header,
+    description,
     appearance,
     onClose,
     styleOverrides,
 }: {
-    confirmationHeader: string
-    confirmationDescription: string
+    header: string
+    description: string
     appearance: SurveyAppearance
     onClose: () => void
     styleOverrides?: React.CSSProperties
@@ -24,13 +24,13 @@ export function ConfirmationMessage({
                 <div className="thank-you-message-container">
                     <Cancel onClick={() => onClose()} />
                     <h3 className="thank-you-message-header" style={{ color: textColor }}>
-                        {confirmationHeader}
+                        {header}
                     </h3>
-                    {confirmationDescription && (
+                    {description && (
                         <div
                             style={{ color: textColor }}
                             className="thank-you-message-body"
-                            dangerouslySetInnerHTML={{ __html: confirmationDescription }}
+                            dangerouslySetInnerHTML={{ __html: description }}
                         />
                     )}
                     <BottomSection

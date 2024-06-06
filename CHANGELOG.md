@@ -1,3 +1,41 @@
+## 1.137.0 - 2024-06-05
+
+- chore: Bump version to 1.137.0 (#1227)
+- feat(survey): Event based survey: Show survey popup based on custom event (#1213)
+
+## 1.137.0 - 2024-06-05
+
+- feat(survey): Event based survey: Show survey popup based on custom event #1213
+
+## 1.136.8 - 2024-06-05
+
+- fix: flush on idle (#1225)
+
+## 1.136.7 - 2024-06-04
+
+- fix: no full snapshot while idle (#1222)
+
+## 1.136.6 - 2024-06-04
+
+- chore(surveys): refactor survey popup (vol. 1) (#1214)
+
+## 1.136.5 - 2024-06-03
+
+- feat: add an explicit in-memory buffer (#1217)
+
+## 1.136.4 - 2024-06-03
+
+- fix: do not start recording buffer without id (#1215)
+
+## 1.136.3 - 2024-06-03
+
+- fix: heatmaps with segment integration (#1218)
+
+## 1.136.2 - 2024-05-30
+
+- fix: reference canvas not client (#1212)
+- fix: Add auto approver for JS prs (#1209)
+
 ## 1.136.1 - 2024-05-29
 
 - fix: fallback size when resizing (#1208)

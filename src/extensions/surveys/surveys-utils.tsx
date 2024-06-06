@@ -537,6 +537,7 @@ export const sendSurveyEvent = (
     posthog?: PostHog
 ) => {
     if (!posthog) return
+
     localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
     posthog.capture('survey sent', {
         $survey_name: survey.name,
@@ -560,7 +561,7 @@ export const shuffle = (array: any[]) => {
         .map((a) => a.value)
 }
 
-const reverseIfUnshuffled = (unshuffled: string[], shuffled: string[]): string[] => {
+const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
     if (unshuffled.length === shuffled.length && unshuffled.every((val, index) => val === shuffled[index])) {
         return shuffled.reverse()
     }
@@ -591,24 +592,24 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
+    // retain the original questionIndex so we can correlate values in the webapp
+    survey.questions.forEach((question, idx) => {
+        question.originalQuestionIndex = idx
+    })
+
     if (!survey.appearance || !survey.appearance.shuffleQuestions) {
         return survey.questions
     }
 
-    // retain the original questionIndex so we can correlate values in the webapp
-    survey.questions.forEach((element, idx) => {
-        element.questionIndex = idx
-    })
-
-    return shuffle(survey.questions)
+    return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
 export const SurveyContext = createContext<{
-    readOnly: boolean
-    previewQuestionIndex: number
-    textColor: string
+    isPreviewMode: boolean
+    previewPageIndex: number | undefined
+    handleCloseSurveyPopup: () => void
 }>({
-    readOnly: false,
-    previewQuestionIndex: 0,
-    textColor: 'black',
+    isPreviewMode: false,
+    previewPageIndex: 0,
+    handleCloseSurveyPopup: () => {},
 })

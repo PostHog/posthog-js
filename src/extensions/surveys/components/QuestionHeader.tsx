@@ -20,11 +20,11 @@ export function QuestionHeader({
 }
 
 export function Cancel({ onClick }: { onClick: () => void }) {
-    const { readOnly } = useContext(SurveyContext)
+    const { isPreviewMode } = useContext(SurveyContext)
 
     return (
         <div className="cancel-btn-wrapper">
-            <button className="form-cancel" onClick={onClick} disabled={readOnly}>
+            <button className="form-cancel" onClick={onClick} disabled={isPreviewMode}>
                 {cancelSVG}
             </button>
         </div>
