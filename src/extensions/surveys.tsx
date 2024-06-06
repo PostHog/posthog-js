@@ -224,7 +224,8 @@ export function SurveyPopup({
             return
         }
 
-        const delay = survey.appearance?.surveyPopupDelay || 3000
+        // surveyPopupDelay is passed to us in seconds, but we need to convert it to milliseconds
+        const delay = survey.appearance?.surveyPopupDelay ? survey.appearance.surveyPopupDelay * 1000 : 0
 
         const showPopup = () => {
             setIsPopupVisible(true)
