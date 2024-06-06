@@ -6,10 +6,12 @@ import {
     style,
     defaultSurveyAppearance,
     sendSurveyEvent,
+    dismissedSurveyEvent,
     createShadow,
     getContrastingTextColor,
     SurveyContext,
     getDisplayOrderQuestions,
+    getSurveySeenKey,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -96,7 +98,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
 
-                if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
+                if (!localStorage.getItem(getSurveySeenKey(survey))) {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<SurveyPopup key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
@@ -221,6 +223,8 @@ export function SurveyPopup({
         posthog.capture('survey shown', {
             $survey_name: survey.name,
             $survey_id: survey.id,
+            $survey_iteration: survey.current_iteration,
+            $survey_iteration_start_date: survey.current_iteration_start_date,
             sessionRecordingUrl: posthog.get_session_replay_url?.(),
         })
         localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
@@ -248,7 +252,7 @@ export function SurveyPopup({
             value={{
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
-                handleCloseSurveyPopup: () => closeSurveyPopup(survey, posthog, isPreviewMode),
+                handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
             }}
         >
             {!shouldShowConfirmation ? (
@@ -401,23 +405,6 @@ export function Questions({
             })}
         </form>
     )
-}
-
-const closeSurveyPopup = (survey: Survey, posthog?: PostHog, isPreviewMode?: boolean) => {
-    if (isPreviewMode || !posthog) {
-        return
-    }
-
-    posthog.capture('survey dismissed', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        $set: {
-            [`$survey_dismissed/${survey.id}`]: true,
-        },
-    })
-    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
-    window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
 export function FeedbackWidget({
