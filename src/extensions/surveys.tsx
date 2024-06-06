@@ -36,10 +36,15 @@ const handleWidget = (posthog: PostHog, survey: Survey) => {
     Preact.render(<FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} />, shadow)
 }
 
+const visibleSurveys = new Set()
+
 export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     posthog?.getActiveMatchingSurveys((surveys) => {
         const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
         nonAPISurveys.forEach((survey) => {
+            if (visibleSurveys.has(survey.id)) {
+                return // skip if survey is already visible
+            }
             if (survey.type === SurveyType.Widget) {
                 if (
                     survey.appearance?.widgetType === 'tab' &&
@@ -99,6 +104,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                 }
 
                 if (!localStorage.getItem(getSurveySeenKey(survey))) {
+                    visibleSurveys.add(survey.id)
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<SurveyPopup key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
@@ -206,7 +212,6 @@ export function SurveyPopup({
     const isPreviewMode = Number.isInteger(previewPageIndex)
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
-    // Ensure the popup stays in the same position for the preview
     if (isPreviewMode) {
         style = style || {}
         style.left = 'unset'
@@ -232,26 +237,34 @@ export function SurveyPopup({
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
             localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
-
-            window.addEventListener('PHSurveyClosed', () => {
-                setIsPopupVisible(false)
-            })
-            window.addEventListener('PHSurveySent', () => {
-                if (!survey.appearance?.displayThankYouMessage) {
-                    return setIsPopupVisible(false)
-                }
-
-                setIsSurveySent(true)
-
-                if (survey.appearance?.autoDisappear) {
-                    setTimeout(() => {
-                        setIsPopupVisible(false)
-                    }, 5000)
-                }
-            })
         }
 
-        setTimeout(showPopup, delay)
+        const handleSurveyClosed = () => setIsPopupVisible(false)
+
+        const handleSurveySent = () => {
+            if (!survey.appearance?.displayThankYouMessage) {
+                return setIsPopupVisible(false)
+            }
+
+            setIsSurveySent(true)
+
+            if (survey.appearance?.autoDisappear) {
+                setTimeout(() => {
+                    setIsPopupVisible(false)
+                }, 5000)
+            }
+        }
+
+        const timeoutId = setTimeout(showPopup, delay)
+
+        window.addEventListener('PHSurveyClosed', handleSurveyClosed)
+        window.addEventListener('PHSurveySent', handleSurveySent)
+
+        return () => {
+            clearTimeout(timeoutId)
+            window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
+            window.removeEventListener('PHSurveySent', handleSurveySent)
+        }
     }, [isPreviewMode, posthog, survey])
 
     return isPopupVisible ? (
