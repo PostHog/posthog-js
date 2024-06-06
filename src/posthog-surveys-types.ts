@@ -48,7 +48,7 @@ interface SurveyQuestionBase {
     description?: string | null
     optional?: boolean
     buttonText?: string
-    questionIndex?: number
+    originalQuestionIndex: number
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -107,6 +107,11 @@ export interface Survey {
         selector?: string
         seenSurveyWaitPeriodInDays?: number
         urlMatchType?: SurveyUrlMatchType
+        events: {
+            values: {
+                name: string
+            }[]
+        } | null
     } | null
     start_date: string | null
     end_date: string | null
