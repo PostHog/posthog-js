@@ -774,8 +774,9 @@ describe('Surveys', () => {
             cy.wait('@capture-assertion')
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getPayload(request)
-                expect(captures.map(({ event }) => event)).to.contain('survey dismissed')
-                expect(captures[1].properties).to.contain({
+                const dismissedEvent = captures.filter(({ event }) => event == 'survey dismissed')[0]
+                expect(dismissedEvent).to.not.be.null
+                expect(dismissedEvent.properties).to.contain({
                     $survey_id: '123',
                     $survey_iteration: 2,
                     $survey_iteration_start_date: '12-12-2004',
