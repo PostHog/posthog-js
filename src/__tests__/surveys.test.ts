@@ -682,7 +682,7 @@ describe('surveys', () => {
             expect(shuffledOptions).not.toEqual(questionWithShufflingOptions.choices)
         })
 
-        it.skip('should keep open-ended coice as the last option', () => {
+        it('should keep open-ended coice as the last option', () => {
             let shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             shuffledOptions = getDisplayOrderChoices(questionWithOpenEndedChoice)
             expect(shuffledOptions.pop()).toEqual('open-ended-choice')
