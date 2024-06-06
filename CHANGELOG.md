@@ -1,3 +1,7 @@
+## 1.138.0 - 2024-06-06
+
+- feat(surveys): `posthog-js` changes to support valid HTML question rendering (#1206)
+
 ## 1.137.0 - 2024-06-05
 
 - chore: Bump version to 1.137.0 (#1227)
