@@ -1,20 +1,31 @@
-import { SurveyContext, defaultSurveyAppearance } from '../surveys-utils'
+import { SurveyContext, defaultSurveyAppearance, renderChildrenAsTextOrHtml } from '../surveys-utils'
 import { cancelSVG } from '../icons'
 import { useContext } from 'preact/hooks'
+import { SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
+import { h } from 'preact'
 
 export function QuestionHeader({
     question,
     description,
+    descriptionContentType,
     backgroundColor,
+    forceDisableHtml,
 }: {
     question: string
     description?: string | null
+    descriptionContentType?: SurveyQuestionDescriptionContentType
+    forceDisableHtml: boolean
     backgroundColor?: string
 }) {
     return (
         <div style={{ backgroundColor: backgroundColor || defaultSurveyAppearance.backgroundColor }}>
             <div className="survey-question">{question}</div>
-            {description && <div className="description" dangerouslySetInnerHTML={{ __html: description }} />}
+            {description &&
+                renderChildrenAsTextOrHtml({
+                    component: h('div', { className: 'description' }),
+                    children: description,
+                    renderAsHtml: !forceDisableHtml && descriptionContentType !== 'text',
+                })}
         </div>
     )
 }

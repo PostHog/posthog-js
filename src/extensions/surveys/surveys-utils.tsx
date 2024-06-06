@@ -1,7 +1,7 @@
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
-import { createContext } from 'preact'
+import { VNode, cloneElement, createContext } from 'preact'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -613,3 +613,22 @@ export const SurveyContext = createContext<{
     previewPageIndex: 0,
     handleCloseSurveyPopup: () => {},
 })
+
+interface RenderProps {
+    component: VNode<{ className: string }>
+    children: string
+    renderAsHtml?: boolean
+    style?: React.CSSProperties
+}
+
+export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {
+    return renderAsHtml
+        ? cloneElement(component, {
+              dangerouslySetInnerHTML: { __html: children },
+              style,
+          })
+        : cloneElement(component, {
+              children,
+              style,
+          })
+}

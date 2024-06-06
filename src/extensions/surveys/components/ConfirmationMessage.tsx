@@ -1,17 +1,22 @@
 import { BottomSection } from './BottomSection'
 import { Cancel } from './QuestionHeader'
-import { SurveyAppearance } from '../../../posthog-surveys-types'
-import { defaultSurveyAppearance, getContrastingTextColor } from '../surveys-utils'
+import { SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
+import { defaultSurveyAppearance, getContrastingTextColor, renderChildrenAsTextOrHtml } from '../surveys-utils'
+import { h } from 'preact'
 
 export function ConfirmationMessage({
     header,
     description,
+    contentType,
+    forceDisableHtml,
     appearance,
     onClose,
     styleOverrides,
 }: {
     header: string
     description: string
+    forceDisableHtml: boolean
+    contentType?: SurveyQuestionDescriptionContentType
     appearance: SurveyAppearance
     onClose: () => void
     styleOverrides?: React.CSSProperties
@@ -26,13 +31,13 @@ export function ConfirmationMessage({
                     <h3 className="thank-you-message-header" style={{ color: textColor }}>
                         {header}
                     </h3>
-                    {description && (
-                        <div
-                            style={{ color: textColor }}
-                            className="thank-you-message-body"
-                            dangerouslySetInnerHTML={{ __html: description }}
-                        />
-                    )}
+                    {description &&
+                        renderChildrenAsTextOrHtml({
+                            component: h('div', { className: 'thank-you-message-body' }),
+                            children: description,
+                            renderAsHtml: !forceDisableHtml && contentType !== 'text',
+                            style: { color: textColor },
+                        })}
                     <BottomSection
                         text={'Close'}
                         submitDisabled={false}
