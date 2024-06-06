@@ -83,7 +83,7 @@ export class WebVitalsAutocapture {
         return href
     }
 
-    private _capture(metric: any) {
+    private _capture = (metric: any) => {
         const sessionIds = this.instance.sessionManager?.checkAndGetSessionAndWindowId(true)
         if (!sessionIds) {
             logger.error(LOGGER_PREFIX + 'Could not read session ID. Dropping metrics!')
@@ -105,11 +105,10 @@ export class WebVitalsAutocapture {
         const { onLCP, onCLS, onFCP, onINP } = assignableWindow.postHogWebVitalsCallbacks
 
         // register performance observers
-        const captureMetric = (metric: any) => this._capture(metric)
-        onLCP(captureMetric)
-        onCLS(captureMetric)
-        onFCP(captureMetric)
-        onINP(captureMetric)
+        onLCP(this._capture)
+        onCLS(this._capture)
+        onFCP(this._capture)
+        onINP(this._capture)
 
         this._initialized = true
     }

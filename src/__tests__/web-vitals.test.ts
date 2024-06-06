@@ -8,15 +8,19 @@ jest.mock('../utils/logger')
 describe('web vitals', () => {
     let posthog: PostHog
     let onCapture = jest.fn()
-    let onLCPCallback: (() => void) | undefined = undefined
-    let onCLSCallback: (() => void) | undefined = undefined
-    let onFCPCallback: (() => void) | undefined = undefined
-    let onINPCallback: (() => void) | undefined = undefined
+    let onLCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
+    let onCLSCallback: ((metric: Record<string, any>) => void) | undefined = undefined
+    let onFCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
+    let onINPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
 
-    const randomlyCallACallback = () => {
+    const randomlyCallACallback = (
+        metricName: string = 'metric',
+        metricValue: number = 600.1,
+        metricProperties: Record<string, any> = {}
+    ) => {
         const callbacks = [onLCPCallback, onCLSCallback, onFCPCallback, onINPCallback]
         const randomIndex = Math.floor(Math.random() * callbacks.length)
-        callbacks[randomIndex]?.()
+        callbacks[randomIndex]?.({ name: metricName, value: metricValue, ...metricProperties })
     }
 
     describe('the behaviour', () => {
@@ -45,7 +49,7 @@ describe('web vitals', () => {
         })
 
         it('should include generated web vitals data', async () => {
-            randomlyCallACallback()
+            randomlyCallACallback('the metric', 123.45, { extra: 'property' })
 
             posthog.capture('test event')
 
@@ -55,7 +59,18 @@ describe('web vitals', () => {
                 {
                     event: 'test event',
                     properties: {
-                        $web_vitals_data: [{}],
+                        $web_vitals_data: [
+                            {
+                                $current_url: 'http://localhost/',
+                                $session_id: expect.any(String),
+                                $window_id: expect.any(String),
+                                timestamp: expect.any(Number),
+                                name: 'the metric',
+                                value: 123.45,
+                                // all the object properties are included
+                                extra: 'property',
+                            },
+                        ],
                     },
                 },
             ])

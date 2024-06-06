@@ -1352,7 +1352,7 @@ describe('SessionRecording', () => {
                 {
                     _batchKey: 'recordings',
                     _noTruncate: true,
-                    _noHeatmaps: true,
+                    _noPassengerEvents: true,
                     _url: 'https://test.com/s/',
                 }
             )
@@ -1454,7 +1454,7 @@ describe('SessionRecording', () => {
                 {
                     _batchKey: 'recordings',
                     _noTruncate: true,
-                    _noHeatmaps: true,
+                    _noPassengerEvents: true,
                     _url: 'https://test.com/s/',
                 }
             )
