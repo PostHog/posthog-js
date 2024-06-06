@@ -1,8 +1,9 @@
 import { PostHog } from '../posthog-core'
-import { assignableWindow, window } from '../utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { logger } from '../utils/logger'
 import { loadScript } from '../utils'
 import Config from '../config'
+import { isUndefined } from '../utils/type-utils'
 
 const LOGGER_PREFIX = '[TRACING-HEADERS]'
 
@@ -29,7 +30,7 @@ export class TracingHeaders {
         )
     }
     public startIfEnabledOrStop() {
-        if (this.instance.config.__add_tracing_headers && this._canPatch()) {
+        if (this.instance.config.__add_tracing_headers) {
             this._loadScript(this._startCapturing)
         } else {
             this._restoreXHRPatch?.()
@@ -42,31 +43,11 @@ export class TracingHeaders {
 
     private _startCapturing = () => {
         // NB: we can assert sessionManager is present only because we've checked previously
-        assignableWindow.postHogTracingHeadersPatchFns._patchXHR(this.instance.sessionManager!)
-        assignableWindow.postHogTracingHeadersPatchFns._patchFetch(this.instance.sessionManager!)
-    }
-
-    private _canPatch() {
-        const skipping = 'skipping fetch patching'
-
-        if (!window) {
-            logger.warn(LOGGER_PREFIX + ' window is not available, ' + skipping)
-            return false
+        if (isUndefined(this._restoreXHRPatch)) {
+            assignableWindow.postHogTracingHeadersPatchFns._patchXHR(this.instance.sessionManager!)
         }
-        if (!window.fetch) {
-            logger.warn(LOGGER_PREFIX + ' window.fetch is not available, ' + skipping)
-            return false
+        if (isUndefined(this._restoreFetchPatch)) {
+            assignableWindow.postHogTracingHeadersPatchFns._patchFetch(this.instance.sessionManager!)
         }
-        if (this._restoreFetchPatch || this._restoreXHRPatch) {
-            logger.warn(LOGGER_PREFIX + ' already patched, ' + skipping)
-            return false
-        }
-
-        if (!this.instance.sessionManager) {
-            logger.warn(LOGGER_PREFIX + ' sessionManager is not available, ' + skipping)
-            return false
-        }
-
-        return true
     }
 }
