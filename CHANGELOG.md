@@ -1,3 +1,16 @@
+## 1.137.0 - 2024-06-05
+
+- chore: Bump version to 1.137.0 (#1227)
+- feat(survey): Event based survey: Show survey popup based on custom event (#1213)
+
+## 1.137.0 - 2024-06-05
+
+- feat(survey): Event based survey: Show survey popup based on custom event #1213
+
+## 1.136.8 - 2024-06-05
+
+- fix: flush on idle (#1225)
+
 ## 1.136.7 - 2024-06-04
 
 - fix: no full snapshot while idle (#1222)

@@ -1283,15 +1283,27 @@ describe('SessionRecording', () => {
             // the custom event doesn't show here since there's not a real rrweb to emit it
             expect(sessionRecording['buffer']).toEqual({
                 data: [
-                    createFullSnapshot(),
-                    firstSnapshotEvent,
-                    secondSnapshot,
-                    // the third snapshot is dropped since it switches the session to idle
+                    // buffer is flushed on switch to idle
                 ],
                 sessionId: firstSessionId,
-                size: 156,
+                size: 0,
                 windowId: expect.any(String),
             })
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [createFullSnapshot(), firstSnapshotEvent, secondSnapshot],
+                    $session_id: firstSessionId,
+                    $snapshot_bytes: 156,
+                    $window_id: expect.any(String),
+                },
+                {
+                    _batchKey: 'recordings',
+                    _noTruncate: true,
+                    _noHeatmaps: true,
+                    _url: 'https://test.com/s/',
+                }
+            )
 
             // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
 
@@ -1306,9 +1318,9 @@ describe('SessionRecording', () => {
             // the fourth snapshot should not trigger a flush because the session id has not changed...
             expect(sessionRecording['buffer']).toEqual({
                 // as we return from idle we will capture a full snapshot _before_ the fourth snapshot
-                data: [createFullSnapshot(), firstSnapshotEvent, secondSnapshot, createFullSnapshot(), fourthSnapshot],
+                data: [createFullSnapshot(), fourthSnapshot],
                 sessionId: firstSessionId,
-                size: 244,
+                size: 88,
                 windowId: expect.any(String),
             })
 
@@ -1371,18 +1383,29 @@ describe('SessionRecording', () => {
             // the custom event doesn't show here since there's not a real rrweb to emit it
             expect(sessionRecording['buffer']).toEqual({
                 data: [
-                    createFullSnapshot(),
-                    firstSnapshotEvent,
-                    secondSnapshot,
-                    // the third snapshot is dropped since it switches the session to idle
+                    // the buffer is flushed on switch to idle
                 ],
                 sessionId: firstSessionId,
-                size: 156,
+                size: 0,
                 windowId: expect.any(String),
             })
 
-            // at this point nothing has caused the session to be flushed to the backend
-            expect(posthog.capture).not.toHaveBeenCalled()
+            // the buffer is flushed on switch to idle
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [createFullSnapshot(), firstSnapshotEvent, secondSnapshot],
+                    $session_id: firstSessionId,
+                    $snapshot_bytes: 156,
+                    $window_id: expect.any(String),
+                },
+                {
+                    _batchKey: 'recordings',
+                    _noTruncate: true,
+                    _noHeatmaps: true,
+                    _url: 'https://test.com/s/',
+                }
+            )
 
             // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
 
