@@ -843,6 +843,47 @@ describe('SessionRecording', () => {
             expect(sessionRecording.started).toEqual(false)
         })
 
+        it('can emit when there are circular references', () => {
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.startIfEnabledOrStop()
+
+            const someObject = { emit: 1 }
+            // the same object can be there multiple times
+            const circularObject: Record<string, any> = { emit: someObject, again: someObject }
+            // but a circular reference will be replaced
+            circularObject.circularReference = circularObject
+            _emit(createFullSnapshot(circularObject))
+
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        again: {
+                            emit: 1,
+                        },
+                        circularReference: {
+                            again: {
+                                emit: 1,
+                            },
+                            // the circular reference is captured to the buffer,
+                            // but it didn't explode when estimating size
+                            circularReference: expect.any(Object),
+                            emit: {
+                                emit: 1,
+                            },
+                        },
+                        data: {},
+                        emit: {
+                            emit: 1,
+                        },
+                        type: 2,
+                    },
+                ],
+                sessionId: sessionId,
+                size: 149,
+                windowId: 'windowId',
+            })
+        })
+
         describe('console logs', () => {
             it('if not enabled, plugin is not used', () => {
                 posthog.config.enable_recording_console_log = false
