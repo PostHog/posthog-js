@@ -193,33 +193,14 @@ export function generateSurveys(posthog: PostHog) {
     }, 3000)
 }
 
-export function SurveyPopup({
-    survey,
-    forceDisableHtml,
-    posthog,
-    style,
-    previewPageIndex,
-}: {
-    survey: Survey
-    forceDisableHtml?: boolean
-    posthog?: PostHog
-    style?: React.CSSProperties
-    previewPageIndex?: number | undefined
-}) {
-    const isPreviewMode = Number.isInteger(previewPageIndex)
-    const delay = survey.appearance?.surveyPopupDelay ? survey.appearance.surveyPopupDelay * 1000 : 0
+export function usePopupVisibility(
+    survey: Survey,
+    posthog: PostHog | undefined,
+    delay: number,
+    isPreviewMode: boolean
+) {
     const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || delay === 0)
     const [isSurveySent, setIsSurveySent] = useState(false)
-    const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
-    const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
-
-    // Ensure the popup stays in the same position for the preview
-    if (isPreviewMode) {
-        style = style || {}
-        style.left = 'unset'
-        style.right = 'unset'
-        style.transform = 'unset'
-    }
 
     useEffect(() => {
         if (isPreviewMode || !posthog) {
@@ -286,6 +267,41 @@ export function SurveyPopup({
             }
         }
     }, [])
+
+    return { isPopupVisible, setIsPopupVisible, isSurveySent, setIsSurveySent }
+}
+
+export function SurveyPopup({
+    survey,
+    forceDisableHtml,
+    posthog,
+    style,
+    previewPageIndex,
+}: {
+    survey: Survey
+    forceDisableHtml?: boolean
+    posthog?: PostHog
+    style?: React.CSSProperties
+    previewPageIndex?: number | undefined
+}) {
+    const isPreviewMode = Number.isInteger(previewPageIndex)
+    const delay = survey.appearance?.surveyPopupDelay ? survey.appearance.surveyPopupDelay * 1000 : 0
+
+    const { isPopupVisible, isSurveySent, setIsPopupVisible } = usePopupVisibility(
+        survey,
+        posthog,
+        delay,
+        isPreviewMode
+    )
+    const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
+    const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
+
+    if (isPreviewMode) {
+        style = style || {}
+        style.left = 'unset'
+        style.right = 'unset'
+        style.transform = 'unset'
+    }
 
     return isPopupVisible ? (
         <SurveyContext.Provider
