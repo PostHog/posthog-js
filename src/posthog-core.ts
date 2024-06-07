@@ -72,6 +72,7 @@ import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
+import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
 
 /*
@@ -173,6 +174,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'always',
+    __add_tracing_headers: false,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -271,6 +273,7 @@ export class PostHog {
 
     constructor() {
         this.config = defaultConfig()
+
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.__request_queue = []
@@ -391,6 +394,8 @@ export class PostHog {
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+
+        new TracingHeaders(this).startIfEnabledOrStop()
 
         this.sessionRecording = new SessionRecording(this)
         this.sessionRecording.startIfEnabledOrStop()
