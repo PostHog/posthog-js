@@ -1,3 +1,8 @@
+## 1.138.1 - 2024-06-07
+
+- feat: wrap fetch and add tracing headers (#1186)
+- feat(survey): Support identifying iterations of a repeatable survey (#1200)
+
 ## 1.138.0 - 2024-06-06
 
 - feat(surveys): `posthog-js` changes to support valid HTML question rendering (#1206)
