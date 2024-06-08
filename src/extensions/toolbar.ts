@@ -21,18 +21,14 @@ enum ToolbarState {
 }
 
 export class Toolbar {
-    instance: PostHog
-
-    constructor(instance: PostHog) {
-        this.instance = instance
-    }
+    constructor(private readonly __instance: PostHog) {}
 
     // NOTE: We store the state of the toolbar in the global scope to avoid multiple instances of the SDK loading the toolbar
-    private setToolbarState(state: ToolbarState) {
+    private __setToolbarState(state: ToolbarState) {
         assignableWindow['ph_toolbar_state'] = state
     }
 
-    private getToolbarState(): ToolbarState {
+    private __getToolbarState(): ToolbarState {
         return assignableWindow['ph_toolbar_state'] ?? ToolbarState.UNINITIALIZED
     }
 
@@ -112,7 +108,7 @@ export class Toolbar {
                 delete toolbarParams.userIntent
             }
 
-            if (toolbarParams['token'] && this.instance.config.token === toolbarParams['token']) {
+            if (toolbarParams['token'] && this.__instance.config.token === toolbarParams['token']) {
                 this.loadToolbar(toolbarParams)
                 return true
             } else {
@@ -123,8 +119,8 @@ export class Toolbar {
         }
     }
 
-    private _callLoadToolbar(params: ToolbarParams) {
-        ;(assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor'])(params, this.instance)
+    private __callLoadToolbar(params: ToolbarParams) {
+        ;(assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor'])(params, this.__instance)
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
@@ -136,12 +132,12 @@ export class Toolbar {
         }
 
         const disableToolbarMetrics =
-            this.instance.requestRouter.region === 'custom' && this.instance.config.advanced_disable_toolbar_metrics
+            this.__instance.requestRouter.region === 'custom' && this.__instance.config.advanced_disable_toolbar_metrics
 
         const toolbarParams = {
-            token: this.instance.config.token,
+            token: this.__instance.config.token,
             ...params,
-            apiURL: this.instance.requestRouter.endpointFor('ui'),
+            apiURL: this.__instance.requestRouter.endpointFor('ui'),
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
         window.localStorage.setItem(
@@ -152,18 +148,18 @@ export class Toolbar {
             })
         )
 
-        if (this.getToolbarState() === ToolbarState.LOADED) {
-            this._callLoadToolbar(toolbarParams)
-        } else if (this.getToolbarState() === ToolbarState.UNINITIALIZED) {
+        if (this.__getToolbarState() === ToolbarState.LOADED) {
+            this.__callLoadToolbar(toolbarParams)
+        } else if (this.__getToolbarState() === ToolbarState.UNINITIALIZED) {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
-            this.setToolbarState(ToolbarState.LOADING)
+            this.__setToolbarState(ToolbarState.LOADING)
 
             // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
             // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
             const fiveMinutesInMillis = 5 * 60 * 1000
             // this ensures that we bust the cache periodically
             const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
-            const toolbarUrl = this.instance.requestRouter.endpointFor(
+            const toolbarUrl = this.__instance.requestRouter.endpointFor(
                 'assets',
                 `/static/toolbar.js?t=${timestampToNearestFiveMinutes}`
             )
@@ -171,17 +167,17 @@ export class Toolbar {
             loadScript(toolbarUrl, (err) => {
                 if (err) {
                     logger.error('Failed to load toolbar', err)
-                    this.setToolbarState(ToolbarState.UNINITIALIZED)
+                    this.__setToolbarState(ToolbarState.UNINITIALIZED)
                     return
                 }
-                this.setToolbarState(ToolbarState.LOADED)
-                this._callLoadToolbar(toolbarParams)
+                this.__setToolbarState(ToolbarState.LOADED)
+                this.__callLoadToolbar(toolbarParams)
             })
 
             // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
             // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
             registerEvent(window, 'turbolinks:load', () => {
-                this.setToolbarState(ToolbarState.UNINITIALIZED)
+                this.__setToolbarState(ToolbarState.UNINITIALIZED)
                 this.loadToolbar(toolbarParams)
             })
         }
