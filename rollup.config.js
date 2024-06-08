@@ -16,7 +16,9 @@ const plugins = [
         babelHelpers: 'bundled',
         presets: ['@babel/preset-env'],
     }),
-    terser({ toplevel: true }),
+    // mangle properties starting with __
+    // allows TS classes to opt in to their private fields nad methods being mangled
+    terser({ toplevel: true, mangle: { properties: { regex: /^__/ } } }),
     visualizer(),
 ]
 
