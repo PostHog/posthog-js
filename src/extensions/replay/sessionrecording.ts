@@ -11,7 +11,6 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-    MutationRateLimiter,
     recordOptions,
     rrwebRecord,
     truncateLargeConsoleLogs,
@@ -36,6 +35,7 @@ import { logger } from '../../utils/logger'
 import { document, assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
+import { MutationRateLimiter } from './mutation-rate-limiter'
 
 const BASE_ENDPOINT = '/s/'
 
