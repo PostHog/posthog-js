@@ -20,6 +20,13 @@ jest.mock('../utils/globals', () => {
                 return mockURLGetter()
             },
         },
+        get location() {
+            const url = mockURLGetter()
+            return {
+                href: url,
+                toString: () => url,
+            }
+        },
     }
 })
 
@@ -158,6 +165,9 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
@@ -168,7 +178,7 @@ describe('person processing', () => {
             // arrange
             const { posthog, onCapture } = await setup('identified_only')
             mockReferrerGetter.mockReturnValue('https://referrer1.com')
-            mockURLGetter.mockReturnValue('https://example1.com?utm_source=foo1')
+            mockURLGetter.mockReturnValue('https://example1.com/pathname1?utm_source=foo1')
 
             // act
             // s1
@@ -180,7 +190,7 @@ describe('person processing', () => {
 
             // s2
             mockReferrerGetter.mockReturnValue('https://referrer2.com')
-            mockURLGetter.mockReturnValue('https://example2.com?utm_source=foo2')
+            mockURLGetter.mockReturnValue('https://example2.com/pathname2?utm_source=foo2')
             posthog.capture('event s2 before identify')
             posthog.identify(distinctId)
             posthog.capture('event s2 after identify')
@@ -197,6 +207,9 @@ describe('person processing', () => {
 
             expect(eventS2Identify[0]).toEqual('$identify')
             expect(eventS2Identify[1].$set_once).toEqual({
+                $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
+                $initial_host: 'example1.com',
+                $initial_pathname: '/pathname1',
                 $initial_referrer: 'https://referrer1.com',
                 $initial_referring_domain: 'referrer1.com',
                 $initial_utm_source: 'foo1',
@@ -204,6 +217,9 @@ describe('person processing', () => {
 
             expect(eventS2After[0]).toEqual('event s2 after identify')
             expect(eventS2After[1].$set_once).toEqual({
+                $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
+                $initial_host: 'example1.com',
+                $initial_pathname: '/pathname1',
                 $initial_referrer: 'https://referrer1.com',
                 $initial_referring_domain: 'referrer1.com',
                 $initial_utm_source: 'foo1',
@@ -221,6 +237,9 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
@@ -243,6 +262,9 @@ describe('person processing', () => {
             expect(eventBeforeIdentify[1].$set_once).toBeUndefined()
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
@@ -261,12 +283,18 @@ describe('person processing', () => {
             // assert
             const eventBeforeIdentify = onCapture.mock.calls[0]
             expect(eventBeforeIdentify[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
             })
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
