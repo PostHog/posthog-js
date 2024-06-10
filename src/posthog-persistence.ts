@@ -270,9 +270,6 @@ export class PostHogPersistence {
             extend(p, initialPersonProps)
         }
 
-        // eslint-disable-next-line no-console
-        console.log({ p })
-
         return p
     }
 
