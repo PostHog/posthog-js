@@ -96,6 +96,7 @@ interface SnapshotBuffer {
     windowId: string
 
     readonly mostRecentSnapshotTimestamp: number | null
+
     add(properties: Properties): void
 }
 
@@ -136,6 +137,32 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 })
 
 const LOGGER_PREFIX = '[SessionRecording]'
+
+// taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
+function circularReferenceReplacer() {
+    const ancestors: any[] = []
+    return function (_key: string, value: any) {
+        if (isObject(value)) {
+            // `this` is the object that value is contained in,
+            // i.e., its direct parent.
+            // @ts-expect-error - TS was unhappy with `this` on the next line but the code is copied in from MDN
+            while (ancestors.length > 0 && ancestors.at(-1) !== this) {
+                ancestors.pop()
+            }
+            if (ancestors.includes(value)) {
+                return '[Circular]'
+            }
+            ancestors.push(value)
+            return value
+        } else {
+            return value
+        }
+    }
+}
+
+function estimateSize(event: eventWithTime): number {
+    return JSON.stringify(event, circularReferenceReplacer()).length
+}
 
 export class SessionRecording {
     private _endpoint: string
@@ -479,6 +506,7 @@ export class SessionRecording {
             timestamp: timestamp(),
         })
     }
+
     private _startCapture() {
         if (isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -786,7 +814,7 @@ export class SessionRecording {
 
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
-        const size = JSON.stringify(event).length
+        const size = estimateSize(event)
 
         this._updateWindowAndSessionIds(event)
 
