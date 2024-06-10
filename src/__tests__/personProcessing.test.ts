@@ -288,9 +288,9 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
-                $initial_referrer: 'https://legacy-referrer.com',
-                $initial_referring_domain: 'legacy-referrer.com',
-                $initial_utm_source: 'legacy-source',
+                $initial_referrer: 'https://deprecated-referrer.com',
+                $initial_referring_domain: 'deprecated-referrer.com',
+                $initial_utm_source: 'deprecated-source',
             })
         })
     })
