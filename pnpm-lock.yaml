@@ -1,4 +1,4 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
 
 settings:
   autoInstallPeers: true
@@ -52,8 +52,8 @@ devDependencies:
     specifier: 2.0.0-alpha.13
     version: 2.0.0-alpha.13
   '@sentry/types':
-    specifier: 7.37.2
-    version: 7.37.2
+    specifier: 8.7.0
+    version: 8.7.0
   '@testing-library/dom':
     specifier: ^9.3.0
     version: 9.3.0
@@ -2664,9 +2664,9 @@ packages:
       rrweb-snapshot: 2.0.0-alpha.13
     dev: true
 
-  /@sentry/types@7.37.2:
-    resolution: {integrity: sha512-SxKQOCX94ZaQM4C2ysNjHdJsjYapu/NYZCz1cnPyCdDvYfhwiVge1uq6ZHiQ/ARfxAAOmc3R4Mh3VvEz7WUOdw==}
-    engines: {node: '>=8'}
+  /@sentry/types@8.7.0:
+    resolution: {integrity: sha512-11KLOKumP6akugVGLvSoEig+JlP0ZEzW3nN9P+ppgdIx9HAxMIh6UvumbieG4/DWjAh2kh6NPNfUw3gk2Gfq1A==}
+    engines: {node: '>=14.18'}
     dev: true
 
   /@sinclair/typebox@0.25.24:
