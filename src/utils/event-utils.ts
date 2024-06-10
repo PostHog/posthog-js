@@ -52,8 +52,7 @@ export const Info = {
         return params
     },
 
-    searchEngine: function (): string | null {
-        const referrer = document?.referrer
+    _searchEngine: function (referrer: string): string | null {
         if (!referrer) {
             return null
         } else {
@@ -71,10 +70,10 @@ export const Info = {
         }
     },
 
-    searchInfo: function (): Record<string, any> {
-        const search = Info.searchEngine(),
-            param = search != 'yahoo' ? 'q' : 'p',
-            ret: Record<string, any> = {}
+    _searchInfoFromReferrer: function (referrer: string): Record<string, any> {
+        const search = Info._searchEngine(referrer)
+        const param = search != 'yahoo' ? 'q' : 'p'
+        const ret: Record<string, any> = {}
 
         if (!isNull(search)) {
             ret['$search_engine'] = search
@@ -86,6 +85,14 @@ export const Info = {
         }
 
         return ret
+    },
+
+    searchInfo: function (): Record<string, any> {
+        const referrer = document?.referrer
+        if (!referrer) {
+            return {}
+        }
+        return this._searchInfoFromReferrer(referrer)
     },
 
     /**
@@ -152,23 +159,27 @@ export const Info = {
                 : initial_referrer == '$direct'
                 ? '$direct'
                 : convertToURL(initial_referrer)?.host
-        const location = initial_current_url == null ? undefined : convertToURL(initial_current_url)
-        const host = location?.host
-        const pathname = location?.pathname
-
-        const campaignParams = this._campaignParamsFromUrl(initial_current_url)
 
         const props: Record<string, string | undefined> = {
             $initial_referrer: initial_referrer,
             $initial_referring_domain: referring_domain,
-            $initial_current_url: initial_current_url,
-            $initial_host: host,
-            $initial_pathname: pathname,
         }
-        each(campaignParams, function (v, k: string) {
-            props['$initial_' + stripLeadingDollar(k)] = v
-        })
-
+        if (initial_current_url) {
+            props['$initial_current_url'] = initial_current_url
+            const location = convertToURL(initial_current_url)
+            props['$initial_host'] = location?.host
+            props['$initial_pathname'] = location?.pathname
+            const campaignParams = this._campaignParamsFromUrl(initial_current_url)
+            each(campaignParams, function (v, k: string) {
+                props['$initial_' + stripLeadingDollar(k)] = v
+            })
+        }
+        if (initial_referrer) {
+            const searchInfo = this._searchInfoFromReferrer(initial_referrer)
+            each(searchInfo, function (v, k: string) {
+                props['$initial_' + stripLeadingDollar(k)] = v
+            })
+        }
         return props
     },
 
