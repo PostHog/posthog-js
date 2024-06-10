@@ -768,11 +768,12 @@ export class PostHog {
         // with every event and used by the session table to create session-initial props.
         if (this.config.store_google) {
             this.sessionPersistence.update_campaign_params()
-            this.persistence.set_initial_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
-            this.persistence.set_initial_referrer_info()
+        }
+        if (this.config.store_google || this.config.save_referrer) {
+            this.persistence.set_initial_person_info()
         }
 
         let data: CaptureResult = {
