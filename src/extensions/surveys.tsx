@@ -37,12 +37,21 @@ const handleWidget = (posthog: PostHog, survey: Survey) => {
 }
 
 const visibleSurveys = new Set()
+let processingSurveyId: string | null = null
 
 export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     posthog?.getActiveMatchingSurveys((surveys) => {
         const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
+
+        // Sort the surveys by surveyPopupDelay (ascending order)
+        nonAPISurveys.sort((a, b) => {
+            const delayA = a.appearance?.surveyPopupDelay || 0
+            const delayB = b.appearance?.surveyPopupDelay || 0
+            return delayA - delayB
+        })
+
         nonAPISurveys.forEach((survey) => {
-            if (visibleSurveys.has(survey.id)) {
+            if (visibleSurveys.has(survey.id) || processingSurveyId) {
                 return // skip if survey is already visible
             }
             if (survey.type === SurveyType.Widget) {
@@ -105,6 +114,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
 
                 if (!localStorage.getItem(getSurveySeenKey(survey))) {
                     visibleSurveys.add(survey.id)
+                    processingSurveyId = survey.id // Set the processing survey
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<SurveyPopup key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
@@ -209,10 +219,12 @@ export function usePopupVisibility(
 
         const handleSurveyClosed = () => {
             setIsPopupVisible(false)
+            processingSurveyId = null // Clear the processing survey
         }
 
         const handleSurveySent = () => {
             if (!survey.appearance?.displayThankYouMessage) {
+                processingSurveyId = null // Clear the processing survey
                 return setIsPopupVisible(false)
             }
 
@@ -220,7 +232,8 @@ export function usePopupVisibility(
 
             if (survey.appearance?.autoDisappear) {
                 setTimeout(() => {
-                    setIsPopupVisible(false)
+                    processingSurveyId = null // Clear the processing survey
+                    return setIsPopupVisible(false)
                 }, 5000)
             }
         }
@@ -240,6 +253,7 @@ export function usePopupVisibility(
                     $survey_iteration_start_date: survey.current_iteration_start_date,
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
+                processingSurveyId = null // Clear the processing survey
                 localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
             }, delay)
 
@@ -268,7 +282,7 @@ export function usePopupVisibility(
         }
     }, [])
 
-    return { isPopupVisible, setIsPopupVisible, isSurveySent, setIsSurveySent }
+    return { isPopupVisible, isSurveySent, setIsPopupVisible }
 }
 
 export function SurveyPopup({
