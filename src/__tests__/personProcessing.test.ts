@@ -230,6 +230,26 @@ describe('person processing', () => {
         it('should include initial referrer info in identify event if always', async () => {
             // arrange
             const { posthog, onCapture } = await setup('always')
+
+            // act
+            posthog.identify(distinctId)
+
+            // assert
+            const identifyCall = onCapture.mock.calls[0]
+            expect(identifyCall[0]).toEqual('$identify')
+            expect(identifyCall[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
+                $initial_referrer: 'https://referrer.com',
+                $initial_referring_domain: 'referrer.com',
+                $initial_utm_source: 'foo',
+            })
+        })
+
+        it('should include initial search params', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('always')
             mockReferrerGetter.mockReturnValue('https://www.google.com?q=bar')
 
             // act
@@ -247,26 +267,6 @@ describe('person processing', () => {
                 $initial_utm_source: 'foo',
                 $initial_ph_keyword: 'bar',
                 $initial_search_engine: 'google',
-            })
-        })
-
-        it('should include initial search params', async () => {
-            // arrange
-            const { posthog, onCapture } = await setup('always')
-
-            // act
-            posthog.identify(distinctId)
-
-            // assert
-            const identifyCall = onCapture.mock.calls[0]
-            expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].$set_once).toEqual({
-                $initial_current_url: 'https://example.com?utm_source=foo',
-                $initial_host: 'example.com',
-                $initial_pathname: '/',
-                $initial_referrer: 'https://referrer.com',
-                $initial_referring_domain: 'referrer.com',
-                $initial_utm_source: 'foo',
             })
         })
 
