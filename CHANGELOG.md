@@ -1,3 +1,7 @@
+## 1.138.3 - 2024-06-10
+
+- fix: circular refs shouldn't explode capture (#1230)
+
 ## 1.138.2 - 2024-06-10
 
 - feat: Updated v8 sentry integration (#1224)
