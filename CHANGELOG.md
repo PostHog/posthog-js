@@ -1,3 +1,7 @@
+## 1.139.0 - 2024-06-10
+
+- feat(personless-events): set_once more initial properties accurately when a person is created (#1236)
+
 ## 1.138.3 - 2024-06-10
 
 - fix: circular refs shouldn't explode capture (#1230)
