@@ -231,6 +231,11 @@ export class PostHogPersistence {
     }
 
     set_initial_person_info(): void {
+        if (this.props[INITIAL_CAMPAIGN_PARAMS] || this.props[INITIAL_REFERRER_INFO]) {
+            // the user has initial properties stored the previous way, don't save them again
+            return
+        }
+
         this.register_once(
             {
                 [INITIAL_PERSON_INFO]: Info.initialPersonInfo(),
