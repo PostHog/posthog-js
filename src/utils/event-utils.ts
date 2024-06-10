@@ -2,7 +2,7 @@ import { getQueryParam, convertToURL } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties, timestamp } from './index'
+import { each, extend, stripEmptyProperties, stripLeadingDollar, timestamp } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 
@@ -31,13 +31,20 @@ export const CAMPAIGN_PARAMS = [
 ]
 
 export const Info = {
-    campaignParams: function (customParams?: string[]): Record<string, any> {
+    campaignParams: function (customParams?: string[]): Record<string, string> {
+        if (!document) {
+            return {}
+        }
+        return this._campaignParamsFromUrl(document.URL, customParams)
+    },
+
+    _campaignParamsFromUrl: function (url: string, customParams?: string[]): Record<string, string> {
         const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
 
         const params: Record<string, any> = {}
         each(campaign_keywords, function (kwkey) {
-            const kw = document ? getQueryParam(document.URL, kwkey) : ''
-            if (kw.length) {
+            const kw = getQueryParam(url, kwkey)
+            if (kw) {
                 params[kwkey] = kw
             }
         })
@@ -127,6 +134,42 @@ export const Info = {
             $referrer: this.referrer(),
             $referring_domain: this.referringDomain(),
         }
+    },
+
+    initialPersonInfo: function (): Record<string, any> {
+        // we're being a bit more economical with bytes here because this is stored in the cookie
+        return {
+            r: this.referrer(),
+            u: location?.href,
+        }
+    },
+
+    initialPersonPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
+        const { r: initial_referrer, u: initial_current_url } = info
+        const referring_domain =
+            initial_referrer == null
+                ? undefined
+                : initial_referrer == '$direct'
+                ? '$direct'
+                : convertToURL(initial_referrer)?.host
+        const location = initial_current_url == null ? undefined : convertToURL(initial_current_url)
+        const host = location?.host
+        const pathname = location?.pathname
+
+        const campaignParams = this._campaignParamsFromUrl(initial_current_url)
+
+        const props: Record<string, string | undefined> = {
+            $initial_referrer: initial_referrer,
+            $initial_referring_domain: referring_domain,
+            $initial_current_url: initial_current_url,
+            $initial_host: host,
+            $initial_pathname: pathname,
+        }
+        each(campaignParams, function (v, k: string) {
+            props['$initial_' + stripLeadingDollar(k)] = v
+        })
+
+        return props
     },
 
     properties: function (): Properties {

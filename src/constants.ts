@@ -31,6 +31,7 @@ export const CLIENT_SESSION_PROPS = '$client_session_props'
 export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
 export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
 export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
+export const INITIAL_PERSON_INFO = '$initial_person_info'
 export const ENABLE_PERSON_PROCESSING = '$epp'
 export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
 

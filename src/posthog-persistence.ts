@@ -7,6 +7,7 @@ import {
     ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
     INITIAL_CAMPAIGN_PARAMS,
+    INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
     PERSISTENCE_RESERVED_PROPERTIES,
 } from './constants'
@@ -221,13 +222,6 @@ export class PostHogPersistence {
             this.campaign_params_saved = true
         }
     }
-    set_initial_campaign_params(): void {
-        this.register_once(
-            { [INITIAL_CAMPAIGN_PARAMS]: Info.campaignParams(this.config.custom_campaign_params) },
-            undefined
-        )
-    }
-
     update_search_keyword(): void {
         this.register(Info.searchInfo())
     }
@@ -236,10 +230,10 @@ export class PostHogPersistence {
         this.register(Info.referrerInfo())
     }
 
-    set_initial_referrer_info(): void {
+    set_initial_person_info(): void {
         this.register_once(
             {
-                [INITIAL_REFERRER_INFO]: Info.referrerInfo(),
+                [INITIAL_PERSON_INFO]: Info.initialPersonInfo(),
             },
             undefined
         )
@@ -254,6 +248,9 @@ export class PostHogPersistence {
 
     get_initial_props(): Properties {
         const p: Properties = {}
+
+        // this section isn't written to anymore, but we should keep reading from it for backwards compatibility
+        // for a while
         each([INITIAL_REFERRER_INFO, INITIAL_CAMPAIGN_PARAMS], (key) => {
             const initialReferrerInfo = this.props[key]
             if (initialReferrerInfo) {
@@ -262,6 +259,15 @@ export class PostHogPersistence {
                 })
             }
         })
+        const initialPersonInfo = this.props[INITIAL_PERSON_INFO]
+        if (initialPersonInfo) {
+            const initialPersonProps = Info.initialPersonPropsFromInfo(initialPersonInfo)
+            extend(p, initialPersonProps)
+        }
+
+        // eslint-disable-next-line no-console
+        console.log({ p })
+
         return p
     }
 
