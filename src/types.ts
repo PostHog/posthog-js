@@ -176,6 +176,12 @@ export interface PostHogConfig {
         /** How many events can be captured in a burst. This defaults to 10 times the events_per_second count  */
         events_burst_limit?: number
     }
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * whether to wrap fetch and add tracing headers to the request
+     * */
+    __add_tracing_headers?: boolean
 }
 
 export interface OptInOutCapturingOptions {

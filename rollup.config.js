@@ -92,6 +92,18 @@ export default [
         plugins: [...plugins],
     },
     {
+        input: 'src/loader-tracing-headers.ts',
+        output: [
+            {
+                file: 'dist/tracing-headers.js',
+                sourcemap: true,
+                format: 'iife',
+                name: 'posthog',
+            },
+        ],
+        plugins: [...plugins],
+    },
+    {
         input: 'src/loader-globals.ts',
         output: [
             {

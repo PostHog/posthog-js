@@ -6,10 +6,12 @@ import {
     style,
     defaultSurveyAppearance,
     sendSurveyEvent,
+    dismissedSurveyEvent,
     createShadow,
     getContrastingTextColor,
     SurveyContext,
     getDisplayOrderQuestions,
+    getSurveySeenKey,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -96,7 +98,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
 
-                if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
+                if (!localStorage.getItem(getSurveySeenKey(survey))) {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<SurveyPopup key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
@@ -105,7 +107,17 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     }, forceReload)
 }
 
-export const renderSurveysPreview = (survey: Survey, parentElement: HTMLElement, previewPageIndex: number) => {
+export const renderSurveysPreview = ({
+    survey,
+    parentElement,
+    previewPageIndex,
+    forceDisableHtml,
+}: {
+    survey: Survey
+    parentElement: HTMLElement
+    previewPageIndex: number
+    forceDisableHtml?: boolean
+}) => {
     const surveyStyleSheet = style(survey.appearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
 
@@ -125,6 +137,7 @@ export const renderSurveysPreview = (survey: Survey, parentElement: HTMLElement,
         <SurveyPopup
             key="surveys-render-preview"
             survey={survey}
+            forceDisableHtml={forceDisableHtml}
             style={{
                 position: 'relative',
                 right: 0,
@@ -137,12 +150,27 @@ export const renderSurveysPreview = (survey: Survey, parentElement: HTMLElement,
         parentElement
     )
 }
-
-export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement) => {
+export const renderFeedbackWidgetPreview = ({
+    survey,
+    root,
+    forceDisableHtml,
+}: {
+    survey: Survey
+    root: HTMLElement
+    forceDisableHtml?: boolean
+}) => {
     const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
     const styleElement = Object.assign(document.createElement('style'), { innerText: widgetStyleSheet })
     root.appendChild(styleElement)
-    Preact.render(<FeedbackWidget key={'feedback-render-preview'} survey={survey} readOnly={true} />, root)
+    Preact.render(
+        <FeedbackWidget
+            key={'feedback-render-preview'}
+            forceDisableHtml={forceDisableHtml}
+            survey={survey}
+            readOnly={true}
+        />,
+        root
+    )
 }
 
 // This is the main exported function
@@ -161,11 +189,13 @@ export function generateSurveys(posthog: PostHog) {
 
 export function SurveyPopup({
     survey,
+    forceDisableHtml,
     posthog,
     style,
     previewPageIndex,
 }: {
     survey: Survey
+    forceDisableHtml?: boolean
     posthog?: PostHog
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
@@ -193,6 +223,8 @@ export function SurveyPopup({
         posthog.capture('survey shown', {
             $survey_name: survey.name,
             $survey_id: survey.id,
+            $survey_iteration: survey.current_iteration,
+            $survey_iteration_start_date: survey.current_iteration_start_date,
             sessionRecordingUrl: posthog.get_session_replay_url?.(),
         })
         localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
@@ -220,15 +252,22 @@ export function SurveyPopup({
             value={{
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
-                handleCloseSurveyPopup: () => closeSurveyPopup(survey, posthog, isPreviewMode),
+                handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
             }}
         >
             {!shouldShowConfirmation ? (
-                <Questions survey={survey} posthog={posthog} styleOverrides={style} />
+                <Questions
+                    survey={survey}
+                    forceDisableHtml={!!forceDisableHtml}
+                    posthog={posthog}
+                    styleOverrides={style}
+                />
             ) : (
                 <ConfirmationMessage
                     header={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                     description={survey.appearance?.thankYouMessageDescription || ''}
+                    forceDisableHtml={!!forceDisableHtml}
+                    contentType={survey.appearance?.thankYouMessageDescriptionContentType}
                     appearance={survey.appearance || defaultSurveyAppearance}
                     styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
                     onClose={() => setIsPopupVisible(false)}
@@ -242,6 +281,7 @@ export function SurveyPopup({
 
 interface GetQuestionComponentProps {
     question: SurveyQuestion
+    forceDisableHtml: boolean
     displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (res: string | string[] | number | null) => void
@@ -249,6 +289,7 @@ interface GetQuestionComponentProps {
 
 const getQuestionComponent = ({
     question,
+    forceDisableHtml,
     displayQuestionIndex,
     appearance,
     onSubmit,
@@ -263,6 +304,7 @@ const getQuestionComponent = ({
 
     const commonProps = {
         question,
+        forceDisableHtml,
         appearance,
         onSubmit,
     }
@@ -283,10 +325,12 @@ const getQuestionComponent = ({
 
 export function Questions({
     survey,
+    forceDisableHtml,
     posthog,
     styleOverrides,
 }: {
     survey: Survey
+    forceDisableHtml: boolean
     posthog?: PostHog
     styleOverrides?: React.CSSProperties
 }) {
@@ -345,6 +389,7 @@ export function Questions({
                         <div>
                             {getQuestionComponent({
                                 question,
+                                forceDisableHtml,
                                 displayQuestionIndex,
                                 appearance: survey.appearance || defaultSurveyAppearance,
                                 onSubmit: (res) =>
@@ -362,29 +407,14 @@ export function Questions({
     )
 }
 
-const closeSurveyPopup = (survey: Survey, posthog?: PostHog, isPreviewMode?: boolean) => {
-    if (isPreviewMode || !posthog) {
-        return
-    }
-
-    posthog.capture('survey dismissed', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        $set: {
-            [`$survey_dismissed/${survey.id}`]: true,
-        },
-    })
-    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
-    window.dispatchEvent(new Event('PHSurveyClosed'))
-}
-
 export function FeedbackWidget({
     survey,
+    forceDisableHtml,
     posthog,
     readOnly,
 }: {
     survey: Survey
+    forceDisableHtml?: boolean
     posthog?: PostHog
     readOnly?: boolean
 }): JSX.Element {
@@ -433,7 +463,13 @@ export function FeedbackWidget({
                 </div>
             )}
             {showSurvey && (
-                <SurveyPopup key={'feedback-widget-survey'} posthog={posthog} survey={survey} style={styleOverrides} />
+                <SurveyPopup
+                    key={'feedback-widget-survey'}
+                    posthog={posthog}
+                    survey={survey}
+                    forceDisableHtml={forceDisableHtml}
+                    style={styleOverrides}
+                />
             )}
         </>
     )
