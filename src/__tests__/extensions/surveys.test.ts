@@ -57,11 +57,11 @@ describe('survey display logic', () => {
         jest.spyOn(global, 'setInterval')
         generateSurveys(mockPostHog)
         expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(1)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 3000)
+        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
 
-        jest.advanceTimersByTime(3000)
+        jest.advanceTimersByTime(1000)
         expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(2)
-        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 3000)
+        expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
     })
 })
 
@@ -154,7 +154,64 @@ describe('usePopupVisibility', () => {
         expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveySent', expect.any(Function))
         jest.useRealTimers()
     })
+
+    test('should set isPopupVisible to true if isPreviewMode is true', () => {
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, true))
+        expect(result.current.isPopupVisible).toBe(true)
+    })
+
+    test('should set isPopupVisible to true after a delay of 500 milliseconds', () => {
+        jest.useFakeTimers()
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 500, false))
+        expect(result.current.isPopupVisible).toBe(false)
+        act(() => {
+            jest.advanceTimersByTime(500)
+        })
+        expect(result.current.isPopupVisible).toBe(true)
+        jest.useRealTimers()
+    })
+
+    test('should not throw an error if posthog is undefined', () => {
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, undefined, 0, false))
+        expect(result.current.isPopupVisible).toBe(true)
+    })
+
+    test('should clean up event listeners on unmount when delay is 0', () => {
+        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
+        const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
+
+        unmount()
+
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveyClosed', expect.any(Function))
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('PHSurveySent', expect.any(Function))
+    })
+
+    test('should dispatch PHSurveyShown event when survey is shown', () => {
+        const dispatchEventSpy = jest.spyOn(window, 'dispatchEvent')
+        renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
+
+        expect(dispatchEventSpy).toHaveBeenCalledWith(new Event('PHSurveyShown'))
+    })
+
+    test('should handle multiple surveys with overlapping conditions', () => {
+        jest.useFakeTimers()
+        const mockSurvey2 = { ...mockSurvey, id: 'testSurvey2', name: 'Test survey 2' } as Survey
+        const { result: result1 } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
+        const { result: result2 } = renderHook(() => usePopupVisibility(mockSurvey2, mockPostHog, 500, false))
+
+        expect(result1.current.isPopupVisible).toBe(true)
+        expect(result2.current.isPopupVisible).toBe(false)
+
+        act(() => {
+            jest.advanceTimersByTime(500)
+        })
+
+        expect(result2.current.isPopupVisible).toBe(true)
+        jest.useRealTimers()
+    })
 })
+
+// describe('')
 
 describe('preview renders', () => {
     beforeEach(() => {
