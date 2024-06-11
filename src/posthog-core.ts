@@ -1674,7 +1674,8 @@ export class PostHog {
      *         maskInputOptions: {},
      *         maskInputFn: null,
      *         slimDOMOptions: {},
-     *         collectFonts: false
+     *         collectFonts: false,
+     *         inlineStylesheet: true,
      *      }
      *
      *      // prevent autocapture from capturing any attribute names on elements
