@@ -29,15 +29,8 @@ import {
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-const handleWidget = (posthog: PostHog, survey: Survey) => {
-    const shadow = createWidgetShadow(survey)
-    const surveyStyleSheet = style(survey.appearance)
-    shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
-    Preact.render(<FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} />, shadow)
-}
-
-const visibleSurveys = new Set()
-let processingSurveyId: string | null = null
+const displayedSurveys = new Set()
+let surveyIdBeingDisplayed: string | null = null // TODO this could be a bool instead of a string, we don't need to know the id
 
 export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
     posthog?.getActiveMatchingSurveys((surveys) => {
@@ -51,7 +44,7 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
         })
 
         nonAPISurveys.forEach((survey) => {
-            if (visibleSurveys.has(survey.id) || processingSurveyId) {
+            if (displayedSurveys.has(survey.id) || surveyIdBeingDisplayed) {
                 return // skip if survey is already visible
             }
             if (survey.type === SurveyType.Widget) {
@@ -113,8 +106,8 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                 }
 
                 if (!localStorage.getItem(getSurveySeenKey(survey))) {
-                    visibleSurveys.add(survey.id)
-                    processingSurveyId = survey.id // Set the processing survey
+                    displayedSurveys.add(survey.id)
+                    surveyIdBeingDisplayed = survey.id // Set the processing survey
                     const shadow = createShadow(style(survey?.appearance), survey.id)
                     Preact.render(<SurveyPopup key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
@@ -166,6 +159,7 @@ export const renderSurveysPreview = ({
         parentElement
     )
 }
+
 export const renderFeedbackWidgetPreview = ({
     survey,
     root,
@@ -197,10 +191,10 @@ export function generateSurveys(posthog: PostHog) {
     }
     callSurveys(posthog, true)
 
-    // recalculate surveys every 3 seconds to check if URL or selectors have changed
+    // recalculate surveys every second to check if URL or selectors have changed
     setInterval(() => {
         callSurveys(posthog, false)
-    }, 3000)
+    }, 1000)
 }
 
 export function usePopupVisibility(
@@ -218,13 +212,15 @@ export function usePopupVisibility(
         }
 
         const handleSurveyClosed = () => {
-            setIsPopupVisible(false)
-            processingSurveyId = null // Clear the processing survey
+            displayedSurveys.delete(survey.id)
+            surveyIdBeingDisplayed = null // Clear the processing survey
+            return setIsPopupVisible(false)
         }
 
         const handleSurveySent = () => {
             if (!survey.appearance?.displayThankYouMessage) {
-                processingSurveyId = null // Clear the processing survey
+                displayedSurveys.delete(survey.id)
+                surveyIdBeingDisplayed = null // Clear the processing survey
                 return setIsPopupVisible(false)
             }
 
@@ -232,7 +228,8 @@ export function usePopupVisibility(
 
             if (survey.appearance?.autoDisappear) {
                 setTimeout(() => {
-                    processingSurveyId = null // Clear the processing survey
+                    displayedSurveys.delete(survey.id)
+                    surveyIdBeingDisplayed = null // Clear the processing survey
                     return setIsPopupVisible(false)
                 }, 5000)
             }
@@ -253,7 +250,7 @@ export function usePopupVisibility(
                     $survey_iteration_start_date: survey.current_iteration_start_date,
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
-                processingSurveyId = null // Clear the processing survey
+                surveyIdBeingDisplayed = null // Clear the processing survey  // TODO WHY DO THIS HERE?
                 localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
             }, delay)
 
@@ -322,7 +319,8 @@ export function SurveyPopup({
             value={{
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
-                handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
+                handleCloseSurveyPopup: () =>
+                    displayedSurveys.delete(survey.id) && dismissedSurveyEvent(survey, posthog, isPreviewMode),
             }}
         >
             {!shouldShowConfirmation ? (
@@ -347,50 +345,6 @@ export function SurveyPopup({
     ) : (
         <></>
     )
-}
-
-interface GetQuestionComponentProps {
-    question: SurveyQuestion
-    forceDisableHtml: boolean
-    displayQuestionIndex: number
-    appearance: SurveyAppearance
-    onSubmit: (res: string | string[] | number | null) => void
-}
-
-const getQuestionComponent = ({
-    question,
-    forceDisableHtml,
-    displayQuestionIndex,
-    appearance,
-    onSubmit,
-}: GetQuestionComponentProps): JSX.Element => {
-    const questionComponents = {
-        [SurveyQuestionType.Open]: OpenTextQuestion,
-        [SurveyQuestionType.Link]: LinkQuestion,
-        [SurveyQuestionType.Rating]: RatingQuestion,
-        [SurveyQuestionType.SingleChoice]: MultipleChoiceQuestion,
-        [SurveyQuestionType.MultipleChoice]: MultipleChoiceQuestion,
-    }
-
-    const commonProps = {
-        question,
-        forceDisableHtml,
-        appearance,
-        onSubmit,
-    }
-
-    const additionalProps: Record<SurveyQuestionType, any> = {
-        [SurveyQuestionType.Open]: {},
-        [SurveyQuestionType.Link]: {},
-        [SurveyQuestionType.Rating]: { displayQuestionIndex },
-        [SurveyQuestionType.SingleChoice]: { displayQuestionIndex },
-        [SurveyQuestionType.MultipleChoice]: { displayQuestionIndex },
-    }
-
-    const Component = questionComponents[question.type]
-    const componentProps = { ...commonProps, ...additionalProps[question.type] }
-
-    return <Component {...componentProps} />
 }
 
 export function Questions({
@@ -432,6 +386,7 @@ export function Questions({
             originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
 
         if (isLastDisplayedQuestion) {
+            displayedSurveys.delete(survey.id)
             return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
             setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
@@ -543,4 +498,55 @@ export function FeedbackWidget({
             )}
         </>
     )
+}
+
+interface GetQuestionComponentProps {
+    question: SurveyQuestion
+    forceDisableHtml: boolean
+    displayQuestionIndex: number
+    appearance: SurveyAppearance
+    onSubmit: (res: string | string[] | number | null) => void
+}
+
+const getQuestionComponent = ({
+    question,
+    forceDisableHtml,
+    displayQuestionIndex,
+    appearance,
+    onSubmit,
+}: GetQuestionComponentProps): JSX.Element => {
+    const questionComponents = {
+        [SurveyQuestionType.Open]: OpenTextQuestion,
+        [SurveyQuestionType.Link]: LinkQuestion,
+        [SurveyQuestionType.Rating]: RatingQuestion,
+        [SurveyQuestionType.SingleChoice]: MultipleChoiceQuestion,
+        [SurveyQuestionType.MultipleChoice]: MultipleChoiceQuestion,
+    }
+
+    const commonProps = {
+        question,
+        forceDisableHtml,
+        appearance,
+        onSubmit,
+    }
+
+    const additionalProps: Record<SurveyQuestionType, any> = {
+        [SurveyQuestionType.Open]: {},
+        [SurveyQuestionType.Link]: {},
+        [SurveyQuestionType.Rating]: { displayQuestionIndex },
+        [SurveyQuestionType.SingleChoice]: { displayQuestionIndex },
+        [SurveyQuestionType.MultipleChoice]: { displayQuestionIndex },
+    }
+
+    const Component = questionComponents[question.type]
+    const componentProps = { ...commonProps, ...additionalProps[question.type] }
+
+    return <Component {...componentProps} />
+}
+
+const handleWidget = (posthog: PostHog, survey: Survey) => {
+    const shadow = createWidgetShadow(survey)
+    const surveyStyleSheet = style(survey.appearance)
+    shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
+    Preact.render(<FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} />, shadow)
 }
