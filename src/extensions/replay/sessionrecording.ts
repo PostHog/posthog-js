@@ -17,7 +17,7 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
-import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
+import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
 import { timestamp, loadScript } from '../../utils'
 
@@ -50,26 +50,6 @@ export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // import type { record } from 'rrweb2/typings'
 // import type { recordOptions } from 'rrweb/typings/types'
 
-// Copied from rrweb typings to avoid import
-enum IncrementalSource {
-    Mutation = 0,
-    MouseMove = 1,
-    MouseInteraction = 2,
-    Scroll = 3,
-    ViewportResize = 4,
-    Input = 5,
-    TouchMove = 6,
-    MediaInteraction = 7,
-    StyleSheetRule = 8,
-    CanvasMutation = 9,
-    Font = 10,
-    Log = 11,
-    Drag = 12,
-    StyleDeclaration = 13,
-    Selection = 14,
-    AdoptedStyleSheet = 15,
-}
-
 const ACTIVE_SOURCES = [
     IncrementalSource.MouseMove,
     IncrementalSource.MouseInteraction,
@@ -80,6 +60,27 @@ const ACTIVE_SOURCES = [
     IncrementalSource.MediaInteraction,
     IncrementalSource.Drag,
 ]
+
+const STYLE_SOURCES = [
+    IncrementalSource.StyleSheetRule,
+    IncrementalSource.StyleDeclaration,
+    IncrementalSource.AdoptedStyleSheet,
+    IncrementalSource.Font,
+]
+
+const TYPES_ALLOWED_WHEN_IDLE = [EventType.Custom, EventType.Meta, EventType.FullSnapshot]
+
+/**
+ * we want to restrict the data allowed when we've detected an idle session
+ * but allow data that the player might require for proper playback
+ */
+function allowedWhenIdle(event: eventWithTime): boolean {
+    const isAllowedIncremental =
+        event.type === EventType.IncrementalSnapshot &&
+        !isNullish(event.data.source) &&
+        STYLE_SOURCES.includes(event.data.source)
+    return TYPES_ALLOWED_WHEN_IDLE.includes(event.type) || isAllowedIncremental
+}
 
 /**
  * Session recording starts in buffering mode while waiting for decide response
@@ -818,9 +819,8 @@ export class SessionRecording {
 
         this._updateWindowAndSessionIds(event)
 
-        // allow custom events even when idle
-        if (this.isIdle && event.type !== EventType.Custom) {
-            // When in an idle state we keep recording, but don't capture the events
+        if (this.isIdle && !allowedWhenIdle(event)) {
+            // When in an idle state we keep recording, but don't capture all events
             return
         }
 
