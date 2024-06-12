@@ -68,6 +68,9 @@ const typesAllowedWhenIdle = [EventType.Custom, EventType.Meta, EventType.FullSn
  * but allow data that the player might require for proper playback
  */
 function allowedWhenIdle(event: eventWithTime): boolean {
+    // TRICKY: technically we should never hit this method with an active incremental snapshot
+    // since we should already have switched out of idle mode if we see one,
+    // but we check here so that this method makes sense in isolation
     const isInactiveIncremental =
         event.type === EventType.IncrementalSnapshot &&
         !isNullish(event.data.source) &&
