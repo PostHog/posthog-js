@@ -1,3 +1,8 @@
+## 1.139.1 - 2024-06-12
+
+- fix: less strict idle event dropping (#1241)
+- chore: add inlineStylesheet prop (#1237)
+
 ## 1.139.0 - 2024-06-10
 
 - feat(personless-events): set_once more initial properties accurately when a person is created (#1236)
