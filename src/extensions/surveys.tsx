@@ -38,6 +38,7 @@ export const handleWidgetSelector = (posthog: PostHog, survey: Survey) => {
         if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0) {
             handleWidget(posthog, survey)
         } else if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 1) {
+            // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
             if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
                 const surveyPopup = document
                     .querySelector(`.PostHogWidget${survey.id}`)
@@ -55,6 +56,12 @@ export const handleWidgetSelector = (posthog: PostHog, survey: Survey) => {
 }
 
 const canShowNextSurvey = (): boolean => {
+    // with event based surveys, we need to show the next survey without reloading the page.
+    // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
+    // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
+    // To alleviate this, we check the last div in the dom and see if it has any elements other than a Style node.
+    // if the last PostHogSurvey_xyz div has only one style node, we can show the next survey in the queue
+    // without reloading the page.
     const surveyPopups = document.querySelectorAll(`div[class^=PostHogSurvey]`)
     if (surveyPopups.length > 0) {
         return surveyPopups[surveyPopups.length - 1].shadowRoot?.childElementCount === 1
@@ -294,6 +301,7 @@ export function SurveyPopup({
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
+    // Ensure the popup stays in the same position for the preview
     if (isPreviewMode) {
         style = style || {}
         style.left = 'unset'
