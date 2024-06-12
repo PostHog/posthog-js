@@ -812,9 +812,8 @@ export class SessionRecording {
 
         this._updateWindowAndSessionIds(event)
 
-        // allow custom events even when idle
-        if (this.isIdle && allowedWhenIdle(event)) {
-            // When in an idle state we keep recording, but don't capture the events
+        if (this.isIdle && !allowedWhenIdle(event)) {
+            // When in an idle state we keep recording, but don't capture all events
             return
         }
 
