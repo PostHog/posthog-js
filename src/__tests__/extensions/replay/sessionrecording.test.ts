@@ -30,9 +30,11 @@ import {
     eventWithTime,
     fullSnapshotEvent,
     incrementalSnapshotEvent,
+    IncrementalSource,
     metaEvent,
     pluginEvent,
 } from '@rrweb/types'
+import { loadScript } from '../../../utils'
 import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
@@ -42,8 +44,6 @@ jest.mock('../../../utils', () => ({
     loadScript: jest.fn(),
 }))
 jest.mock('../../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
-
-import { loadScript } from '../../../utils'
 
 const loadScriptMock = loadScript as jest.Mock
 
@@ -57,9 +57,20 @@ const EMPTY_BUFFER = {
 const createMetaSnapshot = (event = {}): metaEvent =>
     ({
         type: META_EVENT_TYPE,
-        data: {},
+        data: {
+            href: 'https://has-to-be-present-or-invalid.com',
+        },
         ...event,
     } as metaEvent)
+
+const createStyleSnapshot = (event = {}): incrementalSnapshotEvent =>
+    ({
+        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+        data: {
+            source: IncrementalSource.StyleDeclaration,
+        },
+        ...event,
+    } as incrementalSnapshotEvent)
 
 const createFullSnapshot = (event = {}): fullSnapshotEvent =>
     ({
@@ -1312,6 +1323,88 @@ describe('SessionRecording', () => {
             })
         })
 
+        it('emits full snapshot events even when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
+
+            sessionRecording.onRRwebEmit(createFullSnapshot({}) as eventWithTime)
+
+            // custom event is buffered
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        data: {},
+                        type: 2,
+                    },
+                ],
+                sessionId: sessionId,
+                size: 20,
+                windowId: 'windowId',
+            })
+        })
+
+        it('emits meta snapshot events even when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
+
+            sessionRecording.onRRwebEmit(createMetaSnapshot({}) as eventWithTime)
+
+            // custom event is buffered
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            href: 'https://has-to-be-present-or-invalid.com',
+                        },
+                        type: 4,
+                    },
+                ],
+                sessionId: sessionId,
+                size: 69,
+                windowId: 'windowId',
+            })
+        })
+
+        it('emits style snapshot events even when idle', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
+
+            sessionRecording.onRRwebEmit(createStyleSnapshot({}) as eventWithTime)
+
+            // custom event is buffered
+            expect(sessionRecording['buffer']).toEqual({
+                data: [
+                    {
+                        data: {
+                            source: 13,
+                        },
+                        type: 3,
+                    },
+                ],
+                sessionId: sessionId,
+                size: 31,
+                windowId: 'windowId',
+            })
+        })
+
         it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
             const firstActivityTimestamp = startingTimestamp + 100
             const secondActivityTimestamp = startingTimestamp + 200
@@ -1351,7 +1444,7 @@ describe('SessionRecording', () => {
             })
 
             // this triggers idle state and isn't a user interaction so does not take a full snapshot
-            const thirdInactiveEvent = emitInactiveEvent(thirdActivityTimestamp, true)
+            emitInactiveEvent(thirdActivityTimestamp, true)
             expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', {
                 reason: 'user inactivity',
                 threshold: 300000,
@@ -1364,11 +1457,10 @@ describe('SessionRecording', () => {
             // the custom event doesn't show here since there's not a real rrweb to emit it
             expect(sessionRecording['buffer']).toEqual({
                 data: [
-                    // buffer is flushed on switch to idle, but the new event is still emitted to the buffer
-                    thirdInactiveEvent,
+                    // buffer is flushed on switch to idle
                 ],
                 sessionId: firstSessionId,
-                size: 68,
+                size: 0,
                 windowId: expect.any(String),
             })
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -1399,9 +1491,9 @@ describe('SessionRecording', () => {
             // the fourth snapshot should not trigger a flush because the session id has not changed...
             expect(sessionRecording['buffer']).toEqual({
                 // as we return from idle we will capture a full snapshot _before_ the fourth snapshot
-                data: [thirdInactiveEvent, createFullSnapshot(), fourthSnapshot],
+                data: [createFullSnapshot(), fourthSnapshot],
                 sessionId: firstSessionId,
-                size: 156,
+                size: 88,
                 windowId: expect.any(String),
             })
 
@@ -1450,7 +1542,7 @@ describe('SessionRecording', () => {
 
             // this triggers idle state and isn't a user interaction so does not take a full snapshot
 
-            const thirdInactiveEvent = emitInactiveEvent(thirdActivityTimestamp, true)
+            emitInactiveEvent(thirdActivityTimestamp, true)
             expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', {
                 reason: 'user inactivity',
                 threshold: 300000,
@@ -1464,11 +1556,10 @@ describe('SessionRecording', () => {
             // the custom event doesn't show here since there's not a real rrweb to emit it
             expect(sessionRecording['buffer']).toEqual({
                 data: [
-                    // the buffer is flushed on switch to idle, but the new event is still captured to the buffer
-                    thirdInactiveEvent,
+                    // the buffer is flushed on switch to idle
                 ],
                 sessionId: firstSessionId,
-                size: 68,
+                size: 0,
                 windowId: expect.any(String),
             })
 

@@ -61,21 +61,25 @@ const ACTIVE_SOURCES = [
     IncrementalSource.Drag,
 ]
 
-const typesAllowedWhenIdle = [EventType.Custom, EventType.Meta, EventType.FullSnapshot]
+const STYLE_SOURCES = [
+    IncrementalSource.StyleSheetRule,
+    IncrementalSource.StyleDeclaration,
+    IncrementalSource.AdoptedStyleSheet,
+    IncrementalSource.Font,
+]
+
+const TYPES_ALLOWED_WHEN_IDLE = [EventType.Custom, EventType.Meta, EventType.FullSnapshot]
 
 /**
  * we want to restrict the data allowed when we've detected an idle session
  * but allow data that the player might require for proper playback
  */
 function allowedWhenIdle(event: eventWithTime): boolean {
-    // TRICKY: technically we should never hit this method with an active incremental snapshot
-    // since we should already have switched out of idle mode if we see one,
-    // but we check here so that this method makes sense in isolation
-    const isInactiveIncremental =
+    const isAllowedIncremental =
         event.type === EventType.IncrementalSnapshot &&
         !isNullish(event.data.source) &&
-        !ACTIVE_SOURCES.includes(event.data.source)
-    return typesAllowedWhenIdle.includes(event.type) || isInactiveIncremental
+        STYLE_SOURCES.includes(event.data.source)
+    return TYPES_ALLOWED_WHEN_IDLE.includes(event.type) || isAllowedIncremental
 }
 
 /**
