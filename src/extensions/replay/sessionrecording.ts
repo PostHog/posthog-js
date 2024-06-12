@@ -68,11 +68,11 @@ const typesAllowedWhenIdle = [EventType.Custom, EventType.Meta, EventType.FullSn
  * but allow data that the player might require for proper playback
  */
 function allowedWhenIdle(event: eventWithTime): boolean {
-    const isAllowedIncremental =
+    const isInactiveIncremental =
         event.type === EventType.IncrementalSnapshot &&
         !isNullish(event.data.source) &&
         !ACTIVE_SOURCES.includes(event.data.source)
-    return !typesAllowedWhenIdle.includes(event.type) || isAllowedIncremental
+    return typesAllowedWhenIdle.includes(event.type) || isInactiveIncremental
 }
 
 /**
