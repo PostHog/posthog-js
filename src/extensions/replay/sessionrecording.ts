@@ -14,12 +14,12 @@ import {
     recordOptions,
     rrwebRecord,
     truncateLargeConsoleLogs,
-} from './sessionrecording-utils'
+} from './utils/sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
-import { timestamp, loadScript } from '../../utils'
+import { loadScript, timestamp } from '../../utils'
 
 import {
     isBoolean,
@@ -32,10 +32,11 @@ import {
     isUndefined,
 } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { document, assignableWindow, window } from '../../utils/globals'
+import { assignableWindow, document, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
-import { MutationRateLimiter } from './mutation-rate-limiter'
+import { MutationRateLimiter } from './utils/mutation-rate-limiter'
+import { estimateSize } from './utils/estimate-size'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -138,32 +139,6 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 })
 
 const LOGGER_PREFIX = '[SessionRecording]'
-
-// taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
-function circularReferenceReplacer() {
-    const ancestors: any[] = []
-    return function (_key: string, value: any) {
-        if (isObject(value)) {
-            // `this` is the object that value is contained in,
-            // i.e., its direct parent.
-            // @ts-expect-error - TS was unhappy with `this` on the next line but the code is copied in from MDN
-            while (ancestors.length > 0 && ancestors.at(-1) !== this) {
-                ancestors.pop()
-            }
-            if (ancestors.includes(value)) {
-                return '[Circular]'
-            }
-            ancestors.push(value)
-            return value
-        } else {
-            return value
-        }
-    }
-}
-
-function estimateSize(event: eventWithTime): number {
-    return JSON.stringify(event, circularReferenceReplacer()).length
-}
 
 export class SessionRecording {
     private _endpoint: string

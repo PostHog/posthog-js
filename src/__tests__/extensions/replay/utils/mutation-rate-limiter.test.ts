@@ -1,9 +1,9 @@
-import { MutationRateLimiter } from '../../../extensions/replay/mutation-rate-limiter'
+import { MutationRateLimiter } from '../../../../extensions/replay/utils/mutation-rate-limiter'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
     rrwebRecord,
-} from '../../../extensions/replay/sessionrecording-utils'
+} from '../../../../extensions/replay/utils/sessionrecording-utils'
 import { jest } from '@jest/globals'
 import { eventWithTime, mutationData } from '@rrweb/types'
 import { serializedNodeWithId } from 'rrweb-snapshot'

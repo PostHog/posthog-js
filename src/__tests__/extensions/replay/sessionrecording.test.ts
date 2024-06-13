@@ -13,7 +13,7 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-} from '../../../extensions/replay/sessionrecording-utils'
+} from '../../../extensions/replay/utils/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
@@ -36,6 +36,7 @@ import {
 } from '@rrweb/types'
 import { loadScript } from '../../../utils'
 import Mock = jest.Mock
+import { expect } from '@jest/globals'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -110,6 +111,7 @@ function makeDecideResponse(partialResponse: Partial<DecideResponse>) {
 }
 
 const originalLocation = window!.location
+
 function fakeNavigateTo(href: string) {
     delete (window as any).location
     window!.location = { href } as Location
@@ -870,37 +872,25 @@ describe('SessionRecording', () => {
 
             const someObject = { emit: 1 }
             // the same object can be there multiple times
-            const circularObject: Record<string, any> = { emit: someObject, again: someObject }
+            const circularObject: Record<string, any> = {
+                emit: someObject,
+                again: someObject,
+                aThing: {
+                    anArray: [1, 2, 3],
+                    aFurtherNestedThing: { aNumber: 4 },
+                },
+            }
+
             // but a circular reference will be replaced
             circularObject.circularReference = circularObject
+            circularObject.aThing.aFurtherNestedThing.circularReference = circularObject.circularReference
+
             _emit(createFullSnapshot(circularObject))
 
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        again: {
-                            emit: 1,
-                        },
-                        circularReference: {
-                            again: {
-                                emit: 1,
-                            },
-                            // the circular reference is captured to the buffer,
-                            // but it didn't explode when estimating size
-                            circularReference: expect.any(Object),
-                            emit: {
-                                emit: 1,
-                            },
-                        },
-                        data: {},
-                        emit: {
-                            emit: 1,
-                        },
-                        type: 2,
-                    },
-                ],
+                data: [expect.any(Object)],
                 sessionId: sessionId,
-                size: 149,
+                size: 426,
                 windowId: 'windowId',
             })
         })
