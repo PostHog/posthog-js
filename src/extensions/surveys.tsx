@@ -29,7 +29,16 @@ import {
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-// Initialize the set of surveys that are actively displayed
+// TODO: @dmarticus - Keeping track of the surveys that are actively displayed is a bit of a hack
+// to support survey popup delay feature that enables us to embed multiple surveys on the same page
+// without showing them all at once. This is a temporary solution until we have a better way to
+// manage the lifecycle of surveys without using a global state.  I'm currently working on a better
+// a refactor of this feature (see TODO GITHUB LINK), but in the interest of shipping fast and iterating,
+// I decided to go with this approach to unlock a feature that users have been asking for ASAP.  I'll call
+// out all the places in this file where we use this global state and why we use it, which will hopefully make
+// it easier to refactor this feature in the future.
+
+// We start by creating a set to keep track of the surveys that are actively displayed (as compared to the ones that are just on the page)
 const surveysToActivelyDisplay = new Set<string>()
 
 export const handleWidgetSelector = (posthog: PostHog, survey: Survey) => {
@@ -55,7 +64,7 @@ export const handleWidgetSelector = (posthog: PostHog, survey: Survey) => {
     }
 }
 
-const canShowNextSurvey = (): boolean => {
+export const canShowNextSurvey = (): boolean => {
     // with event based surveys, we need to show the next survey without reloading the page.
     // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
     // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
@@ -69,7 +78,7 @@ const canShowNextSurvey = (): boolean => {
     return true
 }
 
-const handlePopoverSurvey = (posthog: PostHog, survey: Survey) => {
+export const handlePopoverSurvey = (posthog: PostHog, survey: Survey) => {
     const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
     const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
     if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
@@ -82,6 +91,9 @@ const handlePopoverSurvey = (posthog: PostHog, survey: Survey) => {
     }
 
     if (!localStorage.getItem(getSurveySeenKey(survey))) {
+        // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys.
+        // If we have a survey to display, we add it to the set of surveys that are actively displayed
+        // this leads us to short-circuit the survey display logic in the callSurveys function and only show one survey at a time
         surveysToActivelyDisplay.add(survey.id)
         const shadow = createShadow(style(survey?.appearance), survey.id)
         Preact.render(<SurveyPopup key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
@@ -95,6 +107,9 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
         nonAPISurveys.sort((a, b) => (a.appearance?.surveyPopupDelay || 0) - (b.appearance?.surveyPopupDelay || 0))
 
         nonAPISurveys.forEach((survey) => {
+            // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
+            // We only show one survey at a time, and we use this global state to short-circuit the display logic
+            // if there is already a survey actively displayed on the page.
             if (surveysToActivelyDisplay.size > 0) {
                 return
             }
@@ -213,12 +228,16 @@ export function usePopupVisibility(
         }
 
         const handleSurveyClosed = () => {
+            // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
+            // If the survey is closed, we remove it from the set of surveys that are actively displayed
             surveysToActivelyDisplay.delete(survey.id)
             return setIsPopupVisible(false)
         }
 
         const handleSurveySent = () => {
             if (!survey.appearance?.displayThankYouMessage) {
+                // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
+                // If the survey is sent, we remove it from the set of surveys that are actively displayed
                 surveysToActivelyDisplay.delete(survey.id)
                 return setIsPopupVisible(false)
             }
@@ -227,6 +246,8 @@ export function usePopupVisibility(
 
             if (survey.appearance?.autoDisappear) {
                 setTimeout(() => {
+                    // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
+                    // If the survey is sent, we remove it from the set of surveys that are actively displayed
                     surveysToActivelyDisplay.delete(survey.id)
                     return setIsPopupVisible(false)
                 }, 5000)
@@ -315,6 +336,8 @@ export function SurveyPopup({
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
                 handleCloseSurveyPopup: () => {
+                    // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
+                    // If the survey is closed, we remove it from the set of surveys that are actively displayed
                     surveysToActivelyDisplay.delete(survey.id)
                     return dismissedSurveyEvent(survey, posthog, isPreviewMode)
                 },
@@ -383,6 +406,8 @@ export function Questions({
             originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
 
         if (isLastDisplayedQuestion) {
+            // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
+            // If the survey is sent, we remove it from the set of surveys that are actively displayed
             surveysToActivelyDisplay.delete(survey.id)
             return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {

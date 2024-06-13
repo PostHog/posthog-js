@@ -3,8 +3,11 @@ import {
     renderSurveysPreview,
     renderFeedbackWidgetPreview,
     usePopupVisibility,
+    canShowNextSurvey,
+    handlePopoverSurvey,
 } from '../../extensions/surveys'
-import { createShadow } from '../../extensions/surveys/surveys-utils'
+import * as Preact from 'preact'
+import { createShadow, getSurveySeenKey } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
 import { renderHook, act } from '@testing-library/preact'
 import '@testing-library/jest-dom'
@@ -211,7 +214,96 @@ describe('usePopupVisibility', () => {
     })
 })
 
-// describe('')
+describe('canShowNextSurvey', () => {
+    beforeEach(() => {
+        // Reset the DOM before each test
+        document.body.innerHTML = ''
+    })
+
+    test('returns true if no survey popups are present', () => {
+        expect(canShowNextSurvey()).toBe(true)
+    })
+
+    test('returns true if the last survey popup has only one child element (a style node)', () => {
+        document.body.innerHTML = `
+            <div class="PostHogSurvey_1">
+                <style></style>
+            </div>
+        `
+        const lastSurveyPopup = document.querySelector('.PostHogSurvey_1') as HTMLElement
+        const shadowRoot = lastSurveyPopup.attachShadow({ mode: 'open' })
+        const styleNode = document.createElement('style')
+        shadowRoot.appendChild(styleNode)
+
+        expect(canShowNextSurvey()).toBe(true)
+    })
+
+    test('returns false if the last survey popup has more than one child element', () => {
+        document.body.innerHTML = `
+            <div class="PostHogSurvey_1">
+                <style></style>
+            </div>
+        `
+        const lastSurveyPopup = document.querySelector('.PostHogSurvey_1') as HTMLElement
+        const shadowRoot = lastSurveyPopup.attachShadow({ mode: 'open' })
+        const styleNode = document.createElement('style')
+        const divNode = document.createElement('div')
+        shadowRoot.appendChild(styleNode)
+        shadowRoot.appendChild(divNode)
+
+        expect(canShowNextSurvey()).toBe(false)
+    })
+})
+
+describe('handlePopoverSurvey', () => {
+    const mockSurvey: Survey = {
+        id: 'testSurvey1',
+        name: 'Test survey 1',
+        type: SurveyType.Popover,
+        appearance: {},
+        start_date: '2021-01-01T00:00:00.000Z',
+        questions: [
+            {
+                question: 'How satisfied are you with our newest product?',
+                description: 'This is a question description',
+                type: SurveyQuestionType.Rating,
+                display: 'number',
+                scale: 10,
+                lowerBoundLabel: 'Not Satisfied',
+                upperBoundLabel: 'Very Satisfied',
+            },
+        ],
+        conditions: {},
+        end_date: null,
+        targeting_flag_key: null,
+    } as Survey
+
+    const mockPostHog: PostHog = {
+        getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
+        get_session_replay_url: jest.fn(),
+        capture: jest.fn().mockImplementation((eventName) => eventName),
+    } as unknown as PostHog
+
+    beforeEach(() => {
+        localStorage.clear()
+        jest.clearAllMocks()
+    })
+
+    test('respects survey wait period', () => {
+        const survey = { ...mockSurvey, conditions: { seenSurveyWaitPeriodInDays: 7 } } as Survey
+        localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+        const spy = jest.spyOn(Preact, 'render')
+        handlePopoverSurvey(mockPostHog, survey)
+        expect(spy).not.toHaveBeenCalled()
+    })
+
+    test('skips survey if it has already been seen', () => {
+        localStorage.setItem(getSurveySeenKey(mockSurvey), 'true')
+        const spy = jest.spyOn(Preact, 'render')
+        handlePopoverSurvey(mockPostHog, mockSurvey)
+        expect(spy).not.toHaveBeenCalled()
+    })
+})
 
 describe('preview renders', () => {
     beforeEach(() => {
