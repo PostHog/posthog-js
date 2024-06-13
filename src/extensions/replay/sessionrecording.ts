@@ -11,14 +11,13 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-    MutationRateLimiter,
     recordOptions,
     rrwebRecord,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
-import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
+import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
 import { timestamp, loadScript } from '../../utils'
 
@@ -36,6 +35,7 @@ import { logger } from '../../utils/logger'
 import { document, assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
+import { MutationRateLimiter } from './mutation-rate-limiter'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -50,26 +50,6 @@ export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // import type { record } from 'rrweb2/typings'
 // import type { recordOptions } from 'rrweb/typings/types'
 
-// Copied from rrweb typings to avoid import
-enum IncrementalSource {
-    Mutation = 0,
-    MouseMove = 1,
-    MouseInteraction = 2,
-    Scroll = 3,
-    ViewportResize = 4,
-    Input = 5,
-    TouchMove = 6,
-    MediaInteraction = 7,
-    StyleSheetRule = 8,
-    CanvasMutation = 9,
-    Font = 10,
-    Log = 11,
-    Drag = 12,
-    StyleDeclaration = 13,
-    Selection = 14,
-    AdoptedStyleSheet = 15,
-}
-
 const ACTIVE_SOURCES = [
     IncrementalSource.MouseMove,
     IncrementalSource.MouseInteraction,
@@ -80,6 +60,27 @@ const ACTIVE_SOURCES = [
     IncrementalSource.MediaInteraction,
     IncrementalSource.Drag,
 ]
+
+const STYLE_SOURCES = [
+    IncrementalSource.StyleSheetRule,
+    IncrementalSource.StyleDeclaration,
+    IncrementalSource.AdoptedStyleSheet,
+    IncrementalSource.Font,
+]
+
+const TYPES_ALLOWED_WHEN_IDLE = [EventType.Custom, EventType.Meta, EventType.FullSnapshot]
+
+/**
+ * we want to restrict the data allowed when we've detected an idle session
+ * but allow data that the player might require for proper playback
+ */
+function allowedWhenIdle(event: eventWithTime): boolean {
+    const isAllowedIncremental =
+        event.type === EventType.IncrementalSnapshot &&
+        !isNullish(event.data.source) &&
+        STYLE_SOURCES.includes(event.data.source)
+    return TYPES_ALLOWED_WHEN_IDLE.includes(event.type) || isAllowedIncremental
+}
 
 /**
  * Session recording starts in buffering mode while waiting for decide response
@@ -96,6 +97,7 @@ interface SnapshotBuffer {
     windowId: string
 
     readonly mostRecentSnapshotTimestamp: number | null
+
     add(properties: Properties): void
 }
 
@@ -136,6 +138,32 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 })
 
 const LOGGER_PREFIX = '[SessionRecording]'
+
+// taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
+function circularReferenceReplacer() {
+    const ancestors: any[] = []
+    return function (_key: string, value: any) {
+        if (isObject(value)) {
+            // `this` is the object that value is contained in,
+            // i.e., its direct parent.
+            // @ts-expect-error - TS was unhappy with `this` on the next line but the code is copied in from MDN
+            while (ancestors.length > 0 && ancestors.at(-1) !== this) {
+                ancestors.pop()
+            }
+            if (ancestors.includes(value)) {
+                return '[Circular]'
+            }
+            ancestors.push(value)
+            return value
+        } else {
+            return value
+        }
+    }
+}
+
+function estimateSize(event: eventWithTime): number {
+    return JSON.stringify(event, circularReferenceReplacer()).length
+}
 
 export class SessionRecording {
     private _endpoint: string
@@ -479,6 +507,7 @@ export class SessionRecording {
             timestamp: timestamp(),
         })
     }
+
     private _startCapture() {
         if (isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -786,13 +815,12 @@ export class SessionRecording {
 
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
-        const size = JSON.stringify(event).length
+        const size = estimateSize(event)
 
         this._updateWindowAndSessionIds(event)
 
-        // allow custom events even when idle
-        if (this.isIdle && event.type !== EventType.Custom) {
-            // When in an idle state we keep recording, but don't capture the events
+        if (this.isIdle && !allowedWhenIdle(event)) {
+            // When in an idle state we keep recording, but don't capture all events
             return
         }
 

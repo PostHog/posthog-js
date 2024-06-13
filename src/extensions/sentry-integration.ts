@@ -27,6 +27,7 @@ import { PostHog } from '../posthog-core'
 //     Hub as _SentryHub,
 //     Integration as _SentryIntegration,
 //     SeverityLevel as _SeverityLevel,
+//     IntegrationClass as _SentryIntegrationClass,
 // } from '@sentry/types'
 
 // Uncomment the above and comment the below to get type checking for development
@@ -35,9 +36,14 @@ type _SentryEvent = any
 type _SentryEventProcessor = any
 type _SentryHub = any
 
-interface _SentryIntegration {
+interface _SentryIntegrationClass {
     name: string
     setupOnce(addGlobalEventProcessor: (callback: _SentryEventProcessor) => void, getCurrentHub: () => _SentryHub): void
+}
+
+interface _SentryIntegration {
+    name: string
+    processEvent(event: _SentryEvent): _SentryEvent
 }
 
 // levels copied from Sentry to avoid relying on a frequently changing @sentry/types dependency
@@ -54,7 +60,90 @@ interface SentryExceptionProperties {
     $sentry_url?: string
 }
 
-export class SentryIntegration implements _SentryIntegration {
+export type SentryIntegrationOptions = {
+    organization?: string
+    projectId?: number
+    prefix?: string
+    /**
+     * By default, only errors are sent to PostHog. You can set this to '*' to send all events.
+     * Or to an error of SeverityLevel to only send events matching the provided levels.
+     * e.g. ['error', 'fatal'] to send only errors and fatals
+     * e.g. ['error'] to send only errors -- the default when omitted
+     * e.g. '*' to send all events
+     */
+    severityAllowList?: _SeverityLevel[] | '*'
+}
+
+const NAME = 'posthog-js'
+
+export function createEventProcessor(
+    _posthog: PostHog,
+    { organization, projectId, prefix, severityAllowList = ['error'] }: SentryIntegrationOptions = {}
+): (event: _SentryEvent) => _SentryEvent {
+    return (event) => {
+        const shouldProcessLevel =
+            severityAllowList === '*' || severityAllowList.includes(event.level as _SeverityLevel)
+        if (!shouldProcessLevel || !_posthog.__loaded) return event
+        if (!event.tags) event.tags = {}
+
+        const personUrl = _posthog.requestRouter.endpointFor(
+            'ui',
+            `/project/${_posthog.config.token}/person/${_posthog.get_distinct_id()}`
+        )
+        event.tags['PostHog Person URL'] = personUrl
+        if (_posthog.sessionRecordingStarted()) {
+            event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
+        }
+
+        const exceptions = event.exception?.values || []
+
+        const data: SentryExceptionProperties & {
+            // two properties added to match any exception auto-capture
+            // added manually to avoid any dependency on the lazily loaded content
+            $exception_message: any
+            $exception_type: any
+            $exception_personURL: string
+            $level: _SeverityLevel
+        } = {
+            // PostHog Exception Properties,
+            $exception_message: exceptions[0]?.value || event.message,
+            $exception_type: exceptions[0]?.type,
+            $exception_personURL: personUrl,
+            // Sentry Exception Properties
+            $sentry_event_id: event.event_id,
+            $sentry_exception: event.exception,
+            $sentry_exception_message: exceptions[0]?.value || event.message,
+            $sentry_exception_type: exceptions[0]?.type,
+            $sentry_tags: event.tags,
+            $level: event.level,
+        }
+
+        if (organization && projectId) {
+            data['$sentry_url'] =
+                (prefix || 'https://sentry.io/organizations/') +
+                organization +
+                '/issues/?project=' +
+                projectId +
+                '&query=' +
+                event.event_id
+        }
+        _posthog.capture('$exception', data)
+        return event
+    }
+}
+
+// V8 integration - function based
+export function sentryIntegration(_posthog: PostHog, options?: SentryIntegrationOptions): _SentryIntegration {
+    const processor = createEventProcessor(_posthog, options)
+    return {
+        name: NAME,
+        processEvent(event) {
+            return processor(event)
+        },
+    }
+}
+// V7 integration - class based
+export class SentryIntegration implements _SentryIntegrationClass {
     name: string
 
     setupOnce: (
@@ -74,60 +163,14 @@ export class SentryIntegration implements _SentryIntegration {
          * e.g. ['error'] to send only errors -- the default when omitted
          * e.g. '*' to send all events
          */
-        severityAllowList: _SeverityLevel[] | '*' = ['error']
+        severityAllowList?: _SeverityLevel[] | '*'
     ) {
         // setupOnce gets called by Sentry when it intializes the plugin
-        this.name = 'posthog-js'
+        this.name = NAME
         this.setupOnce = function (addGlobalEventProcessor: (callback: _SentryEventProcessor) => void) {
-            addGlobalEventProcessor((event: _SentryEvent) => {
-                const shouldProcessLevel =
-                    severityAllowList === '*' || severityAllowList.includes(event.level as _SeverityLevel)
-                if (!shouldProcessLevel || !_posthog.__loaded) return event
-                if (!event.tags) event.tags = {}
-
-                const personUrl = _posthog.requestRouter.endpointFor(
-                    'ui',
-                    `/project/${_posthog.config.token}/person/${_posthog.get_distinct_id()}`
-                )
-                event.tags['PostHog Person URL'] = personUrl
-                if (_posthog.sessionRecordingStarted()) {
-                    event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
-                }
-
-                const exceptions = event.exception?.values || []
-
-                const data: SentryExceptionProperties & {
-                    // two properties added to match any exception auto-capture
-                    // added manually to avoid any dependency on the lazily loaded content
-                    $exception_message: any
-                    $exception_type: any
-                    $exception_personURL: string
-                    $level: _SeverityLevel
-                } = {
-                    // PostHog Exception Properties,
-                    $exception_message: exceptions[0]?.value || event.message,
-                    $exception_type: exceptions[0]?.type,
-                    $exception_personURL: personUrl,
-                    // Sentry Exception Properties
-                    $sentry_event_id: event.event_id,
-                    $sentry_exception: event.exception,
-                    $sentry_exception_message: exceptions[0]?.value || event.message,
-                    $sentry_exception_type: exceptions[0]?.type,
-                    $sentry_tags: event.tags,
-                    $level: event.level,
-                }
-
-                if (organization && projectId)
-                    data['$sentry_url'] =
-                        (prefix || 'https://sentry.io/organizations/') +
-                        organization +
-                        '/issues/?project=' +
-                        projectId +
-                        '&query=' +
-                        event.event_id
-                _posthog.capture('$exception', data)
-                return event
-            })
+            addGlobalEventProcessor(
+                createEventProcessor(_posthog, { organization, projectId, prefix, severityAllowList })
+            )
         }
     }
 }

@@ -1,6 +1,7 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { logger } from '../utils/logger'
+import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 
 jest.mock('../utils/logger')
 
@@ -20,6 +21,13 @@ jest.mock('../utils/globals', () => {
                 return mockURLGetter()
             },
         },
+        get location() {
+            const url = mockURLGetter()
+            return {
+                href: url,
+                toString: () => url,
+            }
+        },
     }
 })
 
@@ -31,8 +39,8 @@ describe('person processing', () => {
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
     })
 
-    const setup = async (person_profiles: 'always' | 'identified_only' | 'never' | undefined) => {
-        const token = uuidv7()
+    const setup = async (person_profiles: 'always' | 'identified_only' | 'never' | undefined, token?: string) => {
+        token = token || uuidv7()
         const onCapture = jest.fn()
         const posthog = await createPosthogInstance(token, {
             _onCapture: onCapture,
@@ -158,6 +166,9 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
@@ -168,7 +179,7 @@ describe('person processing', () => {
             // arrange
             const { posthog, onCapture } = await setup('identified_only')
             mockReferrerGetter.mockReturnValue('https://referrer1.com')
-            mockURLGetter.mockReturnValue('https://example1.com?utm_source=foo1')
+            mockURLGetter.mockReturnValue('https://example1.com/pathname1?utm_source=foo1')
 
             // act
             // s1
@@ -180,7 +191,7 @@ describe('person processing', () => {
 
             // s2
             mockReferrerGetter.mockReturnValue('https://referrer2.com')
-            mockURLGetter.mockReturnValue('https://example2.com?utm_source=foo2')
+            mockURLGetter.mockReturnValue('https://example2.com/pathname2?utm_source=foo2')
             posthog.capture('event s2 before identify')
             posthog.identify(distinctId)
             posthog.capture('event s2 after identify')
@@ -197,6 +208,9 @@ describe('person processing', () => {
 
             expect(eventS2Identify[0]).toEqual('$identify')
             expect(eventS2Identify[1].$set_once).toEqual({
+                $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
+                $initial_host: 'example1.com',
+                $initial_pathname: '/pathname1',
                 $initial_referrer: 'https://referrer1.com',
                 $initial_referring_domain: 'referrer1.com',
                 $initial_utm_source: 'foo1',
@@ -204,6 +218,9 @@ describe('person processing', () => {
 
             expect(eventS2After[0]).toEqual('event s2 after identify')
             expect(eventS2After[1].$set_once).toEqual({
+                $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
+                $initial_host: 'example1.com',
+                $initial_pathname: '/pathname1',
                 $initial_referrer: 'https://referrer1.com',
                 $initial_referring_domain: 'referrer1.com',
                 $initial_utm_source: 'foo1',
@@ -221,9 +238,59 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
+            })
+        })
+
+        it('should include initial search params', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('always')
+            mockReferrerGetter.mockReturnValue('https://www.google.com?q=bar')
+
+            // act
+            posthog.identify(distinctId)
+
+            // assert
+            const identifyCall = onCapture.mock.calls[0]
+            expect(identifyCall[0]).toEqual('$identify')
+            expect(identifyCall[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
+                $initial_referrer: 'https://www.google.com?q=bar',
+                $initial_referring_domain: 'www.google.com',
+                $initial_utm_source: 'foo',
+                $initial_ph_keyword: 'bar',
+                $initial_search_engine: 'google',
+            })
+        })
+
+        it('should be backwards compatible with deprecated INITIAL_REFERRER_INFO and INITIAL_CAMPAIGN_PARAMS way of saving initial person props', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('always')
+            posthog.persistence!.props[INITIAL_REFERRER_INFO] = {
+                referrer: 'https://deprecated-referrer.com',
+                referring_domain: 'deprecated-referrer.com',
+            }
+            posthog.persistence!.props[INITIAL_CAMPAIGN_PARAMS] = {
+                utm_source: 'deprecated-source',
+            }
+
+            // act
+            posthog.identify(distinctId)
+
+            // assert
+            const identifyCall = onCapture.mock.calls[0]
+            expect(identifyCall[0]).toEqual('$identify')
+            expect(identifyCall[1].$set_once).toEqual({
+                $initial_referrer: 'https://deprecated-referrer.com',
+                $initial_referring_domain: 'deprecated-referrer.com',
+                $initial_utm_source: 'deprecated-source',
             })
         })
     })
@@ -243,6 +310,9 @@ describe('person processing', () => {
             expect(eventBeforeIdentify[1].$set_once).toBeUndefined()
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
@@ -261,12 +331,18 @@ describe('person processing', () => {
             // assert
             const eventBeforeIdentify = onCapture.mock.calls[0]
             expect(eventBeforeIdentify[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
             })
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
+                $initial_current_url: 'https://example.com?utm_source=foo',
+                $initial_host: 'example.com',
+                $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
