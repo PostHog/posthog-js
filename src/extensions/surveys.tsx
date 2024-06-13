@@ -33,7 +33,7 @@ const document = _document as Document
 // to support survey popup delay feature that enables us to embed multiple surveys on the same page
 // without showing them all at once. This is a temporary solution until we have a better way to
 // manage the lifecycle of surveys without using a global state.  I'm currently working on a better
-// a refactor of this feature (see TODO GITHUB LINK), but in the interest of shipping fast and iterating,
+// a refactor of this feature (see: https://github.com/PostHog/posthog-js/pull/1242), but in the interest of shipping fast and iterating,
 // I decided to go with this approach to unlock a feature that users have been asking for ASAP.  I'll call
 // out all the places in this file where we use this global state and why we use it, which will hopefully make
 // it easier to refactor this feature in the future.
