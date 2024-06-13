@@ -709,11 +709,11 @@ export class PostHog {
         this._execute_array([item])
     }
 
+    /**
+     * Checks that are common whether capturing stateless or not
+     * @returns
+     */
     private _preCaptureChecks(event_name: string): boolean {
-        if (userOptedOut(this)) {
-            return false
-        }
-
         // typing doesn't prevent interesting data
         if (isUndefined(event_name) || !isString(event_name)) {
             logger.error('No event name provided to posthog.capture')
@@ -757,21 +757,11 @@ export class PostHog {
             return logger.uninitializedWarning('posthog.capture')
         }
 
+        if (!this._preCaptureChecks(event_name)) {
+            return
+        }
+
         if (this.consent.isOptedOut()) {
-            return
-        }
-
-        // typing doesn't prevent interesting data
-        if (isUndefined(event_name) || !isString(event_name)) {
-            logger.error('No event name provided to posthog.capture')
-            return
-        }
-
-        if (
-            userAgent &&
-            !this.config.opt_out_useragent_filter &&
-            isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-        ) {
             return
         }
 
