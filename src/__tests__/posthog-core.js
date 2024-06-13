@@ -57,8 +57,7 @@ describe('posthog core', () => {
                 },
                 props: {},
                 get_property: () => 'anonymous',
-                set_initial_campaign_params: jest.fn(),
-                set_initial_referrer_info: jest.fn(),
+                set_initial_person_info: jest.fn(),
                 get_initial_props: () => ({}),
             },
             sessionPersistence: {

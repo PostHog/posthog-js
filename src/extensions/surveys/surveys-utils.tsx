@@ -1,7 +1,7 @@
 import { PostHog } from '../../posthog-core'
 import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
-import { createContext } from 'preact'
+import { VNode, cloneElement, createContext } from 'preact'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -537,18 +537,40 @@ export const sendSurveyEvent = (
     posthog?: PostHog
 ) => {
     if (!posthog) return
-    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
+    localStorage.setItem(getSurveySeenKey(survey), 'true')
+
     posthog.capture('survey sent', {
         $survey_name: survey.name,
         $survey_id: survey.id,
+        $survey_iteration: survey.current_iteration,
+        $survey_iteration_start_date: survey.current_iteration_start_date,
         $survey_questions: survey.questions.map((question) => question.question),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
         $set: {
-            [`$survey_responded/${survey.id}`]: true,
+            [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
     })
     window.dispatchEvent(new Event('PHSurveySent'))
+}
+
+export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
+    // TODO: state management and unit tests for this would be nice
+    if (readOnly || !posthog) {
+        return
+    }
+    posthog.capture('survey dismissed', {
+        $survey_name: survey.name,
+        $survey_id: survey.id,
+        $survey_iteration: survey.current_iteration,
+        $survey_iteration_start_date: survey.current_iteration_start_date,
+        sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        $set: {
+            [getSurveyInteractionProperty(survey, 'dismissed')]: true,
+        },
+    })
+    localStorage.setItem(getSurveySeenKey(survey), 'true')
+    window.dispatchEvent(new Event('PHSurveyClosed'))
 }
 
 // Use the Fisher-yates algorithm to shuffle this array
@@ -560,7 +582,7 @@ export const shuffle = (array: any[]) => {
         .map((a) => a.value)
 }
 
-const reverseIfUnshuffled = (unshuffled: string[], shuffled: string[]): string[] => {
+const reverseIfUnshuffled = (unshuffled: any[], shuffled: any[]): any[] => {
     if (unshuffled.length === shuffled.length && unshuffled.every((val, index) => val === shuffled[index])) {
         return shuffled.reverse()
     }
@@ -591,24 +613,61 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
+    // retain the original questionIndex so we can correlate values in the webapp
+    survey.questions.forEach((question, idx) => {
+        question.originalQuestionIndex = idx
+    })
+
     if (!survey.appearance || !survey.appearance.shuffleQuestions) {
         return survey.questions
     }
 
-    // retain the original questionIndex so we can correlate values in the webapp
-    survey.questions.forEach((element, idx) => {
-        element.questionIndex = idx
-    })
+    return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
+}
 
-    return shuffle(survey.questions)
+export const getSurveySeenKey = (survey: Survey): string => {
+    let surveySeenKey = `seenSurvey_${survey.id}`
+    if (survey.current_iteration && survey.current_iteration > 0) {
+        surveySeenKey = `seenSurvey_${survey.id}_${survey.current_iteration}`
+    }
+
+    return surveySeenKey
+}
+
+const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
+    let surveyProperty = `$survey_${action}/${survey.id}`
+    if (survey.current_iteration && survey.current_iteration > 0) {
+        surveyProperty = `$survey_${action}/${survey.id}/${survey.current_iteration}`
+    }
+
+    return surveyProperty
 }
 
 export const SurveyContext = createContext<{
-    readOnly: boolean
-    previewQuestionIndex: number
-    textColor: string
+    isPreviewMode: boolean
+    previewPageIndex: number | undefined
+    handleCloseSurveyPopup: () => void
 }>({
-    readOnly: false,
-    previewQuestionIndex: 0,
-    textColor: 'black',
+    isPreviewMode: false,
+    previewPageIndex: 0,
+    handleCloseSurveyPopup: () => {},
 })
+
+interface RenderProps {
+    component: VNode<{ className: string }>
+    children: string
+    renderAsHtml?: boolean
+    style?: React.CSSProperties
+}
+
+export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, style }: RenderProps) => {
+    return renderAsHtml
+        ? cloneElement(component, {
+              dangerouslySetInnerHTML: { __html: children },
+              style,
+          })
+        : cloneElement(component, {
+              children,
+              style,
+          })
+}

@@ -7,7 +7,7 @@ import {
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
 import { RefObject } from 'preact'
-import { useRef, useState, useMemo } from 'preact/hooks'
+import { useRef, useState, useMemo, useContext } from 'preact/hooks'
 import { isNull, isArray } from '../../../utils/type-utils'
 import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import {
@@ -18,23 +18,24 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { defaultSurveyAppearance, getDisplayOrderChoices } from '../surveys-utils'
+import { defaultSurveyAppearance, getDisplayOrderChoices, SurveyContext } from '../surveys-utils'
 import { BottomSection } from './BottomSection'
 import { Cancel, QuestionHeader } from './QuestionHeader'
 
 export function OpenTextQuestion({
     question,
+    forceDisableHtml,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: {
     question: BasicSurveyQuestion
+    forceDisableHtml: boolean
     appearance: SurveyAppearance
     onSubmit: (text: string) => void
-    closeSurveyPopup: () => void
 }) {
     const textRef = useRef(null)
     const [text, setText] = useState('')
+    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     return (
         <div
@@ -42,11 +43,13 @@ export function OpenTextQuestion({
             style={{ backgroundColor: appearance.backgroundColor || defaultSurveyAppearance.backgroundColor }}
             ref={textRef}
         >
-            <Cancel onClick={() => closeSurveyPopup()} />
+            <Cancel onClick={() => handleCloseSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
+                descriptionContentType={question.descriptionContentType}
                 backgroundColor={appearance.backgroundColor}
+                forceDisableHtml={forceDisableHtml}
             />
             <textarea rows={4} placeholder={appearance?.placeholder} onInput={(e) => setText(e.currentTarget.value)} />
             <BottomSection
@@ -61,19 +64,26 @@ export function OpenTextQuestion({
 
 export function LinkQuestion({
     question,
+    forceDisableHtml,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: {
     question: LinkSurveyQuestion
+    forceDisableHtml: boolean
     appearance: SurveyAppearance
     onSubmit: (clicked: string) => void
-    closeSurveyPopup: () => void
 }) {
+    const { handleCloseSurveyPopup } = useContext(SurveyContext)
+
     return (
         <div className="survey-box">
-            <Cancel onClick={() => closeSurveyPopup()} />
-            <QuestionHeader question={question.question} description={question.description} />
+            <Cancel onClick={() => handleCloseSurveyPopup()} />
+            <QuestionHeader
+                question={question.question}
+                description={question.description}
+                descriptionContentType={question.descriptionContentType}
+                forceDisableHtml={forceDisableHtml}
+            />
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={false}
@@ -87,27 +97,30 @@ export function LinkQuestion({
 
 export function RatingQuestion({
     question,
-    questionIndex,
+    forceDisableHtml,
+    displayQuestionIndex,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: {
     question: RatingSurveyQuestion
-    questionIndex: number
+    forceDisableHtml: boolean
+    displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (rating: number | null) => void
-    closeSurveyPopup: () => void
 }) {
     const scale = question.scale
     const starting = question.scale === 10 ? 0 : 1
     const [rating, setRating] = useState<number | null>(null)
+    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     return (
         <div className="survey-box">
-            <Cancel onClick={() => closeSurveyPopup()} />
+            <Cancel onClick={() => handleCloseSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
+                descriptionContentType={question.descriptionContentType}
+                forceDisableHtml={forceDisableHtml}
                 backgroundColor={appearance.backgroundColor}
             />
             <div className="rating-section">
@@ -118,7 +131,7 @@ export function RatingQuestion({
                                 const active = idx + 1 === rating
                                 return (
                                     <button
-                                        className={`ratings-emoji question-${questionIndex}-rating-${idx} ${
+                                        className={`ratings-emoji question-${displayQuestionIndex}-rating-${idx} ${
                                             active ? 'rating-active' : null
                                         }`}
                                         value={idx + 1}
@@ -144,7 +157,7 @@ export function RatingQuestion({
                                 return (
                                     <RatingButton
                                         key={idx}
-                                        questionIndex={questionIndex}
+                                        displayQuestionIndex={displayQuestionIndex}
                                         active={active}
                                         appearance={appearance}
                                         num={number}
@@ -175,13 +188,13 @@ export function RatingQuestion({
 export function RatingButton({
     num,
     active,
-    questionIndex,
+    displayQuestionIndex,
     appearance,
     setActiveNumber,
 }: {
     num: number
     active: boolean
-    questionIndex: number
+    displayQuestionIndex: number
     appearance: any
     setActiveNumber: (num: number) => void
 }) {
@@ -189,7 +202,9 @@ export function RatingButton({
     return (
         <button
             ref={ref as RefObject<HTMLButtonElement>}
-            className={`ratings-number question-${questionIndex}-rating-${num} ${active ? 'rating-active' : null}`}
+            className={`ratings-number question-${displayQuestionIndex}-rating-${num} ${
+                active ? 'rating-active' : null
+            }`}
             type="button"
             onClick={() => {
                 setActiveNumber(num)
@@ -207,16 +222,16 @@ export function RatingButton({
 
 export function MultipleChoiceQuestion({
     question,
-    questionIndex,
+    forceDisableHtml,
+    displayQuestionIndex,
     appearance,
     onSubmit,
-    closeSurveyPopup,
 }: {
     question: MultipleSurveyQuestion
-    questionIndex: number
+    forceDisableHtml: boolean
+    displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (choices: string | string[] | null) => void
-    closeSurveyPopup: () => void
 }) {
     const textRef = useRef(null)
     const choices = useMemo(() => getDisplayOrderChoices(question), [question])
@@ -225,6 +240,7 @@ export function MultipleChoiceQuestion({
     )
     const [openChoiceSelected, setOpenChoiceSelected] = useState(false)
     const [openEndedInput, setOpenEndedInput] = useState('')
+    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
     return (
@@ -233,10 +249,12 @@ export function MultipleChoiceQuestion({
             style={{ backgroundColor: appearance.backgroundColor || defaultSurveyAppearance.backgroundColor }}
             ref={textRef}
         >
-            <Cancel onClick={() => closeSurveyPopup()} />
+            <Cancel onClick={() => handleCloseSurveyPopup()} />
             <QuestionHeader
                 question={question.question}
                 description={question.description}
+                descriptionContentType={question.descriptionContentType}
+                forceDisableHtml={forceDisableHtml}
                 backgroundColor={appearance.backgroundColor}
             />
             <div className="multiple-choice-options">
@@ -254,8 +272,8 @@ export function MultipleChoiceQuestion({
                         <div className={choiceClass}>
                             <input
                                 type={inputType}
-                                id={`surveyQuestion${questionIndex}Choice${idx}`}
-                                name={`question${questionIndex}`}
+                                id={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
+                                name={`question${displayQuestionIndex}`}
                                 value={val}
                                 disabled={!val}
                                 onInput={() => {
@@ -279,14 +297,17 @@ export function MultipleChoiceQuestion({
                                     }
                                 }}
                             />
-                            <label htmlFor={`surveyQuestion${questionIndex}Choice${idx}`} style={{ color: 'black' }}>
+                            <label
+                                htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
+                                style={{ color: 'black' }}
+                            >
                                 {question.hasOpenChoice && idx === question.choices.length - 1 ? (
                                     <>
                                         <span>{option}:</span>
                                         <input
                                             type="text"
-                                            id={`surveyQuestion${questionIndex}Choice${idx}Open`}
-                                            name={`question${questionIndex}`}
+                                            id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
+                                            name={`question${displayQuestionIndex}`}
                                             onInput={(e) => {
                                                 const userValue = e.currentTarget.value
                                                 if (question.type === SurveyQuestionType.SingleChoice) {

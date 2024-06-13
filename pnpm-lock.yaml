@@ -1,4 +1,4 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
 
 settings:
   autoInstallPeers: true
@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   rrweb@2.0.0-alpha.13:
-    hash: xzot57gbh2vywrm2w2dzrqlgli
+    hash: kbttqqcqy44k7qdfsxzockfufy
     path: patches/rrweb@2.0.0-alpha.13.patch
 
 dependencies:
@@ -33,6 +33,9 @@ devDependencies:
   '@babel/preset-typescript':
     specifier: ^7.18.6
     version: 7.18.6(@babel/core@7.18.9)
+  '@jest/globals':
+    specifier: ^27.5.1
+    version: 27.5.1
   '@rollup/plugin-babel':
     specifier: ^6.0.4
     version: 6.0.4(@babel/core@7.18.9)(rollup@4.9.6)
@@ -52,8 +55,8 @@ devDependencies:
     specifier: 2.0.0-alpha.13
     version: 2.0.0-alpha.13
   '@sentry/types':
-    specifier: 7.37.2
-    version: 7.37.2
+    specifier: 8.7.0
+    version: 8.7.0
   '@testing-library/dom':
     specifier: ^9.3.0
     version: 9.3.0
@@ -179,7 +182,7 @@ devDependencies:
     version: 5.12.0(rollup@4.9.6)
   rrweb:
     specifier: 2.0.0-alpha.13
-    version: 2.0.0-alpha.13(patch_hash=xzot57gbh2vywrm2w2dzrqlgli)
+    version: 2.0.0-alpha.13(patch_hash=kbttqqcqy44k7qdfsxzockfufy)
   rrweb-snapshot:
     specifier: 2.0.0-alpha.13
     version: 2.0.0-alpha.13
@@ -2664,9 +2667,9 @@ packages:
       rrweb-snapshot: 2.0.0-alpha.13
     dev: true
 
-  /@sentry/types@7.37.2:
-    resolution: {integrity: sha512-SxKQOCX94ZaQM4C2ysNjHdJsjYapu/NYZCz1cnPyCdDvYfhwiVge1uq6ZHiQ/ARfxAAOmc3R4Mh3VvEz7WUOdw==}
-    engines: {node: '>=8'}
+  /@sentry/types@8.7.0:
+    resolution: {integrity: sha512-11KLOKumP6akugVGLvSoEig+JlP0ZEzW3nN9P+ppgdIx9HAxMIh6UvumbieG4/DWjAh2kh6NPNfUw3gk2Gfq1A==}
+    engines: {node: '>=14.18'}
     dev: true
 
   /@sinclair/typebox@0.25.24:
@@ -9216,7 +9219,7 @@ packages:
     resolution: {integrity: sha512-slbhNBCYjxLGCeH95a67ECCy5a22nloXp1F5wF7DCzUNw80FN7tF9Lef1sRGLNo32g3mNqTc2sWLATlKejMxYw==}
     dev: true
 
-  /rrweb@2.0.0-alpha.13(patch_hash=xzot57gbh2vywrm2w2dzrqlgli):
+  /rrweb@2.0.0-alpha.13(patch_hash=kbttqqcqy44k7qdfsxzockfufy):
     resolution: {integrity: sha512-a8GXOCnzWHNaVZPa7hsrLZtNZ3CGjiL+YrkpLo0TfmxGLhjNZbWY2r7pE06p+FcjFNlgUVTmFrSJbK3kO7yxvw==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.13

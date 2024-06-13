@@ -14,11 +14,25 @@ describe('Surveys', () => {
         question: 'What feedback do you have for us?',
         description: 'plain text description',
     }
-    const linkQuestion = {
+    const linkQuestionWithHTMLContentType = {
         type: 'link',
         question: 'Book an interview with us',
         link: 'https://posthog.com',
         description: '<h2>html description</h2>',
+        descriptionContentType: 'html',
+    }
+    const linkQuestionWithNoContentType = {
+        type: 'link',
+        question: 'Book an interview with us',
+        link: 'https://posthog.com',
+        description: '<h2>html description</h2>',
+    }
+    const linkQuestionWithTextContentType = {
+        type: 'link',
+        question: 'Book an interview with us',
+        link: 'https://posthog.com',
+        description: '<h2>html description</h2>',
+        descriptionContentType: 'text',
     }
     const npsRatingQuestion = { type: 'rating', display: 'number', scale: 10, question: 'Would you recommend surveys?' }
     const emojiRatingQuestion = {
@@ -393,7 +407,29 @@ describe('Surveys', () => {
                         name: 'Test survey',
                         type: 'popover',
                         start_date: '2021-01-01T00:00:00Z',
-                        questions: [linkQuestion],
+                        questions: [linkQuestionWithHTMLContentType],
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question')
+                .should('have.text', 'Book an interview with us')
+            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.html', '<h2>html description</h2>')
+        })
+
+        it('allows html customization for question missing the descriptionContentType field (backfilling against surveys made before we introduced this field)', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [linkQuestionWithNoContentType],
                     },
                 ],
             }).as('surveys')
@@ -419,6 +455,7 @@ describe('Surveys', () => {
                         appearance: {
                             ...appearanceWithThanks,
                             thankYouMessageDescription: '<h3>html thank you message!</h3>',
+                            thankYouMessageDescriptionContentType: 'html',
                         },
                     },
                 ],
@@ -437,6 +474,65 @@ describe('Surveys', () => {
                 .shadow()
                 .find('.thank-you-message-body')
                 .should('have.html', '<h3>html thank you message!</h3>')
+            cy.phCaptures().should('include', 'survey sent')
+        })
+
+        it('does not render html customization for question descriptions if the question.descriptionContentType does not permit it', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [linkQuestionWithTextContentType],
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question')
+                .should('have.text', 'Book an interview with us')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.description')
+                .should('have.html', '&lt;h2&gt;html description&lt;/h2&gt;')
+        })
+
+        it('does not render html customization for thank you message body if the appearance.thankYouMessageDescriptionContentType does not permit it', () => {
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                        appearance: {
+                            ...appearanceWithThanks,
+                            thankYouMessageDescription: '<h3>html thank you message!</h3>',
+                            thankYouMessageDescriptionContentType: 'text',
+                        },
+                    },
+                ],
+            }).as('surveys')
+            cy.visit('./playground/cypress')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.survey-form').should('be.visible')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question')
+                .should('have.text', 'What feedback do you have for us?')
+            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.text', 'plain text description')
+            cy.get('.PostHogSurvey123').shadow().find('textarea').type('This is great!')
+            cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.thank-you-message-body')
+                .should('have.html', '&lt;h3&gt;html thank you message!&lt;/h3&gt;')
             cy.phCaptures().should('include', 'survey sent')
         })
     })
@@ -642,6 +738,39 @@ describe('Surveys', () => {
             })
         })
 
+        it('captures survey sent event with iteration', () => {
+            cy.visit('./playground/cypress')
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                        current_iteration: 2,
+                        current_iteration_start_date: '12-12-2004',
+                    },
+                ],
+            }).as('surveys')
+            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('textarea').type('experiments is awesome!')
+            cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
+            cy.wait('@capture-assertion')
+            cy.wait('@capture-assertion').then(async ({ request }) => {
+                const captures = await getPayload(request)
+                expect(captures.map(({ event }) => event)).to.deep.equal(['survey shown', 'survey sent'])
+                expect(captures[1].properties).to.contain({
+                    $survey_id: '123',
+                    $survey_response: 'experiments is awesome!',
+                    $survey_iteration: 2,
+                    $survey_iteration_start_date: '12-12-2004',
+                })
+            })
+        })
+
         it('captures survey shown event', () => {
             cy.visit('./playground/cypress')
             cy.intercept('GET', '**/surveys/*', {
@@ -662,6 +791,36 @@ describe('Surveys', () => {
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getPayload(request)
                 expect(captures[0].event).to.equal('survey shown')
+            })
+        })
+
+        it('captures survey shown event with iteration', () => {
+            cy.visit('./playground/cypress')
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                        current_iteration: 2,
+                        current_iteration_start_date: '12-12-2004',
+                    },
+                ],
+            }).as('surveys')
+            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            onPageLoad()
+            cy.wait('@capture-assertion')
+            cy.wait('@capture-assertion').then(async ({ request }) => {
+                const captures = await getPayload(request)
+                expect(captures[0].event).to.equal('survey shown')
+                expect(captures[0].properties).to.contain({
+                    $survey_id: '123',
+                    $survey_iteration: 2,
+                    $survey_iteration_start_date: '12-12-2004',
+                })
             })
         })
 
@@ -686,6 +845,38 @@ describe('Surveys', () => {
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getPayload(request)
                 expect(captures.map(({ event }) => event)).to.contain('survey dismissed')
+            })
+        })
+
+        it('captures survey dismissed event with iteration', () => {
+            cy.visit('./playground/cypress')
+            cy.intercept('GET', '**/surveys/*', {
+                surveys: [
+                    {
+                        id: '123',
+                        name: 'Test survey',
+                        description: 'description',
+                        type: 'popover',
+                        start_date: '2021-01-01T00:00:00Z',
+                        questions: [openTextQuestion],
+                        current_iteration: 2,
+                        current_iteration_start_date: '12-12-2004',
+                    },
+                ],
+            }).as('surveys')
+            cy.intercept('POST', '**/e/*').as('capture-assertion')
+            onPageLoad()
+            cy.get('.PostHogSurvey123').shadow().find('.cancel-btn-wrapper').click()
+            cy.wait('@capture-assertion')
+            cy.wait('@capture-assertion').then(async ({ request }) => {
+                const captures = await getPayload(request)
+                const dismissedEvent = captures.filter(({ event }) => event == 'survey dismissed')[0]
+                expect(dismissedEvent).to.not.be.null
+                expect(dismissedEvent.properties).to.contain({
+                    $survey_id: '123',
+                    $survey_iteration: 2,
+                    $survey_iteration_start_date: '12-12-2004',
+                })
             })
         })
     })

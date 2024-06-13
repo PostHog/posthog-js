@@ -1,25 +1,17 @@
 import { PostHog } from '../posthog-core'
-import {
-    BasicSurveyQuestion,
-    LinkSurveyQuestion,
-    MultipleSurveyQuestion,
-    RatingSurveyQuestion,
-    Survey,
-    SurveyAppearance,
-    SurveyQuestion,
-    SurveyQuestionType,
-    SurveyType,
-} from '../posthog-surveys-types'
+import { Survey, SurveyAppearance, SurveyQuestion, SurveyQuestionType, SurveyType } from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
 import {
     style,
     defaultSurveyAppearance,
     sendSurveyEvent,
+    dismissedSurveyEvent,
     createShadow,
     getContrastingTextColor,
     SurveyContext,
     getDisplayOrderQuestions,
+    getSurveySeenKey,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -82,10 +74,19 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
             }
-            if (
-                survey.type === SurveyType.Popover &&
-                document.querySelectorAll("div[class^='PostHogSurvey']").length === 0
-            ) {
+            // with event based surveys, we need to show the next survey without reloading the page.
+            // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
+            // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
+            // To alleviate this, we check the last div in the dom and see if it has any elements other than a Style node.
+            // if the last PostHogSurvey_xyz div has only one style node, we can show the next survey in the queue
+            // without reloading the page.
+            const surveyPopups = document.querySelectorAll(`div[class^=PostHogSurvey]`)
+            const canShowSurvey =
+                surveyPopups.length > 0
+                    ? surveyPopups[surveyPopups.length - 1].shadowRoot?.childElementCount === 1
+                    : true
+
+            if (survey.type === SurveyType.Popover && canShowSurvey) {
                 const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
                 const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
                 if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
@@ -97,35 +98,46 @@ export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
                     }
                 }
 
-                if (!localStorage.getItem(`seenSurvey_${survey.id}`)) {
+                if (!localStorage.getItem(getSurveySeenKey(survey))) {
                     const shadow = createShadow(style(survey?.appearance), survey.id)
-                    Preact.render(<Surveys key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
+                    Preact.render(<SurveyPopup key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
                 }
             }
         })
     }, forceReload)
 }
 
-export const renderSurveysPreview = (
-    survey: Survey,
-    root: HTMLElement,
-    displayState: 'survey' | 'confirmation',
-    previewQuestionIndex: number
-) => {
+export const renderSurveysPreview = ({
+    survey,
+    parentElement,
+    previewPageIndex,
+    forceDisableHtml,
+}: {
+    survey: Survey
+    parentElement: HTMLElement
+    previewPageIndex: number
+    forceDisableHtml?: boolean
+}) => {
     const surveyStyleSheet = style(survey.appearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
-    root.appendChild(styleElement)
+
+    // Remove previously attached <style>
+    Array.from(parentElement.children).forEach((child) => {
+        if (child instanceof HTMLStyleElement) {
+            parentElement.removeChild(child)
+        }
+    })
+
+    parentElement.appendChild(styleElement)
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
     )
 
     Preact.render(
-        <Surveys
-            key={'surveys-render-preview'}
+        <SurveyPopup
+            key="surveys-render-preview"
             survey={survey}
-            readOnly={true}
-            initialDisplayState={displayState}
-            previewQuestionIndex={previewQuestionIndex}
+            forceDisableHtml={forceDisableHtml}
             style={{
                 position: 'relative',
                 right: 0,
@@ -133,16 +145,32 @@ export const renderSurveysPreview = (
                 borderRadius: 10,
                 color: textColor,
             }}
+            previewPageIndex={previewPageIndex}
         />,
-        root
+        parentElement
     )
 }
-
-export const renderFeedbackWidgetPreview = (survey: Survey, root: HTMLElement) => {
+export const renderFeedbackWidgetPreview = ({
+    survey,
+    root,
+    forceDisableHtml,
+}: {
+    survey: Survey
+    root: HTMLElement
+    forceDisableHtml?: boolean
+}) => {
     const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
     const styleElement = Object.assign(document.createElement('style'), { innerText: widgetStyleSheet })
     root.appendChild(styleElement)
-    Preact.render(<FeedbackWidget key={'feedback-render-preview'} survey={survey} readOnly={true} />, root)
+    Preact.render(
+        <FeedbackWidget
+            key={'feedback-render-preview'}
+            forceDisableHtml={forceDisableHtml}
+            survey={survey}
+            readOnly={true}
+        />,
+        root
+    )
 }
 
 // This is the main exported function
@@ -159,144 +187,150 @@ export function generateSurveys(posthog: PostHog) {
     }, 3000)
 }
 
-export function Surveys({
+export function SurveyPopup({
     survey,
+    forceDisableHtml,
     posthog,
-    readOnly,
     style,
-    initialDisplayState,
-    previewQuestionIndex,
+    previewPageIndex,
 }: {
     survey: Survey
+    forceDisableHtml?: boolean
     posthog?: PostHog
-    readOnly?: boolean
     style?: React.CSSProperties
-    initialDisplayState?: 'survey' | 'confirmation' | 'closed'
-    previewQuestionIndex?: number
+    previewPageIndex?: number | undefined
 }) {
-    const [displayState, setDisplayState] = useState<'survey' | 'confirmation' | 'closed'>(
-        initialDisplayState || 'survey'
-    )
+    const [isPopupVisible, setIsPopupVisible] = useState(true)
+    const [isSurveySent, setIsSurveySent] = useState(false)
+    const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
+    const isPreviewMode = Number.isInteger(previewPageIndex)
+    const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
+
+    // Ensure the popup stays in the same position for the preview
+    if (isPreviewMode) {
+        style = style || {}
+        style.left = 'unset'
+        style.right = 'unset'
+        style.transform = 'unset'
+    }
 
     useEffect(() => {
-        if (readOnly || !posthog) {
+        if (isPreviewMode || !posthog) {
             return
         }
 
         window.dispatchEvent(new Event('PHSurveyShown'))
-
         posthog.capture('survey shown', {
             $survey_name: survey.name,
             $survey_id: survey.id,
+            $survey_iteration: survey.current_iteration,
+            $survey_iteration_start_date: survey.current_iteration_start_date,
             sessionRecordingUrl: posthog.get_session_replay_url?.(),
         })
         localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
 
         window.addEventListener('PHSurveyClosed', () => {
-            setDisplayState('closed')
+            setIsPopupVisible(false)
         })
-
         window.addEventListener('PHSurveySent', () => {
             if (!survey.appearance?.displayThankYouMessage) {
-                return setDisplayState('closed')
+                return setIsPopupVisible(false)
             }
-            setDisplayState('confirmation')
+
+            setIsSurveySent(true)
+
             if (survey.appearance?.autoDisappear) {
                 setTimeout(() => {
-                    setDisplayState('closed')
+                    setIsPopupVisible(false)
                 }, 5000)
             }
         })
     }, [])
-    const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
-    return (
-        <>
-            <SurveyContext.Provider
-                value={{
-                    readOnly: !!readOnly,
-                    previewQuestionIndex: previewQuestionIndex ?? 0,
-                    textColor: getContrastingTextColor(
-                        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
-                    ),
-                }}
-            >
-                {displayState === 'survey' && <Questions survey={survey} posthog={posthog} styleOverrides={style} />}
-                {displayState === 'confirmation' && (
-                    <ConfirmationMessage
-                        confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
-                        confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
-                        appearance={survey.appearance || defaultSurveyAppearance}
-                        styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
-                        onClose={() => setDisplayState('closed')}
-                    />
-                )}
-            </SurveyContext.Provider>
-        </>
+    return isPopupVisible ? (
+        <SurveyContext.Provider
+            value={{
+                isPreviewMode,
+                previewPageIndex: previewPageIndex,
+                handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
+            }}
+        >
+            {!shouldShowConfirmation ? (
+                <Questions
+                    survey={survey}
+                    forceDisableHtml={!!forceDisableHtml}
+                    posthog={posthog}
+                    styleOverrides={style}
+                />
+            ) : (
+                <ConfirmationMessage
+                    header={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
+                    description={survey.appearance?.thankYouMessageDescription || ''}
+                    forceDisableHtml={!!forceDisableHtml}
+                    contentType={survey.appearance?.thankYouMessageDescriptionContentType}
+                    appearance={survey.appearance || defaultSurveyAppearance}
+                    styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
+                    onClose={() => setIsPopupVisible(false)}
+                />
+            )}
+        </SurveyContext.Provider>
+    ) : (
+        <></>
     )
 }
 
-const questionTypeMap = (
-    question: SurveyQuestion,
-    questionIndex: number,
-    appearance: SurveyAppearance,
-    onSubmit: (res: string | string[] | number | null) => void,
-    closeSurveyPopup: () => void
-): JSX.Element => {
-    const mapping = {
-        [SurveyQuestionType.Open]: (
-            <OpenTextQuestion
-                question={question as BasicSurveyQuestion}
-                appearance={appearance}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-        [SurveyQuestionType.Link]: (
-            <LinkQuestion
-                question={question as LinkSurveyQuestion}
-                appearance={appearance}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-        [SurveyQuestionType.Rating]: (
-            <RatingQuestion
-                question={question as RatingSurveyQuestion}
-                appearance={appearance}
-                questionIndex={questionIndex}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-        [SurveyQuestionType.SingleChoice]: (
-            <MultipleChoiceQuestion
-                question={question as MultipleSurveyQuestion}
-                appearance={appearance}
-                questionIndex={questionIndex}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
-        [SurveyQuestionType.MultipleChoice]: (
-            <MultipleChoiceQuestion
-                question={question as MultipleSurveyQuestion}
-                appearance={appearance}
-                questionIndex={questionIndex}
-                onSubmit={onSubmit}
-                closeSurveyPopup={closeSurveyPopup}
-            />
-        ),
+interface GetQuestionComponentProps {
+    question: SurveyQuestion
+    forceDisableHtml: boolean
+    displayQuestionIndex: number
+    appearance: SurveyAppearance
+    onSubmit: (res: string | string[] | number | null) => void
+}
+
+const getQuestionComponent = ({
+    question,
+    forceDisableHtml,
+    displayQuestionIndex,
+    appearance,
+    onSubmit,
+}: GetQuestionComponentProps): JSX.Element => {
+    const questionComponents = {
+        [SurveyQuestionType.Open]: OpenTextQuestion,
+        [SurveyQuestionType.Link]: LinkQuestion,
+        [SurveyQuestionType.Rating]: RatingQuestion,
+        [SurveyQuestionType.SingleChoice]: MultipleChoiceQuestion,
+        [SurveyQuestionType.MultipleChoice]: MultipleChoiceQuestion,
     }
-    return mapping[question.type]
+
+    const commonProps = {
+        question,
+        forceDisableHtml,
+        appearance,
+        onSubmit,
+    }
+
+    const additionalProps: Record<SurveyQuestionType, any> = {
+        [SurveyQuestionType.Open]: {},
+        [SurveyQuestionType.Link]: {},
+        [SurveyQuestionType.Rating]: { displayQuestionIndex },
+        [SurveyQuestionType.SingleChoice]: { displayQuestionIndex },
+        [SurveyQuestionType.MultipleChoice]: { displayQuestionIndex },
+    }
+
+    const Component = questionComponents[question.type]
+    const componentProps = { ...commonProps, ...additionalProps[question.type] }
+
+    return <Component {...componentProps} />
 }
 
 export function Questions({
     survey,
+    forceDisableHtml,
     posthog,
     styleOverrides,
 }: {
     survey: Survey
+    forceDisableHtml: boolean
     posthog?: PostHog
     styleOverrides?: React.CSSProperties
 }) {
@@ -304,106 +338,83 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { readOnly, previewQuestionIndex } = useContext(SurveyContext)
-    const [currentQuestion, setCurrentQuestion] = useState(readOnly ? previewQuestionIndex : 0)
+    const { isPreviewMode, previewPageIndex } = useContext(SurveyContext)
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
-    const onNextClick = (res: string | string[] | number | null, idx: number) => {
-        const responseKey = idx === 0 ? `$survey_response` : `$survey_response_${idx}`
-        if (idx === survey.questions.length - 1) {
+    // Sync preview state
+    useEffect(() => {
+        setCurrentQuestionIndex(previewPageIndex ?? 0)
+    }, [previewPageIndex])
+
+    const onNextButtonClick = ({
+        res,
+        originalQuestionIndex,
+        displayQuestionIndex,
+    }: {
+        res: string | string[] | number | null
+        originalQuestionIndex: number
+        displayQuestionIndex: number
+    }) => {
+        const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
+
+        const responseKey =
+            originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
+
+        if (isLastDisplayedQuestion) {
             return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
             setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
-            setCurrentQuestion(idx + 1)
+            setCurrentQuestionIndex(displayQuestionIndex + 1)
         }
     }
 
-    const questionToDisplay = readOnly ? previewQuestionIndex : currentQuestion
-    const hasMultipleQuestions = survey.questions.length > 1
-    const isPreviewThankYouMessage = readOnly && questionToDisplay === survey.questions.length
-
     return (
         <form
-            // TODO: BEMify classes
             className="survey-form"
             style={{
                 color: textColor,
                 borderColor: survey.appearance?.borderColor,
                 ...styleOverrides,
-                ...(isPreviewThankYouMessage ? { border: 'none', borderBottom: 'solid 1px rgb(201, 198, 198)' } : {}),
             }}
         >
-            {isPreviewThankYouMessage ? (
-                <ConfirmationMessage
-                    confirmationHeader={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
-                    confirmationDescription={survey.appearance?.thankYouMessageDescription || ''}
-                    appearance={survey.appearance || defaultSurveyAppearance}
-                    styleOverrides={{
-                        ...style,
-                        position: 'relative',
-                        right: '0px',
-                        borderRadius: '10px',
-                        border: 'solid 1px rgb(201, 198, 198)',
-                    }}
-                    onClose={() => {}}
-                />
-            ) : (
-                <>
-                    {surveyQuestions.map((question, idx) => {
-                        if (hasMultipleQuestions) {
-                            return (
-                                <>
-                                    {questionToDisplay === idx && (
-                                        <div className={`tab question-${idx} ${question.type}`}>
-                                            {questionTypeMap(
-                                                question,
-                                                idx,
-                                                survey.appearance || defaultSurveyAppearance,
-                                                (res) => onNextClick(res, question.questionIndex || idx),
-                                                () => closeSurveyPopup(survey, posthog, readOnly)
-                                            )}
-                                        </div>
-                                    )}
-                                </>
-                            )
-                        }
-                        return questionTypeMap(
-                            surveyQuestions[idx],
-                            idx,
-                            survey.appearance || defaultSurveyAppearance,
-                            (res) => onNextClick(res, idx),
-                            () => closeSurveyPopup(survey, posthog, readOnly)
-                        )
-                    })}
-                </>
-            )}
+            {surveyQuestions.map((question, displayQuestionIndex) => {
+                const { originalQuestionIndex } = question
+
+                const isVisible = isPreviewMode
+                    ? currentQuestionIndex === originalQuestionIndex
+                    : currentQuestionIndex === displayQuestionIndex
+                return (
+                    isVisible && (
+                        <div>
+                            {getQuestionComponent({
+                                question,
+                                forceDisableHtml,
+                                displayQuestionIndex,
+                                appearance: survey.appearance || defaultSurveyAppearance,
+                                onSubmit: (res) =>
+                                    onNextButtonClick({
+                                        res,
+                                        originalQuestionIndex,
+                                        displayQuestionIndex,
+                                    }),
+                            })}
+                        </div>
+                    )
+                )
+            })}
         </form>
     )
 }
 
-const closeSurveyPopup = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
-    // TODO: state management and unit tests for this would be nice
-    if (readOnly || !posthog) {
-        return
-    }
-    posthog.capture('survey dismissed', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        $set: {
-            [`$survey_dismissed/${survey.id}`]: true,
-        },
-    })
-    localStorage.setItem(`seenSurvey_${survey.id}`, 'true')
-    window.dispatchEvent(new Event('PHSurveyClosed'))
-}
-
 export function FeedbackWidget({
     survey,
+    forceDisableHtml,
     posthog,
     readOnly,
 }: {
     survey: Survey
+    forceDisableHtml?: boolean
     posthog?: PostHog
     readOnly?: boolean
 }): JSX.Element {
@@ -452,7 +463,13 @@ export function FeedbackWidget({
                 </div>
             )}
             {showSurvey && (
-                <Surveys key={'feedback-widget-survey'} posthog={posthog} survey={survey} style={styleOverrides} />
+                <SurveyPopup
+                    key={'feedback-widget-survey'}
+                    posthog={posthog}
+                    survey={survey}
+                    forceDisableHtml={forceDisableHtml}
+                    style={styleOverrides}
+                />
             )}
         </>
     )

@@ -47,7 +47,7 @@ import {
     SnippetArrayItem,
     ToolbarParams,
 } from './types'
-import { SentryIntegration } from './extensions/sentry-integration'
+import { SentryIntegration, SentryIntegrationOptions, sentryIntegration } from './extensions/sentry-integration'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
 import { PostHogSurveys } from './posthog-surveys'
@@ -73,6 +73,7 @@ import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
+import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
 
 /*
@@ -174,6 +175,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'always',
+    __add_tracing_headers: false,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -261,6 +263,7 @@ export class PostHog {
     analyticsDefaultEndpoint: string
 
     SentryIntegration: typeof SentryIntegration
+    sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     private _debugEventEmitter = new SimpleEventEmitter()
 
@@ -272,8 +275,10 @@ export class PostHog {
 
     constructor() {
         this.config = defaultConfig()
+
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
+        this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
@@ -392,6 +397,8 @@ export class PostHog {
 
         this.sessionManager = new SessionIdManager(this.config, this.persistence)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+
+        new TracingHeaders(this).startIfEnabledOrStop()
 
         this.sessionRecording = new SessionRecording(this)
         this.sessionRecording.startIfEnabledOrStop()
@@ -785,21 +792,15 @@ export class PostHog {
         // with every event and used by the session table to create session-initial props.
         if (this.config.store_google) {
             this.sessionPersistence.update_campaign_params()
-            this.persistence.set_initial_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
-            this.persistence.set_initial_referrer_info()
+        }
+        if (this.config.store_google || this.config.save_referrer) {
+            this.persistence.set_initial_person_info()
         }
 
-        const allProperties = this._calculate_event_properties(event_name, properties || {})
-
-        if (!options?._noHeatmaps) {
-            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
-            if (heatmapsBuffer) {
-                allProperties['$heatmap_data'] = heatmapsBuffer
-            }
-        }
+        const allProperties = this._calculate_event_properties(event_name, properties || {}, options)
 
         const setProperties = options?.$set
         // if (setProperties) {
@@ -952,7 +953,11 @@ export class PostHog {
     /**
      * Calculates additional properties to be sent with an event that are stateful - i.e. depend on the current state of the user
      */
-    _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
+    _calculate_event_properties(
+        event_name: string,
+        event_properties: Properties,
+        options?: CaptureOptions
+    ): Properties {
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
         }
@@ -1005,6 +1010,32 @@ export class PostHog {
         // update properties with pageview info and super-properties
         properties = extend({}, this.persistence.properties(), this.sessionPersistence.properties(), properties)
         properties['$is_identified'] = this._isIdentified()
+
+        if (!options?._noHeatmaps) {
+            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
+            if (heatmapsBuffer) {
+                properties['$heatmap_data'] = heatmapsBuffer
+            }
+        }
+
+        if (isArray(this.config.property_denylist)) {
+            each(this.config.property_denylist, function (denylisted_prop) {
+                delete properties[denylisted_prop]
+            })
+        } else {
+            logger.error(
+                'Invalid value for property_denylist config: ' +
+                    this.config.property_denylist +
+                    ' or property_blacklist config: ' +
+                    this.config.property_blacklist
+            )
+        }
+
+        const sanitize_properties = this.config.sanitize_properties
+        if (sanitize_properties) {
+            properties = sanitize_properties(properties, event_name)
+        }
+
         // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
         properties['$process_person_profile'] = this._hasPersonProcessing()
 
@@ -1738,7 +1769,8 @@ export class PostHog {
      *         maskInputOptions: {},
      *         maskInputFn: null,
      *         slimDOMOptions: {},
-     *         collectFonts: false
+     *         collectFonts: false,
+     *         inlineStylesheet: true,
      *      }
      *
      *      // prevent autocapture from capturing any attribute names on elements

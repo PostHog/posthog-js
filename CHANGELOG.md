@@ -1,3 +1,75 @@
+## 1.139.1 - 2024-06-12
+
+- fix: less strict idle event dropping (#1241)
+- chore: add inlineStylesheet prop (#1237)
+
+## 1.139.0 - 2024-06-10
+
+- feat(personless-events): set_once more initial properties accurately when a person is created (#1236)
+
+## 1.138.3 - 2024-06-10
+
+- fix: circular refs shouldn't explode capture (#1230)
+
+## 1.138.2 - 2024-06-10
+
+- feat: Updated v8 sentry integration (#1224)
+
+## 1.138.1 - 2024-06-07
+
+- feat: wrap fetch and add tracing headers (#1186)
+- feat(survey): Support identifying iterations of a repeatable survey (#1200)
+
+## 1.138.0 - 2024-06-06
+
+- feat(surveys): `posthog-js` changes to support valid HTML question rendering (#1206)
+
+## 1.137.0 - 2024-06-05
+
+- chore: Bump version to 1.137.0 (#1227)
+- feat(survey): Event based survey: Show survey popup based on custom event (#1213)
+
+## 1.137.0 - 2024-06-05
+
+- feat(survey): Event based survey: Show survey popup based on custom event #1213
+
+## 1.136.8 - 2024-06-05
+
+- fix: flush on idle (#1225)
+
+## 1.136.7 - 2024-06-04
+
+- fix: no full snapshot while idle (#1222)
+
+## 1.136.6 - 2024-06-04
+
+- chore(surveys): refactor survey popup (vol. 1) (#1214)
+
+## 1.136.5 - 2024-06-03
+
+- feat: add an explicit in-memory buffer (#1217)
+
+## 1.136.4 - 2024-06-03
+
+- fix: do not start recording buffer without id (#1215)
+
+## 1.136.3 - 2024-06-03
+
+- fix: heatmaps with segment integration (#1218)
+
+## 1.136.2 - 2024-05-30
+
+- fix: reference canvas not client (#1212)
+- fix: Add auto approver for JS prs (#1209)
+
+## 1.136.1 - 2024-05-29
+
+- fix: fallback size when resizing (#1208)
+
+## 1.136.0 - 2024-05-28
+
+- feat: Refactor GDPR stuff into a more readable consent class (#1176)
+
 ## 1.135.2 - 2024-05-24
 
 - feat: Add tests and fix regex for some obscure android browsers (#1196)

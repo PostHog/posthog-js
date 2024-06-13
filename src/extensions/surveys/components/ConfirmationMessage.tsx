@@ -1,17 +1,22 @@
 import { BottomSection } from './BottomSection'
 import { Cancel } from './QuestionHeader'
-import { SurveyAppearance } from '../../../posthog-surveys-types'
-import { defaultSurveyAppearance, getContrastingTextColor } from '../surveys-utils'
+import { SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
+import { defaultSurveyAppearance, getContrastingTextColor, renderChildrenAsTextOrHtml } from '../surveys-utils'
+import { h } from 'preact'
 
 export function ConfirmationMessage({
-    confirmationHeader,
-    confirmationDescription,
+    header,
+    description,
+    contentType,
+    forceDisableHtml,
     appearance,
     onClose,
     styleOverrides,
 }: {
-    confirmationHeader: string
-    confirmationDescription: string
+    header: string
+    description: string
+    forceDisableHtml: boolean
+    contentType?: SurveyQuestionDescriptionContentType
     appearance: SurveyAppearance
     onClose: () => void
     styleOverrides?: React.CSSProperties
@@ -24,15 +29,15 @@ export function ConfirmationMessage({
                 <div className="thank-you-message-container">
                     <Cancel onClick={() => onClose()} />
                     <h3 className="thank-you-message-header" style={{ color: textColor }}>
-                        {confirmationHeader}
+                        {header}
                     </h3>
-                    {confirmationDescription && (
-                        <div
-                            style={{ color: textColor }}
-                            className="thank-you-message-body"
-                            dangerouslySetInnerHTML={{ __html: confirmationDescription }}
-                        />
-                    )}
+                    {description &&
+                        renderChildrenAsTextOrHtml({
+                            component: h('div', { className: 'thank-you-message-body' }),
+                            children: description,
+                            renderAsHtml: !forceDisableHtml && contentType !== 'text',
+                            style: { color: textColor },
+                        })}
                     <BottomSection
                         text={'Close'}
                         submitDisabled={false}

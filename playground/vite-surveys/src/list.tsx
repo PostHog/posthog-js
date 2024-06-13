@@ -1,4 +1,4 @@
-import { Surveys } from '../../../src/extensions/surveys'
+import { SurveyPopup } from '../../../src/extensions/surveys'
 import {
     BasicSurveyQuestion,
     RatingSurveyQuestion,
@@ -166,7 +166,7 @@ export function List() {
         <div style={{ width: '100%', paddingLeft: '40px', paddingRight: '40px', display: 'flex', flexWrap: 'wrap' }}>
             {surveys.map((survey) => (
                 <div style={{ width: '33%', paddingTop: '40px' }}>
-                    <Surveys
+                    <SurveyPopup
                         readOnly={true}
                         style={{
                             position: 'relative',

@@ -24,18 +24,18 @@ export function BottomSection({
     onSubmit: () => void
     link?: string | null
 }) {
-    const { readOnly } = useContext(SurveyContext)
+    const { isPreviewMode } = useContext(SurveyContext)
     const textColor = getContrastingTextColor(appearance.submitButtonColor || defaultSurveyAppearance.submitButtonColor)
     return (
         <div className="bottom-section">
             <div className="buttons">
                 <button
                     className="form-submit"
-                    disabled={submitDisabled && !readOnly}
+                    disabled={submitDisabled && !isPreviewMode}
                     type="button"
                     style={{ color: textColor }}
                     onClick={() => {
-                        if (readOnly) return
+                        if (isPreviewMode) return
                         if (link) {
                             window?.open(link)
                         }

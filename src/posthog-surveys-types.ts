@@ -21,6 +21,7 @@ export interface SurveyAppearance {
     displayThankYouMessage?: boolean
     thankYouMessageHeader?: string
     thankYouMessageDescription?: string
+    thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
     borderColor?: string
     position?: 'left' | 'right' | 'center'
     placeholder?: string
@@ -43,12 +44,15 @@ export enum SurveyType {
 
 export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
 
+export type SurveyQuestionDescriptionContentType = 'html' | 'text'
+
 interface SurveyQuestionBase {
     question: string
     description?: string | null
+    descriptionContentType?: SurveyQuestionDescriptionContentType
     optional?: boolean
     buttonText?: string
-    questionIndex?: number
+    originalQuestionIndex: number
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -107,7 +111,14 @@ export interface Survey {
         selector?: string
         seenSurveyWaitPeriodInDays?: number
         urlMatchType?: SurveyUrlMatchType
+        events: {
+            values: {
+                name: string
+            }[]
+        } | null
     } | null
     start_date: string | null
     end_date: string | null
+    current_iteration: number | null
+    current_iteration_start_date: string | null
 }

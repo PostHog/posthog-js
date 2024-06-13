@@ -11,14 +11,13 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-    MutationRateLimiter,
     recordOptions,
     rrwebRecord,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
-import { EventType, type eventWithTime, type listenerHandler, RecordPlugin } from '@rrweb/types'
+import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
 import Config from '../../config'
 import { timestamp, loadScript } from '../../utils'
 
@@ -36,6 +35,7 @@ import { logger } from '../../utils/logger'
 import { document, assignableWindow, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
+import { MutationRateLimiter } from './mutation-rate-limiter'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -50,26 +50,6 @@ export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 // import type { record } from 'rrweb2/typings'
 // import type { recordOptions } from 'rrweb/typings/types'
 
-// Copied from rrweb typings to avoid import
-enum IncrementalSource {
-    Mutation = 0,
-    MouseMove = 1,
-    MouseInteraction = 2,
-    Scroll = 3,
-    ViewportResize = 4,
-    Input = 5,
-    TouchMove = 6,
-    MediaInteraction = 7,
-    StyleSheetRule = 8,
-    CanvasMutation = 9,
-    Font = 10,
-    Log = 11,
-    Drag = 12,
-    StyleDeclaration = 13,
-    Selection = 14,
-    AdoptedStyleSheet = 15,
-}
-
 const ACTIVE_SOURCES = [
     IncrementalSource.MouseMove,
     IncrementalSource.MouseInteraction,
@@ -80,6 +60,27 @@ const ACTIVE_SOURCES = [
     IncrementalSource.MediaInteraction,
     IncrementalSource.Drag,
 ]
+
+const STYLE_SOURCES = [
+    IncrementalSource.StyleSheetRule,
+    IncrementalSource.StyleDeclaration,
+    IncrementalSource.AdoptedStyleSheet,
+    IncrementalSource.Font,
+]
+
+const TYPES_ALLOWED_WHEN_IDLE = [EventType.Custom, EventType.Meta, EventType.FullSnapshot]
+
+/**
+ * we want to restrict the data allowed when we've detected an idle session
+ * but allow data that the player might require for proper playback
+ */
+function allowedWhenIdle(event: eventWithTime): boolean {
+    const isAllowedIncremental =
+        event.type === EventType.IncrementalSnapshot &&
+        !isNullish(event.data.source) &&
+        STYLE_SOURCES.includes(event.data.source)
+    return TYPES_ALLOWED_WHEN_IDLE.includes(event.type) || isAllowedIncremental
+}
 
 /**
  * Session recording starts in buffering mode while waiting for decide response
@@ -92,8 +93,35 @@ type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering'
 interface SnapshotBuffer {
     size: number
     data: any[]
-    sessionId: string | null
-    windowId: string | null
+    sessionId: string
+    windowId: string
+
+    readonly mostRecentSnapshotTimestamp: number | null
+
+    add(properties: Properties): void
+}
+
+class InMemoryBuffer implements SnapshotBuffer {
+    size: number
+    data: any[]
+    sessionId: string
+    windowId: string
+
+    get mostRecentSnapshotTimestamp(): number | null {
+        return this.data.length ? this.data[this.data.length - 1].timestamp : null
+    }
+
+    constructor(sessionId: string, windowId: string) {
+        this.size = 0
+        this.data = []
+        this.sessionId = sessionId
+        this.windowId = windowId
+    }
+
+    add(properties: Properties) {
+        this.size += properties.$snapshot_bytes
+        this.data.push(properties.$snapshot_data)
+    }
 }
 
 interface QueuedRRWebEvent {
@@ -111,13 +139,38 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 
 const LOGGER_PREFIX = '[SessionRecording]'
 
+// taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
+function circularReferenceReplacer() {
+    const ancestors: any[] = []
+    return function (_key: string, value: any) {
+        if (isObject(value)) {
+            // `this` is the object that value is contained in,
+            // i.e., its direct parent.
+            // @ts-expect-error - TS was unhappy with `this` on the next line but the code is copied in from MDN
+            while (ancestors.length > 0 && ancestors.at(-1) !== this) {
+                ancestors.pop()
+            }
+            if (ancestors.includes(value)) {
+                return '[Circular]'
+            }
+            ancestors.push(value)
+            return value
+        } else {
+            return value
+        }
+    }
+}
+
+function estimateSize(event: eventWithTime): number {
+    return JSON.stringify(event, circularReferenceReplacer()).length
+}
+
 export class SessionRecording {
-    private instance: PostHog
     private _endpoint: string
     private flushBufferTimer?: any
 
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
-    private buffer?: SnapshotBuffer
+    private buffer: SnapshotBuffer
     // and a queue - that contains rrweb events that we want to send to rrweb, but rrweb wasn't able to accept them yet
     private queuedRRWebEvents: QueuedRRWebEvent[] = []
 
@@ -129,8 +182,8 @@ export class SessionRecording {
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
-    private windowId: string | null = null
-    private sessionId: string | null = null
+    private windowId: string
+    private sessionId: string
     private _linkedFlag: string | FlagVariant | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
@@ -153,7 +206,6 @@ export class SessionRecording {
 
     private get sessionManager() {
         if (!this.instance.sessionManager) {
-            logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
@@ -166,9 +218,9 @@ export class SessionRecording {
     }
 
     private get sessionDuration(): number | null {
-        const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
+        const mostRecentSnapshotTimestamp = this.buffer.mostRecentSnapshotTimestamp
         const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
+        return mostRecentSnapshotTimestamp ? mostRecentSnapshotTimestamp - sessionStartTimestamp : null
     }
 
     private get isRecordingEnabled() {
@@ -250,8 +302,7 @@ export class SessionRecording {
         }
     }
 
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private readonly instance: PostHog) {
         this._captureStarted = false
         this._endpoint = BASE_ENDPOINT
         this.stopRrweb = undefined
@@ -281,7 +332,12 @@ export class SessionRecording {
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
-        this.buffer = this.clearBuffer()
+        // we know there's a sessionManager, so don't need to start without a session id
+        const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
+        this.sessionId = sessionId
+        this.windowId = windowId
+
+        this.buffer = new InMemoryBuffer(this.sessionId, this.windowId)
 
         // on reload there might be an already sampled session that should be continued before decide response,
         // so we call this here _and_ in the decide response
@@ -451,6 +507,7 @@ export class SessionRecording {
             timestamp: timestamp(),
         })
     }
+
     private _startCapture() {
         if (isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
@@ -518,6 +575,10 @@ export class SessionRecording {
                     timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
                     threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
                 })
+                // don't take full snapshots while idle
+                clearTimeout(this._fullSnapshotTimer)
+                // proactively flush the buffer in case the session is idle for a long time
+                this._flushBuffer()
             }
         }
 
@@ -554,7 +615,7 @@ export class SessionRecording {
         if (
             returningFromIdle ||
             ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-                (windowIdChanged || sessionIdChanged))
+                (windowIdChanged || sessionIdChanged || isUndefined(this._fullSnapshotTimer)))
         ) {
             this._tryTakeFullSnapshot()
         }
@@ -644,11 +705,6 @@ export class SessionRecording {
                     this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
             })
-
-        // rrweb takes a snapshot on initialization,
-        // we want to take one in five minutes
-        // if nothing else happens to reset the timer
-        this._scheduleFullSnapshot()
 
         const activePlugins = this._gatherRRWebPlugins()
         this.stopRrweb = this.rrwebRecord({
@@ -759,13 +815,12 @@ export class SessionRecording {
 
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
-        const size = JSON.stringify(event).length
+        const size = estimateSize(event)
 
         this._updateWindowAndSessionIds(event)
 
-        // allow custom events even when idle
-        if (this.isIdle && event.type !== EventType.Custom) {
-            // When in an idle state we keep recording, but don't capture the events
+        if (this.isIdle && !allowedWhenIdle(event)) {
+            // When in an idle state we keep recording, but don't capture all events
             return
         }
 
@@ -846,24 +901,11 @@ export class SessionRecording {
         return url
     }
 
-    private clearBuffer(): SnapshotBuffer {
-        this.buffer = undefined
-
-        return {
-            size: 0,
-            data: [],
-            sessionId: this.sessionId,
-            windowId: this.windowId,
-        }
+    private clearBuffer(): void {
+        this.buffer = new InMemoryBuffer(this.sessionId, this.windowId)
     }
 
-    // the intention is a buffer that (currently) is used only after a decide response enables session recording
-    // it is called ever X seconds using the flushBufferTimer so that we don't have to wait for the buffer to fill up
-    // when it is called on a timer it assumes that it can definitely flush
-    // it is flushed when the session id changes or the size of the buffered data gets too great (1mb by default)
-    // first change: if the recording is in buffering mode,
-    //  flush buffer simply resets the timer and returns the existing flush buffer
-    private _flushBuffer() {
+    private _flushBuffer(): void {
         if (this.flushBufferTimer) {
             clearTimeout(this.flushBufferTimer)
             this.flushBufferTimer = undefined
@@ -881,42 +923,31 @@ export class SessionRecording {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
-            return this.buffer || this.clearBuffer()
+
+            return
         }
 
-        if (this.buffer && this.buffer.data.length !== 0) {
+        if (this.buffer.data.length > 0) {
             this._captureSnapshot({
                 $snapshot_bytes: this.buffer.size,
                 $snapshot_data: this.buffer.data,
                 $session_id: this.buffer.sessionId,
                 $window_id: this.buffer.windowId,
             })
-
-            return this.clearBuffer()
-        } else {
-            return this.buffer || this.clearBuffer()
         }
+        this.clearBuffer()
     }
 
     private _captureSnapshotBuffered(properties: Properties) {
         const additionalBytes = 2 + (this.buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
         if (
-            !this.buffer ||
             this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            (!!this.buffer.sessionId && this.buffer.sessionId !== this.sessionId)
+            this.buffer.sessionId !== this.sessionId
         ) {
-            this.buffer = this._flushBuffer()
+            this._flushBuffer()
         }
 
-        if (isNull(this.buffer.sessionId) && !isNull(this.sessionId)) {
-            // session id starts null but has now been assigned, update the buffer
-            this.buffer.sessionId = this.sessionId
-            this.buffer.windowId = this.windowId
-        }
-
-        this.buffer.size += properties.$snapshot_bytes
-        this.buffer.data.push(properties.$snapshot_data)
-
+        this.buffer.add(properties)
         if (!this.flushBufferTimer) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()

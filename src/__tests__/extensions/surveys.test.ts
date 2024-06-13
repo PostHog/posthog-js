@@ -77,6 +77,7 @@ describe('preview renders', () => {
                 {
                     question: 'How satisfied are you with our newest product?',
                     description: 'This is a question description',
+                    descriptionContentType: 'text',
                     type: SurveyQuestionType.Rating,
                     display: 'number',
                     scale: 10,
@@ -90,10 +91,158 @@ describe('preview renders', () => {
         }
         const surveyDiv = document.createElement('div')
         expect(surveyDiv.innerHTML).toBe('')
-        renderSurveysPreview(mockSurvey as Survey, surveyDiv, 'survey', 0)
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: 0 })
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+    })
+
+    test('renderSurveysPreview marks up question with html when no content type is selected by default', () => {
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Popover,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: '<h3>This is a question description</h3>',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        expect(surveyDiv.innerHTML).toBe('')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: 0 })
+        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+        const descriptionElement = surveyDiv.querySelector('.description')
+        expect(descriptionElement).not.toBeNull()
+        expect(descriptionElement!.innerHTML).toBe('<h3>This is a question description</h3>')
+    })
+
+    test('renderSurveysPreview marks up question with html when `html` content type is selected', () => {
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Popover,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: '<h3>This is a question description</h3>',
+                    descriptionContentType: 'html',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        expect(surveyDiv.innerHTML).toBe('')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: 0 })
+        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+        const descriptionElement = surveyDiv.querySelector('.description')
+        expect(descriptionElement).not.toBeNull()
+        expect(descriptionElement!.innerHTML).toBe('<h3>This is a question description</h3>')
+    })
+
+    test('renderSurveysPreview does not mark up html when when `text` content type is selected', () => {
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Popover,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: '<h3>This is a question description</h3>',
+                    descriptionContentType: 'text',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        expect(surveyDiv.innerHTML).toBe('')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: 0 })
+        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+        const descriptionElement = surveyDiv.querySelector('.description')
+        expect(descriptionElement).not.toBeNull()
+        expect(descriptionElement!.innerHTML).toBe('&lt;h3&gt;This is a question description&lt;/h3&gt;') // HTML is escaped
+    })
+
+    test('renderSurveysPreview does not mark up html when when the forceDisableHtml flag is passed in', () => {
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Popover,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: '<h3>This is a question description</h3>',
+                    descriptionContentType: 'html',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        expect(surveyDiv.innerHTML).toBe('')
+        renderSurveysPreview({
+            survey: mockSurvey as Survey,
+            parentElement: surveyDiv,
+            previewPageIndex: 0,
+            forceDisableHtml: true,
+        })
+        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+        const descriptionElement = surveyDiv.querySelector('.description')
+        expect(descriptionElement).not.toBeNull()
+        expect(descriptionElement!.innerHTML).toBe('&lt;h3&gt;This is a question description&lt;/h3&gt;') // HTML is escaped
     })
 
     test('renderFeedbackWidgetPreview', () => {
@@ -116,7 +265,7 @@ describe('preview renders', () => {
         }
         const root = document.createElement('div')
         expect(root.innerHTML).toBe('')
-        renderFeedbackWidgetPreview(mockSurvey as Survey, root)
+        renderFeedbackWidgetPreview({ survey: mockSurvey as Survey, root })
         expect(root.getElementsByTagName('style').length).toBe(1)
         expect(root.getElementsByClassName('ph-survey-widget-tab').length).toBe(1)
         expect(root.getElementsByClassName('ph-survey-widget-tab')[0].innerHTML).toContain('preview test')
