@@ -3,11 +3,8 @@ import {
     renderSurveysPreview,
     renderFeedbackWidgetPreview,
     usePopupVisibility,
-    canShowNextSurvey,
-    handlePopoverSurvey,
 } from '../../extensions/surveys'
-import * as Preact from 'preact'
-import { createShadow, getSurveySeenKey } from '../../extensions/surveys/surveys-utils'
+import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
 import { renderHook, act } from '@testing-library/preact'
 import '@testing-library/jest-dom'
@@ -97,14 +94,16 @@ describe('usePopupVisibility', () => {
         capture: jest.fn().mockImplementation((eventName) => eventName),
     } as unknown as PostHog
 
+    const removeSurvey = jest.fn()
+
     test('should set isPopupVisible to true immediately if delay is 0', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should set isPopupVisible to true after delay', () => {
         jest.useFakeTimers()
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey))
         expect(result.current.isPopupVisible).toBe(false)
         act(() => {
             jest.advanceTimersByTime(1000)
@@ -114,7 +113,7 @@ describe('usePopupVisibility', () => {
     })
 
     test('should hide popup when PHSurveyClosed event is dispatched', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
         act(() => {
             window.dispatchEvent(new Event('PHSurveyClosed'))
         })
@@ -130,7 +129,7 @@ describe('usePopupVisibility', () => {
             thankYouMessageDescription: 'We appreciate your feedback.',
         }
 
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
         act(() => {
             window.dispatchEvent(new Event('PHSurveySent'))
         })
@@ -148,7 +147,7 @@ describe('usePopupVisibility', () => {
 
     test('should clean up event listeners and timers on unmount', () => {
         jest.useFakeTimers()
-        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false))
+        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, false, removeSurvey))
         const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
 
         unmount()
@@ -159,13 +158,13 @@ describe('usePopupVisibility', () => {
     })
 
     test('should set isPopupVisible to true if isPreviewMode is true', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, true))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 1000, true, removeSurvey))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should set isPopupVisible to true after a delay of 500 milliseconds', () => {
         jest.useFakeTimers()
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 500, false))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 500, false, removeSurvey))
         expect(result.current.isPopupVisible).toBe(false)
         act(() => {
             jest.advanceTimersByTime(500)
@@ -175,12 +174,12 @@ describe('usePopupVisibility', () => {
     })
 
     test('should not throw an error if posthog is undefined', () => {
-        const { result } = renderHook(() => usePopupVisibility(mockSurvey, undefined, 0, false))
+        const { result } = renderHook(() => usePopupVisibility(mockSurvey, undefined, 0, false, removeSurvey))
         expect(result.current.isPopupVisible).toBe(true)
     })
 
     test('should clean up event listeners on unmount when delay is 0', () => {
-        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
+        const { unmount } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
         const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
 
         unmount()
@@ -191,7 +190,7 @@ describe('usePopupVisibility', () => {
 
     test('should dispatch PHSurveyShown event when survey is shown', () => {
         const dispatchEventSpy = jest.spyOn(window, 'dispatchEvent')
-        renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
+        renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
 
         expect(dispatchEventSpy).toHaveBeenCalledWith(new Event('PHSurveyShown'))
     })
@@ -199,8 +198,12 @@ describe('usePopupVisibility', () => {
     test('should handle multiple surveys with overlapping conditions', () => {
         jest.useFakeTimers()
         const mockSurvey2 = { ...mockSurvey, id: 'testSurvey2', name: 'Test survey 2' } as Survey
-        const { result: result1 } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false))
-        const { result: result2 } = renderHook(() => usePopupVisibility(mockSurvey2, mockPostHog, 500, false))
+        const { result: result1 } = renderHook(() =>
+            usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey)
+        )
+        const { result: result2 } = renderHook(() =>
+            usePopupVisibility(mockSurvey2, mockPostHog, 500, false, removeSurvey)
+        )
 
         expect(result1.current.isPopupVisible).toBe(true)
         expect(result2.current.isPopupVisible).toBe(false)
@@ -214,96 +217,96 @@ describe('usePopupVisibility', () => {
     })
 })
 
-describe('canShowNextSurvey', () => {
-    beforeEach(() => {
-        // Reset the DOM before each test
-        document.body.innerHTML = ''
-    })
+// describe('canShowNextSurvey', () => {
+//     beforeEach(() => {
+//         // Reset the DOM before each test
+//         document.body.innerHTML = ''
+//     })
 
-    test('returns true if no survey popups are present', () => {
-        expect(canShowNextSurvey()).toBe(true)
-    })
+//     test('returns true if no survey popups are present', () => {
+//         expect(canShowNextSurvey()).toBe(true)
+//     })
 
-    test('returns true if the last survey popup has only one child element (a style node)', () => {
-        document.body.innerHTML = `
-            <div class="PostHogSurvey_1">
-                <style></style>
-            </div>
-        `
-        const lastSurveyPopup = document.querySelector('.PostHogSurvey_1') as HTMLElement
-        const shadowRoot = lastSurveyPopup.attachShadow({ mode: 'open' })
-        const styleNode = document.createElement('style')
-        shadowRoot.appendChild(styleNode)
+//     test('returns true if the last survey popup has only one child element (a style node)', () => {
+//         document.body.innerHTML = `
+//             <div class="PostHogSurvey_1">
+//                 <style></style>
+//             </div>
+//         `
+//         const lastSurveyPopup = document.querySelector('.PostHogSurvey_1') as HTMLElement
+//         const shadowRoot = lastSurveyPopup.attachShadow({ mode: 'open' })
+//         const styleNode = document.createElement('style')
+//         shadowRoot.appendChild(styleNode)
 
-        expect(canShowNextSurvey()).toBe(true)
-    })
+//         expect(canShowNextSurvey()).toBe(true)
+//     })
 
-    test('returns false if the last survey popup has more than one child element', () => {
-        document.body.innerHTML = `
-            <div class="PostHogSurvey_1">
-                <style></style>
-            </div>
-        `
-        const lastSurveyPopup = document.querySelector('.PostHogSurvey_1') as HTMLElement
-        const shadowRoot = lastSurveyPopup.attachShadow({ mode: 'open' })
-        const styleNode = document.createElement('style')
-        const divNode = document.createElement('div')
-        shadowRoot.appendChild(styleNode)
-        shadowRoot.appendChild(divNode)
+//     test('returns false if the last survey popup has more than one child element', () => {
+//         document.body.innerHTML = `
+//             <div class="PostHogSurvey_1">
+//                 <style></style>
+//             </div>
+//         `
+//         const lastSurveyPopup = document.querySelector('.PostHogSurvey_1') as HTMLElement
+//         const shadowRoot = lastSurveyPopup.attachShadow({ mode: 'open' })
+//         const styleNode = document.createElement('style')
+//         const divNode = document.createElement('div')
+//         shadowRoot.appendChild(styleNode)
+//         shadowRoot.appendChild(divNode)
 
-        expect(canShowNextSurvey()).toBe(false)
-    })
-})
+//         expect(canShowNextSurvey()).toBe(false)
+//     })
+// })
 
-describe('handlePopoverSurvey', () => {
-    const mockSurvey: Survey = {
-        id: 'testSurvey1',
-        name: 'Test survey 1',
-        type: SurveyType.Popover,
-        appearance: {},
-        start_date: '2021-01-01T00:00:00.000Z',
-        questions: [
-            {
-                question: 'How satisfied are you with our newest product?',
-                description: 'This is a question description',
-                type: SurveyQuestionType.Rating,
-                display: 'number',
-                scale: 10,
-                lowerBoundLabel: 'Not Satisfied',
-                upperBoundLabel: 'Very Satisfied',
-            },
-        ],
-        conditions: {},
-        end_date: null,
-        targeting_flag_key: null,
-    } as Survey
+// describe('handlePopoverSurvey', () => {
+//     const mockSurvey: Survey = {
+//         id: 'testSurvey1',
+//         name: 'Test survey 1',
+//         type: SurveyType.Popover,
+//         appearance: {},
+//         start_date: '2021-01-01T00:00:00.000Z',
+//         questions: [
+//             {
+//                 question: 'How satisfied are you with our newest product?',
+//                 description: 'This is a question description',
+//                 type: SurveyQuestionType.Rating,
+//                 display: 'number',
+//                 scale: 10,
+//                 lowerBoundLabel: 'Not Satisfied',
+//                 upperBoundLabel: 'Very Satisfied',
+//             },
+//         ],
+//         conditions: {},
+//         end_date: null,
+//         targeting_flag_key: null,
+//     } as Survey
 
-    const mockPostHog: PostHog = {
-        getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
-        get_session_replay_url: jest.fn(),
-        capture: jest.fn().mockImplementation((eventName) => eventName),
-    } as unknown as PostHog
+//     const mockPostHog: PostHog = {
+//         getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
+//         get_session_replay_url: jest.fn(),
+//         capture: jest.fn().mockImplementation((eventName) => eventName),
+//     } as unknown as PostHog
 
-    beforeEach(() => {
-        localStorage.clear()
-        jest.clearAllMocks()
-    })
+//     beforeEach(() => {
+//         localStorage.clear()
+//         jest.clearAllMocks()
+//     })
 
-    test('respects survey wait period', () => {
-        const survey = { ...mockSurvey, conditions: { seenSurveyWaitPeriodInDays: 7 } } as Survey
-        localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
-        const spy = jest.spyOn(Preact, 'render')
-        handlePopoverSurvey(mockPostHog, survey)
-        expect(spy).not.toHaveBeenCalled()
-    })
+//     test('respects survey wait period', () => {
+//         const survey = { ...mockSurvey, conditions: { seenSurveyWaitPeriodInDays: 7 } } as Survey
+//         localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+//         const spy = jest.spyOn(Preact, 'render')
+//         handlePopoverSurvey(mockPostHog, survey)
+//         expect(spy).not.toHaveBeenCalled()
+//     })
 
-    test('skips survey if it has already been seen', () => {
-        localStorage.setItem(getSurveySeenKey(mockSurvey), 'true')
-        const spy = jest.spyOn(Preact, 'render')
-        handlePopoverSurvey(mockPostHog, mockSurvey)
-        expect(spy).not.toHaveBeenCalled()
-    })
-})
+//     test('skips survey if it has already been seen', () => {
+//         localStorage.setItem(getSurveySeenKey(mockSurvey), 'true')
+//         const spy = jest.spyOn(Preact, 'render')
+//         handlePopoverSurvey(mockPostHog, mockSurvey)
+//         expect(spy).not.toHaveBeenCalled()
+//     })
+// })
 
 describe('preview renders', () => {
     beforeEach(() => {

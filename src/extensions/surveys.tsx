@@ -29,107 +29,133 @@ import {
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-// TODO: @dmarticus - Keeping track of the surveys that are actively displayed is a bit of a hack
-// to support survey popup delay feature that enables us to embed multiple surveys on the same page
-// without showing them all at once. This is a temporary solution until we have a better way to
-// manage the lifecycle of surveys without using a global state.  I'm currently working on a better
-// a refactor of this feature (see: https://github.com/PostHog/posthog-js/pull/1242), but in the interest of shipping fast and iterating,
-// I decided to go with this approach to unlock a feature that users have been asking for ASAP.  I'll call
-// out all the places in this file where we use this global state and why we use it, which will hopefully make
-// it easier to refactor this feature in the future.
+const createSurveyManager = (posthog: PostHog) => {
+    // TODO: @dmarticus - Keeping track of the surveys that are actively displayed is a bit of a hack
+    // to support survey popup delay feature that enables us to embed multiple surveys on the same page
+    // without showing them all at once. This is a temporary solution until we have a better way to
+    // manage the lifecycle of surveys without using a global state.  I'm currently working on a better
+    // a refactor of this feature (see: https://github.com/PostHog/posthog-js/pull/1242), but in the interest of shipping fast and iterating,
+    // I decided to go with this approach to unlock a feature that users have been asking for ASAP.  I'll call
+    // out all the places in this file where we use this global state and why we use it, which will hopefully make
+    // it easier to refactor this feature in the future.
+    const surveysInFocus = new Set<string>()
 
-// We start by creating a set to keep track of the surveys that are actively displayed (as compared to the ones that are just on the page)
-const surveysToActivelyDisplay = new Set<string>()
-
-export const handleWidgetSelector = (posthog: PostHog, survey: Survey) => {
-    const selectorOnPage = survey.appearance?.widgetSelector && document.querySelector(survey.appearance.widgetSelector)
-    if (selectorOnPage) {
-        if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0) {
-            handleWidget(posthog, survey)
-        } else if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 1) {
-            // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
-            if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
-                const surveyPopup = document
-                    .querySelector(`.PostHogWidget${survey.id}`)
-                    ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
-                selectorOnPage.addEventListener('click', () => {
-                    if (surveyPopup) {
-                        surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
-                        surveyPopup.addEventListener('PHSurveyClosed', () => (surveyPopup.style.display = 'none'))
-                    }
-                })
-                selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
-            }
+    const canShowNextSurvey = (): boolean => {
+        // with event based surveys, we need to show the next survey without reloading the page.
+        // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
+        // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
+        // To alleviate this, we check the last div in the dom and see if it has any elements other than a Style node.
+        // if the last PostHogSurvey_xyz div has only one style node, we can show the next survey in the queue
+        // without reloading the page.
+        const surveyPopups = document.querySelectorAll(`div[class^=PostHogSurvey]`)
+        if (surveyPopups.length > 0) {
+            return surveyPopups[surveyPopups.length - 1].shadowRoot?.childElementCount === 1
         }
-    }
-}
-
-export const canShowNextSurvey = (): boolean => {
-    // with event based surveys, we need to show the next survey without reloading the page.
-    // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
-    // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
-    // To alleviate this, we check the last div in the dom and see if it has any elements other than a Style node.
-    // if the last PostHogSurvey_xyz div has only one style node, we can show the next survey in the queue
-    // without reloading the page.
-    const surveyPopups = document.querySelectorAll(`div[class^=PostHogSurvey]`)
-    if (surveyPopups.length > 0) {
-        return surveyPopups[surveyPopups.length - 1].shadowRoot?.childElementCount === 1
-    }
-    return true
-}
-
-export const handlePopoverSurvey = (posthog: PostHog, survey: Survey) => {
-    const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
-    const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
-    if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
-        const today = new Date()
-        const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
-        const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-        if (diffDaysFromToday < surveyWaitPeriodInDays) {
-            return
-        }
+        return true
     }
 
-    if (!localStorage.getItem(getSurveySeenKey(survey))) {
-        // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys.
-        // If we have a survey to display, we add it to the set of surveys that are actively displayed
-        // this leads us to short-circuit the survey display logic in the callSurveys function and only show one survey at a time
-        surveysToActivelyDisplay.add(survey.id)
-        const shadow = createShadow(style(survey?.appearance), survey.id)
-        Preact.render(<SurveyPopup key={'popover-survey'} posthog={posthog} survey={survey} />, shadow)
-    }
-}
-
-export const callSurveys = (posthog: PostHog, forceReload: boolean = false) => {
-    posthog?.getActiveMatchingSurveys((surveys) => {
-        const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
-
-        nonAPISurveys.sort((a, b) => (a.appearance?.surveyPopupDelay || 0) - (b.appearance?.surveyPopupDelay || 0))
-
-        nonAPISurveys.forEach((survey) => {
-            // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
-            // We only show one survey at a time, and we use this global state to short-circuit the display logic
-            // if there is already a survey actively displayed on the page.
-            if (surveysToActivelyDisplay.size > 0) {
+    const handlePopoverSurvey = (survey: Survey) => {
+        const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
+        const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
+        if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
+            const today = new Date()
+            const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
+            const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
+            if (diffDaysFromToday < surveyWaitPeriodInDays) {
                 return
             }
-            if (survey.type === SurveyType.Widget) {
-                if (
-                    survey.appearance?.widgetType === 'tab' &&
-                    document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0
-                ) {
-                    handleWidget(posthog, survey)
-                }
-                if (survey.appearance?.widgetType === 'selector' && survey.appearance?.widgetSelector) {
-                    handleWidgetSelector(posthog, survey)
-                }
-            }
+        }
 
-            if (survey.type === SurveyType.Popover && canShowNextSurvey()) {
-                handlePopoverSurvey(posthog, survey)
+        if (!localStorage.getItem(getSurveySeenKey(survey))) {
+            addSurveyToFocus(survey.id)
+            const shadow = createShadow(style(survey?.appearance), survey.id)
+            Preact.render(
+                <SurveyPopup
+                    key={'popover-survey'}
+                    posthog={posthog}
+                    survey={survey}
+                    removeSurveyFromFocus={removeSurveyFromFocus}
+                />,
+                shadow
+            )
+        }
+    }
+
+    const handleWidget = (survey: Survey) => {
+        const shadow = createWidgetShadow(survey)
+        const surveyStyleSheet = style(survey.appearance)
+        shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
+        Preact.render(
+            <FeedbackWidget
+                key={'feedback-survey'}
+                posthog={posthog}
+                survey={survey}
+                removeSurveyFromFocus={removeSurveyFromFocus}
+            />,
+            shadow
+        )
+    }
+
+    const handleWidgetSelector = (survey: Survey) => {
+        const selectorOnPage =
+            survey.appearance?.widgetSelector && document.querySelector(survey.appearance.widgetSelector)
+        if (selectorOnPage) {
+            if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0) {
+                handleWidget(survey)
+            } else if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 1) {
+                // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
+                if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
+                    const surveyPopup = document
+                        .querySelector(`.PostHogWidget${survey.id}`)
+                        ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
+                    selectorOnPage.addEventListener('click', () => {
+                        if (surveyPopup) {
+                            surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
+                            surveyPopup.addEventListener('PHSurveyClosed', () => (surveyPopup.style.display = 'none'))
+                        }
+                    })
+                    selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
+                }
             }
-        })
-    }, forceReload)
+        }
+    }
+
+    const callSurveys = (forceReload: boolean = false) => {
+        posthog?.getActiveMatchingSurveys((surveys) => {
+            const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
+            nonAPISurveys.sort((a, b) => (a.appearance?.surveyPopupDelay || 0) - (b.appearance?.surveyPopupDelay || 0))
+
+            nonAPISurveys.forEach((survey) => {
+                if (surveysInFocus.size > 0) {
+                    return
+                }
+                if (survey.type === SurveyType.Widget) {
+                    if (
+                        survey.appearance?.widgetType === 'tab' &&
+                        document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0
+                    ) {
+                        handleWidget(survey)
+                    }
+                    if (survey.appearance?.widgetType === 'selector' && survey.appearance?.widgetSelector) {
+                        handleWidgetSelector(survey)
+                    }
+                }
+
+                if (survey.type === SurveyType.Popover && canShowNextSurvey()) {
+                    handlePopoverSurvey(survey)
+                }
+            })
+        }, forceReload)
+    }
+
+    const addSurveyToFocus = (id: string) => surveysInFocus.add(id)
+    const removeSurveyFromFocus = (id: string) => surveysInFocus.delete(id)
+
+    return {
+        callSurveys,
+        addSurveyToFocus,
+        removeSurveyFromFocus,
+    }
 }
 
 export const renderSurveysPreview = ({
@@ -171,6 +197,7 @@ export const renderSurveysPreview = ({
                 color: textColor,
             }}
             previewPageIndex={previewPageIndex}
+            removeSurveyFromFocus={() => {}}
         />,
         parentElement
     )
@@ -194,6 +221,7 @@ export const renderFeedbackWidgetPreview = ({
             forceDisableHtml={forceDisableHtml}
             survey={survey}
             readOnly={true}
+            removeSurveyFromFocus={() => {}}
         />,
         root
     )
@@ -205,11 +233,13 @@ export function generateSurveys(posthog: PostHog) {
     if (!document || !window) {
         return
     }
-    callSurveys(posthog, true)
+
+    const surveyManager = createSurveyManager(posthog)
+    surveyManager.callSurveys(true)
 
     // recalculate surveys every second to check if URL or selectors have changed
     setInterval(() => {
-        callSurveys(posthog, false)
+        surveyManager.callSurveys(false)
     }, 1000)
 }
 
@@ -217,7 +247,8 @@ export function usePopupVisibility(
     survey: Survey,
     posthog: PostHog | undefined,
     delay: number,
-    isPreviewMode: boolean
+    isPreviewMode: boolean,
+    removeSurveyFromFocus: (id: string) => void
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || delay === 0)
     const [isSurveySent, setIsSurveySent] = useState(false)
@@ -228,29 +259,22 @@ export function usePopupVisibility(
         }
 
         const handleSurveyClosed = () => {
-            // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
-            // If the survey is closed, we remove it from the set of surveys that are actively displayed
-            surveysToActivelyDisplay.delete(survey.id)
-            return setIsPopupVisible(false)
+            removeSurveyFromFocus(survey.id)
+            setIsPopupVisible(false)
         }
 
         const handleSurveySent = () => {
             if (!survey.appearance?.displayThankYouMessage) {
-                // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
-                // If the survey is sent, we remove it from the set of surveys that are actively displayed
-                surveysToActivelyDisplay.delete(survey.id)
-                return setIsPopupVisible(false)
-            }
-
-            setIsSurveySent(true)
-
-            if (survey.appearance?.autoDisappear) {
-                setTimeout(() => {
-                    // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
-                    // If the survey is sent, we remove it from the set of surveys that are actively displayed
-                    surveysToActivelyDisplay.delete(survey.id)
-                    return setIsPopupVisible(false)
-                }, 5000)
+                removeSurveyFromFocus(survey.id)
+                setIsPopupVisible(false)
+            } else {
+                setIsSurveySent(true)
+                if (survey.appearance?.autoDisappear) {
+                    setTimeout(() => {
+                        removeSurveyFromFocus(survey.id)
+                        setIsPopupVisible(false)
+                    }, 5000)
+                }
             }
         }
 
@@ -304,12 +328,14 @@ export function SurveyPopup({
     posthog,
     style,
     previewPageIndex,
+    removeSurveyFromFocus,
 }: {
     survey: Survey
     forceDisableHtml?: boolean
     posthog?: PostHog
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
+    removeSurveyFromFocus: (id: string) => void
 }) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     const delay = survey.appearance?.surveyPopupDelay ? survey.appearance.surveyPopupDelay * 1000 : 0
@@ -317,12 +343,12 @@ export function SurveyPopup({
         survey,
         posthog,
         delay,
-        isPreviewMode
+        isPreviewMode,
+        removeSurveyFromFocus
     )
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
-    // Ensure the popup stays in the same position for the preview
     if (isPreviewMode) {
         style = style || {}
         style.left = 'unset'
@@ -336,10 +362,8 @@ export function SurveyPopup({
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
                 handleCloseSurveyPopup: () => {
-                    // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
-                    // If the survey is closed, we remove it from the set of surveys that are actively displayed
-                    surveysToActivelyDisplay.delete(survey.id)
-                    return dismissedSurveyEvent(survey, posthog, isPreviewMode)
+                    removeSurveyFromFocus(survey.id)
+                    dismissedSurveyEvent(survey, posthog, isPreviewMode)
                 },
             }}
         >
@@ -349,6 +373,7 @@ export function SurveyPopup({
                     forceDisableHtml={!!forceDisableHtml}
                     posthog={posthog}
                     styleOverrides={style}
+                    removeSurveyFromFocus={removeSurveyFromFocus}
                 />
             ) : (
                 <ConfirmationMessage
@@ -372,11 +397,13 @@ export function Questions({
     forceDisableHtml,
     posthog,
     styleOverrides,
+    removeSurveyFromFocus,
 }: {
     survey: Survey
     forceDisableHtml: boolean
     posthog?: PostHog
     styleOverrides?: React.CSSProperties
+    removeSurveyFromFocus: (id: string) => void
 }) {
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
@@ -406,9 +433,7 @@ export function Questions({
             originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
 
         if (isLastDisplayedQuestion) {
-            // TODO @dmarticus - This is where we use the global state to manage the lifecycle of surveys
-            // If the survey is sent, we remove it from the set of surveys that are actively displayed
-            surveysToActivelyDisplay.delete(survey.id)
+            removeSurveyFromFocus(survey.id)
             return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
             setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
@@ -459,11 +484,13 @@ export function FeedbackWidget({
     forceDisableHtml,
     posthog,
     readOnly,
+    removeSurveyFromFocus,
 }: {
     survey: Survey
     forceDisableHtml?: boolean
     posthog?: PostHog
     readOnly?: boolean
+    removeSurveyFromFocus: (id: string) => void
 }): JSX.Element {
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyle] = useState({})
@@ -516,6 +543,7 @@ export function FeedbackWidget({
                     survey={survey}
                     forceDisableHtml={forceDisableHtml}
                     style={styleOverrides}
+                    removeSurveyFromFocus={removeSurveyFromFocus}
                 />
             )}
         </>
@@ -566,9 +594,12 @@ const getQuestionComponent = ({
     return <Component {...componentProps} />
 }
 
-const handleWidget = (posthog: PostHog, survey: Survey) => {
-    const shadow = createWidgetShadow(survey)
-    const surveyStyleSheet = style(survey.appearance)
-    shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
-    Preact.render(<FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} />, shadow)
-}
+// const handleWidget = (posthog: PostHog, survey: Survey) => {
+//     const shadow = createWidgetShadow(survey)
+//     const surveyStyleSheet = style(survey.appearance)
+//     shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
+//     Preact.render(
+//         <FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} removeSurveyFromFocus={() => {}} />,
+//         shadow
+//     )
+// }
