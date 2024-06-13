@@ -593,13 +593,3 @@ const getQuestionComponent = ({
 
     return <Component {...componentProps} />
 }
-
-// const handleWidget = (posthog: PostHog, survey: Survey) => {
-//     const shadow = createWidgetShadow(survey)
-//     const surveyStyleSheet = style(survey.appearance)
-//     shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
-//     Preact.render(
-//         <FeedbackWidget key={'feedback-survey'} posthog={posthog} survey={survey} removeSurveyFromFocus={() => {}} />,
-//         shadow
-//     )
-// }
