@@ -28,3 +28,4 @@ test-result.json
 yarn-error.log
 stats.html
 .eslintcache
+cypress/downloads/downloads.html
