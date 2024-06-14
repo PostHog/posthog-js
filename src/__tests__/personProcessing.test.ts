@@ -1,7 +1,7 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { logger } from '../utils/logger'
-import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
+import { INITIAL_CAMPAIGN_PARAMS, INITIAL_PERSON_INFO, INITIAL_REFERRER_INFO } from '../constants'
 
 jest.mock('../utils/logger')
 
@@ -203,8 +203,10 @@ describe('person processing', () => {
             const eventS2After = onCapture.mock.calls[3]
 
             expect(eventS1[1].$set_once).toEqual(undefined)
+            expect(eventS1[1].properties[INITIAL_PERSON_INFO]).toBeUndefined()
 
             expect(eventS2Before[1].$set_once).toEqual(undefined)
+            expect(eventS2Before[1].properties[INITIAL_PERSON_INFO]).toBeUndefined()
 
             expect(eventS2Identify[0]).toEqual('$identify')
             expect(eventS2Identify[1].$set_once).toEqual({
@@ -225,6 +227,7 @@ describe('person processing', () => {
                 $initial_referring_domain: 'referrer1.com',
                 $initial_utm_source: 'foo1',
             })
+            expect(eventS2After[1].properties[INITIAL_PERSON_INFO]).toBeUndefined()
         })
 
         it('should include initial referrer info in identify event if always', async () => {
