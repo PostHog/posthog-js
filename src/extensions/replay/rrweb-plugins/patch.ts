@@ -9,10 +9,7 @@ export function patch(
     replacement: (...args: unknown[]) => unknown
 ): () => void {
     try {
-        // we check if already wrapped
-        // as in the past we've seen this code called multiple times in customer code
-        // even though it should only be called once, so we're extra careful here
-        if (!(name in source) || (source[name] as any).__posthog_wrapped__) {
+        if (!(name in source)) {
             return () => {
                 //
             }
