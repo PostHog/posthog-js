@@ -497,7 +497,9 @@ function initNetworkObserver(
 
     if (initialisedHandler) {
         logger.warn('Network observer already initialised, doing nothing')
-        return initialisedHandler
+        return () => {
+            // the first caller should already have this handler and will be responsible for teardown
+        }
     }
 
     const networkOptions = (
