@@ -112,6 +112,40 @@ describe('opting out', () => {
             pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
         })
 
+        it('can start recording when starting disabled', () => {
+            cy.posthogInit({ disable_session_recording: true })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    cy.phCaptures().then((captures) => {
+                        expect(captures || []).to.deep.equal(['$pageview'])
+                    })
+                })
+
+            cy.posthog().invoke('startSessionRecording')
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    cy.phCaptures().then((captures) => {
+                        expect(captures || []).to.deep.equal(['$pageview'])
+                    })
+                })
+        })
+
         it('can override sampling when starting session recording', () => {
             cy.intercept('POST', '/decide/*', {
                 autocapture_opt_out: true,
