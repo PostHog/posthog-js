@@ -9,7 +9,10 @@ export function patch(
     replacement: (...args: unknown[]) => unknown
 ): () => void {
     try {
-        if (!(name in source)) {
+        // we check if already wrapped
+        // as in the past we've seen this code called multiple times in customer code
+        // even though it should only be called once, so we're extra careful here
+        if (!(name in source) || (source[name] as any).__posthog_wrapped__) {
             return () => {
                 //
             }
@@ -20,9 +23,7 @@ export function patch(
 
         // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
         // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
-        // we check if already wrapped as in the past we've seen this code called multiple times in customer
-        // code even though it should only be called once, so we're extra safe
-        if (isFunction(wrapped) && !(wrapped as any).__posthog_wrapped__) {
+        if (isFunction(wrapped)) {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             wrapped.prototype = wrapped.prototype || {}
             Object.defineProperties(wrapped, {

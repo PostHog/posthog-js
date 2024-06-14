@@ -483,6 +483,7 @@ function initFetchObserver(
     }
 }
 
+let initialisedHandler: listenerHandler | null = null
 function initNetworkObserver(
     callback: networkCallback,
     win: IWindow, // top window or in an iframe
@@ -493,6 +494,12 @@ function initNetworkObserver(
             //
         }
     }
+
+    if (initialisedHandler) {
+        logger.warn('Network observer already initialised, doing nothing')
+        return initialisedHandler
+    }
+
     const networkOptions = (
         options ? Object.assign({}, defaultNetworkOptions, options) : defaultNetworkOptions
     ) as Required<NetworkRecordOptions>
@@ -520,11 +527,12 @@ function initNetworkObserver(
         fetchObserver = initFetchObserver(cb, win, networkOptions)
     }
 
-    return () => {
+    initialisedHandler = () => {
         performanceObserver()
         xhrObserver()
         fetchObserver()
     }
+    return initialisedHandler
 }
 
 // use the plugin name so that when this functionality is adopted into rrweb
