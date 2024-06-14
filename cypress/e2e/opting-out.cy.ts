@@ -129,6 +129,7 @@ describe('opting out', () => {
                     })
                 })
 
+            cy.resetPhCaptures()
             cy.posthog().invoke('startSessionRecording')
 
             assertWhetherPostHogRequestsWereCalled({
@@ -140,9 +141,7 @@ describe('opting out', () => {
             cy.get('[data-cy-input]')
                 .type('hello posthog!')
                 .then(() => {
-                    cy.phCaptures().then((captures) => {
-                        expect(captures || []).to.deep.equal(['$pageview'])
-                    })
+                    pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
                 })
         })
 
