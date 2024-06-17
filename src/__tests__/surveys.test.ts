@@ -288,6 +288,17 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
+        const surveyWithUrlDoesNotContainRegex: Survey = {
+            name: 'survey with url does not contain regex',
+            description: 'survey with url does not contain regex description',
+            type: SurveyType.Popover,
+            questions: [
+                { type: SurveyQuestionType.Open, question: 'what is a survey with url does not contain regex?' },
+            ],
+            conditions: { url: 'regex-url', urlMatchType: 'not_regex' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
         const surveyWithParamRegexUrl: Survey = {
             name: 'survey with param regex url',
             description: 'survey with param regex url description',
@@ -321,6 +332,24 @@ describe('surveys', () => {
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with wildcard route url?' }],
             conditions: { url: 'https://example.com/exact', urlMatchType: 'exact' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
+        const surveyWithIsNotUrlMatch: Survey = {
+            name: 'survey with is not url match',
+            description: 'survey with is not url match description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with is not url match?' }],
+            conditions: { url: 'https://example.com/exact', urlMatchType: 'is_not' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
+        const surveyWithUrlDoesNotContain: Survey = {
+            name: 'survey with url does not contain',
+            description: 'survey with url does not contain description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with url does not contain?' }],
+            conditions: { url: 'posthog.com', urlMatchType: 'not_icontains' },
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
@@ -501,6 +530,36 @@ describe('surveys', () => {
             assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithExactUrlMatch])
+            })
+            assignableWindow.location = originalWindowLocation
+        })
+
+        it('returns surveys based on exclusion conditions', () => {
+            surveysResponse = {
+                surveys: [surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex],
+            }
+
+            // eslint-disable-next-line compat/compat
+            assignableWindow.location = new URL('https://posthog.com') as unknown as Location
+            surveys.getActiveMatchingSurveys((data) => {
+                // returns surveyWithIsNotUrlMatch and surveyWithUrlDoesNotContainRegex because they don't contain posthog.com
+                expect(data).toEqual([surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex])
+            })
+            assignableWindow.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
+            surveys.getActiveMatchingSurveys((data) => {
+                // returns surveyWithUrlDoesNotContain and surveyWithUrlDoesNotContainRegex because they are not exact matches
+                expect(data).toEqual([surveyWithUrlDoesNotContain, surveyWithUrlDoesNotContainRegex])
+            })
+            assignableWindow.location = originalWindowLocation
+
+            // eslint-disable-next-line compat/compat
+            assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
+            surveys.getActiveMatchingSurveys((data) => {
+                // returns surveyWithUrlDoesNotContain and surveyWithIsNotUrlMatch because they are not regex matches
+                expect(data).toEqual([surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch])
             })
             assignableWindow.location = originalWindowLocation
         })

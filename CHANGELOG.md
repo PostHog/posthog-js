@@ -1,3 +1,9 @@
+## 1.139.2 - 2024-06-14
+
+- fix: only wrap once when patching (#1245)
+- chore: add clarifying test (#1246)
+- feat: allow not operators in survey url targeting (#1219)
+
 ## 1.139.1 - 2024-06-12
 
 - fix: less strict idle event dropping (#1241)

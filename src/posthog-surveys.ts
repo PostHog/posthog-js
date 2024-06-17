@@ -12,8 +12,12 @@ import { isUndefined } from './utils/type-utils'
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
         !!window && window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
+    not_icontains: (conditionsUrl) =>
+        !!window && window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) === -1,
     regex: (conditionsUrl) => !!window && isUrlMatchingRegex(window.location.href, conditionsUrl),
+    not_regex: (conditionsUrl) => !!window && !isUrlMatchingRegex(window.location.href, conditionsUrl),
     exact: (conditionsUrl) => window?.location.href === conditionsUrl,
+    is_not: (conditionsUrl) => window?.location.href !== conditionsUrl,
 }
 
 export class PostHogSurveys {
