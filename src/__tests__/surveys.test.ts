@@ -792,8 +792,8 @@ describe('surveys', () => {
 
     describe('branching logic', () => {
         const survey: Survey = {
-            name: 'survey without shuffling questions',
-            description: 'survey without shuffling questions',
+            name: 'My surveys',
+            description: '',
             type: SurveyType.Popover,
             questions: [] as SurveyQuestion[],
             start_date: new Date().toISOString(),
