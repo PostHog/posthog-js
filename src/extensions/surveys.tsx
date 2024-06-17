@@ -362,7 +362,7 @@ export function Questions({
         displayQuestionIndex,
     }: {
         res: string | string[] | number | null
-        question: any
+        question: SurveyQuestion
         originalQuestionIndex: number
         displayQuestionIndex: number
     }) => {
