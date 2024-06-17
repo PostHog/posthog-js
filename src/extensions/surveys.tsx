@@ -375,7 +375,7 @@ export function Questions({
         if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
-            setCurrentQuestionIndex(displayQuestionIndex + 1)
+            setCurrentQuestionIndex(nextStep)
         }
     }
 
