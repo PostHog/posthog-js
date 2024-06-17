@@ -687,96 +687,96 @@ export function getNextStep(
 ) {
     const nextQuestionIndex = displayQuestionIndex + 1
 
-    if (question.branching?.type) {
-        if (question.branching.type === SurveyQuestionBranchingType.ConfirmationMessage) {
-            return SurveyQuestionBranchingType.ConfirmationMessage
-        } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
-            if (Number.isInteger(question.branching.index)) {
-                return question.branching.index
-            }
-        } else if (question.branching.type === SurveyQuestionBranchingType.ResponseBased) {
-            // Single choice
-            if (question.type === SurveyQuestionType.SingleChoice) {
-                // :KLUDGE: for now, look up the choiceIndex based on the response
-                // TODO: once QuestionTypes.MultipleChoiceQuestion is refactored, pass the selected choiceIndex into this method
-                const selectedChoiceIndex = question.choices.indexOf(`${response}`)
-
-                if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
-                    const nextStep = question.branching.responseValues[selectedChoiceIndex]
-
-                    // Specific question
-                    if (Number.isInteger(nextStep)) {
-                        return nextStep
-                    }
-
-                    if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
-                        return SurveyQuestionBranchingType.ConfirmationMessage
-                    }
-
-                    return nextQuestionIndex
-                }
-            } else if (question.type === SurveyQuestionType.Rating) {
-                let responseValueToBucket: { [key: number]: string } = {}
-
-                // Scale 0-10 (NPS)
-                if (question.scale === 3) {
-                    responseValueToBucket = {
-                        1: 'negative',
-                        2: 'neutral',
-                        3: 'positive',
-                    }
-                } else if (question.scale === 5) {
-                    responseValueToBucket = {
-                        1: 'negative',
-                        2: 'negative',
-                        3: 'neutral',
-                        4: 'positive',
-                        5: 'positive',
-                    }
-                } else if (question.scale === 10) {
-                    responseValueToBucket = {
-                        0: 'detractors',
-                        1: 'detractors',
-                        2: 'detractors',
-                        3: 'detractors',
-                        4: 'detractors',
-                        5: 'detractors',
-                        6: 'detractors',
-                        7: 'passives',
-                        8: 'passives',
-                        9: 'promoters',
-                        10: 'promoters',
-                    }
-                }
-
-                const resNumber = Number(response)
-                const ratingBucket = responseValueToBucket[resNumber]
-
-                if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
-                    const nextStep = question.branching.responseValues[ratingBucket]
-
-                    // Specific question
-                    if (Number.isInteger(nextStep)) {
-                        return nextStep
-                    }
-
-                    if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
-                        return SurveyQuestionBranchingType.ConfirmationMessage
-                    }
-
-                    return nextQuestionIndex
-                }
-            }
-
-            return nextQuestionIndex
-        }
-
-        return nextQuestionIndex
-    } else {
+    if (!question.branching?.type) {
         if (displayQuestionIndex === survey.questions.length - 1) {
             return SurveyQuestionBranchingType.ConfirmationMessage
         }
 
         return nextQuestionIndex
     }
+
+    if (question.branching.type === SurveyQuestionBranchingType.ConfirmationMessage) {
+        return SurveyQuestionBranchingType.ConfirmationMessage
+    } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
+        if (Number.isInteger(question.branching.index)) {
+            return question.branching.index
+        }
+    } else if (question.branching.type === SurveyQuestionBranchingType.ResponseBased) {
+        // Single choice
+        if (question.type === SurveyQuestionType.SingleChoice) {
+            // :KLUDGE: for now, look up the choiceIndex based on the response
+            // TODO: once QuestionTypes.MultipleChoiceQuestion is refactored, pass the selected choiceIndex into this method
+            const selectedChoiceIndex = question.choices.indexOf(`${response}`)
+
+            if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
+                const nextStep = question.branching.responseValues[selectedChoiceIndex]
+
+                // Specific question
+                if (Number.isInteger(nextStep)) {
+                    return nextStep
+                }
+
+                if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
+                    return SurveyQuestionBranchingType.ConfirmationMessage
+                }
+
+                return nextQuestionIndex
+            }
+        } else if (question.type === SurveyQuestionType.Rating) {
+            let responseValueToBucket: { [key: number]: string } = {}
+
+            // Scale 0-10 (NPS)
+            if (question.scale === 3) {
+                responseValueToBucket = {
+                    1: 'negative',
+                    2: 'neutral',
+                    3: 'positive',
+                }
+            } else if (question.scale === 5) {
+                responseValueToBucket = {
+                    1: 'negative',
+                    2: 'negative',
+                    3: 'neutral',
+                    4: 'positive',
+                    5: 'positive',
+                }
+            } else if (question.scale === 10) {
+                responseValueToBucket = {
+                    0: 'detractors',
+                    1: 'detractors',
+                    2: 'detractors',
+                    3: 'detractors',
+                    4: 'detractors',
+                    5: 'detractors',
+                    6: 'detractors',
+                    7: 'passives',
+                    8: 'passives',
+                    9: 'promoters',
+                    10: 'promoters',
+                }
+            }
+
+            const resNumber = Number(response)
+            const ratingBucket = responseValueToBucket[resNumber]
+
+            if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
+                const nextStep = question.branching.responseValues[ratingBucket]
+
+                // Specific question
+                if (Number.isInteger(nextStep)) {
+                    return nextStep
+                }
+
+                if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
+                    return SurveyQuestionBranchingType.ConfirmationMessage
+                }
+
+                return nextQuestionIndex
+            }
+        }
+
+        return nextQuestionIndex
+    }
+
+    return nextQuestionIndex
 }
