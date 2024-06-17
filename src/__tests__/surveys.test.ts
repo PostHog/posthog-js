@@ -792,7 +792,7 @@ describe('surveys', () => {
 
     describe('branching logic', () => {
         const survey: Survey = {
-            name: 'My surveys',
+            name: 'My survey',
             description: '',
             type: SurveyType.Popover,
             questions: [] as SurveyQuestion[],
