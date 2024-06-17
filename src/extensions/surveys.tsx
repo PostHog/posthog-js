@@ -1,5 +1,12 @@
 import { PostHog } from '../posthog-core'
-import { Survey, SurveyAppearance, SurveyQuestion, SurveyQuestionType, SurveyType } from '../posthog-surveys-types'
+import {
+    Survey,
+    SurveyAppearance,
+    SurveyQuestion,
+    SurveyQuestionBranchingType,
+    SurveyQuestionType,
+    SurveyType,
+} from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
 import {
@@ -12,6 +19,7 @@ import {
     SurveyContext,
     getDisplayOrderQuestions,
     getSurveySeenKey,
+    getNextStep,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -349,22 +357,24 @@ export function Questions({
 
     const onNextButtonClick = ({
         res,
+        question,
         originalQuestionIndex,
         displayQuestionIndex,
     }: {
         res: string | string[] | number | null
+        question: any
         originalQuestionIndex: number
         displayQuestionIndex: number
     }) => {
-        const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
-
         const responseKey =
             originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
 
-        if (isLastDisplayedQuestion) {
-            return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+        setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
+
+        const nextStep = getNextStep(survey, question, displayQuestionIndex, res)
+        if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
+            sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
-            setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
             setCurrentQuestionIndex(displayQuestionIndex + 1)
         }
     }
@@ -395,6 +405,7 @@ export function Questions({
                                 onSubmit: (res) =>
                                     onNextButtonClick({
                                         res,
+                                        question,
                                         originalQuestionIndex,
                                         displayQuestionIndex,
                                     }),

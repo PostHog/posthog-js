@@ -53,6 +53,11 @@ interface SurveyQuestionBase {
     optional?: boolean
     buttonText?: string
     originalQuestionIndex: number
+    branching?:
+        | NextQuestionBranching
+        | ConfirmationMessageBranching
+        | ResponseBasedBranching
+        | SpecificQuestionBranching
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -85,6 +90,31 @@ export enum SurveyQuestionType {
     SingleChoice = 'single_choice',
     Rating = 'rating',
     Link = 'link',
+}
+
+export enum SurveyQuestionBranchingType {
+    NextQuestion = 'next_question',
+    ConfirmationMessage = 'confirmation_message',
+    ResponseBased = 'response_based',
+    SpecificQuestion = 'specific_question',
+}
+
+interface NextQuestionBranching {
+    type: SurveyQuestionBranchingType.NextQuestion
+}
+
+interface ConfirmationMessageBranching {
+    type: SurveyQuestionBranchingType.ConfirmationMessage
+}
+
+interface ResponseBasedBranching {
+    type: SurveyQuestionBranchingType.ResponseBased
+    responseValues: Record<string, any>
+}
+
+interface SpecificQuestionBranching {
+    type: SurveyQuestionBranchingType.SpecificQuestion
+    index: number
 }
 
 export interface SurveyResponse {
