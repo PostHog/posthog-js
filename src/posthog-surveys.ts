@@ -26,6 +26,30 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
     is_not: (conditionsUrl) => window?.location.href !== conditionsUrl,
 }
 
+function getRatingBucketForResponseValue(responseValue: number, scale: number) {
+    if (scale === 3) {
+        if (responseValue < 1 || responseValue > 3) {
+            throw new Error('The response must be in range 1-3')
+        }
+
+        return responseValue === 1 ? 'negative' : responseValue === 2 ? 'neutral' : 'positive'
+    } else if (scale === 5) {
+        if (responseValue < 1 || responseValue > 5) {
+            throw new Error('The response must be in range 1-5')
+        }
+
+        return responseValue <= 2 ? 'negative' : responseValue === 3 ? 'neutral' : 'positive'
+    } else if (scale === 10) {
+        if (responseValue < 0 || responseValue > 10) {
+            throw new Error('The response must be in range 0-10')
+        }
+
+        return responseValue <= 6 ? 'detractors' : responseValue <= 8 ? 'passives' : 'promoters'
+    }
+
+    throw new Error('The scale must be one of: 3, 5, 10')
+}
+
 export class PostHogSurveys {
     instance: PostHog
     private _decideServerResponse?: boolean
@@ -202,43 +226,11 @@ export class PostHogSurveys {
                     return nextQuestionIndex
                 }
             } else if (question.type === SurveyQuestionType.Rating) {
-                let responseValueToBucket: { [key: number]: string } = {}
-
-                if (question.scale === 3) {
-                    responseValueToBucket = {
-                        1: 'negative',
-                        2: 'neutral',
-                        3: 'positive',
-                    }
-                } else if (question.scale === 5) {
-                    responseValueToBucket = {
-                        1: 'negative',
-                        2: 'negative',
-                        3: 'neutral',
-                        4: 'positive',
-                        5: 'positive',
-                    }
-                } else if (question.scale === 10) {
-                    responseValueToBucket = {
-                        0: 'detractors',
-                        1: 'detractors',
-                        2: 'detractors',
-                        3: 'detractors',
-                        4: 'detractors',
-                        5: 'detractors',
-                        6: 'detractors',
-                        7: 'passives',
-                        8: 'passives',
-                        9: 'promoters',
-                        10: 'promoters',
-                    }
-                }
-
                 if (typeof response !== 'number' || !Number.isInteger(response)) {
                     throw new Error('The response type must be an integer')
                 }
 
-                const ratingBucket = responseValueToBucket[response]
+                const ratingBucket = getRatingBucketForResponseValue(response, question.scale)
 
                 if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
                     const nextStep = question.branching.responseValues[ratingBucket]
