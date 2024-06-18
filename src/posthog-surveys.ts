@@ -204,7 +204,6 @@ export class PostHogSurveys {
             } else if (question.type === SurveyQuestionType.Rating) {
                 let responseValueToBucket: { [key: number]: string } = {}
 
-                // Scale 0-10 (NPS)
                 if (question.scale === 3) {
                     responseValueToBucket = {
                         1: 'negative',
