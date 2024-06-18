@@ -55,9 +55,11 @@ import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
 import {
     isArray,
+    isBoolean,
     isEmptyObject,
     isEmptyString,
     isFunction,
+    isNull,
     isNumber,
     isObject,
     isString,
@@ -1921,11 +1923,16 @@ export class PostHog {
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
-        if (!isUndefined(options?.captureEventName) && !options?.captureEventName) {
+        if (isNull(options?.captureEventName) || options?.captureEventName === false) {
             // Don't capture if captureEventName is null or false
             return
         }
-        this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
+
+        this.capture(
+            isString(options?.captureEventName) ? options.captureEventName : '$opt_in',
+            options?.captureProperties,
+            { send_instantly: true }
+        )
     }
 
     /**
