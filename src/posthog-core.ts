@@ -1923,16 +1923,12 @@ export class PostHog {
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
-        if (isNull(options?.captureEventName) || options?.captureEventName === false) {
+        if (!isUndefined(options?.captureEventName) && !options?.captureEventName) {
             // Don't capture if captureEventName is null or false
             return
         }
 
-        this.capture(
-            isString(options?.captureEventName) ? options?.captureEventName : '$opt_in',
-            options?.captureProperties,
-            { send_instantly: true }
-        )
+        this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
     }
 
     /**
