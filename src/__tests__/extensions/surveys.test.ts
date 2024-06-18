@@ -254,13 +254,15 @@ describe('SurveyManager', () => {
             .mockImplementation(() => {
                 console.log('Mock handlePopoverSurvey called')
             })
-        const canShowNextSurveyMock = jest.spyOn(surveyManager as any, 'canShowNextSurvey').mockReturnValue(true)
+        const canShowNextEventBasedSurveyMock = jest
+            .spyOn(surveyManager as any, 'canShowNextEventBasedSurvey')
+            .mockReturnValue(true)
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalled()
         expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
-        expect(canShowNextSurveyMock).toHaveBeenCalled()
+        expect(canShowNextEventBasedSurveyMock).toHaveBeenCalled()
     })
 
     test('should initialize surveysInFocus correctly', () => {
@@ -281,17 +283,17 @@ describe('SurveyManager', () => {
         expect(surveyManager.getTestAPI().surveysInFocus.has('survey1')).toBe(false)
     })
 
-    test('canShowNextSurvey should return correct visibility status', () => {
+    test('canShowNextEventBasedSurvey should return correct visibility status', () => {
         const surveyDiv = document.createElement('div')
         surveyDiv.className = 'PostHogSurvey_test'
         surveyDiv.attachShadow({ mode: 'open' })
         surveyDiv.shadowRoot!.appendChild(document.createElement('style'))
         document.body.appendChild(surveyDiv)
 
-        expect(surveyManager.getTestAPI().canShowNextSurvey()).toBe(true)
+        expect(surveyManager.getTestAPI().canShowNextEventBasedSurvey()).toBe(true)
 
         surveyDiv.shadowRoot!.appendChild(document.createElement('div'))
-        expect(surveyManager.getTestAPI().canShowNextSurvey()).toBe(false)
+        expect(surveyManager.getTestAPI().canShowNextEventBasedSurvey()).toBe(false)
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle surveys correctly', () => {
@@ -306,7 +308,7 @@ describe('SurveyManager', () => {
         const handleWidgetSelectorMock = jest
             .spyOn(surveyManager as any, 'handleWidgetSelector')
             .mockImplementation(() => {})
-        jest.spyOn(surveyManager as any, 'canShowNextSurvey').mockReturnValue(true)
+        jest.spyOn(surveyManager as any, 'canShowNextEventBasedSurvey').mockReturnValue(true)
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 

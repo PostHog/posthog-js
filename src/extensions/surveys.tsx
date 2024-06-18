@@ -35,11 +35,14 @@ export class SurveyManager {
 
     constructor(posthog: PostHog) {
         this.posthog = posthog
-        // TODO: @dmarticus: write a comment about this that's up-to-date.
+        // We use a set to keep track of surveys in focus to prevent multiple surveys from showing at the same time
+        // This is important for correctly displaying popover surveys with a delay, where we want to show them
+        // in order of their delay, rather than evaluate them all at once.
+        // NB: This set should only ever have 0 or 1 items in it at a time.
         this.surveysInFocus = new Set<string>()
     }
 
-    private canShowNextSurvey = (): boolean => {
+    private canShowNextEventBasedSurvey = (): boolean => {
         // with event based surveys, we need to show the next survey without reloading the page.
         // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
         // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
@@ -122,11 +125,16 @@ export class SurveyManager {
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.posthog?.getActiveMatchingSurveys((surveys) => {
             const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
+
+            // Create a queue of surveys sorted by their appearance delay, where surveys with no delay come first,
+            // followed by surveys with a delay in ascending order.
+            // This lets us show surveys with no delay first, and then show the rest in order of their delay.
             const nonAPISurveyQueue = nonAPISurveys.sort(
                 (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
             )
 
             nonAPISurveyQueue.forEach((survey) => {
+                // We only evaluate the display logic for one survey at a time
                 if (this.surveysInFocus.size > 0) {
                     return
                 }
@@ -142,7 +150,7 @@ export class SurveyManager {
                     }
                 }
 
-                if (survey.type === SurveyType.Popover && this.canShowNextSurvey()) {
+                if (survey.type === SurveyType.Popover && this.canShowNextEventBasedSurvey()) {
                     this.handlePopoverSurvey(survey)
                 }
             })
@@ -163,7 +171,7 @@ export class SurveyManager {
             addSurveyToFocus: this.addSurveyToFocus,
             removeSurveyFromFocus: this.removeSurveyFromFocus,
             surveysInFocus: this.surveysInFocus,
-            canShowNextSurvey: this.canShowNextSurvey,
+            canShowNextEventBasedSurvey: this.canShowNextEventBasedSurvey,
             handleWidget: this.handleWidget,
             handlePopoverSurvey: this.handlePopoverSurvey,
             handleWidgetSelector: this.handleWidgetSelector,
