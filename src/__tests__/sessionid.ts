@@ -1,8 +1,8 @@
 import { SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
-import { uuidv7 } from '../uuidv7'
-import { PostHogConfig, Properties } from '../types'
+import { uuidv7, uuid7ToTimestampMs } from '../uuidv7'
+import { BootstrapConfig, PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { assignableWindow } from '../utils/globals'
 
@@ -38,6 +38,7 @@ describe('Session ID manager', () => {
         ;(sessionStore.is_supported as jest.Mock).mockReturnValue(true)
         jest.spyOn(global, 'Date').mockImplementation(() => new originalDate(now))
         ;(uuidv7 as jest.Mock).mockReturnValue('newUUID')
+        ;(uuid7ToTimestampMs as jest.Mock).mockReturnValue(timestamp)
     })
 
     describe('new session id manager', () => {
@@ -63,6 +64,22 @@ describe('Session ID manager', () => {
                 [SESSION_ID]: [timestamp, 'newUUID', timestamp],
             })
             expect(sessionStore.set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newUUID')
+        })
+
+        it('should allow bootstrapping of the session id', () => {
+            // arrange
+            const bootstrapSessionId = 'bootstrap-session-id'
+            const bootstrap: BootstrapConfig = {
+                sessionID: bootstrapSessionId,
+            }
+            const sessionIdManager = new SessionIdManager({ ...config, bootstrap }, persistence as PostHogPersistence)
+
+            // act
+            const { sessionId, sessionStartTimestamp } = sessionIdManager.checkAndGetSessionAndWindowId(false, now)
+
+            // assert
+            expect(sessionId).toEqual(bootstrapSessionId)
+            expect(sessionStartTimestamp).toEqual(timestamp)
         })
     })
 
