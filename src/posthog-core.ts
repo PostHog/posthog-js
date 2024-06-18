@@ -52,7 +52,7 @@ import { PageViewManager } from './page-view'
 import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
-import { SurveyCallback } from './posthog-surveys-types'
+import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
 import {
     isArray,
     isEmptyObject,
@@ -1177,6 +1177,15 @@ export class PostHog {
     /** Get surveys that should be enabled for the current user. */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
+    }
+
+    /** Get the next step of the survey: a question index or confirmation_message */
+    getNextSurveyStep(
+        survey: Survey,
+        currentQuestionIndex: number,
+        response: string | string[] | number | null
+    ): number | SurveyQuestionBranchingType.ConfirmationMessage {
+        return this.surveys.getNextSurveyStep(survey, currentQuestionIndex, response)
     }
 
     /**

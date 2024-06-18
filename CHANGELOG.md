@@ -1,3 +1,7 @@
+## 1.139.3 - 2024-06-18
+
+- feat(surveys): add branching logic (#1247)
+
 ## 1.139.2 - 2024-06-14
 
 - fix: only wrap once when patching (#1245)

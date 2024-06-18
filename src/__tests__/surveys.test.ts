@@ -1,7 +1,14 @@
 /// <reference lib="dom" />
 
 import { PostHogSurveys } from '../posthog-surveys'
-import { SurveyType, SurveyQuestionType, Survey, MultipleSurveyQuestion } from '../posthog-surveys-types'
+import {
+    SurveyType,
+    SurveyQuestionType,
+    Survey,
+    MultipleSurveyQuestion,
+    SurveyQuestionBranchingType,
+    SurveyQuestion,
+} from '../posthog-surveys-types'
 import { getDisplayOrderChoices, getDisplayOrderQuestions } from '../extensions/surveys/surveys-utils'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
@@ -780,6 +787,366 @@ describe('surveys', () => {
             surveys.afterDecideResponse({ surveys: true } as DecideResponse)
             // Make sure the script is not loaded
             expectScriptToNotExist('https://us-assets.i.posthog.com/static/surveys.js')
+        })
+    })
+
+    describe('branching logic', () => {
+        const survey: Survey = {
+            name: 'My survey',
+            description: '',
+            type: SurveyType.Popover,
+            questions: [] as SurveyQuestion[],
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as Survey
+
+        // Simple branching
+        it('when no branching specified, should return the index of the next question or confirmation_message', () => {
+            survey.questions = [
+                { type: SurveyQuestionType.Open, question: 'Question A' },
+                { type: SurveyQuestionType.Open, question: 'Question B' },
+            ] as SurveyQuestion[]
+            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 1, 'Some response')).toEqual(
+                SurveyQuestionBranchingType.ConfirmationMessage
+            )
+        })
+
+        it('should branch out to confirmation_message', () => {
+            survey.questions = [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Question A',
+                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                },
+                { type: SurveyQuestionType.Open, question: 'Question B' },
+            ] as SurveyQuestion[]
+            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(
+                SurveyQuestionBranchingType.ConfirmationMessage
+            )
+        })
+
+        it('should branch out to a specific question', () => {
+            survey.questions = [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Question A',
+                    branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 2 },
+                },
+                { type: SurveyQuestionType.Open, question: 'Question B' },
+                { type: SurveyQuestionType.Open, question: 'Question C' },
+            ] as SurveyQuestion[]
+            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(2)
+        })
+
+        // Single-choice
+        it('should branch out correctly based on a single choice response, with shuffled choices', () => {
+            survey.questions = [
+                {
+                    type: SurveyQuestionType.SingleChoice,
+                    question: 'Will you leave us a review?',
+                    choices: ['Yes', 'No', 'Maybe'],
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { 0: 1, 1: 2, 2: 3 },
+                    },
+                    shuffleOptions: true,
+                },
+                { type: SurveyQuestionType.Open, question: 'Why yes?' },
+                { type: SurveyQuestionType.Open, question: 'Why no?' },
+                { type: SurveyQuestionType.Open, question: 'Why maybe?' },
+            ] as SurveyQuestion[]
+            expect(surveys.getNextSurveyStep(survey, 0, 'Yes')).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 'No')).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
+        })
+
+        // Response-based branching, scale 1-3
+        it('should branch out the negative/neutral/positive respondends correctly (scale 1-3)', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 3,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+
+            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 2)).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(3)
+        })
+
+        // Response-based branching, scale 1-5
+        it('should branch out the negative/neutral/positive respondents correctly (scale 1-5)', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 5,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+
+            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 5)).toEqual(3)
+        })
+
+        // Response-based branching, scale 0-10 (NPS)
+        it('should branch out detractors/passives/promoters correctly', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 10,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { detractors: 1, passives: 2, promoters: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+
+            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 8)).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 10)).toEqual(3)
+        })
+
+        it('should display questions in the order AGCEHDFB', () => {
+            survey.questions = [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'A',
+                    branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 6 },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'B',
+                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'C',
+                    branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 4 },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'D',
+                    branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 5 },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'E',
+                    branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 7 },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'F',
+                    branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 1 },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'G',
+                    branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 2 },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'H',
+                    branching: { type: SurveyQuestionBranchingType.SpecificQuestion, index: 3 },
+                },
+            ] as SurveyQuestion[]
+
+            const desiredOrder = ['A', 'G', 'C', 'E', 'H', 'D', 'F', 'B']
+            let currentStep = 0
+            const actualOrder: string[] = []
+
+            for (let i = 0; i < survey.questions.length; i++) {
+                const currentQuestion = survey.questions[currentStep]
+                actualOrder.push(currentQuestion.question)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, 'Some response')
+            }
+
+            expect(desiredOrder).toEqual(actualOrder)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+        })
+
+        it('should display questions in the correct order in a multi-step NPS survey', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 10,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { detractors: 1, passives: 2, promoters: 3 },
+                    },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Sorry to hear that. Please enter your email, a colleague will be in touch.',
+                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Seems you are not completely happy. Tell us more!',
+                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                },
+                {
+                    type: SurveyQuestionType.SingleChoice,
+                    question: 'Glad to hear that! Will you leave us a review?',
+                    choices: ['Yes', 'No'],
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { 0: 4, 1: 5 },
+                    },
+                },
+                {
+                    type: SurveyQuestionType.Link,
+                    question: 'Great! Here is the link:',
+                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                },
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Curious, why not?',
+                },
+            ] as SurveyQuestion[]
+
+            // Detractor customer
+            let desiredOrder = [
+                'How happy are you?',
+                'Sorry to hear that. Please enter your email, a colleague will be in touch.',
+            ]
+            let actualOrder: string[] = []
+            let currentStep = 0
+            let answers: (string | number | null)[] = [0, 'test@test.com']
+            for (const answer of answers) {
+                const currentQuestion = survey.questions[currentStep]
+                actualOrder.push(currentQuestion.question)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+            }
+            expect(desiredOrder).toEqual(actualOrder)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+
+            // Passive customer
+            desiredOrder = ['How happy are you?', 'Seems you are not completely happy. Tell us more!']
+            actualOrder = []
+            currentStep = 0
+            answers = [7, 'I am not impressed']
+            for (const answer of answers) {
+                const currentQuestion = survey.questions[currentStep]
+                actualOrder.push(currentQuestion.question)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+            }
+            expect(desiredOrder).toEqual(actualOrder)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+
+            // Promoter customer, won't leave a review
+            desiredOrder = ['How happy are you?', 'Glad to hear that! Will you leave us a review?', 'Curious, why not?']
+            actualOrder = []
+            currentStep = 0
+            answers = [10, 'No', 'I am lazy']
+            for (const answer of answers) {
+                const currentQuestion = survey.questions[currentStep]
+                actualOrder.push(currentQuestion.question)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+            }
+            expect(desiredOrder).toEqual(actualOrder)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+
+            // Promoter customer, will leave a review
+            desiredOrder = [
+                'How happy are you?',
+                'Glad to hear that! Will you leave us a review?',
+                'Great! Here is the link:',
+            ]
+            actualOrder = []
+            currentStep = 0
+            answers = [10, 'Yes', null]
+            for (const answer of answers) {
+                const currentQuestion = survey.questions[currentStep]
+                actualOrder.push(currentQuestion.question)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+            }
+            expect(desiredOrder).toEqual(actualOrder)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+        })
+
+        it('should throw an error for an invalid scale', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 2,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+            expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 10')
+        })
+
+        it('should throw an error for a response value out of the valid range', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 3,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
+
+            survey.questions[0].scale = 5
+            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
+
+            survey.questions[0].scale = 10
+            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 0-10')
+        })
+
+        it('should throw an error for if a response value in a rating question is not an integer', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 3,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+            expect(() => surveys.getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
+            expect(() => surveys.getNextSurveyStep(survey, 0, 'some_string')).toThrow(
+                'The response type must be an integer'
+            )
         })
     })
 })
