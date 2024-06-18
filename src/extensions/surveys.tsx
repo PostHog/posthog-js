@@ -29,9 +29,9 @@ import {
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-const createSurveyManager = (posthog: PostHog) => {
+export const createSurveyManager = (posthog: PostHog) => {
     // TODO: @dmarticus - Keeping track of the surveys that are actively displayed is a bit of a hack
-    // to support survey popup delay feature that enables us to embed multiple surveys on the same page
+    // to support survey popup millisecondDelay feature that enables us to embed multiple surveys on the same page
     // without showing them all at once. This is a temporary solution until we have a better way to
     // manage the lifecycle of surveys without using a global state.  I'm currently working on a better
     // a refactor of this feature (see: https://github.com/PostHog/posthog-js/pull/1242), but in the interest of shipping fast and iterating,
@@ -123,9 +123,11 @@ const createSurveyManager = (posthog: PostHog) => {
     const callSurveys = (forceReload: boolean = false) => {
         posthog?.getActiveMatchingSurveys((surveys) => {
             const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
-            nonAPISurveys.sort((a, b) => (a.appearance?.surveyPopupDelay || 0) - (b.appearance?.surveyPopupDelay || 0))
+            const nonAPISurveyQueue = nonAPISurveys.sort(
+                (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
+            )
 
-            nonAPISurveys.forEach((survey) => {
+            nonAPISurveyQueue.forEach((survey) => {
                 if (surveysInFocus.size > 0) {
                     return
                 }
@@ -246,11 +248,11 @@ export function generateSurveys(posthog: PostHog) {
 export function usePopupVisibility(
     survey: Survey,
     posthog: PostHog | undefined,
-    delay: number,
+    millisecondDelay: number,
     isPreviewMode: boolean,
     removeSurveyFromFocus: (id: string) => void
 ) {
-    const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || delay === 0)
+    const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || millisecondDelay === 0)
     const [isSurveySent, setIsSurveySent] = useState(false)
 
     useEffect(() => {
@@ -281,7 +283,7 @@ export function usePopupVisibility(
         window.addEventListener('PHSurveyClosed', handleSurveyClosed)
         window.addEventListener('PHSurveySent', handleSurveySent)
 
-        if (delay > 0) {
+        if (millisecondDelay > 0) {
             const timeoutId = setTimeout(() => {
                 setIsPopupVisible(true)
                 window.dispatchEvent(new Event('PHSurveyShown'))
@@ -293,7 +295,7 @@ export function usePopupVisibility(
                     sessionRecordingUrl: posthog.get_session_replay_url?.(),
                 })
                 localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
-            }, delay)
+            }, millisecondDelay)
 
             return () => {
                 clearTimeout(timeoutId)
@@ -338,11 +340,14 @@ export function SurveyPopup({
     removeSurveyFromFocus: (id: string) => void
 }) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
-    const delay = survey.appearance?.surveyPopupDelay ? survey.appearance.surveyPopupDelay * 1000 : 0
+    // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
+    const surveyPopupDelayMilliseconds = survey.appearance?.surveyPopupDelaySeconds
+        ? survey.appearance.surveyPopupDelaySeconds * 1000
+        : 0
     const { isPopupVisible, isSurveySent, setIsPopupVisible } = usePopupVisibility(
         survey,
         posthog,
-        delay,
+        surveyPopupDelayMilliseconds,
         isPreviewMode,
         removeSurveyFromFocus
     )

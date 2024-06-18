@@ -26,7 +26,7 @@ export interface SurveyAppearance {
     position?: 'left' | 'right' | 'center'
     placeholder?: string
     shuffleQuestions?: boolean
-    surveyPopupDelay?: number
+    surveyPopupDelaySeconds?: number
     // widget options
     widgetType?: 'button' | 'tab' | 'selector'
     widgetSelector?: string

@@ -3,6 +3,7 @@ import {
     renderSurveysPreview,
     renderFeedbackWidgetPreview,
     usePopupVisibility,
+    createSurveyManager,
 } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
@@ -217,96 +218,84 @@ describe('usePopupVisibility', () => {
     })
 })
 
-// describe('canShowNextSurvey', () => {
-//     beforeEach(() => {
-//         // Reset the DOM before each test
-//         document.body.innerHTML = ''
-//     })
+describe('createSurveyManager', () => {
+    let mockPostHog: PostHog
+    let surveyManager: ReturnType<typeof createSurveyManager>
 
-//     test('returns true if no survey popups are present', () => {
-//         expect(canShowNextSurvey()).toBe(true)
-//     })
+    beforeEach(() => {
+        mockPostHog = {
+            getActiveMatchingSurveys: jest.fn(),
+            get_session_replay_url: jest.fn(),
+            capture: jest.fn(),
+        } as unknown as PostHog
 
-//     test('returns true if the last survey popup has only one child element (a style node)', () => {
-//         document.body.innerHTML = `
-//             <div class="PostHogSurvey_1">
-//                 <style></style>
-//             </div>
-//         `
-//         const lastSurveyPopup = document.querySelector('.PostHogSurvey_1') as HTMLElement
-//         const shadowRoot = lastSurveyPopup.attachShadow({ mode: 'open' })
-//         const styleNode = document.createElement('style')
-//         shadowRoot.appendChild(styleNode)
+        surveyManager = createSurveyManager(mockPostHog)
+    })
 
-//         expect(canShowNextSurvey()).toBe(true)
-//     })
+    test('should initialize surveysInFocus correctly', () => {
+        expect(surveyManager).toBeDefined()
+        expect(typeof surveyManager.addSurveyToFocus).toBe('function')
+        expect(typeof surveyManager.removeSurveyFromFocus).toBe('function')
+        expect(typeof surveyManager.callSurveys).toBe('function')
+    })
 
-//     test('returns false if the last survey popup has more than one child element', () => {
-//         document.body.innerHTML = `
-//             <div class="PostHogSurvey_1">
-//                 <style></style>
-//             </div>
-//         `
-//         const lastSurveyPopup = document.querySelector('.PostHogSurvey_1') as HTMLElement
-//         const shadowRoot = lastSurveyPopup.attachShadow({ mode: 'open' })
-//         const styleNode = document.createElement('style')
-//         const divNode = document.createElement('div')
-//         shadowRoot.appendChild(styleNode)
-//         shadowRoot.appendChild(divNode)
+    test('addSurveyToFocus should add survey ID to surveysInFocus', () => {
+        surveyManager.addSurveyToFocus('survey1')
+        expect(surveyManager['surveysInFocus'].has('survey1')).toBe(true)
+    })
 
-//         expect(canShowNextSurvey()).toBe(false)
-//     })
-// })
+    test('removeSurveyFromFocus should remove survey ID from surveysInFocus', () => {
+        surveyManager.addSurveyToFocus('survey1')
+        surveyManager.removeSurveyFromFocus('survey1')
+        expect(surveyManager['surveysInFocus'].has('survey1')).toBe(false)
+    })
 
-// describe('handlePopoverSurvey', () => {
-//     const mockSurvey: Survey = {
-//         id: 'testSurvey1',
-//         name: 'Test survey 1',
-//         type: SurveyType.Popover,
-//         appearance: {},
-//         start_date: '2021-01-01T00:00:00.000Z',
-//         questions: [
-//             {
-//                 question: 'How satisfied are you with our newest product?',
-//                 description: 'This is a question description',
-//                 type: SurveyQuestionType.Rating,
-//                 display: 'number',
-//                 scale: 10,
-//                 lowerBoundLabel: 'Not Satisfied',
-//                 upperBoundLabel: 'Very Satisfied',
-//             },
-//         ],
-//         conditions: {},
-//         end_date: null,
-//         targeting_flag_key: null,
-//     } as Survey
+    test('canShowNextSurvey should return correct visibility status', () => {
+        const surveyDiv = document.createElement('div')
+        surveyDiv.className = 'PostHogSurvey_test'
+        surveyDiv.attachShadow({ mode: 'open' })
+        surveyDiv.shadowRoot!.appendChild(document.createElement('style'))
+        document.body.appendChild(surveyDiv)
 
-//     const mockPostHog: PostHog = {
-//         getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
-//         get_session_replay_url: jest.fn(),
-//         capture: jest.fn().mockImplementation((eventName) => eventName),
-//     } as unknown as PostHog
+        expect(surveyManager['canShowNextSurvey']()).toBe(true)
 
-//     beforeEach(() => {
-//         localStorage.clear()
-//         jest.clearAllMocks()
-//     })
+        surveyDiv.shadowRoot!.appendChild(document.createElement('div'))
+        expect(surveyManager['canShowNextSurvey']()).toBe(false)
+    })
 
-//     test('respects survey wait period', () => {
-//         const survey = { ...mockSurvey, conditions: { seenSurveyWaitPeriodInDays: 7 } } as Survey
-//         localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
-//         const spy = jest.spyOn(Preact, 'render')
-//         handlePopoverSurvey(mockPostHog, survey)
-//         expect(spy).not.toHaveBeenCalled()
-//     })
+    test('callSurveys should handle surveys correctly', () => {
+        const mockSurveys: any[] = [
+            // TODO let's clean up these anys
+            {
+                id: 'survey1',
+                name: 'Survey 1',
+                type: SurveyType.Popover,
+                appearance: { surveyPopupDelaySeconds: 0 },
+                start_date: '2021-01-01T00:00:00.000Z',
+                questions: [
+                    {
+                        question: 'How satisfied are you with our newest product?',
+                        description: 'This is a question description',
+                        type: 'rating' as SurveyQuestionType,
+                        display: 'number',
+                        scale: 10,
+                        lowerBoundLabel: 'Not Satisfied',
+                        upperBoundLabel: 'Very Satisfied',
+                    },
+                ],
+            },
+        ]
 
-//     test('skips survey if it has already been seen', () => {
-//         localStorage.setItem(getSurveySeenKey(mockSurvey), 'true')
-//         const spy = jest.spyOn(Preact, 'render')
-//         handlePopoverSurvey(mockPostHog, mockSurvey)
-//         expect(spy).not.toHaveBeenCalled()
-//     })
-// })
+        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback(mockSurveys))
+
+        surveyManager.callSurveys()
+
+        expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalled()
+        expect(document.querySelector('.PostHogSurvey_survey1')).not.toBeNull()
+    })
+
+    // Add more tests to cover handleWidget, handleWidgetSelector, and other edge cases...
+})
 
 describe('preview renders', () => {
     beforeEach(() => {
