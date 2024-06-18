@@ -1929,7 +1929,7 @@ export class PostHog {
         }
 
         this.capture(
-            isString(options?.captureEventName) ? options.captureEventName : '$opt_in',
+            isString(options?.captureEventName) ? options?.captureEventName : '$opt_in',
             options?.captureProperties,
             { send_instantly: true }
         )
