@@ -55,11 +55,9 @@ import { uuidv7 } from './uuidv7'
 import { SurveyCallback } from './posthog-surveys-types'
 import {
     isArray,
-    isBoolean,
     isEmptyObject,
     isEmptyString,
     isFunction,
-    isNull,
     isNumber,
     isObject,
     isString,
