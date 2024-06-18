@@ -106,6 +106,7 @@ describe('consentManager', () => {
                 })
             )
         })
+
         it('should not send opt in event if null or false', () => {
             posthog.opt_in_capturing({ captureEventName: null })
             expect(onCapture).not.toHaveBeenCalled()
