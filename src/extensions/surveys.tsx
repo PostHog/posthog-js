@@ -29,18 +29,17 @@ import {
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-export const createSurveyManager = (posthog: PostHog) => {
-    // TODO: @dmarticus - Keeping track of the surveys that are actively displayed is a bit of a hack
-    // to support survey popup millisecondDelay feature that enables us to embed multiple surveys on the same page
-    // without showing them all at once. This is a temporary solution until we have a better way to
-    // manage the lifecycle of surveys without using a global state.  I'm currently working on a better
-    // a refactor of this feature (see: https://github.com/PostHog/posthog-js/pull/1242), but in the interest of shipping fast and iterating,
-    // I decided to go with this approach to unlock a feature that users have been asking for ASAP.  I'll call
-    // out all the places in this file where we use this global state and why we use it, which will hopefully make
-    // it easier to refactor this feature in the future.
-    const surveysInFocus = new Set<string>()
+export class SurveyManager {
+    private posthog: PostHog
+    private surveysInFocus: Set<string>
 
-    const canShowNextSurvey = (): boolean => {
+    constructor(posthog: PostHog) {
+        this.posthog = posthog
+        // TODO: @dmarticus: write a comment about this that's up-to-date.
+        this.surveysInFocus = new Set<string>()
+    }
+
+    private canShowNextSurvey = (): boolean => {
         // with event based surveys, we need to show the next survey without reloading the page.
         // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
         // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
@@ -54,7 +53,7 @@ export const createSurveyManager = (posthog: PostHog) => {
         return true
     }
 
-    const handlePopoverSurvey = (survey: Survey) => {
+    private handlePopoverSurvey = (survey: Survey): void => {
         const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
         const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
         if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
@@ -67,41 +66,41 @@ export const createSurveyManager = (posthog: PostHog) => {
         }
 
         if (!localStorage.getItem(getSurveySeenKey(survey))) {
-            addSurveyToFocus(survey.id)
+            this.addSurveyToFocus(survey.id)
             const shadow = createShadow(style(survey?.appearance), survey.id)
             Preact.render(
                 <SurveyPopup
                     key={'popover-survey'}
-                    posthog={posthog}
+                    posthog={this.posthog}
                     survey={survey}
-                    removeSurveyFromFocus={removeSurveyFromFocus}
+                    removeSurveyFromFocus={this.removeSurveyFromFocus}
                 />,
                 shadow
             )
         }
     }
 
-    const handleWidget = (survey: Survey) => {
+    private handleWidget = (survey: Survey): void => {
         const shadow = createWidgetShadow(survey)
         const surveyStyleSheet = style(survey.appearance)
         shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
         Preact.render(
             <FeedbackWidget
                 key={'feedback-survey'}
-                posthog={posthog}
+                posthog={this.posthog}
                 survey={survey}
-                removeSurveyFromFocus={removeSurveyFromFocus}
+                removeSurveyFromFocus={this.removeSurveyFromFocus}
             />,
             shadow
         )
     }
 
-    const handleWidgetSelector = (survey: Survey) => {
+    private handleWidgetSelector = (survey: Survey): void => {
         const selectorOnPage =
             survey.appearance?.widgetSelector && document.querySelector(survey.appearance.widgetSelector)
         if (selectorOnPage) {
             if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0) {
-                handleWidget(survey)
+                this.handleWidget(survey)
             } else if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 1) {
                 // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
                 if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
@@ -120,15 +119,15 @@ export const createSurveyManager = (posthog: PostHog) => {
         }
     }
 
-    const callSurveys = (forceReload: boolean = false) => {
-        posthog?.getActiveMatchingSurveys((surveys) => {
+    public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
+        this.posthog?.getActiveMatchingSurveys((surveys) => {
             const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
             const nonAPISurveyQueue = nonAPISurveys.sort(
                 (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
             )
 
             nonAPISurveyQueue.forEach((survey) => {
-                if (surveysInFocus.size > 0) {
+                if (this.surveysInFocus.size > 0) {
                     return
                 }
                 if (survey.type === SurveyType.Widget) {
@@ -136,27 +135,39 @@ export const createSurveyManager = (posthog: PostHog) => {
                         survey.appearance?.widgetType === 'tab' &&
                         document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0
                     ) {
-                        handleWidget(survey)
+                        this.handleWidget(survey)
                     }
                     if (survey.appearance?.widgetType === 'selector' && survey.appearance?.widgetSelector) {
-                        handleWidgetSelector(survey)
+                        this.handleWidgetSelector(survey)
                     }
                 }
 
-                if (survey.type === SurveyType.Popover && canShowNextSurvey()) {
-                    handlePopoverSurvey(survey)
+                if (survey.type === SurveyType.Popover && this.canShowNextSurvey()) {
+                    this.handlePopoverSurvey(survey)
                 }
             })
         }, forceReload)
     }
 
-    const addSurveyToFocus = (id: string) => surveysInFocus.add(id)
-    const removeSurveyFromFocus = (id: string) => surveysInFocus.delete(id)
+    private addSurveyToFocus = (id: string): void => {
+        this.surveysInFocus.add(id)
+    }
 
-    return {
-        callSurveys,
-        addSurveyToFocus,
-        removeSurveyFromFocus,
+    private removeSurveyFromFocus = (id: string): void => {
+        this.surveysInFocus.delete(id)
+    }
+
+    // Expose internal state and methods for testing
+    public getTestAPI() {
+        return {
+            addSurveyToFocus: this.addSurveyToFocus,
+            removeSurveyFromFocus: this.removeSurveyFromFocus,
+            surveysInFocus: this.surveysInFocus,
+            canShowNextSurvey: this.canShowNextSurvey,
+            handleWidget: this.handleWidget,
+            handlePopoverSurvey: this.handlePopoverSurvey,
+            handleWidgetSelector: this.handleWidgetSelector,
+        }
     }
 }
 
@@ -236,12 +247,12 @@ export function generateSurveys(posthog: PostHog) {
         return
     }
 
-    const surveyManager = createSurveyManager(posthog)
-    surveyManager.callSurveys(true)
+    const surveyManager = new SurveyManager(posthog)
+    surveyManager.callSurveysAndEvaluateDisplayLogic(true)
 
     // recalculate surveys every second to check if URL or selectors have changed
     setInterval(() => {
-        surveyManager.callSurveys(false)
+        surveyManager.callSurveysAndEvaluateDisplayLogic(false)
     }, 1000)
 }
 
