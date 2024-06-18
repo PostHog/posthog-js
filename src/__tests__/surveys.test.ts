@@ -839,6 +839,28 @@ describe('surveys', () => {
             expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(2)
         })
 
+        // Single-choice
+        it('should branch out correctly based on a single choice response, with shuffled choices', () => {
+            survey.questions = [
+                {
+                    type: SurveyQuestionType.SingleChoice,
+                    question: 'Will you leave us a review?',
+                    choices: ['Yes', 'No', 'Maybe'],
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { 0: 1, 1: 2, 2: 3 },
+                    },
+                    shuffleOptions: true,
+                },
+                { type: SurveyQuestionType.Open, question: 'Why yes?' },
+                { type: SurveyQuestionType.Open, question: 'Why no?' },
+                { type: SurveyQuestionType.Open, question: 'Why maybe?' },
+            ] as SurveyQuestion[]
+            expect(surveys.getNextSurveyStep(survey, 0, 'Yes')).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 'No')).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
+        })
+
         // Response-based branching, scale 1-3
         it('should branch out the negative/neutral/positive respondends correctly (scale 1-3)', () => {
             survey.questions = [
