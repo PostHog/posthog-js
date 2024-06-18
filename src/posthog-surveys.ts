@@ -251,6 +251,7 @@ export class PostHogSurveys {
             return nextQuestionIndex
         }
 
+        console.warn('Falling back to next question index due to unexpected branching type') // eslint-disable-line no-console
         return nextQuestionIndex
     }
 }
