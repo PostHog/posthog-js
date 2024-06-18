@@ -9,7 +9,7 @@ import {
     SurveyQuestionBranchingType,
     SurveyQuestion,
 } from '../posthog-surveys-types'
-import { getDisplayOrderChoices, getDisplayOrderQuestions, getNextStep } from '../extensions/surveys/surveys-utils'
+import { getDisplayOrderChoices, getDisplayOrderQuestions } from '../extensions/surveys/surveys-utils'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
@@ -806,8 +806,8 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Question A' },
                 { type: SurveyQuestionType.Open, question: 'Question B' },
             ] as SurveyQuestion[]
-            expect(getNextStep(survey, survey.questions[0], 0, 'Some response')).toEqual(1)
-            expect(getNextStep(survey, survey.questions[0], 1, 'Some response')).toEqual(
+            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 1, 'Some response')).toEqual(
                 SurveyQuestionBranchingType.ConfirmationMessage
             )
         })
@@ -821,7 +821,7 @@ describe('surveys', () => {
                 },
                 { type: SurveyQuestionType.Open, question: 'Question B' },
             ] as SurveyQuestion[]
-            expect(getNextStep(survey, survey.questions[0], 0, 'Some response')).toEqual(
+            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(
                 SurveyQuestionBranchingType.ConfirmationMessage
             )
         })
@@ -836,7 +836,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Question B' },
                 { type: SurveyQuestionType.Open, question: 'Question C' },
             ] as SurveyQuestion[]
-            expect(getNextStep(survey, survey.questions[0], 2, 'Some response')).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(2)
         })
 
         // Response-based branching, scale 1-3
@@ -856,9 +856,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
 
-            expect(getNextStep(survey, survey.questions[0], 0, 1)).toEqual(1)
-            expect(getNextStep(survey, survey.questions[0], 0, 2)).toEqual(2)
-            expect(getNextStep(survey, survey.questions[0], 0, 3)).toEqual(3)
+            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 2)).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(3)
         })
 
         // Response-based branching, scale 1-5
@@ -878,9 +878,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
 
-            expect(getNextStep(survey, survey.questions[0], 0, 1)).toEqual(1)
-            expect(getNextStep(survey, survey.questions[0], 0, 3)).toEqual(2)
-            expect(getNextStep(survey, survey.questions[0], 0, 5)).toEqual(3)
+            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 5)).toEqual(3)
         })
 
         // Response-based branching, scale 0-10 (NPS)
@@ -900,9 +900,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
 
-            expect(getNextStep(survey, survey.questions[0], 0, 1)).toEqual(1)
-            expect(getNextStep(survey, survey.questions[0], 0, 8)).toEqual(2)
-            expect(getNextStep(survey, survey.questions[0], 0, 10)).toEqual(3)
+            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 8)).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 10)).toEqual(3)
         })
 
         it('should display questions in the order AGCEHDFB', () => {
@@ -956,7 +956,7 @@ describe('surveys', () => {
             for (let i = 0; i < survey.questions.length; i++) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = getNextStep(survey, currentQuestion, currentStep, 'Some response')
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, 'Some response')
             }
 
             expect(desiredOrder).toEqual(actualOrder)
@@ -1015,7 +1015,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = getNextStep(survey, currentQuestion, currentStep, answer)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
@@ -1028,7 +1028,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = getNextStep(survey, currentQuestion, currentStep, answer)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
@@ -1041,7 +1041,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = getNextStep(survey, currentQuestion, currentStep, answer)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
@@ -1058,7 +1058,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = getNextStep(survey, currentQuestion, currentStep, answer)
+                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)

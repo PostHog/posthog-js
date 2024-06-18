@@ -19,7 +19,6 @@ import {
     SurveyContext,
     getDisplayOrderQuestions,
     getSurveySeenKey,
-    getNextStep,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -357,21 +356,23 @@ export function Questions({
 
     const onNextButtonClick = ({
         res,
-        question,
         originalQuestionIndex,
         displayQuestionIndex,
     }: {
         res: string | string[] | number | null
-        question: SurveyQuestion
         originalQuestionIndex: number
         displayQuestionIndex: number
     }) => {
+        if (!posthog) {
+            return
+        }
+
         const responseKey =
             originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
 
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
-        const nextStep = getNextStep(survey, question, displayQuestionIndex, res)
+        const nextStep = posthog?.getNextSurveyStep(survey, displayQuestionIndex, res)
         if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
@@ -405,7 +406,6 @@ export function Questions({
                                 onSubmit: (res) =>
                                     onNextButtonClick({
                                         res,
-                                        question,
                                         originalQuestionIndex,
                                         displayQuestionIndex,
                                     }),
