@@ -252,3 +252,17 @@ export const uuidv7 = (): string => uuidv7obj().toString()
 
 /** Generates a UUIDv7 object. */
 const uuidv7obj = (): UUID => (defaultGenerator || (defaultGenerator = new V7Generator())).generate()
+
+export const uuid7ToTimestampMs = (uuid: string): number => {
+    // remove hyphens
+    const hex = uuid.replace(/-/g, '')
+    // ensure that it's a version 7 UUID
+    if (hex.length !== 32) {
+        throw new Error('Not a valid UUID')
+    }
+    if (hex[12] !== '7') {
+        throw new Error('Not a UUIDv7')
+    }
+    // the first 6 bytes are the timestamp, which means that we can read only the first 12 hex characters
+    return parseInt(hex.substring(0, 12), 16)
+}

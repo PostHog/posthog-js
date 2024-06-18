@@ -67,6 +67,14 @@ export interface BootstrapConfig {
     isIdentifiedID?: boolean
     featureFlags?: Record<string, boolean | string>
     featureFlagPayloads?: Record<string, JsonType>
+    /**
+     * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
+     * - unique to this user
+     * - a valid UUID v7
+     * - the timestamp part must be <= the timestamp of the first event in the session
+     * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
+     * **/
+    sessionID?: string
 }
 
 export interface PostHogConfig {

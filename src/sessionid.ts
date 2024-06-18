@@ -2,7 +2,7 @@ import { PostHogPersistence } from './posthog-persistence'
 import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
-import { uuidv7 } from './uuidv7'
+import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
 import { window } from './utils/globals'
 
 import { isArray, isNumber, isUndefined } from './utils/type-utils'
@@ -74,6 +74,15 @@ export class SessionIdManager {
             }
             // Flag this session as having a primary window
             sessionStore.set(this._primary_window_exists_storage_key, true)
+        }
+
+        if (this.config.bootstrap?.sessionID) {
+            try {
+                const sessionStartTimestamp = uuid7ToTimestampMs(this.config.bootstrap.sessionID)
+                this._setSessionId(this.config.bootstrap.sessionID, new Date().getTime(), sessionStartTimestamp)
+            } catch (e) {
+                logger.error('Invalid sessionID in bootstrap', e)
+            }
         }
 
         this._listenToReloadWindow()
