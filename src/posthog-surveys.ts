@@ -234,8 +234,11 @@ export class PostHogSurveys {
                     }
                 }
 
-                const resNumber = Number(response)
-                const ratingBucket = responseValueToBucket[resNumber]
+                if (typeof response !== 'number' || !Number.isInteger(response)) {
+                    throw new Error('The response type must be an integer')
+                }
+
+                const ratingBucket = responseValueToBucket[response]
 
                 if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
                     const nextStep = question.branching.responseValues[ratingBucket]
