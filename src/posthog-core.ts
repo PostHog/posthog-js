@@ -1911,7 +1911,7 @@ export class PostHog {
      *     });
      *
      * @param {Object} [config] A dictionary of config options to override
-     * @param {string} [config.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action
+     * @param {string} [config.capture_event_name=$opt_in] Event name to be used for capturing the opt-in action. Set to `null` or `false` to skip capturing the optin event
      * @param {Object} [config.capture_properties] Set of properties to be captured along with the opt-in action
      */
     opt_in_capturing(options?: {
