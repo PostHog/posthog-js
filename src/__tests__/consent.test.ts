@@ -78,32 +78,40 @@ describe('consentManager', () => {
         expect(posthog.persistence?.disabled).toBe(true)
     })
 
-    it('should send opt in event if not disabled', () => {
-        const onCapture = jest.fn()
-        posthog = createPostHog({ opt_out_capturing_by_default: true, _onCapture: onCapture })
-        posthog.opt_in_capturing()
-        expect(onCapture).toHaveBeenCalledWith('$opt_in', expect.objectContaining({}))
-        onCapture.mockClear()
-
-        posthog.opt_in_capturing({
-            captureEventName: 'override-opt-in',
-            captureProperties: {
-                foo: 'bar',
-            },
+    describe('opt out event', () => {
+        let onCapture = jest.fn()
+        beforeEach(() => {
+            onCapture = jest.fn()
+            posthog = createPostHog({ opt_out_capturing_by_default: true, _onCapture: onCapture })
         })
-        expect(onCapture).toHaveBeenCalledWith(
-            'override-opt-in',
-            expect.objectContaining({
-                properties: expect.objectContaining({
+
+        it('should send opt in event if not disabled', () => {
+            posthog.opt_in_capturing()
+            expect(onCapture).toHaveBeenCalledWith('$opt_in', expect.objectContaining({}))
+        })
+
+        it('should send opt in event with overrides', () => {
+            posthog.opt_in_capturing({
+                captureEventName: 'override-opt-in',
+                captureProperties: {
                     foo: 'bar',
-                }),
+                },
             })
-        )
-        onCapture.mockClear()
-        posthog.opt_in_capturing({ captureEventName: null })
-        expect(onCapture).not.toHaveBeenCalled()
-        posthog.opt_in_capturing({ captureEventName: false })
-        expect(onCapture).not.toHaveBeenCalled()
+            expect(onCapture).toHaveBeenCalledWith(
+                'override-opt-in',
+                expect.objectContaining({
+                    properties: expect.objectContaining({
+                        foo: 'bar',
+                    }),
+                })
+            )
+        })
+        it('should not send opt in event if null or false', () => {
+            posthog.opt_in_capturing({ captureEventName: null })
+            expect(onCapture).not.toHaveBeenCalled()
+            posthog.opt_in_capturing({ captureEventName: false })
+            expect(onCapture).not.toHaveBeenCalled()
+        })
     })
 
     describe('with do not track setting', () => {

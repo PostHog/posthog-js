@@ -1921,7 +1921,7 @@ export class PostHog {
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
-        if (!isUndefined(options?.captureEventName) && !options.captureEventName) {
+        if (!isUndefined(options?.captureEventName) && !options?.captureEventName) {
             // Don't capture if captureEventName is null or false
             return
         }
