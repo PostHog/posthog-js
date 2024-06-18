@@ -23,27 +23,29 @@ import { uuidv7 } from '../uuidv7'
 import { isFunction } from '../utils/type-utils'
 import { USER_STATE } from '../constants'
 
+type SegmentID = string | null | undefined
+
 export type SegmentUser = {
-    anonymousId(): string | undefined
-    id(): string | undefined
+    anonymousId(): SegmentID
+    id(): SegmentID
 }
 
 export type SegmentAnalytics = {
     user: () => SegmentUser | Promise<SegmentUser>
-    register: (integration: SegmentPlugin) => Promise<void>
+    register: (integration: SegmentPlugin) => Promise<SegmentContext>
 }
 
 // Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
 interface SegmentContext {
     event: {
-        event: string
-        userId?: string
-        anonymousId?: string
-        properties: any
+        event?: string
+        userId?: SegmentID
+        anonymousId?: SegmentID
+        properties?: any
     }
 }
 
-type SegmentFunction = (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
+type SegmentFunction<T extends SegmentContext = any> = (ctx: T) => Promise<T> | T
 
 interface SegmentPlugin {
     name: string
@@ -66,7 +68,7 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }
 
-    const enrichEvent = (ctx: SegmentContext, eventName: string | undefined) => {
+    const enrichEvent = <T extends SegmentContext>(ctx: T, eventName: string | undefined): T => {
         if (!eventName) {
             return ctx
         }
