@@ -1,5 +1,12 @@
 import { PostHog } from '../posthog-core'
-import { Survey, SurveyAppearance, SurveyQuestion, SurveyQuestionType, SurveyType } from '../posthog-surveys-types'
+import {
+    Survey,
+    SurveyAppearance,
+    SurveyQuestion,
+    SurveyQuestionBranchingType,
+    SurveyQuestionType,
+    SurveyType,
+} from '../posthog-surveys-types'
 
 import { window as _window, document as _document } from '../utils/globals'
 import {
@@ -356,16 +363,20 @@ export function Questions({
         originalQuestionIndex: number
         displayQuestionIndex: number
     }) => {
-        const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
+        if (!posthog) {
+            return
+        }
 
         const responseKey =
             originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
 
-        if (isLastDisplayedQuestion) {
-            return sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+        setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
+
+        const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
+        if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
+            sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
-            setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
-            setCurrentQuestionIndex(displayQuestionIndex + 1)
+            setCurrentQuestionIndex(nextStep)
         }
     }
 

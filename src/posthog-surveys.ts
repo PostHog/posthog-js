@@ -1,6 +1,12 @@
 import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
-import { Survey, SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
+import {
+    Survey,
+    SurveyCallback,
+    SurveyQuestionBranchingType,
+    SurveyQuestionType,
+    SurveyUrlMatchType,
+} from './posthog-surveys-types'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
@@ -18,6 +24,30 @@ export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: 
     not_regex: (conditionsUrl) => !!window && !isUrlMatchingRegex(window.location.href, conditionsUrl),
     exact: (conditionsUrl) => window?.location.href === conditionsUrl,
     is_not: (conditionsUrl) => window?.location.href !== conditionsUrl,
+}
+
+function getRatingBucketForResponseValue(responseValue: number, scale: number) {
+    if (scale === 3) {
+        if (responseValue < 1 || responseValue > 3) {
+            throw new Error('The response must be in range 1-3')
+        }
+
+        return responseValue === 1 ? 'negative' : responseValue === 2 ? 'neutral' : 'positive'
+    } else if (scale === 5) {
+        if (responseValue < 1 || responseValue > 5) {
+            throw new Error('The response must be in range 1-5')
+        }
+
+        return responseValue <= 2 ? 'negative' : responseValue === 3 ? 'neutral' : 'positive'
+    } else if (scale === 10) {
+        if (responseValue < 0 || responseValue > 10) {
+            throw new Error('The response must be in range 0-10')
+        }
+
+        return responseValue <= 6 ? 'detractors' : responseValue <= 8 ? 'passives' : 'promoters'
+    }
+
+    throw new Error('The scale must be one of: 3, 5, 10')
 }
 
 export class PostHogSurveys {
@@ -154,5 +184,74 @@ export class PostHogSurveys {
 
             return callback(targetingMatchedSurveys)
         }, forceReload)
+    }
+
+    getNextSurveyStep(survey: Survey, currentQuestionIndex: number, response: string | string[] | number | null) {
+        const question = survey.questions[currentQuestionIndex]
+        const nextQuestionIndex = currentQuestionIndex + 1
+
+        if (!question.branching?.type) {
+            if (currentQuestionIndex === survey.questions.length - 1) {
+                return SurveyQuestionBranchingType.ConfirmationMessage
+            }
+
+            return nextQuestionIndex
+        }
+
+        if (question.branching.type === SurveyQuestionBranchingType.ConfirmationMessage) {
+            return SurveyQuestionBranchingType.ConfirmationMessage
+        } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
+            if (Number.isInteger(question.branching.index)) {
+                return question.branching.index
+            }
+        } else if (question.branching.type === SurveyQuestionBranchingType.ResponseBased) {
+            // Single choice
+            if (question.type === SurveyQuestionType.SingleChoice) {
+                // :KLUDGE: for now, look up the choiceIndex based on the response
+                // TODO: once QuestionTypes.MultipleChoiceQuestion is refactored, pass the selected choiceIndex into this method
+                const selectedChoiceIndex = question.choices.indexOf(`${response}`)
+
+                if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
+                    const nextStep = question.branching.responseValues[selectedChoiceIndex]
+
+                    // Specific question
+                    if (Number.isInteger(nextStep)) {
+                        return nextStep
+                    }
+
+                    if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
+                        return SurveyQuestionBranchingType.ConfirmationMessage
+                    }
+
+                    return nextQuestionIndex
+                }
+            } else if (question.type === SurveyQuestionType.Rating) {
+                if (typeof response !== 'number' || !Number.isInteger(response)) {
+                    throw new Error('The response type must be an integer')
+                }
+
+                const ratingBucket = getRatingBucketForResponseValue(response, question.scale)
+
+                if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
+                    const nextStep = question.branching.responseValues[ratingBucket]
+
+                    // Specific question
+                    if (Number.isInteger(nextStep)) {
+                        return nextStep
+                    }
+
+                    if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
+                        return SurveyQuestionBranchingType.ConfirmationMessage
+                    }
+
+                    return nextQuestionIndex
+                }
+            }
+
+            return nextQuestionIndex
+        }
+
+        console.warn('Falling back to next question index due to unexpected branching type') // eslint-disable-line no-console
+        return nextQuestionIndex
     }
 }
