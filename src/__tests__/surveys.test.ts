@@ -1085,5 +1085,68 @@ describe('surveys', () => {
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
         })
+
+        it('should throw an error for an invalid scale', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 2,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+            expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 10')
+        })
+
+        it('should throw an error for a response value out of the valid range', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 3,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
+
+            survey.questions[0].scale = 5
+            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
+
+            survey.questions[0].scale = 10
+            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 0-10')
+        })
+
+        it('should throw an error for if a response value in a rating question is not an integer', () => {
+            survey.questions = [
+                {
+                    question: 'How happy are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 3,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
+                { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
+            ] as SurveyQuestion[]
+            expect(() => surveys.getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
+            expect(() => surveys.getNextSurveyStep(survey, 0, 'some_string')).toThrow(
+                'The response type must be an integer'
+            )
+        })
     })
 })
