@@ -77,39 +77,3 @@ export function SurveyPopup({
           )
         : null
 }
-
-// return isPopupVisible ? (
-//     <SurveyContext.Provider
-//         value={{
-//             isPreviewMode,
-//             previewPageIndex: previewPageIndex,
-//             handleCloseSurveyPopup: () => {
-//                 removeSurveyFromFocus(survey.id)
-//                 dismissedSurveyEvent(survey, posthog, isPreviewMode)
-//             },
-//         }}
-//     >
-//         {!shouldShowConfirmation ? (
-//             <Questions
-//                 survey={survey}
-//                 forceDisableHtml={!!forceDisableHtml}
-//                 posthog={posthog}
-//                 styleOverrides={style}
-//                 removeSurveyFromFocus={removeSurveyFromFocus}
-//             />
-//         ) : (
-//             <ConfirmationMessage
-//                 header={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
-//                 description={survey.appearance?.thankYouMessageDescription || ''}
-//                 forceDisableHtml={!!forceDisableHtml}
-//                 contentType={survey.appearance?.thankYouMessageDescriptionContentType}
-//                 appearance={survey.appearance || defaultSurveyAppearance}
-//                 styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
-//                 onClose={() => setIsPopupVisible(false)}
-//             />
-//         )}
-//     </SurveyContext.Provider>
-// ) : (
-//     <></>
-// )
-// }
