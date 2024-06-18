@@ -78,6 +78,34 @@ describe('consentManager', () => {
         expect(posthog.persistence?.disabled).toBe(true)
     })
 
+    it('should send opt in event if not disabled', () => {
+        const onCapture = jest.fn()
+        posthog = createPostHog({ opt_out_capturing_by_default: true, _onCapture: onCapture })
+        posthog.opt_in_capturing()
+        expect(onCapture).toHaveBeenCalledWith('$opt_in', expect.objectContaining({}))
+        onCapture.mockClear()
+
+        posthog.opt_in_capturing({
+            captureEventName: 'override-opt-in',
+            captureProperties: {
+                foo: 'bar',
+            },
+        })
+        expect(onCapture).toHaveBeenCalledWith(
+            'override-opt-in',
+            expect.objectContaining({
+                properties: expect.objectContaining({
+                    foo: 'bar',
+                }),
+            })
+        )
+        onCapture.mockClear()
+        posthog.opt_in_capturing({ captureEventName: null })
+        expect(onCapture).not.toHaveBeenCalled()
+        posthog.opt_in_capturing({ captureEventName: false })
+        expect(onCapture).not.toHaveBeenCalled()
+    })
+
     describe('with do not track setting', () => {
         beforeEach(() => {
             ;(navigator as any).doNotTrack = '1'

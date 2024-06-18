@@ -1915,13 +1915,16 @@ export class PostHog {
      * @param {Object} [config.capture_properties] Set of properties to be captured along with the opt-in action
      */
     opt_in_capturing(options?: {
-        captureEventName?: string /** event name to be used for capturing the opt-in action */
+        captureEventName?: string | null | false /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
-        // TODO: Do we need it to be sent instantly?
+        if (!isUndefined(options?.captureEventName) && !options.captureEventName) {
+            // Don't capture if captureEventName is null or false
+            return
+        }
         this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
     }
 
