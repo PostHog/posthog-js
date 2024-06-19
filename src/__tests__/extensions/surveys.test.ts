@@ -51,7 +51,7 @@ describe('survey display logic', () => {
         getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
         get_session_replay_url: jest.fn(),
         capture: jest.fn().mockImplementation((eventName) => eventName),
-    } as any
+    } as unknown as PostHog
 
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
         jest.useFakeTimers()
