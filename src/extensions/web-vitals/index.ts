@@ -83,9 +83,6 @@ export class WebVitalsAutocapture {
             return
         }
 
-        // TODO make these properties better
-        // TODO if configured fewer collections then we need to check length of enabled metrics
-        // TODO send on timeout too (and on page leave even maybe)
         this.instance.capture(
             '$web_vitals',
             this.buffer.metrics.reduce(
