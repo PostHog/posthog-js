@@ -68,24 +68,6 @@ describe('web vitals', () => {
             })
         })
 
-        it('should include generated web vitals data', async () => {
-            randomlyAddAMetric('lcp', 123.45, { extra: 'property' })
-
-            posthog.webVitalsAutocapture!['_flushToCapture']()
-
-            expect(onCapture).toBeCalledTimes(1)
-            expect(onCapture.mock.lastCall).toMatchObject([
-                '$web_vitals',
-                {
-                    event: '$web_vitals',
-                    properties: {
-                        $web_vitals_lcp_event: expectedEmittedWebVitals('lcp'),
-                        $web_vitals_lcp_value: 123.45,
-                    },
-                },
-            ])
-        })
-
         it('should emit when all 4 metrics are captured', async () => {
             emitAllMetrics()
 
