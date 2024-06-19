@@ -347,7 +347,7 @@ describe('SurveyManager', () => {
             .spyOn(surveyManager as any, 'handleWidgetSelector')
             .mockImplementation(() => {})
         surveyManager.getTestAPI().handleWidgetSelector(mockSurvey)
-        expect(handleWidgetSelectorMock).toHaveBeenCalledWith(mockSurvey)
+        expect(handleWidgetSelectorMock).toHaveBeenCalledOnceWith(mockSurvey)
     })
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
