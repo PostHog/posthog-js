@@ -1,7 +1,7 @@
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
 import { logger } from '../../utils/logger'
-import { isBoolean, isObject, isUndefined } from '../../utils/type-utils'
+import { isBoolean, isNullish, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { loadScript } from '../../utils'
 import { assignableWindow, window } from '../../utils/globals'
@@ -88,7 +88,15 @@ export class WebVitalsAutocapture {
         // TODO send on timeout too (and on page leave even maybe)
         this.instance.capture(
             '$web_vitals',
-            this.buffer.metrics.reduce((acc, metric) => ({ ...acc, [metric.name]: { ...metric } }), {})
+            this.buffer.metrics.reduce(
+                (acc, metric) => ({
+                    ...acc,
+                    // the entire event so we can use it in the future e.g. includes google's rating
+                    [`$web_vitals_${metric.name}_event`]: { ...metric },
+                    [`$web_vitals_${metric.name}_value`]: metric.value,
+                }),
+                {}
+            )
         )
         this.buffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     }
@@ -107,8 +115,10 @@ export class WebVitalsAutocapture {
             return
         }
 
-        // if  we have all the metrics for the URL we need to send them
-        // if too long has passed we send what we have
+        if (isNullish(metric?.name) || isNullish(metric?.value)) {
+            logger.error(LOGGER_PREFIX + 'Invalid metric received', metric)
+            return
+        }
 
         const urlHasChanged = this.buffer.url !== $currentUrl
 

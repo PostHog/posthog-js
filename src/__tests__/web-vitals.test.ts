@@ -69,7 +69,7 @@ describe('web vitals', () => {
         })
 
         it('should include generated web vitals data', async () => {
-            randomlyAddAMetric('the metric', 123.45, { extra: 'property' })
+            randomlyAddAMetric('lcp', 123.45, { extra: 'property' })
 
             posthog.webVitalsAutocapture!['_flushToCapture']()
 
@@ -79,16 +79,8 @@ describe('web vitals', () => {
                 {
                     event: '$web_vitals',
                     properties: {
-                        'the metric': {
-                            $current_url: 'http://localhost/',
-                            $session_id: expect.any(String),
-                            $window_id: expect.any(String),
-                            timestamp: expect.any(Number),
-                            name: 'the metric',
-                            value: 123.45,
-                            // all the object properties are included
-                            extra: 'property',
-                        },
+                        $web_vitals_lcp_event: expectedEmittedWebVitals('lcp'),
+                        $web_vitals_lcp_value: 123.45,
                     },
                 },
             ])
@@ -104,10 +96,14 @@ describe('web vitals', () => {
                 {
                     event: '$web_vitals',
                     properties: {
-                        LCP: expectedEmittedWebVitals('LCP'),
-                        CLS: expectedEmittedWebVitals('CLS'),
-                        FCP: expectedEmittedWebVitals('FCP'),
-                        INP: expectedEmittedWebVitals('INP'),
+                        $web_vitals_LCP_event: expectedEmittedWebVitals('LCP'),
+                        $web_vitals_LCP_value: 123.45,
+                        $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                        $web_vitals_CLS_value: 123.45,
+                        $web_vitals_FCP_event: expectedEmittedWebVitals('FCP'),
+                        $web_vitals_FCP_value: 123.45,
+                        $web_vitals_INP_event: expectedEmittedWebVitals('INP'),
+                        $web_vitals_INP_value: 123.45,
                     },
                 },
             ])
@@ -127,7 +123,8 @@ describe('web vitals', () => {
                 {
                     event: '$web_vitals',
                     properties: {
-                        LCP: expectedEmittedWebVitals('LCP'),
+                        $web_vitals_LCP_event: expectedEmittedWebVitals('LCP'),
+                        $web_vitals_LCP_value: 123.45,
                     },
                 },
             ])
