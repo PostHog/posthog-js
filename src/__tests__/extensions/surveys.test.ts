@@ -296,7 +296,7 @@ describe('SurveyManager', () => {
         expect(surveyManager.getTestAPI().canShowNextEventBasedSurvey()).toBe(false)
     })
 
-    test('callSurveysAndEvaluateDisplayLogic should handle surveys correctly', () => {
+    test('callSurveysAndEvaluateDisplayLogic should handle popup surveys correctly', () => {
         mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurveys[0]]))
 
         const handlePopoverSurveyMock = jest
