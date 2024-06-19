@@ -2,7 +2,7 @@ import { getQueryParam, convertToURL } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties, timestamp } from './index'
+import { each, extend, stripEmptyProperties, stripLeadingDollar, timestamp } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 
@@ -31,13 +31,20 @@ export const CAMPAIGN_PARAMS = [
 ]
 
 export const Info = {
-    campaignParams: function (customParams?: string[]): Record<string, any> {
+    campaignParams: function (customParams?: string[]): Record<string, string> {
+        if (!document) {
+            return {}
+        }
+        return this._campaignParamsFromUrl(document.URL, customParams)
+    },
+
+    _campaignParamsFromUrl: function (url: string, customParams?: string[]): Record<string, string> {
         const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
 
         const params: Record<string, any> = {}
         each(campaign_keywords, function (kwkey) {
-            const kw = document ? getQueryParam(document.URL, kwkey) : ''
-            if (kw.length) {
+            const kw = getQueryParam(url, kwkey)
+            if (kw) {
                 params[kwkey] = kw
             }
         })
@@ -45,8 +52,7 @@ export const Info = {
         return params
     },
 
-    searchEngine: function (): string | null {
-        const referrer = document?.referrer
+    _searchEngine: function (referrer: string): string | null {
         if (!referrer) {
             return null
         } else {
@@ -64,10 +70,10 @@ export const Info = {
         }
     },
 
-    searchInfo: function (): Record<string, any> {
-        const search = Info.searchEngine(),
-            param = search != 'yahoo' ? 'q' : 'p',
-            ret: Record<string, any> = {}
+    _searchInfoFromReferrer: function (referrer: string): Record<string, any> {
+        const search = Info._searchEngine(referrer)
+        const param = search != 'yahoo' ? 'q' : 'p'
+        const ret: Record<string, any> = {}
 
         if (!isNull(search)) {
             ret['$search_engine'] = search
@@ -79,6 +85,14 @@ export const Info = {
         }
 
         return ret
+    },
+
+    searchInfo: function (): Record<string, any> {
+        const referrer = document?.referrer
+        if (!referrer) {
+            return {}
+        }
+        return this._searchInfoFromReferrer(referrer)
     },
 
     /**
@@ -127,6 +141,46 @@ export const Info = {
             $referrer: this.referrer(),
             $referring_domain: this.referringDomain(),
         }
+    },
+
+    initialPersonInfo: function (): Record<string, any> {
+        // we're being a bit more economical with bytes here because this is stored in the cookie
+        return {
+            r: this.referrer(),
+            u: location?.href,
+        }
+    },
+
+    initialPersonPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
+        const { r: initial_referrer, u: initial_current_url } = info
+        const referring_domain =
+            initial_referrer == null
+                ? undefined
+                : initial_referrer == '$direct'
+                ? '$direct'
+                : convertToURL(initial_referrer)?.host
+
+        const props: Record<string, string | undefined> = {
+            $initial_referrer: initial_referrer,
+            $initial_referring_domain: referring_domain,
+        }
+        if (initial_current_url) {
+            props['$initial_current_url'] = initial_current_url
+            const location = convertToURL(initial_current_url)
+            props['$initial_host'] = location?.host
+            props['$initial_pathname'] = location?.pathname
+            const campaignParams = this._campaignParamsFromUrl(initial_current_url)
+            each(campaignParams, function (v, k: string) {
+                props['$initial_' + stripLeadingDollar(k)] = v
+            })
+        }
+        if (initial_referrer) {
+            const searchInfo = this._searchInfoFromReferrer(initial_referrer)
+            each(searchInfo, function (v, k: string) {
+                props['$initial_' + stripLeadingDollar(k)] = v
+            })
+        }
+        return props
     },
 
     properties: function (): Properties {

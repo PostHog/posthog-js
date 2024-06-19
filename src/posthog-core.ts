@@ -46,13 +46,13 @@ import {
     SnippetArrayItem,
     ToolbarParams,
 } from './types'
-import { SentryIntegration } from './extensions/sentry-integration'
+import { SentryIntegration, SentryIntegrationOptions, sentryIntegration } from './extensions/sentry-integration'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { PageViewManager } from './page-view'
 import { PostHogSurveys } from './posthog-surveys'
 import { RateLimiter } from './rate-limiter'
 import { uuidv7 } from './uuidv7'
-import { SurveyCallback } from './posthog-surveys-types'
+import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
 import {
     isArray,
     isEmptyObject,
@@ -264,6 +264,7 @@ export class PostHog {
     analyticsDefaultEndpoint: string
 
     SentryIntegration: typeof SentryIntegration
+    sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     private _internalEventEmitter = new SimpleEventEmitter()
 
@@ -278,6 +279,7 @@ export class PostHog {
 
         this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
+        this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
@@ -771,11 +773,12 @@ export class PostHog {
         // with every event and used by the session table to create session-initial props.
         if (this.config.store_google) {
             this.sessionPersistence.update_campaign_params()
-            this.persistence.set_initial_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
-            this.persistence.set_initial_referrer_info()
+        }
+        if (this.config.store_google || this.config.save_referrer) {
+            this.persistence.set_initial_person_info()
         }
 
         let data: CaptureResult = {
@@ -1184,6 +1187,15 @@ export class PostHog {
     /** Get surveys that should be enabled for the current user. */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
+    }
+
+    /** Get the next step of the survey: a question index or confirmation_message */
+    getNextSurveyStep(
+        survey: Survey,
+        currentQuestionIndex: number,
+        response: string | string[] | number | null
+    ): number | SurveyQuestionBranchingType.ConfirmationMessage {
+        return this.surveys.getNextSurveyStep(survey, currentQuestionIndex, response)
     }
 
     /**
@@ -1681,7 +1693,8 @@ export class PostHog {
      *         maskInputOptions: {},
      *         maskInputFn: null,
      *         slimDOMOptions: {},
-     *         collectFonts: false
+     *         collectFonts: false,
+     *         inlineStylesheet: true,
      *      }
      *
      *      // prevent autocapture from capturing any attribute names on elements

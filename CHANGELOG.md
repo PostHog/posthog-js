@@ -1,3 +1,30 @@
+## 1.139.3 - 2024-06-18
+
+- feat(surveys): add branching logic (#1247)
+
+## 1.139.2 - 2024-06-14
+
+- fix: only wrap once when patching (#1245)
+- chore: add clarifying test (#1246)
+- feat: allow not operators in survey url targeting (#1219)
+
+## 1.139.1 - 2024-06-12
+
+- fix: less strict idle event dropping (#1241)
+- chore: add inlineStylesheet prop (#1237)
+
+## 1.139.0 - 2024-06-10
+
+- feat(personless-events): set_once more initial properties accurately when a person is created (#1236)
+
+## 1.138.3 - 2024-06-10
+
+- fix: circular refs shouldn't explode capture (#1230)
+
+## 1.138.2 - 2024-06-10
+
+- feat: Updated v8 sentry integration (#1224)
+
 ## 1.138.1 - 2024-06-07
 
 - feat: wrap fetch and add tracing headers (#1186)

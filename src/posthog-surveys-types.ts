@@ -53,6 +53,11 @@ interface SurveyQuestionBase {
     optional?: boolean
     buttonText?: string
     originalQuestionIndex: number
+    branching?:
+        | NextQuestionBranching
+        | ConfirmationMessageBranching
+        | ResponseBasedBranching
+        | SpecificQuestionBranching
 }
 
 export interface BasicSurveyQuestion extends SurveyQuestionBase {
@@ -87,13 +92,38 @@ export enum SurveyQuestionType {
     Link = 'link',
 }
 
+export enum SurveyQuestionBranchingType {
+    NextQuestion = 'next_question',
+    ConfirmationMessage = 'confirmation_message',
+    ResponseBased = 'response_based',
+    SpecificQuestion = 'specific_question',
+}
+
+interface NextQuestionBranching {
+    type: SurveyQuestionBranchingType.NextQuestion
+}
+
+interface ConfirmationMessageBranching {
+    type: SurveyQuestionBranchingType.ConfirmationMessage
+}
+
+interface ResponseBasedBranching {
+    type: SurveyQuestionBranchingType.ResponseBased
+    responseValues: Record<string, any>
+}
+
+interface SpecificQuestionBranching {
+    type: SurveyQuestionBranchingType.SpecificQuestion
+    index: number
+}
+
 export interface SurveyResponse {
     surveys: Survey[]
 }
 
 export type SurveyCallback = (surveys: Survey[]) => void
 
-export type SurveyUrlMatchType = 'regex' | 'exact' | 'icontains'
+export type SurveyUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 
 export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
