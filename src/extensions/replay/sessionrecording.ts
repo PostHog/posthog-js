@@ -965,7 +965,7 @@ export class SessionRecording {
             _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
-            _noPassengerEvents: true,
+            _noHeatmaps: true,
         })
     }
 }

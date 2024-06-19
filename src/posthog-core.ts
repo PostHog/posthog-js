@@ -921,15 +921,10 @@ export class PostHog {
 
         properties['$is_identified'] = this._isIdentified()
 
-        if (!options?._noPassengerEvents) {
+        if (!options?._noHeatmaps) {
             const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
             if (heatmapsBuffer) {
                 properties['$heatmap_data'] = heatmapsBuffer
-            }
-
-            const webVitalsBuffer = this.webVitalsAutocapture?.getAndClearBuffer()
-            if (webVitalsBuffer) {
-                properties['$web_vitals_data'] = webVitalsBuffer
             }
         }
 

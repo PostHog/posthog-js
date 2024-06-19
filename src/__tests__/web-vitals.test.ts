@@ -3,7 +3,10 @@ import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
+import { FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS } from '../extensions/web-vitals'
+
 jest.mock('../utils/logger')
+jest.useFakeTimers()
 
 describe('web vitals', () => {
     let posthog: PostHog
@@ -13,7 +16,7 @@ describe('web vitals', () => {
     let onFCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onINPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
 
-    const randomlyCallACallback = (
+    const randomlyAddAMetric = (
         metricName: string = 'metric',
         metricValue: number = 600.1,
         metricProperties: Record<string, any> = {}
@@ -22,6 +25,23 @@ describe('web vitals', () => {
         const randomIndex = Math.floor(Math.random() * callbacks.length)
         callbacks[randomIndex]?.({ name: metricName, value: metricValue, ...metricProperties })
     }
+
+    const emitAllMetrics = () => {
+        onLCPCallback?.({ name: 'LCP', value: 123.45, extra: 'property' })
+        onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
+        onFCPCallback?.({ name: 'FCP', value: 123.45, extra: 'property' })
+        onINPCallback?.({ name: 'INP', value: 123.45, extra: 'property' })
+    }
+
+    const expectedEmittedWebVitals = (name: string) => ({
+        $current_url: 'http://localhost/',
+        $session_id: expect.any(String),
+        $window_id: expect.any(String),
+        timestamp: expect.any(Number),
+        name: name,
+        value: 123.45,
+        extra: 'property',
+    })
 
     describe('the behaviour', () => {
         beforeEach(async () => {
@@ -49,53 +69,68 @@ describe('web vitals', () => {
         })
 
         it('should include generated web vitals data', async () => {
-            randomlyCallACallback('the metric', 123.45, { extra: 'property' })
+            randomlyAddAMetric('the metric', 123.45, { extra: 'property' })
 
-            posthog.capture('test event')
+            posthog.webVitalsAutocapture!['_flushToCapture']()
 
             expect(onCapture).toBeCalledTimes(1)
             expect(onCapture.mock.lastCall).toMatchObject([
-                'test event',
+                '$web_vitals',
                 {
-                    event: 'test event',
+                    event: '$web_vitals',
                     properties: {
-                        $web_vitals_data: [
-                            {
-                                $current_url: 'http://localhost/',
-                                $session_id: expect.any(String),
-                                $window_id: expect.any(String),
-                                timestamp: expect.any(Number),
-                                name: 'the metric',
-                                value: 123.45,
-                                // all the object properties are included
-                                extra: 'property',
-                            },
-                        ],
+                        'the metric': {
+                            $current_url: 'http://localhost/',
+                            $session_id: expect.any(String),
+                            $window_id: expect.any(String),
+                            timestamp: expect.any(Number),
+                            name: 'the metric',
+                            value: 123.45,
+                            // all the object properties are included
+                            extra: 'property',
+                        },
                     },
                 },
             ])
         })
 
-        it('should clear the buffer after each call', async () => {
-            randomlyCallACallback()
+        it('should emit when all 4 metrics are captured', async () => {
+            emitAllMetrics()
 
-            posthog.capture('test event')
             expect(onCapture).toBeCalledTimes(1)
-            expect(onCapture.mock.lastCall[1].properties.$web_vitals_data).toHaveLength(1)
 
-            posthog.capture('test event 2')
-            expect(onCapture).toBeCalledTimes(2)
-            expect(onCapture.mock.lastCall[1].properties.$web_vitals_data).toBeUndefined()
+            expect(onCapture.mock.lastCall).toMatchObject([
+                '$web_vitals',
+                {
+                    event: '$web_vitals',
+                    properties: {
+                        LCP: expectedEmittedWebVitals('LCP'),
+                        CLS: expectedEmittedWebVitals('CLS'),
+                        FCP: expectedEmittedWebVitals('FCP'),
+                        INP: expectedEmittedWebVitals('INP'),
+                    },
+                },
+            ])
         })
 
-        it('should not include generated web vitals data with _noPassengerEvents', async () => {
-            randomlyCallACallback()
+        it('should emit after 8 seconds even when only 1 to 3 metrics captured', async () => {
+            randomlyAddAMetric('LCP', 123.45, { extra: 'property' })
 
-            posthog.capture('anything', undefined, { _noPassengerEvents: true })
+            expect(onCapture).toBeCalledTimes(0)
 
-            expect(onCapture).toBeCalledTimes(1)
-            expect(onCapture.mock.lastCall).toMatchObject(['anything', {}])
-            expect(onCapture.mock.lastCall[1].properties).not.toHaveProperty('$web_vitals_data')
+            jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            // for some reason advancing the timer emits a $pageview event as well 🤷
+            expect(onCapture).toBeCalledTimes(2)
+            expect(onCapture.mock.lastCall).toMatchObject([
+                '$web_vitals',
+                {
+                    event: '$web_vitals',
+                    properties: {
+                        LCP: expectedEmittedWebVitals('LCP'),
+                    },
+                },
+            ])
         })
     })
 
