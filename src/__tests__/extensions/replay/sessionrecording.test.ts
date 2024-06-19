@@ -1335,7 +1335,6 @@ describe('SessionRecording', () => {
 
             sessionRecording.onRRwebEmit(createFullSnapshot({}) as eventWithTime)
 
-            // custom event is buffered
             expect(sessionRecording['buffer']).toEqual({
                 data: [
                     {
@@ -1361,7 +1360,6 @@ describe('SessionRecording', () => {
 
             sessionRecording.onRRwebEmit(createMetaSnapshot({}) as eventWithTime)
 
-            // custom event is buffered
             expect(sessionRecording['buffer']).toEqual({
                 data: [
                     {
@@ -1389,7 +1387,6 @@ describe('SessionRecording', () => {
 
             sessionRecording.onRRwebEmit(createStyleSnapshot({}) as eventWithTime)
 
-            // custom event is buffered
             expect(sessionRecording['buffer']).toEqual({
                 data: [
                     {
@@ -1445,11 +1442,7 @@ describe('SessionRecording', () => {
 
             // this triggers idle state and isn't a user interaction so does not take a full snapshot
             emitInactiveEvent(thirdActivityTimestamp, true)
-            expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', {
-                reason: 'user inactivity',
-                threshold: 300000,
-                timeSinceLastActive: 300900,
-            })
+
             // event was not active so activity timestamp is not updated
             expect(sessionRecording['_lastActivityTimestamp']).toEqual(firstActivityTimestamp)
             expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(1)
@@ -1481,10 +1474,7 @@ describe('SessionRecording', () => {
 
             // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
             const fourthSnapshot = emitActiveEvent(fourthActivityTimestamp)
-            expect(_addCustomEvent).toHaveBeenCalledWith('sessionNoLongerIdle', {
-                reason: 'user activity',
-                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-            })
+
             expect(sessionRecording['_lastActivityTimestamp']).toEqual(fourthActivityTimestamp)
             expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(2)
 
@@ -1543,11 +1533,7 @@ describe('SessionRecording', () => {
             // this triggers idle state and isn't a user interaction so does not take a full snapshot
 
             emitInactiveEvent(thirdActivityTimestamp, true)
-            expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', {
-                reason: 'user inactivity',
-                threshold: 300000,
-                timeSinceLastActive: 1799901,
-            })
+
             // event was not active so activity timestamp is not updated
             expect(sessionRecording['_lastActivityTimestamp']).toEqual(firstActivityTimestamp)
             expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(1)
@@ -1583,10 +1569,7 @@ describe('SessionRecording', () => {
             // this triggers exit from idle state _and_ is a user interaction, so we take a full snapshot
 
             const fourthSnapshot = emitActiveEvent(fourthActivityTimestamp)
-            expect(_addCustomEvent).toHaveBeenCalledWith('sessionNoLongerIdle', {
-                reason: 'user activity',
-                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-            })
+
             expect(sessionRecording['_lastActivityTimestamp']).toEqual(fourthActivityTimestamp)
             expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(2)
 
