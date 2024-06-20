@@ -587,6 +587,10 @@ export class SessionRecording {
             if (this.isIdle) {
                 // Remove the idle state
                 this.isIdle = false
+                this._tryAddCustomEvent('sessionNoLongerIdle', {
+                    reason: 'user activity',
+                    type: event.type,
+                })
                 returningFromIdle = true
             }
         }
