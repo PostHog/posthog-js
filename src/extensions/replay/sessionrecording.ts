@@ -212,6 +212,10 @@ export class SessionRecording {
         return this.instance.sessionManager
     }
 
+    private get fullSnapshotIntervalMillis(): number {
+        return this.instance.config.session_recording?.full_snapshot_interval_millis || FIVE_MINUTES
+    }
+
     private get isSampled(): boolean | null {
         const currentValue = this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
         return isBoolean(currentValue) ? currentValue : null
@@ -748,9 +752,14 @@ export class SessionRecording {
             return
         }
 
+        const interval = this.fullSnapshotIntervalMillis
+        if (!interval) {
+            return
+        }
+
         this._fullSnapshotTimer = setInterval(() => {
             this._tryTakeFullSnapshot()
-        }, FIVE_MINUTES) // 5 minutes
+        }, interval)
     }
 
     private _gatherRRWebPlugins() {
