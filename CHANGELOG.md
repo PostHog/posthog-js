@@ -1,3 +1,7 @@
+## 1.139.5 - 2024-06-20
+
+- fix: Allow no capture of $opt_in event (#1250)
+
 ## 1.139.4 - 2024-06-20
 
 - fix: no scheduled snapshots while idle (#1254)
