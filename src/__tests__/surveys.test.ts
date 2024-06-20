@@ -801,29 +801,25 @@ describe('surveys', () => {
         } as Survey
 
         // Simple branching
-        it('when no branching specified, should return the index of the next question or confirmation_message', () => {
+        it('when no branching specified, should return the index of the next question or `end`', () => {
             survey.questions = [
                 { type: SurveyQuestionType.Open, question: 'Question A' },
                 { type: SurveyQuestionType.Open, question: 'Question B' },
             ] as SurveyQuestion[]
             expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 1, 'Some response')).toEqual(
-                SurveyQuestionBranchingType.ConfirmationMessage
-            )
+            expect(surveys.getNextSurveyStep(survey, 1, 'Some response')).toEqual(SurveyQuestionBranchingType.End)
         })
 
-        it('should branch out to confirmation_message', () => {
+        it('should branch out to `end`', () => {
             survey.questions = [
                 {
                     type: SurveyQuestionType.Open,
                     question: 'Question A',
-                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                    branching: { type: SurveyQuestionBranchingType.End },
                 },
                 { type: SurveyQuestionType.Open, question: 'Question B' },
             ] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(
-                SurveyQuestionBranchingType.ConfirmationMessage
-            )
+            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(SurveyQuestionBranchingType.End)
         })
 
         it('should branch out to a specific question', () => {
@@ -937,7 +933,7 @@ describe('surveys', () => {
                 {
                     type: SurveyQuestionType.Open,
                     question: 'B',
-                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                    branching: { type: SurveyQuestionBranchingType.End },
                 },
                 {
                     type: SurveyQuestionType.Open,
@@ -982,7 +978,7 @@ describe('surveys', () => {
             }
 
             expect(desiredOrder).toEqual(actualOrder)
-            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
         })
 
         it('should display questions in the correct order in a multi-step NPS survey', () => {
@@ -999,12 +995,12 @@ describe('surveys', () => {
                 {
                     type: SurveyQuestionType.Open,
                     question: 'Sorry to hear that. Please enter your email, a colleague will be in touch.',
-                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                    branching: { type: SurveyQuestionBranchingType.End },
                 },
                 {
                     type: SurveyQuestionType.Open,
                     question: 'Seems you are not completely happy. Tell us more!',
-                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                    branching: { type: SurveyQuestionBranchingType.End },
                 },
                 {
                     type: SurveyQuestionType.SingleChoice,
@@ -1018,7 +1014,7 @@ describe('surveys', () => {
                 {
                     type: SurveyQuestionType.Link,
                     question: 'Great! Here is the link:',
-                    branching: { type: SurveyQuestionBranchingType.ConfirmationMessage },
+                    branching: { type: SurveyQuestionBranchingType.End },
                 },
                 {
                     type: SurveyQuestionType.Open,
@@ -1040,7 +1036,7 @@ describe('surveys', () => {
                 currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
-            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
 
             // Passive customer
             desiredOrder = ['How happy are you?', 'Seems you are not completely happy. Tell us more!']
@@ -1053,7 +1049,7 @@ describe('surveys', () => {
                 currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
-            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
 
             // Promoter customer, won't leave a review
             desiredOrder = ['How happy are you?', 'Glad to hear that! Will you leave us a review?', 'Curious, why not?']
@@ -1066,7 +1062,7 @@ describe('surveys', () => {
                 currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
-            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
 
             // Promoter customer, will leave a review
             desiredOrder = [
@@ -1083,7 +1079,7 @@ describe('surveys', () => {
                 currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
-            expect(currentStep).toEqual(SurveyQuestionBranchingType.ConfirmationMessage)
+            expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
         })
 
         it('should throw an error for an invalid scale', () => {

@@ -1179,12 +1179,12 @@ export class PostHog {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
     }
 
-    /** Get the next step of the survey: a question index or confirmation_message */
+    /** Get the next step of the survey: a question index or `end` */
     getNextSurveyStep(
         survey: Survey,
         currentQuestionIndex: number,
         response: string | string[] | number | null
-    ): number | SurveyQuestionBranchingType.ConfirmationMessage {
+    ): number | SurveyQuestionBranchingType.End {
         return this.surveys.getNextSurveyStep(survey, currentQuestionIndex, response)
     }
 
