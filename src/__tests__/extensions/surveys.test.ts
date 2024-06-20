@@ -304,19 +304,18 @@ describe('SurveyManager', () => {
         expect(typeof surveyManager.getTestAPI().addSurveyToFocus).toBe('function')
         expect(typeof surveyManager.getTestAPI().removeSurveyFromFocus).toBe('function')
         expect(typeof surveyManager.callSurveysAndEvaluateDisplayLogic).toBe('function')
-        expect(surveyManager.getTestAPI().surveyInFocus).toBeInstanceOf(Set)
-        expect(surveyManager.getTestAPI().surveyInFocus.size).toBe(0)
+        expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
     })
 
     test('addSurveyToFocus should add survey ID to surveyInFocus', () => {
         surveyManager.getTestAPI().addSurveyToFocus('survey1')
-        expect(surveyManager.getTestAPI().surveyInFocus.has('survey1')).toBe(true)
+        expect(surveyManager.getTestAPI().surveyInFocus).toEqual('survey1')
     })
 
     test('removeSurveyFromFocus should remove survey ID from surveyInFocus', () => {
         surveyManager.getTestAPI().addSurveyToFocus('survey1')
         surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
-        expect(surveyManager.getTestAPI().surveyInFocus.has('survey1')).toBe(false)
+        expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
     })
 
     test('canShowNextEventBasedSurvey should return correct visibility status', () => {
@@ -403,7 +402,7 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(1)
-        expect(surveyManager.getTestAPI().surveyInFocus.size).toBe(1)
+        expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
     })
 
     test('surveyInFocus handling works correctly with in callSurveysAndEvaluateDisplayLogic', () => {
@@ -413,7 +412,7 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(1)
-        expect(surveyManager.getTestAPI().surveyInFocus.size).toBe(1)
+        expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
 
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
@@ -423,7 +422,7 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(2)
-        expect(surveyManager.getTestAPI().surveyInFocus.size).toBe(0)
+        expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
         expect(handlePopoverSurveyMock).toHaveBeenCalledTimes(1)
     })
 

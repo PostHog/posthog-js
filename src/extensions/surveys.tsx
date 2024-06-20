@@ -23,7 +23,7 @@ import {
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { useState, useEffect, useRef, useContext, useMemo } from 'preact/hooks'
-import { isNumber } from '../utils/type-utils'
+import { isNull, isNumber } from '../utils/type-utils'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import {
     OpenTextQuestion,
@@ -39,15 +39,12 @@ const document = _document as Document
 
 export class SurveyManager {
     private posthog: PostHog
-    private surveyInFocus: Set<string>
+    private surveyInFocus: string | null
 
     constructor(posthog: PostHog) {
         this.posthog = posthog
-        // We use a set to keep track of the survey in focus to prevent multiple surveys from showing at the same time
-        // This is important for correctly displaying popover surveys with a delay, where we want to show them
-        // in order of their delay, rather than evaluate them all at once.
-        // NB: This set should only ever have 0 or 1 items in it at a time.
-        this.surveyInFocus = new Set<string>()
+        // This is used to track the survey that is currently in focus. We only show one survey at a time.
+        this.surveyInFocus = null
     }
 
     private canShowNextEventBasedSurvey = (): boolean => {
@@ -155,7 +152,7 @@ export class SurveyManager {
 
             nonAPISurveyQueue.forEach((survey) => {
                 // We only evaluate the display logic for one survey at a time
-                if (this.surveyInFocus.size > 0) {
+                if (!isNull(this.surveyInFocus)) {
                     return
                 }
                 if (survey.type === SurveyType.Widget) {
@@ -178,14 +175,17 @@ export class SurveyManager {
     }
 
     private addSurveyToFocus = (id: string): void => {
-        if (this.surveyInFocus.size > 0) {
-            logger.error(`Survey ${[...this.surveyInFocus.keys()]} already in focus. Cannot add survey ${id}.`)
+        if (!isNull(this.surveyInFocus)) {
+            logger.error(`Survey ${[...this.surveyInFocus]} already in focus. Cannot add survey ${id}.`)
         }
-        this.surveyInFocus.add(id)
+        this.surveyInFocus = id
     }
 
     private removeSurveyFromFocus = (id: string): void => {
-        this.surveyInFocus.delete(id)
+        if (this.surveyInFocus !== id) {
+            logger.error(`Survey ${id} is not in focus. Cannot remove survey ${id}.`)
+        }
+        this.surveyInFocus = null
     }
 
     // Expose internal state and methods for testing
