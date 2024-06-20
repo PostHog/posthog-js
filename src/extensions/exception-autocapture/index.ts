@@ -1,17 +1,14 @@
 import { window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, Properties } from '../../types'
-import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
-import { isPrimitive } from './type-checking'
+import { DecideResponse, ErrorConversions, ErrorEventArgs, ErrorProperties } from '../../types'
 
-import { isArray, isObject, isUndefined } from '../../utils/type-utils'
+import { isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
+import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
+import { loadScript } from '../../utils'
+import Config from '../../config'
 
-export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
-    const exceptionObserver = new ExceptionObserver(instance)
-    exceptionObserver.afterDecideResponse(response)
-    return exceptionObserver
-}
+const LOGGER_PREFIX = '[Exception Capture]'
 
 export class ExceptionObserver {
     instance: PostHog
@@ -19,22 +16,69 @@ export class ExceptionObserver {
     private originalOnErrorHandler: Window['onerror'] | null | undefined = undefined
     private originalOnUnhandledRejectionHandler: Window['onunhandledrejection'] | null | undefined = undefined
 
-    private errorsToIgnore: RegExp[] = []
-
     constructor(instance: PostHog) {
         this.instance = instance
+        this.remoteEnabled = !!this.instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
+        this.startIfEnabled()
     }
 
-    startCapturing() {
-        if (!window || !this.isEnabled() || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
+    get isEnabled() {
+        return this.remoteEnabled ?? false
+    }
+
+    get isCapturing() {
+        return !!(window?.onerror as any)?.__POSTHOG_INSTRUMENTED__
+    }
+
+    get hasHandlers() {
+        return this.originalOnUnhandledRejectionHandler || this.originalOnErrorHandler
+    }
+
+    startIfEnabled(): void {
+        if (this.isEnabled && !this.isCapturing) {
+            logger.info(LOGGER_PREFIX + ' enabled, starting...')
+            this.loadScript(this.startCapturing)
+        }
+    }
+
+    private loadScript(cb: () => void): void {
+        if (this.hasHandlers) {
+            // already loaded
+            cb()
+        }
+
+        loadScript(
+            this.instance.requestRouter.endpointFor(
+                'assets',
+                `/static/exception-autocapture.js?v=${Config.LIB_VERSION}`
+            ),
+            (err) => {
+                if (err) {
+                    logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                }
+                cb()
+            }
+        )
+    }
+
+    private startCapturing = () => {
+        if (!window || !this.isEnabled || this.hasHandlers || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
             return
         }
+
+        if (!(window as any).posthogErrorConversion) {
+            logger.error(LOGGER_PREFIX + ' failed to load error conversion scripts - error capture cannot start')
+            return
+        }
+
+        const { errorToProperties, unhandledRejectionToProperties } = (window as any)
+            .posthogErrorConversion as ErrorConversions
 
         try {
             this.originalOnErrorHandler = window.onerror
 
             window.onerror = function (this: ExceptionObserver, ...args: ErrorEventArgs): boolean {
-                this.captureException(args)
+                this.captureException(args, errorToProperties)
 
                 if (this.originalOnErrorHandler) {
                     // eslint-disable-next-line prefer-rest-params
@@ -68,7 +112,7 @@ export class ExceptionObserver {
         }
     }
 
-    stopCapturing() {
+    private stopCapturing() {
         if (!window) {
             return
         }
@@ -85,47 +129,22 @@ export class ExceptionObserver {
         delete (window.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__
     }
 
-    isCapturing() {
-        return !!(window?.onerror as any)?.__POSTHOG_INSTRUMENTED__
-    }
-
-    isEnabled() {
-        return this.remoteEnabled ?? false
-    }
-
     afterDecideResponse(response: DecideResponse) {
         const autocaptureExceptionsResponse = response.autocaptureExceptions
-        this.remoteEnabled = !!autocaptureExceptionsResponse || false
-        if (
-            !isPrimitive(autocaptureExceptionsResponse) &&
-            'errors_to_ignore' in autocaptureExceptionsResponse &&
-            isArray(autocaptureExceptionsResponse.errors_to_ignore)
-        ) {
-            const dropRules = autocaptureExceptionsResponse.errors_to_ignore
 
-            this.errorsToIgnore = dropRules.map((rule) => {
-                return new RegExp(rule)
+        // store this in-memory in case persistence is disabled
+        this.remoteEnabled = !!autocaptureExceptionsResponse || false
+        if (this.instance.persistence) {
+            this.instance.persistence.register({
+                [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this.remoteEnabled,
             })
         }
 
-        if (this.isEnabled()) {
-            this.startCapturing()
-            logger.info(
-                '[Exception Capture] Remote config for exception autocapture is enabled, starting with config: ',
-                isObject(autocaptureExceptionsResponse) ? autocaptureExceptionsResponse : {}
-            )
-        }
+        this.startIfEnabled()
     }
 
-    captureException(args: ErrorEventArgs, properties?: Properties) {
+    captureException(args: ErrorEventArgs, errorToProperties: ErrorConversions['errorToProperties']) {
         const errorProperties = errorToProperties(args)
-
-        if (this.errorsToIgnore.some((regex) => regex.test(errorProperties.$exception_message || ''))) {
-            logger.info('[Exception Capture] Ignoring exception based on remote config', errorProperties)
-            return
-        }
-
-        const propertiesToSend = { ...properties, ...errorProperties }
 
         const posthogHost = this.instance.requestRouter.endpointFor('ui')
 
@@ -133,7 +152,7 @@ export class ExceptionObserver {
             this.instance.config.token
         }/person/${this.instance.get_distinct_id()}`
 
-        this.sendExceptionEvent(propertiesToSend)
+        this.sendExceptionEvent(errorProperties)
     }
 
     /**

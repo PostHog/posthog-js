@@ -465,3 +465,29 @@ export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
 }
+
+export type ErrorEventArgs = [
+    event: string | Event,
+    source?: string | undefined,
+    lineno?: number | undefined,
+    colno?: number | undefined,
+    error?: Error | undefined
+]
+
+export interface ErrorProperties {
+    $exception_type: string
+    $exception_message: string
+    $exception_source?: string
+    $exception_lineno?: number
+    $exception_colno?: number
+    $exception_DOMException_code?: string
+    $exception_is_synthetic?: boolean
+    $exception_stack_trace_raw?: string
+    $exception_handled?: boolean
+    $exception_personURL?: string
+}
+
+export interface ErrorConversions {
+    errorToProperties: (args: ErrorEventArgs) => ErrorProperties
+    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
+}

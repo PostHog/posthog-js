@@ -1,9 +1,12 @@
-import { extendPostHog } from './extensions/exception-autocapture'
+import { errorToProperties, unhandledRejectionToProperties } from './extensions/exception-autocapture/error-conversion'
+import { assignableWindow } from './utils/globals'
+import { ErrorConversions } from './types'
 
-import { window } from './utils/globals'
+const errorConversion: ErrorConversions = {
+    errorToProperties,
+    unhandledRejectionToProperties,
+}
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-window.extendPostHogWithExceptionAutoCapture = extendPostHog
+assignableWindow.posthogErrorConversion = errorConversion
 
-export default extendPostHog
+export default errorConversion
