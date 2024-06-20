@@ -8,8 +8,11 @@ import {
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
 import { renderHook, act } from '@testing-library/preact'
+
 import '@testing-library/jest-dom'
 import { PostHog } from '../../posthog-core'
+
+declare const global: any
 
 describe('survey display logic', () => {
     beforeEach(() => {
@@ -26,24 +29,34 @@ describe('survey display logic', () => {
         expect(mockShadow.host.className).toBe(`PostHogSurvey${surveyId}`)
     })
 
-    const mockSurveys: any[] = [
+    const mockSurveys: Survey[] = [
         {
             id: 'testSurvey1',
             name: 'Test survey 1',
+            description: 'Test survey description 1',
             type: SurveyType.Popover,
-            appearance: null,
-            start_date: '2021-01-01T00:00:00.000Z',
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
             questions: [
                 {
                     question: 'How satisfied are you with our newest product?',
                     description: 'This is a question description',
-                    type: 'rating',
+                    descriptionContentType: 'text',
+                    type: SurveyQuestionType.Rating,
                     display: 'number',
                     scale: 10,
                     lowerBoundLabel: 'Not Satisfied',
                     upperBoundLabel: 'Very Satisfied',
+                    originalQuestionIndex: 0,
                 },
             ],
+            appearance: null,
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
         },
     ]
 
@@ -67,28 +80,34 @@ describe('survey display logic', () => {
 })
 
 describe('usePopupVisibility', () => {
-    const mockSurvey = {
+    const mockSurvey: Survey = {
         id: 'testSurvey1',
         name: 'Test survey 1',
+        description: 'Test survey description 1',
         type: SurveyType.Popover,
-        appearance: {},
-        start_date: '2021-01-01T00:00:00.000Z',
+        linked_flag_key: null,
+        targeting_flag_key: null,
+        internal_targeting_flag_key: null,
         questions: [
             {
                 question: 'How satisfied are you with our newest product?',
                 description: 'This is a question description',
+                descriptionContentType: 'text',
                 type: SurveyQuestionType.Rating,
                 display: 'number',
                 scale: 10,
                 lowerBoundLabel: 'Not Satisfied',
                 upperBoundLabel: 'Very Satisfied',
+                originalQuestionIndex: 0,
             },
         ],
-        conditions: {},
+        appearance: {},
+        conditions: null,
+        start_date: '2021-01-01T00:00:00.000Z',
         end_date: null,
-        targeting_flag_key: null,
-    } as Survey
-
+        current_iteration: null,
+        current_iteration_start_date: null,
+    }
     const mockPostHog = {
         getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
         get_session_replay_url: jest.fn(),
@@ -234,26 +253,41 @@ describe('SurveyManager', () => {
 
         mockSurveys = [
             {
-                id: 'survey1',
-                name: 'Survey 1',
+                id: 'testSurvey1',
+                name: 'Test survey 1',
+                description: 'Test survey description 1',
                 type: SurveyType.Popover,
-                appearance: { surveyPopupDelay: 0 },
-                questions: [],
-                conditions: {},
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+                questions: [
+                    {
+                        question: 'How satisfied are you with our newest product?',
+                        description: 'This is a question description',
+                        descriptionContentType: 'text',
+                        type: SurveyQuestionType.Rating,
+                        display: 'number',
+                        scale: 10,
+                        lowerBoundLabel: 'Not Satisfied',
+                        upperBoundLabel: 'Very Satisfied',
+                        originalQuestionIndex: 0,
+                    },
+                ],
+                appearance: {},
+                conditions: null,
                 start_date: '2021-01-01T00:00:00.000Z',
                 end_date: null,
-                targeting_flag_key: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
             },
-        ] as unknown as Survey[]
+        ]
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {
         mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurveys[0]]))
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
-            .mockImplementation(() => {
-                console.log('Mock handlePopoverSurvey called')
-            })
+            .mockImplementation(() => {})
         const canShowNextEventBasedSurveyMock = jest
             .spyOn(surveyManager as any, 'canShowNextEventBasedSurvey')
             .mockReturnValue(true)
@@ -265,22 +299,24 @@ describe('SurveyManager', () => {
         expect(canShowNextEventBasedSurveyMock).toHaveBeenCalled()
     })
 
-    test('should initialize surveysInFocus correctly', () => {
+    test('should initialize surveyInFocus correctly', () => {
         expect(surveyManager).toBeDefined()
         expect(typeof surveyManager.getTestAPI().addSurveyToFocus).toBe('function')
         expect(typeof surveyManager.getTestAPI().removeSurveyFromFocus).toBe('function')
         expect(typeof surveyManager.callSurveysAndEvaluateDisplayLogic).toBe('function')
+        expect(surveyManager.getTestAPI().surveyInFocus).toBeInstanceOf(Set)
+        expect(surveyManager.getTestAPI().surveyInFocus.size).toBe(0)
     })
 
-    test('addSurveyToFocus should add survey ID to surveysInFocus', () => {
+    test('addSurveyToFocus should add survey ID to surveyInFocus', () => {
         surveyManager.getTestAPI().addSurveyToFocus('survey1')
-        expect(surveyManager.getTestAPI().surveysInFocus.has('survey1')).toBe(true)
+        expect(surveyManager.getTestAPI().surveyInFocus.has('survey1')).toBe(true)
     })
 
-    test('removeSurveyFromFocus should remove survey ID from surveysInFocus', () => {
+    test('removeSurveyFromFocus should remove survey ID from surveyInFocus', () => {
         surveyManager.getTestAPI().addSurveyToFocus('survey1')
         surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
-        expect(surveyManager.getTestAPI().surveysInFocus.has('survey1')).toBe(false)
+        expect(surveyManager.getTestAPI().surveyInFocus.has('survey1')).toBe(false)
     })
 
     test('canShowNextEventBasedSurvey should return correct visibility status', () => {
@@ -301,9 +337,7 @@ describe('SurveyManager', () => {
 
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
-            .mockImplementation(() => {
-                console.log('Mock handlePopoverSurvey called')
-            })
+            .mockImplementation(() => {})
         const handleWidgetMock = jest.spyOn(surveyManager as any, 'handleWidget').mockImplementation(() => {})
         const handleWidgetSelectorMock = jest
             .spyOn(surveyManager as any, 'handleWidgetSelector')
@@ -326,22 +360,34 @@ describe('SurveyManager', () => {
     })
 
     test('handleWidgetSelector should set up the widget selector correctly', () => {
-        const mockSurvey = {
-            id: 'widgetSurvey2',
-            name: 'Widget Survey 2',
+        const mockSurvey: Survey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            description: 'Test survey description 1',
             type: SurveyType.Widget,
-            appearance: { widgetType: 'selector', widgetSelector: '.widget-selector' },
-            start_date: '2021-01-01T00:00:00.000Z',
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
             questions: [
                 {
-                    question: 'What would you like to see next?',
-                    type: SurveyQuestionType.Open,
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    descriptionContentType: 'text',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                    originalQuestionIndex: 0,
                 },
             ],
-            conditions: {},
+            appearance: {},
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
             end_date: null,
-            targeting_flag_key: null,
-        } as any
+            current_iteration: null,
+            current_iteration_start_date: null,
+        }
         document.body.innerHTML = '<div class="widget-selector"></div>'
         const handleWidgetSelectorMock = jest
             .spyOn(surveyManager as any, 'handleWidgetSelector')
@@ -357,7 +403,7 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(1)
-        expect(surveyManager.getTestAPI().surveysInFocus.size).toBe(1)
+        expect(surveyManager.getTestAPI().surveyInFocus.size).toBe(1)
     })
 
     test('surveyInFocus handling works correctly with in callSurveysAndEvaluateDisplayLogic', () => {
@@ -367,20 +413,36 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(1)
-        expect(surveyManager.getTestAPI().surveysInFocus.size).toBe(1)
+        expect(surveyManager.getTestAPI().surveyInFocus.size).toBe(1)
 
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
-            .mockImplementation(() => {
-                console.log('Mock handlePopoverSurvey called')
-            })
+            .mockImplementation(() => {})
 
         surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(2)
-        expect(surveyManager.getTestAPI().surveysInFocus.size).toBe(0)
+        expect(surveyManager.getTestAPI().surveyInFocus.size).toBe(0)
         expect(handlePopoverSurveyMock).toHaveBeenCalledTimes(1)
+    })
+
+    test('sortSurveysByAppearanceDelay should sort surveys correctly', () => {
+        const surveys: Survey[] = [
+            { id: '1', appearance: { surveyPopupDelaySeconds: 5 } },
+            { id: '2', appearance: { surveyPopupDelaySeconds: 2 } },
+            { id: '3', appearance: {} },
+            { id: '4', appearance: { surveyPopupDelaySeconds: 8 } },
+        ] as unknown as Survey[]
+
+        const sortedSurveys = surveyManager.getTestAPI().sortSurveysByAppearanceDelay(surveys)
+
+        expect(sortedSurveys).toEqual([
+            { id: '3', appearance: {} },
+            { id: '2', appearance: { surveyPopupDelaySeconds: 2 } },
+            { id: '1', appearance: { surveyPopupDelaySeconds: 5 } },
+            { id: '4', appearance: { surveyPopupDelaySeconds: 8 } },
+        ])
     })
 })
 

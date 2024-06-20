@@ -31,6 +31,7 @@ import {
     RatingQuestion,
     MultipleChoiceQuestion,
 } from './surveys/components/QuestionTypes'
+import { logger } from '../utils/logger'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -38,15 +39,15 @@ const document = _document as Document
 
 export class SurveyManager {
     private posthog: PostHog
-    private surveysInFocus: Set<string>
+    private surveyInFocus: Set<string>
 
     constructor(posthog: PostHog) {
         this.posthog = posthog
-        // We use a set to keep track of surveys in focus to prevent multiple surveys from showing at the same time
+        // We use a set to keep track of the survey in focus to prevent multiple surveys from showing at the same time
         // This is important for correctly displaying popover surveys with a delay, where we want to show them
         // in order of their delay, rather than evaluate them all at once.
         // NB: This set should only ever have 0 or 1 items in it at a time.
-        this.surveysInFocus = new Set<string>()
+        this.surveyInFocus = new Set<string>()
     }
 
     private canShowNextEventBasedSurvey = (): boolean => {
@@ -120,7 +121,10 @@ export class SurveyManager {
                     selectorOnPage.addEventListener('click', () => {
                         if (surveyPopup) {
                             surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
-                            surveyPopup.addEventListener('PHSurveyClosed', () => (surveyPopup.style.display = 'none'))
+                            surveyPopup.addEventListener('PHSurveyClosed', () => {
+                                this.removeSurveyFromFocus(survey.id)
+                                surveyPopup.style.display = 'none'
+                            })
                         }
                     })
                     selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
@@ -129,20 +133,29 @@ export class SurveyManager {
         }
     }
 
+    /**
+     * Sorts surveys by their appearance delay in ascending order. If a survey does not have an appearance delay,
+     * it is considered to have a delay of 0.
+     * @param surveys
+     * @returns The surveys sorted by their appearance delay
+     */
+    private sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
+        return surveys.sort(
+            (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
+        )
+    }
+
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.posthog?.getActiveMatchingSurveys((surveys) => {
             const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
 
-            // Create a queue of surveys sorted by their appearance delay, where surveys with no delay come first,
-            // followed by surveys with a delay in ascending order.
-            // This lets us show surveys with no delay first, and then show the rest in order of their delay.
-            const nonAPISurveyQueue = nonAPISurveys.sort(
-                (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
-            )
+            // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
+            // for each survey in the queue in order, and only display one survey at a time.
+            const nonAPISurveyQueue = this.sortSurveysByAppearanceDelay(nonAPISurveys)
 
             nonAPISurveyQueue.forEach((survey) => {
                 // We only evaluate the display logic for one survey at a time
-                if (this.surveysInFocus.size > 0) {
+                if (this.surveyInFocus.size > 0) {
                     return
                 }
                 if (survey.type === SurveyType.Widget) {
@@ -165,11 +178,14 @@ export class SurveyManager {
     }
 
     private addSurveyToFocus = (id: string): void => {
-        this.surveysInFocus.add(id)
+        if (this.surveyInFocus.size > 0) {
+            logger.error(`Survey ${[...this.surveyInFocus.keys()]} already in focus. Cannot add survey ${id}.`)
+        }
+        this.surveyInFocus.add(id)
     }
 
     private removeSurveyFromFocus = (id: string): void => {
-        this.surveysInFocus.delete(id)
+        this.surveyInFocus.delete(id)
     }
 
     // Expose internal state and methods for testing
@@ -177,11 +193,12 @@ export class SurveyManager {
         return {
             addSurveyToFocus: this.addSurveyToFocus,
             removeSurveyFromFocus: this.removeSurveyFromFocus,
-            surveysInFocus: this.surveysInFocus,
+            surveyInFocus: this.surveyInFocus,
             canShowNextEventBasedSurvey: this.canShowNextEventBasedSurvey,
             handleWidget: this.handleWidget,
             handlePopoverSurvey: this.handlePopoverSurvey,
             handleWidgetSelector: this.handleWidgetSelector,
+            sortSurveysByAppearanceDelay: this.sortSurveysByAppearanceDelay,
         }
     }
 }
@@ -297,38 +314,16 @@ export function usePopupVisibility(
                 setIsPopupVisible(false)
             } else {
                 setIsSurveySent(true)
+                removeSurveyFromFocus(survey.id)
                 if (survey.appearance?.autoDisappear) {
                     setTimeout(() => {
-                        removeSurveyFromFocus(survey.id)
                         setIsPopupVisible(false)
                     }, 5000)
                 }
             }
         }
 
-        window.addEventListener('PHSurveyClosed', handleSurveyClosed)
-        window.addEventListener('PHSurveySent', handleSurveySent)
-
-        if (millisecondDelay > 0) {
-            const timeoutId = setTimeout(() => {
-                setIsPopupVisible(true)
-                window.dispatchEvent(new Event('PHSurveyShown'))
-                posthog.capture('survey shown', {
-                    $survey_name: survey.name,
-                    $survey_id: survey.id,
-                    $survey_iteration: survey.current_iteration,
-                    $survey_iteration_start_date: survey.current_iteration_start_date,
-                    sessionRecordingUrl: posthog.get_session_replay_url?.(),
-                })
-                localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
-            }, millisecondDelay)
-
-            return () => {
-                clearTimeout(timeoutId)
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
-                window.removeEventListener('PHSurveySent', handleSurveySent)
-            }
-        } else {
+        const showSurvey = () => {
             setIsPopupVisible(true)
             window.dispatchEvent(new Event('PHSurveyShown'))
             posthog.capture('survey shown', {
@@ -338,12 +333,36 @@ export function usePopupVisibility(
                 $survey_iteration_start_date: survey.current_iteration_start_date,
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
-            localStorage.setItem(`lastSeenSurveyDate`, new Date().toISOString())
+            localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+        }
 
+        const handleShowSurveyWithDelay = () => {
+            const timeoutId = setTimeout(() => {
+                showSurvey()
+            }, millisecondDelay)
+
+            return () => {
+                clearTimeout(timeoutId)
+                window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
+                window.removeEventListener('PHSurveySent', handleSurveySent)
+            }
+        }
+
+        const handleShowSurveyImmediately = () => {
+            showSurvey()
             return () => {
                 window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
                 window.removeEventListener('PHSurveySent', handleSurveySent)
             }
+        }
+
+        window.addEventListener('PHSurveyClosed', handleSurveyClosed)
+        window.addEventListener('PHSurveySent', handleSurveySent)
+
+        if (millisecondDelay > 0) {
+            return handleShowSurveyWithDelay()
+        } else {
+            return handleShowSurveyImmediately()
         }
     }, [])
 
@@ -392,10 +411,7 @@ export function SurveyPopup({
             value={{
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
-                handleCloseSurveyPopup: () => {
-                    removeSurveyFromFocus(survey.id)
-                    dismissedSurveyEvent(survey, posthog, isPreviewMode)
-                },
+                handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
             }}
         >
             {!shouldShowConfirmation ? (
@@ -404,7 +420,6 @@ export function SurveyPopup({
                     forceDisableHtml={!!forceDisableHtml}
                     posthog={posthog}
                     styleOverrides={style}
-                    removeSurveyFromFocus={removeSurveyFromFocus}
                 />
             ) : (
                 <ConfirmationMessage
@@ -428,13 +443,11 @@ export function Questions({
     forceDisableHtml,
     posthog,
     styleOverrides,
-    removeSurveyFromFocus,
 }: {
     survey: Survey
     forceDisableHtml: boolean
     posthog?: PostHog
     styleOverrides?: React.CSSProperties
-    removeSurveyFromFocus: (id: string) => void
 }) {
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
@@ -469,7 +482,7 @@ export function Questions({
 
         const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
         if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
-            removeSurveyFromFocus(survey.id)
+            // removeSurveyFromFocus(survey.id)
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
             setCurrentQuestionIndex(nextStep)
