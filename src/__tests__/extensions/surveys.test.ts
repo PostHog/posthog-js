@@ -2,7 +2,6 @@ import {
     generateSurveys,
     renderSurveysPreview,
     renderFeedbackWidgetPreview,
-    usePopupVisibility,
     SurveyManager,
 } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
@@ -10,6 +9,7 @@ import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-ty
 import { renderHook, act } from '@testing-library/preact'
 import '@testing-library/jest-dom'
 import { PostHog } from '../../posthog-core'
+import { usePopupVisibility } from '../../extensions/surveys/hooks/usePopupVisibility'
 
 describe('survey display logic', () => {
     beforeEach(() => {
