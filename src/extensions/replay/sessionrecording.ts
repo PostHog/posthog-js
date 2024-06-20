@@ -212,6 +212,10 @@ export class SessionRecording {
         return this.instance.sessionManager
     }
 
+    private get fullSnapshotIntervalMillis(): number {
+        return this.instance.config.session_recording?.full_snapshot_interval_millis || FIVE_MINUTES
+    }
+
     private get isSampled(): boolean | null {
         const currentValue = this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
         return isBoolean(currentValue) ? currentValue : null
@@ -570,11 +574,6 @@ export class SessionRecording {
             // We check if the lastActivityTimestamp is old enough to go idle
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
-                this._tryAddCustomEvent('sessionIdle', {
-                    reason: 'user inactivity',
-                    timeSinceLastActive: event.timestamp - this._lastActivityTimestamp,
-                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
-                })
                 // don't take full snapshots while idle
                 clearTimeout(this._fullSnapshotTimer)
                 // proactively flush the buffer in case the session is idle for a long time
@@ -586,7 +585,7 @@ export class SessionRecording {
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
-                // Remove the idle state if set and trigger a full snapshot as we will have ignored previous mutations
+                // Remove the idle state
                 this.isIdle = false
                 this._tryAddCustomEvent('sessionNoLongerIdle', {
                     reason: 'user activity',
@@ -752,10 +751,19 @@ export class SessionRecording {
         if (this._fullSnapshotTimer) {
             clearInterval(this._fullSnapshotTimer)
         }
+        // we don't schedule snapshots while idle
+        if (this.isIdle) {
+            return
+        }
+
+        const interval = this.fullSnapshotIntervalMillis
+        if (!interval) {
+            return
+        }
 
         this._fullSnapshotTimer = setInterval(() => {
             this._tryTakeFullSnapshot()
-        }, FIVE_MINUTES) // 5 minutes
+        }, interval)
     }
 
     private _gatherRRWebPlugins() {
@@ -800,8 +808,8 @@ export class SessionRecording {
             this._pageViewFallBack()
         }
 
+        // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
-            // we're processing a full snapshot, so we should reset the timer
             this._scheduleFullSnapshot()
         }
 
@@ -864,20 +872,8 @@ export class SessionRecording {
             const itemsToProcess = [...this.queuedRRWebEvents]
             this.queuedRRWebEvents = []
             itemsToProcess.forEach((queuedRRWebEvent) => {
-                if (Date.now() - queuedRRWebEvent.enqueuedAt > TWO_SECONDS) {
-                    this._tryAddCustomEvent('rrwebQueueTimeout', {
-                        enqueuedAt: queuedRRWebEvent.enqueuedAt,
-                        attempt: queuedRRWebEvent.attempt,
-                        queueLength: itemsToProcess.length,
-                    })
-                } else {
-                    if (this._tryRRWebMethod(queuedRRWebEvent)) {
-                        this._tryAddCustomEvent('rrwebQueueSuccess', {
-                            enqueuedAt: queuedRRWebEvent.enqueuedAt,
-                            attempt: queuedRRWebEvent.attempt,
-                            queueLength: itemsToProcess.length,
-                        })
-                    }
+                if (Date.now() - queuedRRWebEvent.enqueuedAt <= TWO_SECONDS) {
+                    this._tryRRWebMethod(queuedRRWebEvent)
                 }
             })
         }

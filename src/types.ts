@@ -223,6 +223,8 @@ export interface SessionRecordingOptions {
     // our settings here only support a subset of those proposed for rrweb's network capture plugin
     recordHeaders?: boolean
     recordBody?: boolean
+    // ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
+    full_snapshot_interval_millis?: number
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
