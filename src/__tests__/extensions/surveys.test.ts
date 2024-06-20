@@ -347,7 +347,7 @@ describe('SurveyManager', () => {
             .spyOn(surveyManager as any, 'handleWidgetSelector')
             .mockImplementation(() => {})
         surveyManager.getTestAPI().handleWidgetSelector(mockSurvey)
-        expect(handleWidgetSelectorMock).toHaveBeenCalledOnceWith(mockSurvey)
+        expect(handleWidgetSelectorMock).toHaveBeenNthCalledWith(1, mockSurvey)
     })
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
@@ -358,6 +358,29 @@ describe('SurveyManager', () => {
 
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(1)
         expect(surveyManager.getTestAPI().surveysInFocus.size).toBe(1)
+    })
+
+    test('surveyInFocus handling works correctly with in callSurveysAndEvaluateDisplayLogic', () => {
+        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback(mockSurveys))
+
+        surveyManager.getTestAPI().addSurveyToFocus('survey1')
+        surveyManager.callSurveysAndEvaluateDisplayLogic()
+
+        expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(1)
+        expect(surveyManager.getTestAPI().surveysInFocus.size).toBe(1)
+
+        const handlePopoverSurveyMock = jest
+            .spyOn(surveyManager as any, 'handlePopoverSurvey')
+            .mockImplementation(() => {
+                console.log('Mock handlePopoverSurvey called')
+            })
+
+        surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
+        surveyManager.callSurveysAndEvaluateDisplayLogic()
+
+        expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(2)
+        expect(surveyManager.getTestAPI().surveysInFocus.size).toBe(0)
+        expect(handlePopoverSurveyMock).toHaveBeenCalledTimes(1)
     })
 })
 
