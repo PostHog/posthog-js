@@ -1,3 +1,8 @@
+## 1.139.4 - 2024-06-20
+
+- fix: no scheduled snapshots while idle (#1254)
+- feat: Allow bootstrapping session id (#1251)
+
 ## 1.139.3 - 2024-06-18
 
 - feat(surveys): add branching logic (#1247)
