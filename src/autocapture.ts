@@ -24,7 +24,8 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { isBoolean, isFunction, isNull, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { document, window } from './utils/globals'
+import { document, location, window } from './utils/globals'
+import { convertToURL } from './utils/request-utils'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
@@ -322,8 +323,13 @@ export class Autocapture {
                 }
             }
 
+            let externalHref: string | undefined
             if (href) {
                 elementsJson[0]['attr__href'] = href
+                const hrefHost = convertToURL(href)?.host
+                if (hrefHost && location?.host && hrefHost !== location.host) {
+                    externalHref = href
+                }
             }
 
             if (explicitNoCapture) {
@@ -340,7 +346,7 @@ export class Autocapture {
                           $elements: elementsJson,
                       },
                 elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
-                e.type === 'click' && href ? { $click_href: href } : {},
+                externalHref && e.type === 'click' ? { $click_external_href: externalHref } : {},
                 autocaptureAugmentProperties
             )
 
