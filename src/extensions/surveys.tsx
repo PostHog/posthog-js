@@ -372,9 +372,18 @@ export function Questions({
 
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
-        const nextStep = posthog.getNextSurveyStep
-            ? posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
-            : displayQuestionIndex + 1
+        // Old SDK, no branching
+        if (!posthog.getNextSurveyStep) {
+            const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
+            if (isLastDisplayedQuestion) {
+                sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+            } else {
+                setCurrentQuestionIndex(displayQuestionIndex + 1)
+            }
+            return
+        }
+
+        const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
         if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
