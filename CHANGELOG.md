@@ -1,3 +1,7 @@
+## 1.139.7 - 2024-06-21
+
+- fix(surveys): fix missing confirmation message state (#1263)
+
 ## 1.139.6 - 2024-06-20
 
 - fix(surveys): handle missing getNextSurveyStep (#1260)
