@@ -24,7 +24,7 @@ import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { isBoolean, isFunction, isNull, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { document, location, window } from './utils/globals'
+import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
@@ -327,7 +327,8 @@ export class Autocapture {
             if (href) {
                 elementsJson[0]['attr__href'] = href
                 const hrefHost = convertToURL(href)?.host
-                if (hrefHost && location?.host && hrefHost !== location.host) {
+                const locationHost = window?.location?.host
+                if (hrefHost && locationHost && hrefHost !== locationHost) {
                     externalHref = href
                 }
             }

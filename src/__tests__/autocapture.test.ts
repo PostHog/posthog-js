@@ -600,6 +600,24 @@ describe('Autocapture system', () => {
             expect(props['$click_external_href']).toEqual('https://test.com')
         })
 
+        it('does not include $click_external_href for same site', () => {
+            window!.location = new URL('https://www.example.com/location') as unknown as Location
+            const elTarget = document.createElement('img')
+            const elParent = document.createElement('span')
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'https://www.example.com/link')
+            elGrandparent.appendChild(elParent)
+            autocapture['_captureEvent'](
+                makeMouseEvent({
+                    target: elTarget,
+                })
+            )
+            const props = captureMock.mock.calls[0][1]
+            expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://www.example.com/link')
+            expect(props['$click_external_href']).toBeUndefined()
+        })
+
         it('does not capture href attribute values from password elements', () => {
             const elTarget = document.createElement('span')
             const elParent = document.createElement('span')
