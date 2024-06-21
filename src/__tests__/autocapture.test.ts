@@ -615,7 +615,7 @@ describe('Autocapture system', () => {
             )
             const props = captureMock.mock.calls[0][1]
             expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://www.example.com/link')
-            expect(props['external_click_url']).toBeUndefined()
+            expect(props['$external_click_url']).toBeUndefined()
         })
 
         it('does not capture href attribute values from password elements', () => {
