@@ -1,3 +1,8 @@
+## 1.140.0 - 2024-06-21
+
+- feat(web-analytics): Add property for autocapture link click (#1259)
+- chore: add sanitization test to heatmaps tests (#1256)
+
 ## 1.139.8 - 2024-06-21
 
 - fix(surveys branching): rename confirmation_message -> end (#1257)
