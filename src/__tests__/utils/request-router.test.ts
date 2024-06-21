@@ -82,13 +82,14 @@ describe('request-router', () => {
 
     describe('loadScript', () => {
         const theRouter = router()
+        const callback = jest.fn()
         beforeEach(() => {
+            callback.mockClear()
             document!.getElementsByTagName('html')![0].innerHTML = ''
         })
 
         it('should insert the given script before the one already on the page', () => {
             document!.body.appendChild(document!.createElement('script'))
-            const callback = jest.fn()
             theRouter.loadScript('https://fake_url', callback)
             const scripts = document!.getElementsByTagName('script')
             const new_script = scripts[0]
@@ -102,7 +103,6 @@ describe('request-router', () => {
         })
 
         it("should add the script to the page when there aren't any preexisting scripts on the page", () => {
-            const callback = jest.fn()
             theRouter.loadScript('https://fake_url', callback)
             const scripts = document!.getElementsByTagName('script')
 
@@ -112,13 +112,20 @@ describe('request-router', () => {
         })
 
         it('should respond with an error if one happens', () => {
-            const callback = jest.fn()
             theRouter.loadScript('https://fake_url', callback)
             const scripts = document!.getElementsByTagName('script')
             const new_script = scripts[0]
 
             new_script.onerror!('uh-oh')
             expect(callback).toHaveBeenCalledWith('uh-oh')
+        })
+
+        it('should prefix with assets url if not already prefixed', () => {
+            theRouter.loadScript('/static/recorder.js', callback)
+            const scripts = document!.getElementsByTagName('script')
+            const new_script = scripts[0]
+            expect(new_script.type).toBe('text/javascript')
+            expect(new_script.src).toBe('https://us-assets.i.posthog.com/static/recorder.js')
         })
     })
 })

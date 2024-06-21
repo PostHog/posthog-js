@@ -7,9 +7,8 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, loadScript, isCrossDomainCookie, _base64Encode } from '../utils'
+import { _copyAndTruncateStrings, isCrossDomainCookie, _base64Encode } from '../utils'
 import { Info } from '../utils/event-utils'
-import { document } from '../utils/globals'
 import { isBlockedUA, DEFAULT_BLOCKED_UA_STRS } from '../utils/blocked-uas'
 
 function userAgentFor(botString: string) {
