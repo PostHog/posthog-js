@@ -1,4 +1,4 @@
-// Same as loader-globals.ts except includes rrweb scripts.
+// Same as loader-globals.ts except includes all additional extension loaders
 
 import './recorder'
 import './surveys'
