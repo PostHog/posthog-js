@@ -1,6 +1,6 @@
-import { SessionIdManager } from './sessionid'
-import { patch } from './extensions/replay/rrweb-plugins/patch'
-import { assignableWindow, window } from './utils/globals'
+import { SessionIdManager } from '../sessionid'
+import { patch } from '../extensions/replay/rrweb-plugins/patch'
+import { assignableWindow, window } from '../utils/globals'
 
 const addTracingHeaders = (sessionManager: SessionIdManager, req: Request) => {
     const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)

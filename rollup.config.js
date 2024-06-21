@@ -6,6 +6,7 @@ import { dts } from 'rollup-plugin-dts'
 import pkg from './package.json'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
+import fs from 'fs'
 
 const plugins = [
     json(),
@@ -21,102 +22,41 @@ const plugins = [
 ]
 
 /** @type {import('rollup').RollupOptions[]} */
-export default [
-    {
-        input: 'src/loader-recorder.ts',
-        output: [
-            {
-                file: 'dist/recorder.js',
-                sourcemap: true,
-                format: 'iife',
-                name: 'posthog',
-            },
-            {
-                // Backwards compatibility for older SDK versions
-                file: 'dist/recorder-v2.js',
-                sourcemap: true,
-                format: 'iife',
-                name: 'posthog',
-            },
-        ],
-        plugins: [...plugins],
-    },
-    {
-        input: 'src/loader-surveys.ts',
-        output: [
-            {
-                file: 'dist/surveys.js',
-                sourcemap: true,
-                format: 'iife',
-                name: 'posthog',
-                globals: {
-                    preact: 'preact',
+
+const entrypoints = fs
+    .readdirSync('./src/entrypoints')
+    // Filter out the module file as we handle this differently
+    .filter((file) => file !== 'module.mts')
+    .map((file) => {
+        const fileParts = file.split('.')
+        const extension = fileParts.pop()
+        const fileName = fileParts.join('.')
+
+        return {
+            input: `src/entrypoints/${file}`,
+            output: [
+                {
+                    file: `dist/${fileName}.js`,
+                    sourcemap: true,
+                    format: extension === '.mts' ? 'es' : 'iife',
+                    ...(extension === '.ts'
+                        ? {
+                              name: 'posthog',
+                              globals: {
+                                  preact: 'preact',
+                              },
+                          }
+                        : {}),
                 },
-            },
-        ],
-        plugins: [...plugins],
-    },
+            ],
+            plugins: [...plugins],
+        }
+    })
+
+export default [
+    ...entrypoints,
     {
-        input: 'src/loader-surveys-preview.ts',
-        output: [
-            {
-                file: 'dist/surveys-module-previews.js',
-                format: 'es',
-                sourcemap: true,
-            },
-        ],
-        plugins: [...plugins],
-    },
-    {
-        input: 'src/loader-exception-autocapture.ts',
-        output: [
-            {
-                file: 'dist/exception-autocapture.js',
-                sourcemap: true,
-                format: 'iife',
-                name: 'posthog',
-            },
-        ],
-        plugins: [...plugins],
-    },
-    {
-        input: 'src/loader-tracing-headers.ts',
-        output: [
-            {
-                file: 'dist/tracing-headers.js',
-                sourcemap: true,
-                format: 'iife',
-                name: 'posthog',
-            },
-        ],
-        plugins: [...plugins],
-    },
-    {
-        input: 'src/loader-globals.ts',
-        output: [
-            {
-                file: 'dist/array.js',
-                sourcemap: true,
-                format: 'iife',
-                name: 'posthog',
-            },
-        ],
-        plugins: [...plugins],
-    },
-    {
-        input: 'src/loader-globals-full.ts',
-        output: [
-            {
-                file: 'dist/array.full.js',
-                sourcemap: true,
-                format: 'iife',
-                name: 'posthog',
-            },
-        ],
-        plugins: [...plugins],
-    },
-    {
-        input: 'src/loader-module.ts',
+        input: 'src/entrypoints/module.mts',
         output: [
             {
                 file: pkg.main,
@@ -133,7 +73,7 @@ export default [
         plugins: [...plugins],
     },
     {
-        input: './lib/src/loader-module.d.ts',
+        input: './lib/src/entrypoints/module.d.mts',
         output: [{ file: pkg.types, format: 'es' }],
         plugins: [
             dts({
