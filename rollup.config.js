@@ -26,16 +26,26 @@ const plugins = [
 const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
     const fileParts = file.split('.')
     const extension = fileParts.pop()
+
+    let format = fileParts[fileParts.length - 1]
+    // NOTE: Sadly we can't just use the file extensions as tsc won't compile things correctly
+    if (['cjs', 'es', 'iife'].includes(format)) {
+        fileParts.pop()
+    } else {
+        format = 'iife'
+    }
+
     const fileName = fileParts.join('.')
 
+    console.log(`Building ${fileName} in ${format} format`)
     return {
         input: `src/entrypoints/${file}`,
         output: [
             {
                 file: `dist/${fileName}.js`,
                 sourcemap: true,
-                format: extension === 'mts' ? 'es' : extension === 'cts' ? 'cjs' : 'iife',
-                ...(extension === 'ts'
+                format,
+                ...(format === 'iife'
                     ? {
                           name: 'posthog',
                           globals: {
@@ -43,7 +53,7 @@ const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
                           },
                       }
                     : {}),
-                ...(extension === 'cts' ? { exports: 'auto' } : {}),
+                ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
         plugins: [...plugins],
@@ -53,7 +63,7 @@ const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
 export default [
     ...entrypoints,
     {
-        input: './lib/src/entrypoints/module.d.mts',
+        input: './lib/src/entrypoints/module.es.d.ts',
         output: [{ file: pkg.types, format: 'es' }],
         plugins: [
             dts({

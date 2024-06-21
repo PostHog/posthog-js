@@ -4,4 +4,3 @@ export * from '../types'
 export * from '../posthog-surveys-types'
 export const posthog = init_as_module()
 export default posthog
-
