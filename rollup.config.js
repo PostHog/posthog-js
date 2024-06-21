@@ -35,7 +35,7 @@ const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
                 file: `dist/${fileName}.js`,
                 sourcemap: true,
                 format: extension === 'mts' ? 'es' : extension === 'cts' ? 'cjs' : 'iife',
-                ...(extension === '.ts'
+                ...(extension === 'ts'
                     ? {
                           name: 'posthog',
                           globals: {
