@@ -1,3 +1,7 @@
+## 1.139.8 - 2024-06-21
+
+- fix(surveys branching): rename confirmation_message -> end (#1257)
+
 ## 1.139.7 - 2024-06-21
 
 - fix(surveys): fix missing confirmation message state (#1263)
