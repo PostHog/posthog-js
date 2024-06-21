@@ -23,55 +23,35 @@ const plugins = [
 
 /** @type {import('rollup').RollupOptions[]} */
 
-const entrypoints = fs
-    .readdirSync('./src/entrypoints')
-    // Filter out the module file as we handle this differently
-    .filter((file) => file !== 'module.mts')
-    .map((file) => {
-        const fileParts = file.split('.')
-        const extension = fileParts.pop()
-        const fileName = fileParts.join('.')
+const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
+    const fileParts = file.split('.')
+    const extension = fileParts.pop()
+    const fileName = fileParts.join('.')
 
-        return {
-            input: `src/entrypoints/${file}`,
-            output: [
-                {
-                    file: `dist/${fileName}.js`,
-                    sourcemap: true,
-                    format: extension === '.mts' ? 'es' : 'iife',
-                    ...(extension === '.ts'
-                        ? {
-                              name: 'posthog',
-                              globals: {
-                                  preact: 'preact',
-                              },
-                          }
-                        : {}),
-                },
-            ],
-            plugins: [...plugins],
-        }
-    })
-
-export default [
-    ...entrypoints,
-    {
-        input: 'src/entrypoints/module.mts',
+    return {
+        input: `src/entrypoints/${file}`,
         output: [
             {
-                file: pkg.main,
-                format: 'cjs',
+                file: `dist/${fileName}.js`,
                 sourcemap: true,
-                exports: 'auto',
-            },
-            {
-                file: pkg.module,
-                format: 'es',
-                sourcemap: true,
+                format: extension === 'mts' ? 'es' : extension === 'cts' ? 'cjs' : 'iife',
+                ...(extension === '.ts'
+                    ? {
+                          name: 'posthog',
+                          globals: {
+                              preact: 'preact',
+                          },
+                      }
+                    : {}),
+                ...(extension === 'cts' ? { exports: 'auto' } : {}),
             },
         ],
         plugins: [...plugins],
-    },
+    }
+})
+
+export default [
+    ...entrypoints,
     {
         input: './lib/src/entrypoints/module.d.mts',
         output: [{ file: pkg.types, format: 'es' }],
