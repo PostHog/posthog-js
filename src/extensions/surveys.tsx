@@ -384,7 +384,7 @@ export function Questions({
         }
 
         const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
-        if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
+        if (nextStep === SurveyQuestionBranchingType.End) {
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
         } else {
             setCurrentQuestionIndex(nextStep)
