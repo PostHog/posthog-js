@@ -11,7 +11,6 @@ import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
-import { loadScript } from './utils'
 import { logger } from './utils/logger'
 import { isUndefined } from './utils/type-utils'
 
@@ -74,7 +73,7 @@ export class PostHogSurveys {
             if (this._surveyEventReceiver == null) {
                 this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
             }
-            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
+            this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)
                 }

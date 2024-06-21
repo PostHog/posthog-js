@@ -1,6 +1,6 @@
 // The library depends on having the module initialized before it can be used.
 
-import { PostHog } from '../../posthog-core'
+import { PostHog, init_as_module } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
 import { uuidv7 } from '../../uuidv7'
 
@@ -32,4 +32,9 @@ export const createPosthogInstance = async (
             'test-' + token
         )
     )
+}
+
+const posthog = init_as_module()
+export const defaultPostHog = (): PostHog => {
+    return posthog
 }

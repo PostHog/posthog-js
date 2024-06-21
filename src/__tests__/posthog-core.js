@@ -1,4 +1,3 @@
-import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
 
@@ -7,6 +6,7 @@ import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
 import { USER_STATE } from '../constants'
+import { defaultPostHog } from './helpers/posthog-instance'
 
 jest.mock('../decide')
 
@@ -14,7 +14,7 @@ describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
 
     given('lib', () => {
-        const posthog = _posthog.init('testtoken', given.config, uuidv7())
+        const posthog = defaultPostHog().init('testtoken', given.config, uuidv7())
         posthog.debug()
         return Object.assign(posthog, given.overrides)
     })
