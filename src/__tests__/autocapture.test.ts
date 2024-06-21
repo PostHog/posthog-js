@@ -557,6 +557,7 @@ describe('Autocapture system', () => {
             expect(props['$elements'][1]).toHaveProperty('tag_name', 'span')
             expect(props['$elements'][2]).toHaveProperty('tag_name', 'div')
             expect(props['$elements'][props['$elements'].length - 1]).toHaveProperty('tag_name', 'body')
+            expect(props['$click_external_href']).toEqual('https://test.com')
         })
 
         it('truncate any element property value to 1024 bytes', () => {
@@ -594,7 +595,9 @@ describe('Autocapture system', () => {
                     target: elTarget,
                 })
             )
-            expect(captureMock.mock.calls[0][1]['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
+            const props = captureMock.mock.calls[0][1]
+            expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
+            expect(props['$click_external_href']).toEqual('https://test.com')
         })
 
         it('does not capture href attribute values from password elements', () => {
