@@ -1,3 +1,7 @@
+## 1.140.1 - 2024-06-21
+
+- fix: unwind recent changes things seem less stable (#1267)
+
 ## 1.140.0 - 2024-06-21
 
 - feat(web-analytics): Add property for autocapture link click (#1259)
