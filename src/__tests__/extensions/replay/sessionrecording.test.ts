@@ -1323,7 +1323,7 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('emits full snapshot events even when idle', () => {
+        it('drops full snapshots when idle - so we must make sure not to take them while idle!', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1336,19 +1336,14 @@ describe('SessionRecording', () => {
             sessionRecording.onRRwebEmit(createFullSnapshot({}) as eventWithTime)
 
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {},
-                        type: 2,
-                    },
-                ],
+                data: [],
                 sessionId: sessionId,
-                size: 20,
+                size: 0,
                 windowId: 'windowId',
             })
         })
 
-        it('emits meta snapshot events even when idle', () => {
+        it('does not emit meta snapshot events when idle - so we must make sure not to take them while idle!', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1361,21 +1356,14 @@ describe('SessionRecording', () => {
             sessionRecording.onRRwebEmit(createMetaSnapshot({}) as eventWithTime)
 
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {
-                            href: 'https://has-to-be-present-or-invalid.com',
-                        },
-                        type: 4,
-                    },
-                ],
+                data: [],
                 sessionId: sessionId,
-                size: 69,
+                size: 0,
                 windowId: 'windowId',
             })
         })
 
-        it('emits style snapshot events even when idle', () => {
+        it('does not emit style snapshot events when idle - so we must make sure not to take them while idle!', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1388,16 +1376,9 @@ describe('SessionRecording', () => {
             sessionRecording.onRRwebEmit(createStyleSnapshot({}) as eventWithTime)
 
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {
-                            source: 13,
-                        },
-                        type: 3,
-                    },
-                ],
+                data: [],
                 sessionId: sessionId,
-                size: 31,
+                size: 0,
                 windowId: 'windowId',
             })
         })
