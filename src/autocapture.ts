@@ -347,7 +347,7 @@ export class Autocapture {
                           $elements: elementsJson,
                       },
                 elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
-                externalHref && e.type === 'click' ? { $click_external_href: externalHref } : {},
+                externalHref && e.type === 'click' ? { $external_click_url: externalHref } : {},
                 autocaptureAugmentProperties
             )
 
