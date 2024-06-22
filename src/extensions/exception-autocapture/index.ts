@@ -1,8 +1,8 @@
 import { window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, ErrorConversions, ErrorEventArgs, ErrorProperties } from '../../types'
+import { DecideResponse, Properties } from '../../types'
 
-import { isObject, isUndefined } from '../../utils/type-utils'
+import { isObject } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE, EXCEPTION_CAPTURE_ENDPOINT } from '../../constants'
 import { loadScript } from '../../utils'
@@ -16,8 +16,9 @@ export class ExceptionObserver {
     private _endpoint: string = BASE_ENDPOINT
     instance: PostHog
     remoteEnabled: boolean | undefined
-    private originalOnErrorHandler: Window['onerror'] | null | undefined = undefined
     private originalOnUnhandledRejectionHandler: Window['onunhandledrejection'] | null | undefined = undefined
+    private unwrapOnError: (() => void) | undefined
+    private unwrapUnhandledRejection: (() => void) | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -34,7 +35,7 @@ export class ExceptionObserver {
     }
 
     get hasHandlers() {
-        return this.originalOnUnhandledRejectionHandler || this.originalOnErrorHandler
+        return this.originalOnUnhandledRejectionHandler || this.unwrapOnError
     }
 
     startIfEnabled(): void {
@@ -69,67 +70,26 @@ export class ExceptionObserver {
             return
         }
 
-        if (!(window as any).posthogErrorConversion) {
-            logger.error(LOGGER_PREFIX + ' failed to load error conversion scripts - error capture cannot start')
+        const wrapOnError = (window as any).posthogErrorHandlers.wrapOnError
+        const wrapUnhandledRejection = (window as any).posthogErrorHandlers.wrapUnhandledRejection
+
+        if (!wrapOnError || !wrapUnhandledRejection) {
+            logger.error(LOGGER_PREFIX + ' failed to load error wrapping functions - cannot start')
             return
         }
 
-        const { errorToProperties, unhandledRejectionToProperties } = (window as any)
-            .posthogErrorConversion as ErrorConversions
-
         try {
-            this.originalOnErrorHandler = window.onerror
-
-            window.onerror = function (this: ExceptionObserver, ...args: ErrorEventArgs): boolean {
-                this.captureException(args, errorToProperties)
-
-                if (this.originalOnErrorHandler) {
-                    // eslint-disable-next-line prefer-rest-params
-                    return this.originalOnErrorHandler.apply(this, args)
-                }
-
-                return false
-            }.bind(this)
-            ;(window.onerror as any).__POSTHOG_INSTRUMENTED__ = true
-
-            this.originalOnUnhandledRejectionHandler = window.onunhandledrejection
-
-            window.onunhandledrejection = function (
-                this: ExceptionObserver,
-                ...args: [ev: PromiseRejectionEvent]
-            ): boolean {
-                const errorProperties: ErrorProperties = unhandledRejectionToProperties(args)
-                this.sendExceptionEvent(errorProperties)
-
-                if (window && this.originalOnUnhandledRejectionHandler) {
-                    // eslint-disable-next-line prefer-rest-params
-                    return this.originalOnUnhandledRejectionHandler.apply(window, args)
-                }
-
-                return true
-            }.bind(this)
-            ;(window.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__ = true
+            this.unwrapOnError = wrapOnError(this.captureException)
+            this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException)
         } catch (e) {
-            logger.error('PostHog failed to start exception autocapture', e)
+            logger.error(LOGGER_PREFIX + 'PostHog failed to start', e)
             this.stopCapturing()
         }
     }
 
     private stopCapturing() {
-        if (!window) {
-            return
-        }
-        if (!isUndefined(this.originalOnErrorHandler)) {
-            window.onerror = this.originalOnErrorHandler
-            this.originalOnErrorHandler = null
-        }
-        delete (window.onerror as any)?.__POSTHOG_INSTRUMENTED__
-
-        if (!isUndefined(this.originalOnUnhandledRejectionHandler)) {
-            window.onunhandledrejection = this.originalOnUnhandledRejectionHandler
-            this.originalOnUnhandledRejectionHandler = null
-        }
-        delete (window.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__
+        this.unwrapOnError?.()
+        this.unwrapUnhandledRejection?.()
     }
 
     afterDecideResponse(response: DecideResponse) {
@@ -155,9 +115,7 @@ export class ExceptionObserver {
         this.startIfEnabled()
     }
 
-    captureException(args: ErrorEventArgs, errorToProperties: ErrorConversions['errorToProperties']) {
-        const errorProperties = errorToProperties(args)
-
+    captureException(errorProperties: Properties) {
         const posthogHost = this.instance.requestRouter.endpointFor('ui')
 
         errorProperties.$exception_personURL = `${posthogHost}/project/${

@@ -6,10 +6,8 @@ import { assignableWindow, window } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { uuidv7 } from '../../../uuidv7'
 import { loadScript } from '../../../utils'
-import {
-    errorToProperties,
-    unhandledRejectionToProperties,
-} from '../../../extensions/exception-autocapture/error-conversion'
+import posthogErrorWrappingFunctions from '../../../loader-exception-autocapture'
+import { afterEach } from '@jest/globals'
 
 jest.mock('../../../utils', () => ({
     ...jest.requireActual('../../../utils'),
@@ -24,13 +22,10 @@ describe('Exception Observer', () => {
     const mockCapture = jest.fn()
 
     const addErrorWrappingFlagToWindow = () => {
-        assignableWindow.onerror = jest.fn()
-        assignableWindow.onerror__POSTHOG_INSTRUMENTED__ = true
+        // assignableWindow.onerror = jest.fn()
+        // assignableWindow.onerror__POSTHOG_INSTRUMENTED__ = true
 
-        assignableWindow.posthogErrorConversion = {
-            errorToProperties,
-            unhandledRejectionToProperties,
-        }
+        assignableWindow.posthogErrorHandlers = posthogErrorWrappingFunctions
     }
 
     beforeEach(async () => {
@@ -41,6 +36,10 @@ describe('Exception Observer', () => {
 
         posthog = await createPosthogInstance(uuidv7(), { _onCapture: mockCapture })
         exceptionObserver = new ExceptionObserver(posthog)
+    })
+
+    afterEach(() => {
+        exceptionObserver['stopCapturing']()
     })
 
     describe('when enabled', () => {
