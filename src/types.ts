@@ -301,7 +301,6 @@ export interface DecideResponse {
         | boolean
         | {
               endpoint?: string
-              errors_to_ignore: string[]
           }
     sessionRecording?: {
         endpoint?: string

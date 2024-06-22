@@ -2,15 +2,18 @@ import { window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, ErrorConversions, ErrorEventArgs, ErrorProperties } from '../../types'
 
-import { isUndefined } from '../../utils/type-utils'
+import { isObject, isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
+import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE, EXCEPTION_CAPTURE_ENDPOINT } from '../../constants'
 import { loadScript } from '../../utils'
 import Config from '../../config'
 
+// TODO: move this to /x/ as default
+const BASE_ENDPOINT = '/e/'
 const LOGGER_PREFIX = '[Exception Capture]'
 
 export class ExceptionObserver {
+    private _endpoint: string = BASE_ENDPOINT
     instance: PostHog
     remoteEnabled: boolean | undefined
     private originalOnErrorHandler: Window['onerror'] | null | undefined = undefined
@@ -134,9 +137,18 @@ export class ExceptionObserver {
 
         // store this in-memory in case persistence is disabled
         this.remoteEnabled = !!autocaptureExceptionsResponse || false
+        this._endpoint = isObject(autocaptureExceptionsResponse)
+            ? autocaptureExceptionsResponse.endpoint || BASE_ENDPOINT
+            : BASE_ENDPOINT
+
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this.remoteEnabled,
+            })
+            // when we come to moving the endpoint to not /e/ we'll want that to persist between startup and decide response
+            // TODO: once BASE_ENDPOINT is no longer /e/ this can be removed
+            this.instance.persistence.register({
+                [EXCEPTION_CAPTURE_ENDPOINT]: this._endpoint,
             })
         }
 
@@ -163,6 +175,7 @@ export class ExceptionObserver {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
             _noHeatmaps: true,
+            _url: this._endpoint,
         })
     }
 }
