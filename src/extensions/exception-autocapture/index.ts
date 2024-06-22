@@ -79,8 +79,8 @@ export class ExceptionObserver {
         }
 
         try {
-            this.unwrapOnError = wrapOnError(this.captureException)
-            this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException)
+            this.unwrapOnError = wrapOnError(this.captureException.bind(this))
+            this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
         } catch (e) {
             logger.error(LOGGER_PREFIX + 'PostHog failed to start', e)
             this.stopCapturing()

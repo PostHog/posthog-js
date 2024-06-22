@@ -9,6 +9,28 @@ import { loadScript } from '../../../utils'
 import posthogErrorWrappingFunctions from '../../../loader-exception-autocapture'
 import { afterEach } from '@jest/globals'
 
+/** help out jsdom */
+export type PromiseRejectionEventTypes = 'rejectionhandled' | 'unhandledrejection'
+
+export type PromiseRejectionEventInit = {
+    promise: Promise<any>
+    reason: any
+}
+
+export class PromiseRejectionEvent extends Event {
+    public readonly promise: Promise<any>
+    public readonly reason: any
+
+    public constructor(type: PromiseRejectionEventTypes, options: PromiseRejectionEventInit) {
+        super(type)
+
+        this.promise = options.promise
+        this.reason = options.reason
+    }
+}
+
+/* finished helping js-dom */
+
 jest.mock('../../../utils', () => ({
     ...jest.requireActual('../../../utils'),
     loadScript: jest.fn(),
@@ -62,6 +84,103 @@ describe('Exception Observer', () => {
             expect((window?.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__).not.toBeDefined()
 
             expect(exceptionObserver.isCapturing).toBe(false)
+        })
+
+        it('captures an event when an error is thrown', () => {
+            const error = new Error('test error')
+            window!.onerror?.call(window, 'message', 'source', 0, 0, error)
+
+            const captureCalls = mockCapture.mock.calls
+            expect(captureCalls.length).toBe(1)
+            const singleCall = captureCalls[0]
+            expect(singleCall[0]).toBe('$exception')
+            expect(singleCall[1]).toMatchObject({
+                properties: {
+                    $exception_message: 'test error',
+                    $exception_type: 'Error',
+                    $exception_personURL: expect.any(String),
+                },
+            })
+        })
+
+        it('captures an event when an unhandled rejection occurs', () => {
+            const error = new Error('test error')
+            const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+                // this is a test not a browser, so we don't care there's no Promise in IE11
+                // eslint-disable-next-line compat/compat
+                promise: Promise.resolve(),
+                reason: error,
+            })
+            window!.onunhandledrejection?.call(window!, promiseRejectionEvent)
+
+            const captureCalls = mockCapture.mock.calls
+            expect(captureCalls.length).toBe(1)
+            const singleCall = captureCalls[0]
+            expect(singleCall[0]).toBe('$exception')
+            expect(singleCall[1]).toMatchObject({
+                properties: {
+                    $exception_message: 'test error',
+                    $exception_type: 'UnhandledRejection',
+                    $exception_personURL: expect.any(String),
+                },
+            })
+        })
+    })
+
+    describe('when there are handlers already', () => {
+        const originalOnError = jest.fn()
+        const originalOnUnhandledRejection = jest.fn()
+
+        beforeEach(() => {
+            jest.clearAllMocks()
+            window!.onerror = originalOnError
+            window!.onunhandledrejection = originalOnUnhandledRejection
+
+            exceptionObserver.afterDecideResponse({ autocaptureExceptions: true } as DecideResponse)
+        })
+
+        it('should wrap original onerror handler if one was present when wrapped', () => {
+            expect(window!.onerror).toBeDefined()
+            expect(window!.onerror).not.toBe(originalOnError)
+        })
+
+        it('should wrap original onunhandledrejection handler if one was present when wrapped', () => {
+            expect(window!.onunhandledrejection).toBeDefined()
+            expect(window!.onunhandledrejection).not.toBe(originalOnUnhandledRejection)
+        })
+
+        it('should call original onerror handler if one was present when wrapped', () => {
+            // throw an error so that it will be caught by window.onerror
+            const error = new Error('test error')
+            window!.onerror?.call(window, 'message', 'source', 0, 0, error)
+
+            expect(originalOnError).toHaveBeenCalledWith('message', 'source', 0, 0, error)
+        })
+
+        it('should call original onunhandledrejection handler if one was present when wrapped', () => {
+            // throw an error so that it will be caught by window.onunhandledrejection
+            const error = new Error('test error')
+            const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
+                // this is a test not a browser, so we don't care there's no Promise in IE11
+                // eslint-disable-next-line compat/compat
+                promise: Promise.resolve(),
+                reason: error,
+            })
+            window!.onunhandledrejection?.call(window!, promiseRejectionEvent)
+
+            expect(originalOnUnhandledRejection).toHaveBeenCalledWith(promiseRejectionEvent)
+        })
+
+        it('should reinstate original onerror handler if one was present when wrapped', () => {
+            exceptionObserver['stopCapturing']()
+
+            expect(window!.onerror).toBe(originalOnError)
+        })
+
+        it('should reinstate original onunhandledrejection handler if one was present when wrapped', () => {
+            exceptionObserver['stopCapturing']()
+
+            expect(window!.onunhandledrejection).toBe(originalOnUnhandledRejection)
         })
     })
 
