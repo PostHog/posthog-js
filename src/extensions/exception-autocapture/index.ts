@@ -70,8 +70,8 @@ export class ExceptionObserver {
             return
         }
 
-        const wrapOnError = (window as any).posthogErrorHandlers.wrapOnError
-        const wrapUnhandledRejection = (window as any).posthogErrorHandlers.wrapUnhandledRejection
+        const wrapOnError = (window as any).posthogErrorWrappingFunctions.wrapOnError
+        const wrapUnhandledRejection = (window as any).posthogErrorWrappingFunctions.wrapUnhandledRejection
 
         if (!wrapOnError || !wrapUnhandledRejection) {
             logger.error(LOGGER_PREFIX + ' failed to load error wrapping functions - cannot start')
@@ -82,7 +82,7 @@ export class ExceptionObserver {
             this.unwrapOnError = wrapOnError(this.captureException.bind(this))
             this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
         } catch (e) {
-            logger.error(LOGGER_PREFIX + 'PostHog failed to start', e)
+            logger.error(LOGGER_PREFIX + ' failed to start', e)
             this.stopCapturing()
         }
     }

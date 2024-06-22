@@ -23,8 +23,8 @@ describe('Exception autocapture', () => {
             expect(captures[2].properties.$exception_message).to.be.eql('This is an error')
             expect(captures[2].properties.$exception_type).to.be.eql('Error')
             expect(captures[2].properties.$exception_source).to.match(/http:\/\/localhost:\d+\/playground\/cypress\//)
-            expect(captures[2].properties.$exception_personURL).to.include(
-                'http://localhost:60621/project/test_token/person/019037b8-ac98-75ff-aafc-ec3ff9ade9dd'
+            expect(captures[2].properties.$exception_personURL).to.match(
+                /http:\/\/localhost:\d+\/project\/test_token\/person\/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
             )
         })
     })
