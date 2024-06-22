@@ -1,3 +1,24 @@
+## 1.140.1 - 2024-06-21
+
+- fix: unwind recent changes things seem less stable (#1267)
+
+## 1.140.0 - 2024-06-21
+
+- feat(web-analytics): Add property for autocapture link click (#1259)
+- chore: add sanitization test to heatmaps tests (#1256)
+
+## 1.139.8 - 2024-06-21
+
+- fix(surveys branching): rename confirmation_message -> end (#1257)
+
+## 1.139.7 - 2024-06-21
+
+- fix(surveys): fix missing confirmation message state (#1263)
+
+## 1.139.6 - 2024-06-20
+
+- fix(surveys): handle missing getNextSurveyStep (#1260)
+
 ## 1.139.5 - 2024-06-20
 
 - fix: Allow no capture of $opt_in event (#1250)

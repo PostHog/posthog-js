@@ -192,14 +192,14 @@ export class PostHogSurveys {
 
         if (!question.branching?.type) {
             if (currentQuestionIndex === survey.questions.length - 1) {
-                return SurveyQuestionBranchingType.ConfirmationMessage
+                return SurveyQuestionBranchingType.End
             }
 
             return nextQuestionIndex
         }
 
-        if (question.branching.type === SurveyQuestionBranchingType.ConfirmationMessage) {
-            return SurveyQuestionBranchingType.ConfirmationMessage
+        if (question.branching.type === SurveyQuestionBranchingType.End) {
+            return SurveyQuestionBranchingType.End
         } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
             if (Number.isInteger(question.branching.index)) {
                 return question.branching.index
@@ -219,8 +219,8 @@ export class PostHogSurveys {
                         return nextStep
                     }
 
-                    if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
-                        return SurveyQuestionBranchingType.ConfirmationMessage
+                    if (nextStep === SurveyQuestionBranchingType.End) {
+                        return SurveyQuestionBranchingType.End
                     }
 
                     return nextQuestionIndex
@@ -240,8 +240,8 @@ export class PostHogSurveys {
                         return nextStep
                     }
 
-                    if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
-                        return SurveyQuestionBranchingType.ConfirmationMessage
+                    if (nextStep === SurveyQuestionBranchingType.End) {
+                        return SurveyQuestionBranchingType.End
                     }
 
                     return nextQuestionIndex
