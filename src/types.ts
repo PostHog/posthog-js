@@ -67,6 +67,14 @@ export interface BootstrapConfig {
     isIdentifiedID?: boolean
     featureFlags?: Record<string, boolean | string>
     featureFlagPayloads?: Record<string, JsonType>
+    /**
+     * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
+     * - unique to this user
+     * - a valid UUID v7
+     * - the timestamp part must be <= the timestamp of the first event in the session
+     * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
+     * **/
+    sessionID?: string
 }
 
 export interface PostHogConfig {
@@ -215,6 +223,8 @@ export interface SessionRecordingOptions {
     // our settings here only support a subset of those proposed for rrweb's network capture plugin
     recordHeaders?: boolean
     recordBody?: boolean
+    // ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
+    full_snapshot_interval_millis?: number
 }
 
 export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
