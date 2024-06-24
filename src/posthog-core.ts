@@ -828,8 +828,8 @@ export class PostHog {
         return data
     }
 
-    _addCaptureHook(callback: (eventName: string) => void): void {
-        this.on('eventCaptured', (data) => callback(data.event))
+    _addCaptureHook(callback: (eventName: string, eventPayload?: string) => void): void {
+        this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
     _calculate_event_properties(

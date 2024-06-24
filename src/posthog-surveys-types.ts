@@ -141,6 +141,7 @@ export interface Survey {
         selector?: string
         seenSurveyWaitPeriodInDays?: number
         urlMatchType?: SurveyUrlMatchType
+        actions: ActionType[] | null
         events: {
             values: {
                 name: string
@@ -151,4 +152,128 @@ export interface Survey {
     end_date: string | null
     current_iteration: number | null
     current_iteration_start_date: string | null
+}
+
+export enum PropertyFilterType {
+    /** Event metadata and fields on the clickhouse events table */
+    Meta = 'meta',
+    /** Event properties */
+    Event = 'event',
+    /** Person properties */
+    Person = 'person',
+    Element = 'element',
+    /** Event property with "$feature/" prepended */
+    Feature = 'feature',
+    Session = 'session',
+    Cohort = 'cohort',
+    Recording = 'recording',
+    Group = 'group',
+    HogQL = 'hogql',
+    DataWarehouse = 'data_warehouse',
+    DataWarehousePersonProperty = 'data_warehouse_person_property',
+}
+export enum PropertyOperator {
+    Exact = 'exact',
+    IsNot = 'is_not',
+    IContains = 'icontains',
+    NotIContains = 'not_icontains',
+    Regex = 'regex',
+    NotRegex = 'not_regex',
+    GreaterThan = 'gt',
+    GreaterThanOrEqual = 'gte',
+    LessThan = 'lt',
+    LessThanOrEqual = 'lte',
+    IsSet = 'is_set',
+    IsNotSet = 'is_not_set',
+    IsDateExact = 'is_date_exact',
+    IsDateBefore = 'is_date_before',
+    IsDateAfter = 'is_date_after',
+    Between = 'between',
+    NotBetween = 'not_between',
+    Minimum = 'min',
+    Maximum = 'max',
+}
+
+export type PropertyFilterValue = string | number | (string | number)[] | null
+
+/** Sync with plugin-server/src/types.ts */
+interface BasePropertyFilter {
+    key: string
+    value?: PropertyFilterValue
+    label?: string
+    type?: PropertyFilterType
+}
+
+/** Sync with plugin-server/src/types.ts */
+export interface EventPropertyFilter extends BasePropertyFilter {
+    type: PropertyFilterType.Event
+    /** @default 'exact' */
+    operator: PropertyOperator
+}
+
+/** Sync with plugin-server/src/types.ts */
+export interface PersonPropertyFilter extends BasePropertyFilter {
+    type: PropertyFilterType.Person
+    operator: PropertyOperator
+}
+
+/** Sync with plugin-server/src/types.ts */
+export interface ElementPropertyFilter extends BasePropertyFilter {
+    type: PropertyFilterType.Element
+    key: 'tag_name' | 'text' | 'href' | 'selector'
+    operator: PropertyOperator
+}
+export type AnyPropertyFilter = EventPropertyFilter | PersonPropertyFilter | ElementPropertyFilter
+
+export interface ActionType {
+    count?: number
+    created_at: string
+    deleted?: boolean
+    id: number
+    is_calculating?: boolean
+    last_calculated_at?: string
+    last_updated_at?: string // alias for last_calculated_at to achieve event and action parity
+    name: string | null
+    description?: string
+    post_to_slack?: boolean
+    slack_message_format?: string
+    steps?: ActionStepType[]
+    tags?: string[]
+    verified?: boolean
+    is_action?: true
+    action_id?: number // alias of id to make it compatible with event definitions uuid
+    bytecode?: any[]
+    bytecode_error?: string
+}
+
+/** Sync with plugin-server/src/types.ts */
+export type ActionStepStringMatching = 'contains' | 'exact' | 'regex'
+
+export interface ActionStepType {
+    event?: string | null
+    properties?: AnyPropertyFilter[]
+    selector?: string | null
+    /** @deprecated Only `selector` should be used now. */
+    tag_name?: string
+    text?: string | null
+    /** @default StringMatching.Exact */
+    text_matching?: ActionStepStringMatching | null
+    href?: string | null
+    /** @default ActionStepStringMatching.Exact */
+    href_matching?: ActionStepStringMatching | null
+    url?: string | null
+    /** @default StringMatching.Contains */
+    url_matching?: ActionStepStringMatching | null
+}
+
+export interface ElementType {
+    attr_class?: string[]
+    attr_id?: string
+    attributes: Record<string, string>
+    href?: string
+    nth_child?: number
+    nth_of_type?: number
+    order?: number
+    tag_name: string
+    text?: string
 }

@@ -72,7 +72,7 @@ export class PostHogSurveys {
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
             }
             loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
                 if (err) {
@@ -92,7 +92,7 @@ export class PostHogSurveys {
         }
 
         if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
