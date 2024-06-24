@@ -7,9 +7,9 @@ import { window } from '../../utils/globals'
 import { isUrlMatchingRegex } from '../../utils/request-utils'
 
 export class ActionMatcher {
-    private actionRegistry?: Set<ActionType>
+    private readonly actionRegistry?: Set<ActionType>
     private readonly instance?: PostHog
-    private actionEvents: Set<string>
+    private readonly actionEvents: Set<string>
     private _debugEventEmitter = new SimpleEventEmitter()
 
     constructor(instance?: PostHog) {
@@ -118,19 +118,29 @@ export class ActionMatcher {
         return true
     }
 
-    private matchString(actual: string, expected: string, matching: ActionStepStringMatching): boolean {
+    private matchString(url: string, pattern: string, matching: ActionStepStringMatching): boolean {
         switch (matching) {
             case 'regex':
-                return !!window && isUrlMatchingRegex(actual, expected)
+                return !!window && isUrlMatchingRegex(url, pattern)
             case 'exact':
-                return expected === actual
-            // case ActionStepStringMatching.Contains:
-            //     // Simulating SQL LIKE behavior (_ = any single character, % = any zero or more characters)
-            //     const adjustedRegExpString = escapeStringRegexp(expected).replace(/_/g, '.').replace(/%/g, '.*')
-            //     return new RegExp(adjustedRegExpString).test(actual)
+                return pattern === url
+            case 'contains':
+                // Simulating SQL LIKE behavior (_ = any single character, % = any zero or more characters)
+                // eslint-disable-next-line no-case-declarations
+                const adjustedRegExpStringPattern = this.escapeStringRegexp(pattern)
+                    .replace(/_/g, '.')
+                    .replace(/%/g, '.*')
+                return isUrlMatchingRegex(url, adjustedRegExpStringPattern)
+
             default:
                 return false
         }
+    }
+
+    private escapeStringRegexp(pattern: string): string {
+        // Escape characters with special meaning either inside or outside character sets.
+        // Use a simple backslash escape when it’s always valid, and a `\xnn` escape when the simpler form would be disallowed by Unicode patterns’ stricter grammar.
+        return pattern.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d')
     }
 
     // private checkStepElement(event: CaptureResult, step: ActionStepType): boolean {
