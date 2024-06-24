@@ -1,3 +1,8 @@
+## 1.141.0 - 2024-06-24
+
+- feat(surveys): add configurable delay to popup surveys (#1228)
+- chore: update pnpm action setup worfklow version (#1268)
+
 ## 1.140.1 - 2024-06-21
 
 - fix: unwind recent changes things seem less stable (#1267)
