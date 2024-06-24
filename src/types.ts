@@ -110,6 +110,8 @@ export interface PostHogConfig {
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie?: boolean
     disable_surveys: boolean
+    /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
+    disable_external_dependency_loading?: boolean
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean

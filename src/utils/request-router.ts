@@ -1,5 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { document } from '../utils/globals'
+import { logger } from './logger'
 
 /**
  * The request router helps simplify the logic to determine which endpoints should be called for which things
@@ -75,6 +76,11 @@ export class RequestRouter {
     }
 
     loadScript(scriptUrlToLoad: string, callback: (error?: string | Event, event?: Event) => void): void {
+        if (this.instance.config.disable_external_dependency_loading) {
+            logger.warn(`${scriptUrlToLoad} was requested but loading of external scripts is disabled.`)
+            return callback('Loading of external scripts is disabled')
+        }
+
         const url = scriptUrlToLoad[0] === '/' ? this.endpointFor('assets', scriptUrlToLoad) : scriptUrlToLoad
 
         const addScript = () => {
