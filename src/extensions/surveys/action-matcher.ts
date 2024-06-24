@@ -3,6 +3,8 @@ import type { ActionStepStringMatching, ActionStepType, ActionType } from '../..
 import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
 import { CaptureResult } from '../../types'
 import { isUndefined } from '../../utils/type-utils'
+import { window } from '../../utils/globals'
+import { isUrlMatchingRegex } from '../../utils/request-utils'
 
 export class ActionMatcher {
     private actionRegistry?: Set<ActionType>
@@ -118,14 +120,8 @@ export class ActionMatcher {
 
     private matchString(actual: string, expected: string, matching: ActionStepStringMatching): boolean {
         switch (matching) {
-            // case ActionStepStringMatching.Regex:
-            //     // Using RE2 here because that's what ClickHouse uses for regex matching anyway
-            //     // It's also safer for user-provided patterns because of a few explicit limitations
-            //     try {
-            //         return new RE2(expected).test(actual)
-            //     } catch {
-            //         return false
-            //     }
+            case 'regex':
+                return !!window && isUrlMatchingRegex(actual, expected)
             case 'exact':
                 return expected === actual
             // case ActionStepStringMatching.Contains:
@@ -137,39 +133,39 @@ export class ActionMatcher {
         }
     }
 
-    private checkStepElement(event: CaptureResult, step: ActionStepType): boolean {
-        // CHECK CONDITIONS, OTHERWISE SKIPPED
-        if (step.href || step.tag_name || step.text) {
-            const elements = this.getElementsList(event)
-            if (
-                !elements.some((element) => {
-                    if (
-                        step.href &&
-                        !matchString(element.href || '', step.href, step.href_matching || StringMatching.Exact)
-                    ) {
-                        return false // ELEMENT HREF IS A MISMATCH
-                    }
-                    if (step.tag_name && element.tag_name !== step.tag_name) {
-                        return false // ELEMENT TAG NAME IS A MISMATCH
-                    }
-                    if (
-                        step.text &&
-                        !matchString(element.text || '', step.text, step.text_matching || StringMatching.Exact)
-                    ) {
-                        return false // ELEMENT TEXT IS A MISMATCH
-                    }
-                    return true
-                })
-            ) {
-                // AT LEAST ONE ELEMENT MUST BE A SUBMATCH
-                return false
-            }
-        }
-        if (step.selector && !this.checkElementsAgainstSelector(event, step.selector)) {
-            return false // SELECTOR IS A MISMATCH
-        }
-        return true
-    }
+    // private checkStepElement(event: CaptureResult, step: ActionStepType): boolean {
+    //     // CHECK CONDITIONS, OTHERWISE SKIPPED
+    //     if (step.href || step.tag_name || step.text) {
+    //         const elements = this.getElementsList(event)
+    //         if (
+    //             !elements.some((element) => {
+    //                 if (
+    //                     step.href &&
+    //                     !matchString(element.href || '', step.href, step.href_matching || StringMatching.Exact)
+    //                 ) {
+    //                     return false // ELEMENT HREF IS A MISMATCH
+    //                 }
+    //                 if (step.tag_name && element.tag_name !== step.tag_name) {
+    //                     return false // ELEMENT TAG NAME IS A MISMATCH
+    //                 }
+    //                 if (
+    //                     step.text &&
+    //                     !matchString(element.text || '', step.text, step.text_matching || StringMatching.Exact)
+    //                 ) {
+    //                     return false // ELEMENT TEXT IS A MISMATCH
+    //                 }
+    //                 return true
+    //             })
+    //         ) {
+    //             // AT LEAST ONE ELEMENT MUST BE A SUBMATCH
+    //             return false
+    //         }
+    //     }
+    //     if (step.selector && !this.checkElementsAgainstSelector(event, step.selector)) {
+    //         return false // SELECTOR IS A MISMATCH
+    //     }
+    //     return true
+    // }
 
     private getElementsList(event: CaptureResult): Element[] {
         if (event.properties['$elements'] == null) {

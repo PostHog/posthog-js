@@ -1,6 +1,12 @@
 /// <reference lib="dom" />
 
-import { SurveyType, SurveyQuestionType, Survey, ActionType } from '../../posthog-surveys-types'
+import {
+    SurveyType,
+    SurveyQuestionType,
+    Survey,
+    ActionType,
+    ActionStepStringMatching,
+} from '../../posthog-surveys-types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { CaptureResult, PostHogConfig } from '../../types'
@@ -169,7 +175,12 @@ describe('survey-event-receiver', () => {
                 event: eventName,
             }
         }
-        const createAction = (id: number, eventName: string, currentUrl?: string): ActionType => {
+        const createAction = (
+            id: number,
+            eventName: string,
+            currentUrl?: string,
+            urlMatch?: ActionStepStringMatching
+        ): ActionType => {
             return {
                 id: id,
                 name: 'Ignored certain elements',
@@ -186,7 +197,7 @@ describe('survey-event-receiver', () => {
                         href: null,
                         href_matching: null,
                         url: currentUrl,
-                        url_matching: 'exact',
+                        url_matching: urlMatch || 'exact',
                     },
                 ],
                 created_at: '2024-06-20T14:39:23.616676Z',
@@ -230,12 +241,25 @@ describe('survey-event-receiver', () => {
             expect(surveyEventReceiver.getSurveys()).toContain('pageview-survey')
         })
 
-        it('can match action on current_url', () => {
+        it('can match action on current_url exact', () => {
             autoCaptureSurvey.conditions.actions = [createAction(2, '$autocapture', 'https://us.posthog.com')]
             const surveyEventReceiver = new SurveyEventReceiver(instance)
             surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
             surveyEventReceiver.onEvent('$autocapture', createCaptureResult('$autocapture', 'https://eu.posthog.com'))
             expect(surveyEventReceiver.getSurveys()).not.toEqual(['first-survey'])
+            surveyEventReceiver.onEvent('$autocapture', createCaptureResult('$autocapture', 'https://us.posthog.com'))
+            expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
+        })
+
+        it('can match action on current_url regexp', () => {
+            autoCaptureSurvey.conditions.actions = [createAction(2, '$autocapture', '[a-z][a-z].posthog.*', 'regex')]
+            let surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
+            surveyEventReceiver.onEvent('$autocapture', createCaptureResult('$autocapture', 'https://eu.posthog.com'))
+            expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
+
+            surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
             surveyEventReceiver.onEvent('$autocapture', createCaptureResult('$autocapture', 'https://us.posthog.com'))
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         })
