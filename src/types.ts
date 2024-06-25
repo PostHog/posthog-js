@@ -306,6 +306,7 @@ export interface DecideResponse {
      *     and as a standalone web vitals tracker
      *     people can have them enabled separately
      *     they work standalone but enhance each other
+     *     TODO: deprecate this so we make a new config that doesn't need this explanation
      */
     capturePerformance?: boolean | PerformanceCaptureConfig
     analytics?: {
