@@ -14,6 +14,7 @@ export const AUTOCAPTURE_DISABLED_SERVER_SIDE = '$autocapture_disabled_server_si
 export const HEATMAPS_ENABLED_SERVER_SIDE = '$heatmaps_enabled_server_side'
 export const EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE = '$exception_capture_enabled_server_side'
 export const EXCEPTION_CAPTURE_ENDPOINT = '$exception_capture_endpoint'
+export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
 export const SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE = '$session_recording_network_payload_capture'

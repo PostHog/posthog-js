@@ -34,7 +34,8 @@
     ],
     "dependencies": {
         "fflate": "^0.4.8",
-        "preact": "^10.19.3"
+        "preact": "^10.19.3",
+        "web-vitals": "^4.0.1"
     },
     "devDependencies": {
         "@babel/core": "7.18.9",
