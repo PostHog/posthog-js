@@ -74,6 +74,7 @@ import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
 import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
+import { ExceptionObserver } from './extensions/exception-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -249,6 +250,7 @@ export class PostHog {
     requestRouter: RequestRouter
     autocapture?: Autocapture
     heatmaps?: Heatmaps
+    exceptionObserver?: ExceptionObserver
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -413,6 +415,9 @@ export class PostHog {
         this.heatmaps = new Heatmaps(this)
         this.heatmaps.startIfEnabled()
 
+        this.exceptionObserver = new ExceptionObserver(this)
+        this.exceptionObserver.startIfEnabled()
+
         // if any instance on the page has debug = true, we set the
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
@@ -507,6 +512,7 @@ export class PostHog {
         this.autocapture?.afterDecideResponse(response)
         this.heatmaps?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
+        this.exceptionObserver?.afterDecideResponse(response)
     }
 
     _loaded(): void {
