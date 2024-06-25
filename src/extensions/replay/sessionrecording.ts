@@ -219,12 +219,12 @@ export class SessionRecording {
         const clientConfigForPerformanceCapture = isObject(this.instance.config.capture_performance)
             ? this.instance.config.capture_performance.network_timing
             : this.instance.config.capture_performance
-        const performanceEnabled = !!(isBoolean(clientConfigForPerformanceCapture)
+        const networkTimingEnabled = !!(isBoolean(clientConfigForPerformanceCapture)
             ? clientConfigForPerformanceCapture
             : networkPayloadCapture_server_side?.capturePerformance)
 
-        return headersEnabled || bodyEnabled || performanceEnabled
-            ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: performanceEnabled }
+        return headersEnabled || bodyEnabled || networkTimingEnabled
+            ? { recordHeaders: headersEnabled, recordBody: bodyEnabled, recordPerformance: networkTimingEnabled }
             : undefined
     }
 

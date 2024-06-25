@@ -128,12 +128,14 @@ export class WebVitalsAutocapture {
             this._delayedFlushTimer = setTimeout(this._flushToCapture, FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS)
         }
 
-	if (isUndefined(this.buffer.url)) {
-		this.buffer.url = $currentUrl
-	}
+        if (isUndefined(this.buffer.url)) {
+            this.buffer.url = $currentUrl
+        }
+
         this.buffer.firstMetricTimestamp = isUndefined(this.buffer.firstMetricTimestamp)
             ? Date.now()
             : this.buffer.firstMetricTimestamp
+
         this.buffer.metrics.push({
             ...metric,
             $current_url: $currentUrl,
