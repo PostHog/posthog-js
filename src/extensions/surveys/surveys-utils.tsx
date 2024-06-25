@@ -625,6 +625,35 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
+export const hasEvents = (survey: Survey): boolean => {
+    return !!(
+        survey.conditions &&
+        survey.conditions?.events &&
+        survey.conditions?.events?.values &&
+        survey.conditions?.events?.values?.length > 0
+    )
+}
+
+export const canActivateRepeatedly = (survey: Survey): boolean => {
+    return !!(survey.conditions?.repeatedActivation && hasEvents(survey))
+}
+
+/**
+ * getSurveySeen checks local storage for the surveySeen Key a
+ * and overrides this value if the survey can be repeatedly activated by its events.
+ * @param survey
+ */
+export const getSurveySeen = (survey: Survey): boolean => {
+    const surveySeen = localStorage.getItem(getSurveySeenKey(survey))
+    if (surveySeen) {
+        // if a survey has already been seen,
+        // we will override it with the event repeated activation value.
+        return !canActivateRepeatedly(survey)
+    }
+
+    return false
+}
+
 export const getSurveySeenKey = (survey: Survey): string => {
     let surveySeenKey = `seenSurvey_${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {

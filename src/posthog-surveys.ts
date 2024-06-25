@@ -14,6 +14,7 @@ import { DecideResponse } from './types'
 import { loadScript } from './utils'
 import { logger } from './utils/logger'
 import { isUndefined } from './utils/type-utils'
+import { canActivateRepeatedly, hasEvents } from './extensions/surveys/surveys-utils'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -168,15 +169,14 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
 
-                const internalTargetingFlagCheck = survey.internal_targeting_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
-                    : true
+                const eventBasedTargetingFlagCheck = hasEvents(survey) ? activatedSurveys?.includes(survey.id) : true
 
-                const hasEvents =
-                    survey.conditions?.events &&
-                    survey.conditions?.events?.values &&
-                    survey.conditions?.events?.values.length > 0
-                const eventBasedTargetingFlagCheck = hasEvents ? activatedSurveys?.includes(survey.id) : true
+                const overrideInternalTargetingFlagCheck = canActivateRepeatedly(survey)
+                const internalTargetingFlagCheck =
+                    survey.internal_targeting_flag_key && !overrideInternalTargetingFlagCheck
+                        ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
+                        : true
+
                 return (
                     linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck
                 )
