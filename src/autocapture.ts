@@ -154,6 +154,7 @@ export class Autocapture {
                 }
             }
         })
+
         return props
     }
 

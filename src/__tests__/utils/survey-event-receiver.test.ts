@@ -264,6 +264,48 @@ describe('survey-event-receiver', () => {
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         })
 
+        it('can match action on html element selector', () => {
+            const action = createAction(2, '$autocapture')
+            action.steps[0].selector = '* > #__next .flex > button:nth-child(2)'
+            autoCaptureSurvey.conditions.actions = [action]
+            const result = createCaptureResult('$autocapture', 'https://eu.posthog.com')
+            result.properties.$elements = [
+                {
+                    tag_name: 'button',
+                    $el_text: 'Unsubscribe from newsletter',
+                    nth_child: 3,
+                    nth_of_type: 3,
+                },
+                {
+                    tag_name: 'div',
+                    classes: ['flex', 'items-center', 'gap-2', 'flex-wrap'],
+                    attr__class: 'flex items-center gap-2 flex-wrap',
+                    nth_child: 4,
+                    nth_of_type: 2,
+                },
+                {
+                    tag_name: 'main',
+                    nth_child: 1,
+                    nth_of_type: 1,
+                },
+                {
+                    tag_name: 'div',
+                    attr__id: '__next',
+                    nth_child: 1,
+                    nth_of_type: 1,
+                },
+                {
+                    tag_name: 'body',
+                    nth_child: 2,
+                    nth_of_type: 1,
+                },
+            ]
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([autoCaptureSurvey, pageViewSurvey])
+            surveyEventReceiver.onEvent('$autocapture', result)
+            expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
+        })
+
         //
         // it('can match action with only element selector', () => {
         //     console.log(actionWithOnlySelector)

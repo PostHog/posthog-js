@@ -36,7 +36,7 @@ export class ActionMatcher {
         actions.forEach((action) => {
             this.actionRegistry?.add(action)
             action.steps
-                ?.filter((step) => step.event != null)
+                ?.filter((step) => step?.event != null)
                 .forEach((step) => {
                     this.actionEvents?.add(step.event!)
                 })
@@ -88,7 +88,7 @@ export class ActionMatcher {
     }
 
     private checkStep = (event?: CaptureResult, step?: ActionStepType): boolean => {
-        return this.checkStepEvent(event, step) && this.checkStepUrl(event, step)
+        return this.checkStepEvent(event, step) && this.checkStepUrl(event, step) && this.checkStepElement(event, step)
         // &&
         //    this.checkStepEvent(event, step) &&
         //    // The below checks are less performant may parse the elements chain or do a database query hence moved to the end
@@ -111,14 +111,14 @@ export class ActionMatcher {
             if (!eventUrl || typeof eventUrl !== 'string') {
                 return false // URL IS UNKNOWN
             }
-            if (!this.matchString(eventUrl, step.url, step.url_matching || 'contains')) {
+            if (!ActionMatcher.matchString(eventUrl, step?.url, step?.url_matching || 'contains')) {
                 return false // URL IS A MISMATCH
             }
         }
         return true
     }
 
-    private matchString(url: string, pattern: string, matching: ActionStepStringMatching): boolean {
+    private static matchString(url: string, pattern: string, matching: ActionStepStringMatching): boolean {
         switch (matching) {
             case 'regex':
                 return !!window && isUrlMatchingRegex(url, pattern)
@@ -127,7 +127,7 @@ export class ActionMatcher {
             case 'contains':
                 // Simulating SQL LIKE behavior (_ = any single character, % = any zero or more characters)
                 // eslint-disable-next-line no-case-declarations
-                const adjustedRegExpStringPattern = this.escapeStringRegexp(pattern)
+                const adjustedRegExpStringPattern = ActionMatcher.escapeStringRegexp(pattern)
                     .replace(/_/g, '.')
                     .replace(/%/g, '.*')
                 return isUrlMatchingRegex(url, adjustedRegExpStringPattern)
@@ -137,52 +137,61 @@ export class ActionMatcher {
         }
     }
 
-    private escapeStringRegexp(pattern: string): string {
+    private static escapeStringRegexp(pattern: string): string {
         // Escape characters with special meaning either inside or outside character sets.
         // Use a simple backslash escape when it’s always valid, and a `\xnn` escape when the simpler form would be disallowed by Unicode patterns’ stricter grammar.
         return pattern.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d')
     }
 
-    // private checkStepElement(event: CaptureResult, step: ActionStepType): boolean {
-    //     // CHECK CONDITIONS, OTHERWISE SKIPPED
-    //     if (step.href || step.tag_name || step.text) {
-    //         const elements = this.getElementsList(event)
-    //         if (
-    //             !elements.some((element) => {
-    //                 if (
-    //                     step.href &&
-    //                     !matchString(element.href || '', step.href, step.href_matching || StringMatching.Exact)
-    //                 ) {
-    //                     return false // ELEMENT HREF IS A MISMATCH
-    //                 }
-    //                 if (step.tag_name && element.tag_name !== step.tag_name) {
-    //                     return false // ELEMENT TAG NAME IS A MISMATCH
-    //                 }
-    //                 if (
-    //                     step.text &&
-    //                     !matchString(element.text || '', step.text, step.text_matching || StringMatching.Exact)
-    //                 ) {
-    //                     return false // ELEMENT TEXT IS A MISMATCH
-    //                 }
-    //                 return true
-    //             })
-    //         ) {
-    //             // AT LEAST ONE ELEMENT MUST BE A SUBMATCH
-    //             return false
-    //         }
-    //     }
-    //     if (step.selector && !this.checkElementsAgainstSelector(event, step.selector)) {
-    //         return false // SELECTOR IS A MISMATCH
-    //     }
-    //     return true
-    // }
+    private checkStepElement(event?: CaptureResult, step?: ActionStepType): boolean {
+        // CHECK CONDITIONS, OTHERWISE SKIPPED
+        if (step?.href || step?.tag_name || step?.text) {
+            const elements = this.getElementsList(event)
+            if (
+                !elements.some((element) => {
+                    if (
+                        step?.href &&
+                        !ActionMatcher.matchString(
+                            element.getAttribute('href') || '',
+                            step?.href,
+                            step?.href_matching || 'exact'
+                        )
+                    ) {
+                        return false // ELEMENT HREF IS A MISMATCH
+                    }
+                    if (step?.tag_name && element.tagName !== step?.tag_name) {
+                        return false // ELEMENT TAG NAME IS A MISMATCH
+                    }
+                    if (
+                        step?.text &&
+                        !ActionMatcher.matchString(
+                            element.getAttribute('text') || '',
+                            step?.text,
+                            step?.text_matching || 'exact'
+                        )
+                    ) {
+                        return false // ELEMENT TEXT IS A MISMATCH
+                    }
+                    return true
+                })
+            ) {
+                // AT LEAST ONE ELEMENT MUST BE A SUBMATCH
+                return false
+            }
+        }
 
-    private getElementsList(event: CaptureResult): Element[] {
-        if (event.properties['$elements'] == null) {
+        // if (step?.selector && !this.checkElementsAgainstSelector(event, step?.selector)) {
+        //     return false // SELECTOR IS A MISMATCH
+        // }
+        return true
+    }
+
+    private getElementsList(event?: CaptureResult): Element[] {
+        if (event?.properties.$elements == null) {
             return []
         }
 
-        return event.properties['$elements'] as unknown as Element[]
+        return event?.properties.$elements as unknown as Element[]
     }
 
     // private mutateCaptureResultWithElementsList(event: CaptureResult: Element[] {

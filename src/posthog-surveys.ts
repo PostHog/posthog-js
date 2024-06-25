@@ -120,7 +120,7 @@ export class PostHogSurveys {
                     if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
                         this._surveyEventReceiver?.register(eventBasedSurveys)
                         const onEventName = (eventName: string) => {
-                            this._surveyEventReceiver?.on(eventName)
+                            this._surveyEventReceiver?.onEvent(eventName)
                         }
                         this.instance._addCaptureHook(onEventName)
                     }
