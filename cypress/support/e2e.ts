@@ -46,4 +46,12 @@ beforeEach(() => {
     cy.readFile('dist/surveys.js.map').then((body) => {
         cy.intercept('/static/surveys.js.map', { body })
     })
+
+    cy.readFile('dist/exception-autocapture.js').then((body) => {
+        cy.intercept('/static/exception-autocapture.js*', { body })
+    })
+
+    cy.readFile('dist/exception-autocapture.js.map').then((body) => {
+        cy.intercept('/static/exception-autocapture.js.map', { body })
+    })
 })

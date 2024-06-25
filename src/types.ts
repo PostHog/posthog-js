@@ -318,7 +318,6 @@ export interface DecideResponse {
         | boolean
         | {
               endpoint?: string
-              errors_to_ignore: string[]
           }
     sessionRecording?: {
         endpoint?: string
@@ -481,4 +480,37 @@ export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
     responseBody?: string | null
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
+}
+
+export type ErrorEventArgs = [
+    event: string | Event,
+    source?: string | undefined,
+    lineno?: number | undefined,
+    colno?: number | undefined,
+    error?: Error | undefined
+]
+
+// levels originally copied from Sentry to work with the sentry integration
+// and to avoid relying on a frequently changing @sentry/types dependency
+// but provided as an array of literal types, so we can constrain the level below
+export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
+export declare type SeverityLevel = typeof severityLevels[number]
+
+export interface ErrorProperties {
+    $exception_type: string
+    $exception_message: string
+    $exception_level: SeverityLevel
+    $exception_source?: string
+    $exception_lineno?: number
+    $exception_colno?: number
+    $exception_DOMException_code?: string
+    $exception_is_synthetic?: boolean
+    $exception_stack_trace_raw?: string
+    $exception_handled?: boolean
+    $exception_personURL?: string
+}
+
+export interface ErrorConversions {
+    errorToProperties: (args: ErrorEventArgs) => ErrorProperties
+    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
 }

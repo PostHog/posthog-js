@@ -1,3 +1,7 @@
+## 1.141.1 - 2024-06-25
+
+- fix: exception autocapture (#1261)
+
 ## 1.141.0 - 2024-06-24
 
 - feat(surveys): add configurable delay to popup surveys (#1228)
