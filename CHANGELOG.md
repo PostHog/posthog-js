@@ -1,3 +1,7 @@
+## 1.141.3 - 2024-06-25
+
+- fix: dropped styles on route transition (#1272)
+
 ## 1.141.2 - 2024-06-25
 
 
