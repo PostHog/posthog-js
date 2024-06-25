@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.140.1",
+    "version": "1.141.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -52,6 +52,8 @@
         "@rrweb/types": "2.0.0-alpha.13",
         "@sentry/types": "8.7.0",
         "@testing-library/dom": "^9.3.0",
+        "@testing-library/jest-dom": "^6.4.5",
+        "@testing-library/preact": "^3.2.4",
         "@types/eslint": "^8.44.6",
         "@types/jest": "^29.5.1",
         "@types/react-dom": "^18.0.10",
