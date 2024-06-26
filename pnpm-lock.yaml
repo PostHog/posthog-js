@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   rrweb@2.0.0-alpha.13:
-    hash: r7tadzcafyums4uktydxz6hwry
+    hash: zfkdpmdytjgvxaxif5jxg5ibpy
     path: patches/rrweb@2.0.0-alpha.13.patch
 
 dependencies:
@@ -191,7 +191,7 @@ devDependencies:
     version: 5.12.0(rollup@4.9.6)
   rrweb:
     specifier: 2.0.0-alpha.13
-    version: 2.0.0-alpha.13(patch_hash=r7tadzcafyums4uktydxz6hwry)
+    version: 2.0.0-alpha.13(patch_hash=zfkdpmdytjgvxaxif5jxg5ibpy)
   rrweb-snapshot:
     specifier: 2.0.0-alpha.13
     version: 2.0.0-alpha.13
@@ -9319,7 +9319,7 @@ packages:
     resolution: {integrity: sha512-slbhNBCYjxLGCeH95a67ECCy5a22nloXp1F5wF7DCzUNw80FN7tF9Lef1sRGLNo32g3mNqTc2sWLATlKejMxYw==}
     dev: true
 
-  /rrweb@2.0.0-alpha.13(patch_hash=r7tadzcafyums4uktydxz6hwry):
+  /rrweb@2.0.0-alpha.13(patch_hash=zfkdpmdytjgvxaxif5jxg5ibpy):
     resolution: {integrity: sha512-a8GXOCnzWHNaVZPa7hsrLZtNZ3CGjiL+YrkpLo0TfmxGLhjNZbWY2r7pE06p+FcjFNlgUVTmFrSJbK3kO7yxvw==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.13
