@@ -59,13 +59,13 @@ export class ActionMatcher {
                 if (this.checkAction(eventPayload, action)) {
                     // eslint-disable-next-line no-console
                     console.log(`in action matcher, emitting event with payload `, action.id)
-                    this._debugEventEmitter.emit('actionCaptured', action.id)
+                    this._debugEventEmitter.emit('actionCaptured', action.name)
                 }
             })
         }
     }
 
-    _addActionHook(callback: (actionId: number, eventPayload?: any) => void): void {
+    _addActionHook(callback: (actionName: string, eventPayload?: any) => void): void {
         this.onAction('actionCaptured', (data) => callback(data))
     }
 

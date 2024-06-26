@@ -6,14 +6,14 @@ import { CaptureResult } from '../types'
 
 export class SurveyEventReceiver {
     private readonly eventRegistry: Map<string, string[]>
-    private readonly actionRegistry: Map<string, number[]>
+    private readonly actionRegistry: Map<string, string[]>
     private actionMatcher?: ActionMatcher | null
     private readonly instance?: PostHog
 
     constructor(instance: PostHog) {
         this.instance = instance
         this.eventRegistry = new Map<string, string[]>()
-        this.actionRegistry = new Map<string, number[]>()
+        this.actionRegistry = new Map<string, string[]>()
     }
 
     register(surveys: Survey[]): void {
@@ -38,19 +38,24 @@ export class SurveyEventReceiver {
             if (this.actionMatcher == null) {
                 this.actionMatcher = new ActionMatcher(this.instance)
                 this.actionMatcher.init()
-                const withAction = (actionId: number) => {
-                    this.onAction(actionId)
+                const withAction = (actionName: string) => {
+                    this.onAction(actionName)
                 }
 
                 this.actionMatcher._addActionHook(withAction)
             }
 
             actionBasedSurveys.forEach((survey) => {
-                if (survey.conditions && survey.conditions?.actions && survey.conditions.actions.length > 0) {
-                    this.actionMatcher?.register(survey.conditions.actions)
+                if (
+                    survey.conditions &&
+                    survey.conditions?.actions &&
+                    survey.conditions?.actions?.values &&
+                    survey.conditions?.actions?.values?.length > 0
+                ) {
+                    this.actionMatcher?.register(survey.conditions.actions.values)
                     this.actionRegistry.set(
                         survey.id,
-                        survey.conditions?.actions.map((e) => e.id)
+                        survey.conditions?.actions?.values?.map((e) => e.name!)
                     )
                 }
             })
@@ -70,11 +75,11 @@ export class SurveyEventReceiver {
         this.actionMatcher?.on(event, eventPayload)
     }
 
-    onAction(actionID: any): void {
+    onAction(actionName: string): void {
         const activatedSurveys: string[] = []
 
         this.actionRegistry.forEach((actions, surveyID) => {
-            if (actions.includes(actionID)) {
+            if (actions.includes(actionName)) {
                 activatedSurveys.push(surveyID)
             }
         })

@@ -141,7 +141,9 @@ export interface Survey {
         selector?: string
         seenSurveyWaitPeriodInDays?: number
         urlMatchType?: SurveyUrlMatchType
-        actions: ActionType[] | null
+        actions: {
+            values: ActionType[]
+        } | null
         events: {
             values: {
                 name: string
