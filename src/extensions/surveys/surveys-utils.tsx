@@ -57,6 +57,9 @@ export const style = (appearance: SurveyAppearance | null) => {
               border-color: ${appearance?.borderColor || '#c9c6c6'};
               margin-top: 14px;
           }
+          .survey-box:has(.survey-question:empty) textarea {
+              margin-top: 0;
+          }
           .form-submit {
               box-sizing: border-box;
               margin: 0;
@@ -197,6 +200,9 @@ export const style = (appearance: SurveyAppearance | null) => {
           .multiple-choice-options {
               margin-top: 13px;
               font-size: 14px;
+          }
+          .survey-box > div:has(.survey-question:empty) + .multiple-choice-options {
+              margin-top: 0;
           }
           .multiple-choice-options .choice-option {
               display: flex;
