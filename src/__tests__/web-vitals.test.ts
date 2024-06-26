@@ -46,14 +46,13 @@ describe('web vitals', () => {
 
     describe('the behaviour', () => {
         beforeEach(async () => {
-            onCapture = jest.fn()
             posthog = await createPosthogInstance(uuidv7(), {
                 _onCapture: onCapture,
                 capture_performance: { web_vitals: true },
             })
 
             loadScriptMock.mockImplementation((_path, callback) => {
-                // we need a set of fake web vitals handlers so we can manually trigger the events
+                // we need a set of fake web vitals handlers, so we can manually trigger the events
                 assignableWindow.postHogWebVitalsCallbacks = {
                     onLCP: (cb: any) => {
                         onLCPCallback = cb
@@ -72,6 +71,11 @@ describe('web vitals', () => {
             })
 
             posthog.requestRouter.loadScript = loadScriptMock
+
+            // need to force this to get the web vitals script loaded
+            posthog.webVitalsAutocapture!.afterDecideResponse({
+                capturePerformance: { web_vitals: true },
+            } as unknown as DecideResponse)
         })
 
         it('should emit when all 4 metrics are captured', async () => {
