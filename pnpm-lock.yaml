@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   rrweb@2.0.0-alpha.13:
-    hash: kbttqqcqy44k7qdfsxzockfufy
+    hash: r7tadzcafyums4uktydxz6hwry
     path: patches/rrweb@2.0.0-alpha.13.patch
 
 dependencies:
@@ -16,6 +16,9 @@ dependencies:
   preact:
     specifier: ^10.19.3
     version: 10.19.3
+  web-vitals:
+    specifier: ^4.0.1
+    version: 4.2.0
 
 devDependencies:
   '@babel/core':
@@ -62,7 +65,7 @@ devDependencies:
     version: 9.3.0
   '@testing-library/jest-dom':
     specifier: ^6.4.5
-    version: 6.4.5(@types/jest@29.5.1)(jest@27.5.1)
+    version: 6.4.5(@jest/globals@27.5.1)(@types/jest@29.5.1)(jest@27.5.1)
   '@testing-library/preact':
     specifier: ^3.2.4
     version: 3.2.4(preact@10.19.3)
@@ -188,7 +191,7 @@ devDependencies:
     version: 5.12.0(rollup@4.9.6)
   rrweb:
     specifier: 2.0.0-alpha.13
-    version: 2.0.0-alpha.13(patch_hash=kbttqqcqy44k7qdfsxzockfufy)
+    version: 2.0.0-alpha.13(patch_hash=r7tadzcafyums4uktydxz6hwry)
   rrweb-snapshot:
     specifier: 2.0.0-alpha.13
     version: 2.0.0-alpha.13
@@ -2751,7 +2754,7 @@ packages:
       pretty-format: 27.5.1
     dev: true
 
-  /@testing-library/jest-dom@6.4.5(@types/jest@29.5.1)(jest@27.5.1):
+  /@testing-library/jest-dom@6.4.5(@jest/globals@27.5.1)(@types/jest@29.5.1)(jest@27.5.1):
     resolution: {integrity: sha512-AguB9yvTXmCnySBP1lWjfNNUwpbElsaQ567lt2VdGqAdHtpieLgjmcVyv1q7PMIvLbgpDdkWV5Ydv3FEejyp2A==}
     engines: {node: '>=14', npm: '>=6', yarn: '>=1'}
     peerDependencies:
@@ -2774,6 +2777,7 @@ packages:
     dependencies:
       '@adobe/css-tools': 4.4.0
       '@babel/runtime': 7.13.9
+      '@jest/globals': 27.5.1
       '@types/jest': 29.5.1
       aria-query: 5.1.3
       chalk: 3.0.0
@@ -9315,7 +9319,7 @@ packages:
     resolution: {integrity: sha512-slbhNBCYjxLGCeH95a67ECCy5a22nloXp1F5wF7DCzUNw80FN7tF9Lef1sRGLNo32g3mNqTc2sWLATlKejMxYw==}
     dev: true
 
-  /rrweb@2.0.0-alpha.13(patch_hash=kbttqqcqy44k7qdfsxzockfufy):
+  /rrweb@2.0.0-alpha.13(patch_hash=r7tadzcafyums4uktydxz6hwry):
     resolution: {integrity: sha512-a8GXOCnzWHNaVZPa7hsrLZtNZ3CGjiL+YrkpLo0TfmxGLhjNZbWY2r7pE06p+FcjFNlgUVTmFrSJbK3kO7yxvw==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.13
@@ -10665,6 +10669,10 @@ packages:
     optionalDependencies:
       '@zxing/text-encoding': 0.9.0
     dev: true
+
+  /web-vitals@4.2.0:
+    resolution: {integrity: sha512-ohj72kbtVWCpKYMxcbJ+xaOBV3En76hW47j52dG+tEGG36LZQgfFw5yHl9xyjmosy3XUMn8d/GBUAy4YPM839w==}
+    dev: false
 
   /webauth@1.1.0:
     resolution: {integrity: sha512-BwbI3vESF7eVleIU6zYPnFuzT89IRswYoJ0C6xYLDpNSUpiw7pdX0HjebyYkFYt1IuYnQvx2Y1Lx+bGKz4Zi6w==}

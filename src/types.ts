@@ -77,6 +77,13 @@ export interface BootstrapConfig {
     sessionID?: string
 }
 
+export interface PerformanceCaptureConfig {
+    /** works with session replay to use the browser's native performance observer to capture performance metrics */
+    network_timing?: boolean
+    /** works as a passenger event to use chrome's web vitals library to wrap fetch and capture web vitals */
+    web_vitals?: boolean
+}
+
 export interface PostHogConfig {
     api_host: string
     /** @deprecated - This property is no longer supported */
@@ -150,7 +157,7 @@ export interface PostHogConfig {
     get_device_id: (uuid: string) => string
     name: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
-    capture_performance?: boolean
+    capture_performance?: boolean | PerformanceCaptureConfig
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
     bootstrap: BootstrapConfig
@@ -274,7 +281,8 @@ export interface CaptureOptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
     _url?: string /** Used to override the desired endpoint for the captured event */
-    _noHeatmaps?: boolean /** Used to ensure that heatmap data is not included with this event */
+    /** Some events are sent as passengers inside other events - e.g. heatmaps and web vitals, not all ingestion routes can process passengers */
+    _noHeatmaps?: boolean
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     send_instantly?: boolean /** if set skips the batched queue */
@@ -291,7 +299,16 @@ export interface DecideResponse {
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
-    capturePerformance?: boolean
+    /**
+     *     originally capturePerformance was replay only and so boolean true
+     *     is equivalent to { network_timing: true }
+     *     now capture performance can be separately enabled within replay
+     *     and as a standalone web vitals tracker
+     *     people can have them enabled separately
+     *     they work standalone but enhance each other
+     *     TODO: deprecate this so we make a new config that doesn't need this explanation
+     */
+    capturePerformance?: boolean | PerformanceCaptureConfig
     analytics?: {
         endpoint?: string
     }
@@ -477,7 +494,7 @@ export type ErrorEventArgs = [
 // and to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
-export declare type SeverityLevel = (typeof severityLevels)[number]
+export declare type SeverityLevel = typeof severityLevels[number]
 
 export interface ErrorProperties {
     $exception_type: string
