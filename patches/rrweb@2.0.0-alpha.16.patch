@@ -1,5 +1,5 @@
 diff --git a/dist/rrweb.js b/dist/rrweb.js
-index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..a9a473fca25eeec5c6794c4806baffe2d1bc1e15 100644
+index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..a0b51af0402a23af1e99a5d395f065c61c54864e 100644
 --- a/dist/rrweb.js
 +++ b/dist/rrweb.js
 @@ -661,9 +661,17 @@ function serializeElementNode(n2, options) {
@@ -33,12 +33,12 @@ index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..a9a473fca25eeec5c6794c4806baffe2
 -        }
 -      });
 +      const searchCanvas = (root) => {
-+        root.querySelectorAll('canvas').forEach((canvas) => {
++        root.querySelectorAll("canvas").forEach((canvas) => {
 +          if (!isBlocked(canvas, blockClass, blockSelector, true)) {
 +            matchedCanvas.push(canvas);
 +          }
 +        });
-+        root.querySelectorAll('*').forEach((elem) => {
++        root.querySelectorAll("*").forEach((elem) => {
 +          if (elem.shadowRoot) {
 +            searchCanvas(elem.shadowRoot);
 +          }
@@ -57,7 +57,7 @@ index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..a9a473fca25eeec5c6794c4806baffe2
 +        // Fallback to intrinsic size if canvas has not yet rendered
 +        const width = canvas.clientWidth || canvas.width;
 +        const height = canvas.clientHeight || canvas.height;
-+        const bitmap = yield createImageBitmap(canvas, {
++        const bitmap = await createImageBitmap(canvas, {
 +          resizeWidth: width,
 +          resizeHeight: height
 +        });
