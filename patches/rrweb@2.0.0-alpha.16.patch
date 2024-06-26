@@ -1,0 +1,74 @@
+diff --git a/dist/rrweb.js b/dist/rrweb.js
+index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..a9a473fca25eeec5c6794c4806baffe2d1bc1e15 100644
+--- a/dist/rrweb.js
++++ b/dist/rrweb.js
+@@ -661,9 +661,17 @@ function serializeElementNode(n2, options) {
+     }
+   }
+   if (tagName === "link" && inlineStylesheet) {
+-    const stylesheet = Array.from(doc.styleSheets).find((s2) => {
+-      return s2.href === n2.href;
+-    });
++    function findStylesheet(href) {
++      return Array.from(doc.styleSheets).find((s2) => {
++        return s2.href === href;
++      });
++    }
++    let stylesheet = findStylesheet(n2.href);
++    if (!stylesheet && href.includes('.css')) {
++      const stylesheetPath = href.replace(window.location.href, '');
++      const potentialStylesheetHref = window.location.origin + '/' + stylesheetPath;
++      stylesheet = findStylesheet(potentialStylesheetHref);      
++    }
+     let cssText = null;
+     if (stylesheet) {
+       cssText = stringifyStylesheet(stylesheet);
+@@ -5016,11 +5024,19 @@ class CanvasManager {
+     let rafId;
+     const getCanvas = () => {
+       const matchedCanvas = [];
+-      win.document.querySelectorAll("canvas").forEach((canvas) => {
+-        if (!isBlocked(canvas, blockClass, blockSelector, true)) {
+-          matchedCanvas.push(canvas);
+-        }
+-      });
++      const searchCanvas = (root) => {
++        root.querySelectorAll('canvas').forEach((canvas) => {
++          if (!isBlocked(canvas, blockClass, blockSelector, true)) {
++            matchedCanvas.push(canvas);
++          }
++        });
++        root.querySelectorAll('*').forEach((elem) => {
++          if (elem.shadowRoot) {
++            searchCanvas(elem.shadowRoot);
++          }
++        });
++      };
++      searchCanvas(win.document);
+       return matchedCanvas;
+     };
+     const takeCanvasSnapshots = (timestamp) => {
+@@ -5041,13 +5057,20 @@ class CanvasManager {
+             context.clear(context.COLOR_BUFFER_BIT);
+           }
+         }
+-        const bitmap = await createImageBitmap(canvas);
++        // createImageBitmap throws if resizing to 0
++        // Fallback to intrinsic size if canvas has not yet rendered
++        const width = canvas.clientWidth || canvas.width;
++        const height = canvas.clientHeight || canvas.height;
++        const bitmap = yield createImageBitmap(canvas, {
++          resizeWidth: width,
++          resizeHeight: height
++        });
+         worker.postMessage(
+           {
+             id,
+             bitmap,
+-            width: canvas.width,
+-            height: canvas.height,
++            width: width,
++            height: height,
+             dataURLOptions: options.dataURLOptions
+           },
+           [bitmap]
