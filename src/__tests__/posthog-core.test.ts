@@ -60,7 +60,7 @@ describe('posthog core', () => {
                 onCapture.mockClear()
                 ;(console.error as any).mockClear()
                 posthog.capture(eventName, properties)
-                expect(onCapture).toHaveBeenCalledTimes(0)
+                expect(onCapture.mock.calls).toEqual([])
                 expect(console.error).toHaveBeenCalledTimes(1)
                 expect(console.error).toHaveBeenCalledWith(
                     '[PostHog.js]',

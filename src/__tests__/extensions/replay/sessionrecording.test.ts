@@ -6,6 +6,7 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
@@ -15,7 +16,13 @@ import {
     META_EVENT_TYPE,
 } from '../../../extensions/replay/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { DecideResponse, PostHogConfig, Property, SessionIdChangedCallback } from '../../../types'
+import {
+    DecideResponse,
+    PerformanceCaptureConfig,
+    PostHogConfig,
+    Property,
+    SessionIdChangedCallback,
+} from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import {
     RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
@@ -219,26 +226,71 @@ describe('SessionRecording', () => {
     })
 
     describe('isConsoleLogCaptureEnabled', () => {
-        it('uses client side setting when set to false', () => {
-            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: true })
-            posthog.config.enable_recording_console_log = false
-            expect(sessionRecording['isConsoleLogCaptureEnabled']).toBe(false)
-        })
+        it.each([
+            ['enabled when both enabled', true, true, true],
+            ['uses client side setting when set to false', true, false, false],
+            ['uses client side setting when set to true', false, true, true],
+            ['disabled when both disabled', false, false, false],
+            ['uses client side setting (disabled) if server side setting is not set', undefined, false, false],
+            ['uses client side setting (enabled) if server side setting is not set', undefined, true, true],
+            ['is disabled when nothing is set', undefined, undefined, false],
+            ['uses server side setting (disabled) if client side setting is not set', undefined, false, false],
+            ['uses server side setting (enabled) if client side setting is not set', undefined, true, true],
+        ])(
+            '%s',
+            (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {
+                posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: serverSide })
+                posthog.config.enable_recording_console_log = clientSide
+                expect(sessionRecording['isConsoleLogCaptureEnabled']).toBe(expected)
+            }
+        )
+    })
 
-        it('uses client side setting when set to true', () => {
-            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
-            posthog.config.enable_recording_console_log = true
-            expect(sessionRecording['isConsoleLogCaptureEnabled']).toBe(true)
-        })
-
-        it('uses server side setting if client side setting is not set', () => {
-            posthog.config.enable_recording_console_log = undefined
-            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
-            expect(sessionRecording['isConsoleLogCaptureEnabled']).toBe(false)
-
-            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: true })
-            expect(sessionRecording['isConsoleLogCaptureEnabled']).toBe(true)
-        })
+    describe('network timing capture config', () => {
+        it.each([
+            ['enabled when both enabled', true, true, true],
+            // returns undefined when nothing is enabled
+            ['uses client side setting when set to false - even if remotely enabled', true, false, undefined],
+            ['uses client side setting when set to true', false, true, true],
+            // returns undefined when nothing is enabled
+            ['disabled when both disabled', false, false, undefined],
+            // returns undefined when nothing is enabled
+            ['uses client side setting (disabled) if server side setting is not set', undefined, false, undefined],
+            ['uses client side setting (enabled) if server side setting is not set', undefined, true, true],
+            // returns undefined when nothing is enabled
+            ['is disabled when nothing is set', undefined, undefined, undefined],
+            // returns undefined when nothing is enabled
+            ['can be disabled when client object config only is set', undefined, { network_timing: false }, undefined],
+            [
+                'can be disabled when client object config only is disabled - even if remotely enabled',
+                true,
+                { network_timing: false },
+                undefined,
+            ],
+            ['can be enabled when client object config only is set', undefined, { network_timing: true }, true],
+            [
+                'can be disabled when client object config makes no decision',
+                undefined,
+                { network_timing: undefined },
+                undefined,
+            ],
+            ['uses server side setting (disabled) if client side setting is not set', false, undefined, undefined],
+            ['uses server side setting (enabled) if client side setting is not set', true, undefined, true],
+        ])(
+            '%s',
+            (
+                _name: string,
+                serverSide: boolean | undefined,
+                clientSide: boolean | PerformanceCaptureConfig | undefined,
+                expected: boolean | undefined
+            ) => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: { capturePerformance: serverSide },
+                })
+                posthog.config.capture_performance = clientSide
+                expect(sessionRecording['networkPayloadCapture']?.recordPerformance).toBe(expected)
+            }
+        )
     })
 
     describe('startIfEnabledOrStop', () => {
@@ -1320,7 +1372,7 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('emits full snapshot events even when idle', () => {
+        it('drops full snapshots when idle - so we must make sure not to take them while idle!', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1333,19 +1385,14 @@ describe('SessionRecording', () => {
             sessionRecording.onRRwebEmit(createFullSnapshot({}) as eventWithTime)
 
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {},
-                        type: 2,
-                    },
-                ],
+                data: [],
                 sessionId: sessionId,
-                size: 20,
+                size: 0,
                 windowId: 'windowId',
             })
         })
 
-        it('emits meta snapshot events even when idle', () => {
+        it('does not emit meta snapshot events when idle - so we must make sure not to take them while idle!', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1358,21 +1405,14 @@ describe('SessionRecording', () => {
             sessionRecording.onRRwebEmit(createMetaSnapshot({}) as eventWithTime)
 
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {
-                            href: 'https://has-to-be-present-or-invalid.com',
-                        },
-                        type: 4,
-                    },
-                ],
+                data: [],
                 sessionId: sessionId,
-                size: 69,
+                size: 0,
                 windowId: 'windowId',
             })
         })
 
-        it('emits style snapshot events even when idle', () => {
+        it('does not emit style snapshot events when idle - so we must make sure not to take them while idle!', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1385,16 +1425,9 @@ describe('SessionRecording', () => {
             sessionRecording.onRRwebEmit(createStyleSnapshot({}) as eventWithTime)
 
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {
-                            source: 13,
-                        },
-                        type: 3,
-                    },
-                ],
+                data: [],
                 sessionId: sessionId,
-                size: 31,
+                size: 0,
                 windowId: 'windowId',
             })
         })

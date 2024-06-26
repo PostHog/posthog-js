@@ -148,6 +148,8 @@ export class Heatmaps {
         if (!window) {
             return
         }
+
+        // TODO we should be able to mask this
         const url = window.location.href
 
         this.buffer = this.buffer || {}

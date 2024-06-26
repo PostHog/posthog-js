@@ -74,6 +74,8 @@ import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { Autocapture } from './autocapture'
 import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
+import { ExceptionObserver } from './extensions/exception-autocapture'
+import { WebVitalsAutocapture } from './extensions/web-vitals'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -249,6 +251,8 @@ export class PostHog {
     requestRouter: RequestRouter
     autocapture?: Autocapture
     heatmaps?: Heatmaps
+    webVitalsAutocapture?: WebVitalsAutocapture
+    exceptionObserver?: ExceptionObserver
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -264,7 +268,7 @@ export class PostHog {
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
-    private _debugEventEmitter = new SimpleEventEmitter()
+    private _internalEventEmitter = new SimpleEventEmitter()
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -413,6 +417,11 @@ export class PostHog {
         this.heatmaps = new Heatmaps(this)
         this.heatmaps.startIfEnabled()
 
+        this.webVitalsAutocapture = new WebVitalsAutocapture(this)
+
+        this.exceptionObserver = new ExceptionObserver(this)
+        this.exceptionObserver.startIfEnabled()
+
         // if any instance on the page has debug = true, we set the
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
@@ -507,6 +516,8 @@ export class PostHog {
         this.autocapture?.afterDecideResponse(response)
         this.heatmaps?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
+        this.webVitalsAutocapture?.afterDecideResponse(response)
+        this.exceptionObserver?.afterDecideResponse(response)
     }
 
     _loaded(): void {
@@ -809,7 +820,7 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        this._debugEventEmitter.emit('eventCaptured', data)
+        this._internalEventEmitter.emit('eventCaptured', data)
 
         const requestOptions: QueuedRequestOptions = {
             method: 'POST',
@@ -1133,7 +1144,7 @@ export class PostHog {
      * _after_ registering a listener
      */
     on(event: 'eventCaptured', cb: (...args: any[]) => void): () => void {
-        return this._debugEventEmitter.on(event, cb)
+        return this._internalEventEmitter.on(event, cb)
     }
 
     /*

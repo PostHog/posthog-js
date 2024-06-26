@@ -167,7 +167,7 @@ index ea868845c4fad3276aa8e5f74abfd3568b466d11..965505de44975e718d431a4e9a62e753
  
  export { WorkerFactory as default };
 diff --git a/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js b/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
-index da2c103fe6b1408a5996f0eb3bf047571e434cc2..3b34097a089791bd1043f313dcab9ad4c3733830 100644
+index da2c103fe6b1408a5996f0eb3bf047571e434cc2..f5b060c7e0728a3e2c6cf62b01d97282f2484ac3 100644
 --- a/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
 +++ b/es/rrweb/packages/rrweb/src/record/observers/canvas/canvas-manager.js
 @@ -91,11 +91,21 @@ class CanvasManager {
@@ -223,3 +223,28 @@ index da2c103fe6b1408a5996f0eb3bf047571e434cc2..3b34097a089791bd1043f313dcab9ad4
                      dataURLOptions: options.dataURLOptions,
                  }, [bitmap]);
              }));
+diff --git a/es/rrweb/packages/rrweb-snapshot/es/rrweb-snapshot.js b/es/rrweb/packages/rrweb-snapshot/es/rrweb-snapshot.js
+index 0fc7d4bcafc9be822347f9437658478fd77d9972..5dcd1dcbd5380567110378269f3bc8d7b7ca6440 100644
+--- a/es/rrweb/packages/rrweb-snapshot/es/rrweb-snapshot.js
++++ b/es/rrweb/packages/rrweb-snapshot/es/rrweb-snapshot.js
+@@ -641,9 +641,18 @@ function serializeElementNode(n, options) {
+         }
+     }
+     if (tagName === 'link' && inlineStylesheet) {
+-        const stylesheet = Array.from(doc.styleSheets).find((s) => {
+-            return s.href === n.href;
++        const href = n.href
++        let stylesheet = Array.from(doc.styleSheets).find((s) => {
++            return s.href === href;
+         });
++        if (!stylesheet && href.includes('.css')) {
++            const rootDomain = window.location.origin
++            const stylesheetPath = href.replace(window.location.href, '')
++            const potentialStylesheetHref = rootDomain + '/' + stylesheetPath
++            stylesheet = Array.from(doc.styleSheets).find((s) => {
++                return s.href === potentialStylesheetHref;
++            });
++        }
+         let cssText = null;
+         if (stylesheet) {
+             cssText = stringifyStylesheet(stylesheet);

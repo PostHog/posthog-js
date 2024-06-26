@@ -10,7 +10,8 @@ import {
 } from './type-checking'
 import { defaultStackParser, StackFrame } from './stack-trace'
 
-import { isNumber, isString, isUndefined } from '../../utils/type-utils'
+import { isEmptyString, isNumber, isString, isUndefined } from '../../utils/type-utils'
+import { ErrorEventArgs, ErrorProperties, SeverityLevel, severityLevels } from '../../types'
 
 /**
  * based on the very wonderful MIT licensed Sentry SDK
@@ -18,27 +19,6 @@ import { isNumber, isString, isUndefined } from '../../utils/type-utils'
 
 const ERROR_TYPES_PATTERN =
     /^(?:[Uu]ncaught (?:exception: )?)?(?:((?:Eval|Internal|Range|Reference|Syntax|Type|URI|)Error): )?(.*)$/i
-
-export type ErrorEventArgs = [
-    event: string | Event,
-    source?: string | undefined,
-    lineno?: number | undefined,
-    colno?: number | undefined,
-    error?: Error | undefined
-]
-
-export interface ErrorProperties {
-    $exception_type: string
-    $exception_message: string
-    $exception_source?: string
-    $exception_lineno?: number
-    $exception_colno?: number
-    $exception_DOMException_code?: string
-    $exception_is_synthetic?: boolean
-    $exception_stack_trace_raw?: string
-    $exception_handled?: boolean
-    $exception_personURL?: string
-}
 
 const reactMinifiedRegexp = /Minified React error #\d+;/i
 
@@ -80,6 +60,7 @@ function errorPropertiesFromError(error: Error): ErrorProperties {
         $exception_type: error.name,
         $exception_message: error.message,
         $exception_stack_trace_raw: JSON.stringify(frames),
+        $exception_level: 'error',
     }
 }
 
@@ -87,6 +68,7 @@ function errorPropertiesFromString(candidate: string): ErrorProperties {
     return {
         $exception_type: 'Error',
         $exception_message: candidate,
+        $exception_level: 'error',
     }
 }
 
@@ -117,18 +99,24 @@ function extractExceptionKeysForMessage(exception: Record<string, unknown>, maxL
     return ''
 }
 
+function isSeverityLevel(x: unknown): x is SeverityLevel {
+    return isString(x) && !isEmptyString(x) && severityLevels.indexOf(x as SeverityLevel) >= 0
+}
+
 function errorPropertiesFromObject(candidate: Record<string, unknown>): ErrorProperties {
     return {
         $exception_type: isEvent(candidate) ? candidate.constructor.name : 'Error',
         $exception_message: `Non-Error ${'exception'} captured with keys: ${extractExceptionKeysForMessage(candidate)}`,
+        $exception_level: isSeverityLevel(candidate.level) ? candidate.level : 'error',
     }
 }
 
 export function errorToProperties([event, source, lineno, colno, error]: ErrorEventArgs): ErrorProperties {
-    // exception type and message are not optional but, it's useful to start off without them enforced
-    let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message'> & {
+    // some properties are not optional but, it's useful to start off without them enforced
+    let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message' | '$exception_level'> & {
         $exception_type?: string
         $exception_message?: string
+        $exception_level?: string
     } = {}
 
     if (isUndefined(error) && isString(event)) {
@@ -186,6 +174,9 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         // now we make sure the mandatory fields that were made optional are present
         $exception_type: errorProperties.$exception_type || 'UnknownErrorType',
         $exception_message: errorProperties.$exception_message || '',
+        $exception_level: isSeverityLevel(errorProperties.$exception_level)
+            ? errorProperties.$exception_level
+            : 'error',
         ...(source
             ? {
                   $exception_source: source, // TODO get this from URL if not present
@@ -217,10 +208,11 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
         // no-empty
     }
 
-    // exception type and message are not optional but, it's useful to start off without them enforced
-    let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message'> & {
+    // some properties are not optional but, it's useful to start off without them enforced
+    let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message' | '$exception_level'> & {
         $exception_type?: string
         $exception_message?: string
+        $exception_level?: string
     } = {}
     if (isPrimitive(error)) {
         errorProperties = {
@@ -237,5 +229,8 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
         $exception_type: (errorProperties.$exception_type = 'UnhandledRejection'),
         $exception_message: (errorProperties.$exception_message =
             errorProperties.$exception_message || (ev as any).reason || String(error)),
+        $exception_level: isSeverityLevel(errorProperties.$exception_level)
+            ? errorProperties.$exception_level
+            : 'error',
     }
 }
