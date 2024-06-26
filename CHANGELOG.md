@@ -1,3 +1,8 @@
+## 1.141.4 - 2024-06-26
+
+- fix: use includes over contains (#1275)
+- chore: add browsertack build name (#1271)
+
 ## 1.141.3 - 2024-06-25
 
 - fix: dropped styles on route transition (#1272)
