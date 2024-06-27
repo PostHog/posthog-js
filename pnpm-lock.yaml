@@ -10,9 +10,6 @@ patchedDependencies:
     path: patches/rrweb@2.0.0-alpha.16.patch
 
 dependencies:
-  '@rrweb/rrweb-plugin-console-record':
-    specifier: 2.0.0-alpha.15
-    version: 2.0.0-alpha.15(rrweb@2.0.0-alpha.16)
   fflate:
     specifier: ^0.4.8
     version: 0.4.8
@@ -57,6 +54,9 @@ devDependencies:
   '@rollup/plugin-typescript':
     specifier: ^11.1.6
     version: 11.1.6(rollup@4.9.6)(tslib@2.5.0)(typescript@4.9.5)
+  '@rrweb/rrweb-plugin-console-record':
+    specifier: 2.0.0-alpha.15
+    version: 2.0.0-alpha.15(rrweb@2.0.0-alpha.16)
   '@rrweb/types':
     specifier: 2.0.0-alpha.16
     version: 2.0.0-alpha.16
@@ -2683,12 +2683,13 @@ packages:
       rrweb: ^2.0.0-alpha.15
     dependencies:
       rrweb: 2.0.0-alpha.16(patch_hash=gpsetihczs7jp5pkuai253i3iu)
-    dev: false
+    dev: true
 
   /@rrweb/types@2.0.0-alpha.16:
     resolution: {integrity: sha512-E6cACNVsm+NUhn7dzocQoKyXI7BHrHRRm5Ab23yrAzEQ2caWocCEYJhqDlc4KRVJBkQfXZfyWm8+2d0uggFuZg==}
     dependencies:
       rrweb-snapshot: 2.0.0-alpha.16
+    dev: true
 
   /@sentry/types@8.7.0:
     resolution: {integrity: sha512-11KLOKumP6akugVGLvSoEig+JlP0ZEzW3nN9P+ppgdIx9HAxMIh6UvumbieG4/DWjAh2kh6NPNfUw3gk2Gfq1A==}
@@ -2860,6 +2861,7 @@ packages:
 
   /@types/css-font-loading-module@0.0.7:
     resolution: {integrity: sha512-nl09VhutdjINdWyXxHWN/w9zlNCfr60JUqJbd24YXUuCwgeL0TpFSdElCwb6cxfB6ybE19Gjj4g0jsgkXxKv1Q==}
+    dev: true
 
   /@types/debug@4.1.7:
     resolution: {integrity: sha512-9AonUzyTjXXhEOa0DnqpzZi6VHlqKMswga9EXjpXnnqxwLtdvPPtlO8evrI5D9S6asFRCQ6v+wpiUKbw+vKqyg==}
@@ -3265,6 +3267,7 @@ packages:
 
   /@xstate/fsm@1.5.2:
     resolution: {integrity: sha512-l2l7ztpLw/0EomJcvl86F8M6cLeMXhSEOtmI89fg34DbDMaatUKfiiAQpZpdcRqWHMjZYPAfC8EqmnHbmIlyEg==}
+    dev: true
 
   /@zxing/text-encoding@0.9.0:
     resolution: {integrity: sha512-U/4aVJ2mxI0aDNI8Uq0wEhMgY+u4CNtEb0om3+y3+niDAsoTCOB33UF0sxpzqzdqXLqmvc+vZyAt4O8pPdfkwA==}
@@ -3827,6 +3830,7 @@ packages:
   /base64-arraybuffer@1.0.2:
     resolution: {integrity: sha512-I3yl4r9QB5ZRY3XuJVEPfc2XhZO6YweFPI+UovAzn+8/hb3oJ6lnysaFcjVpkCPfVWFUDvoZ8kmVDP7WyRtYtQ==}
     engines: {node: '>= 0.6.0'}
+    dev: true
 
   /base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
@@ -8070,6 +8074,7 @@ packages:
 
   /mitt@3.0.0:
     resolution: {integrity: sha512-7dX2/10ITVyqh4aOSVI9gdape+t9l2/8QxHrFmUXu4EEUpdlxl6RudZUPZoc+zuY2hk1j7XxVroIVIan/pD/SQ==}
+    dev: true
 
   /mixin-deep@1.3.2:
     resolution: {integrity: sha512-WRoDn//mXBiJ1H40rqa3vH0toePwSsGb45iInWlTySa+Uu4k3tYUSxa2v1KqAiLtvlrSzaExqS1gtk96A9zvEA==}
@@ -9320,9 +9325,11 @@ packages:
     resolution: {integrity: sha512-m8aoeORWUz7AFdEb7hES7wPeL6fl/oP23RoAlzLXyA/f2+NqCDM7KEyCXY4sHu6CChN3OAUP2BaUGEXn0zynlw==}
     dependencies:
       rrweb-snapshot: 2.0.0-alpha.16
+    dev: true
 
   /rrweb-snapshot@2.0.0-alpha.16:
     resolution: {integrity: sha512-p81OrzUiCmUMZzJu4fGHeLB00PIbVIqsV/zhqzr2pitHTUXpMYcyOvDWt0vHdla0vnowEPaHq3Wsu6cUc732/w==}
+    dev: true
 
   /rrweb@2.0.0-alpha.16(patch_hash=gpsetihczs7jp5pkuai253i3iu):
     resolution: {integrity: sha512-Uxl7quZc8gm9RqrUR+10prZBoAfKWvM5lqlWDe7zd2wAkMiBQawDHUrmt8dByx96aiLonvm4oLsbBK14A0A0Tg==}
@@ -9334,6 +9341,7 @@ packages:
       mitt: 3.0.0
       rrdom: 2.0.0-alpha.16
       rrweb-snapshot: 2.0.0-alpha.16
+    dev: true
     patched: true
 
   /rsvp@4.8.5:

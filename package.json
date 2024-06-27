@@ -33,7 +33,6 @@
         "react/package.json"
     ],
     "dependencies": {
-        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.15",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
         "web-vitals": "^4.0.1"
@@ -96,6 +95,7 @@
         "rollup-plugin-dts": "^6.1.0",
         "rollup-plugin-visualizer": "^5.12.0",
         "rrweb": "2.0.0-alpha.16",
+        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.15",
         "rrweb-snapshot": "2.0.0-alpha.16",
         "sinon": "9.0.2",
         "testcafe": "1.19.0",
