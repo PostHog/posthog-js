@@ -125,6 +125,20 @@ export type SurveyCallback = (surveys: Survey[]) => void
 
 export type SurveyUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 
+export interface SurveyElement {
+    text?: string
+    $el_text?: string
+    tag_name?: string
+    href?: string
+    attr_id?: string
+    attr_class?: string[]
+    nth_child?: number
+    nth_of_type?: number
+    attributes?: Record<string, any>
+    event_id?: number
+    order?: number
+    group_id?: number
+}
 export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string

@@ -39,11 +39,13 @@ export class Autocapture {
     instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
+    _elementSelectors: Set<string> | null
     rageclicks = new RageClick()
     _elementsChainAsString = false
 
     constructor(instance: PostHog) {
         this.instance = instance
+        this._elementSelectors = null
     }
 
     private get config(): AutocaptureConfig {
@@ -106,6 +108,22 @@ export class Autocapture {
         // store this in-memory in case persistence is disabled
         this._isDisabledServerSide = !!response['autocapture_opt_out']
         this.startIfEnabled()
+    }
+
+    public setElementSelectors(selectors: Set<string>): void {
+        this._elementSelectors = selectors
+    }
+
+    public getElementSelector(element: Element | null): string | null {
+        let elementSelector = ''
+
+        this._elementSelectors?.forEach((selector) => {
+            if (element == document?.querySelector(selector)) {
+                elementSelector = selector
+            }
+        })
+
+        return elementSelector
     }
 
     public get isEnabled(): boolean {
@@ -343,6 +361,11 @@ export class Autocapture {
                 elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
                 autocaptureAugmentProperties
             )
+
+            const elementSelector = this.getElementSelector(target)
+            if (elementSelector && elementSelector.length > 0) {
+                props['$element_selector'] = elementSelector
+            }
 
             if (eventName === COPY_AUTOCAPTURE_EVENT) {
                 // you can't read the data from the clipboard event,

@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import type { ActionStepStringMatching, ActionStepType, ActionType } from '../../posthog-surveys-types'
+import { ActionStepStringMatching, ActionStepType, ActionType, SurveyElement } from '../../posthog-surveys-types'
 import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
 import { CaptureResult } from '../../types'
 import { isUndefined } from '../../utils/type-utils'
@@ -21,8 +21,6 @@ export class ActionMatcher {
     init() {
         if (!isUndefined(this.instance?._addCaptureHook)) {
             const onEventName = (eventName: string, eventPayload: any) => {
-                // eslint-disable-next-line no-console
-                console.log(` in action matcher, payload is `, eventPayload)
                 this.on(eventName, eventPayload)
             }
             this.instance?._addCaptureHook(onEventName)
@@ -44,21 +42,17 @@ export class ActionMatcher {
     }
 
     on(eventName: string, eventPayload?: CaptureResult) {
-        // eslint-disable-next-line no-console
-        console.log(`in action matcher, known events are `, this.actionEvents, ` receieved event `, eventName)
-        if (!this.actionEvents.has(eventName) && !this.actionEvents.has(<string>eventPayload?.event)) {
-            // eslint-disable-next-line no-console
-            console.log(`no idea what this event is `, eventName)
+        if (eventPayload == null || eventName.length == 0) {
             return
         }
 
-        // eslint-disable-next-line no-console
-        // console.log(`in action matcher, event registry is `, this.actionRegistry)
+        if (!this.actionEvents.has(eventName) && !this.actionEvents.has(<string>eventPayload?.event)) {
+            return
+        }
+
         if (this.actionRegistry && this.actionRegistry?.size > 0) {
             this.actionRegistry.forEach((action) => {
                 if (this.checkAction(eventPayload, action)) {
-                    // eslint-disable-next-line no-console
-                    console.log(`in action matcher, emitting event with payload `, action.id)
                     this._debugEventEmitter.emit('actionCaptured', action.name)
                 }
             })
@@ -147,27 +141,37 @@ export class ActionMatcher {
         // CHECK CONDITIONS, OTHERWISE SKIPPED
         if (step?.href || step?.tag_name || step?.text) {
             const elements = this.getElementsList(event)
+            // eslint-disable-next-line no-console
+            console.log(` in action matcher, elements is `, elements)
             if (
                 !elements.some((element) => {
+                    // eslint-disable-next-line no-console
+                    console.log(
+                        `in action matcher, element is `,
+                        element,
+                        ` attributes are `,
+                        element.attributes,
+                        `element.text is `,
+                        element.text
+                    )
                     if (
                         step?.href &&
-                        !ActionMatcher.matchString(
-                            element.getAttribute('href') || '',
-                            step?.href,
-                            step?.href_matching || 'exact'
-                        )
+                        !ActionMatcher.matchString(element.href || '', step?.href, step?.href_matching || 'exact')
                     ) {
                         return false // ELEMENT HREF IS A MISMATCH
                     }
-                    if (step?.tag_name && element.tagName !== step?.tag_name) {
+                    if (step?.tag_name && element.tag_name !== step?.tag_name) {
                         return false // ELEMENT TAG NAME IS A MISMATCH
                     }
                     if (
                         step?.text &&
-                        !ActionMatcher.matchString(
-                            element.getAttribute('text') || '',
-                            step?.text,
-                            step?.text_matching || 'exact'
+                        !(
+                            ActionMatcher.matchString(element.text || '', step?.text, step?.text_matching || 'exact') ||
+                            ActionMatcher.matchString(
+                                element.$el_text || '',
+                                step?.text,
+                                step?.text_matching || 'exact'
+                            )
                         )
                     ) {
                         return false // ELEMENT TEXT IS A MISMATCH
@@ -179,6 +183,14 @@ export class ActionMatcher {
                 return false
             }
         }
+        // eslint-disable-next-line no-console
+        console.log(` in action matcher, checkStepElement, selector is `, event?.properties?.$element_selector)
+        if (step?.selector === event?.properties?.$element_selector) {
+            // eslint-disable-next-line no-console
+            console.log(`SELECTOR MATCHED!! in step `, step)
+        } else {
+            return false // SELECTOR IS A MISMATCH
+        }
 
         // if (step?.selector && !this.checkElementsAgainstSelector(event, step?.selector)) {
         //     return false // SELECTOR IS A MISMATCH
@@ -186,12 +198,15 @@ export class ActionMatcher {
         return true
     }
 
-    private getElementsList(event?: CaptureResult): Element[] {
+    private getElementsList(event?: CaptureResult): SurveyElement[] {
         if (event?.properties.$elements == null) {
             return []
         }
 
-        return event?.properties.$elements as unknown as Element[]
+        // eslint-disable-next-line no-console
+        console.log(` in action matcher: getElementsList, elements is `, event?.properties.$elements)
+
+        return event?.properties.$elements as unknown as SurveyElement[]
     }
 
     // private mutateCaptureResultWithElementsList(event: CaptureResult: Element[] {

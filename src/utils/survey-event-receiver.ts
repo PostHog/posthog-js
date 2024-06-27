@@ -31,7 +31,7 @@ export class SurveyEventReceiver {
         })
 
         const actionBasedSurveys = surveys.filter(
-            (survey: Survey) => survey.conditions?.actions && survey.conditions?.actions?.length > 0
+            (survey: Survey) => survey.conditions?.actions && survey.conditions?.actions?.values?.length > 0
         )
 
         if (actionBasedSurveys.length > 0) {
@@ -44,6 +44,25 @@ export class SurveyEventReceiver {
 
                 this.actionMatcher._addActionHook(withAction)
             }
+
+            const selectorsToWatch: Set<string> = new Set<string>()
+            actionBasedSurveys.forEach((survey) => {
+                survey.conditions?.actions?.values.forEach((action) => {
+                    action.steps?.forEach((step) => {
+                        if (step?.selector) {
+                            selectorsToWatch.add(step?.selector)
+                        }
+                    })
+                })
+            })
+
+            if (this.instance && this.instance.autocapture) {
+                this.instance.autocapture.setElementSelectors(selectorsToWatch)
+            }
+
+            actionBasedSurveys.map((survey) =>
+                survey.conditions?.actions?.values.map((action) => action.steps?.map((step) => step.selector))
+            )
 
             actionBasedSurveys.forEach((survey) => {
                 if (

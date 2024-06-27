@@ -112,9 +112,12 @@ export class PostHogSurveys {
 
                     const eventBasedSurveys = surveys.filter(
                         (survey: Survey) =>
-                            survey.conditions?.events &&
-                            survey.conditions?.events?.values &&
-                            survey.conditions?.events?.values?.length > 0
+                            (survey.conditions?.events &&
+                                survey.conditions?.events?.values &&
+                                survey.conditions?.events?.values?.length > 0) ||
+                            (survey.conditions?.actions &&
+                                survey.conditions?.actions?.values &&
+                                survey.conditions?.actions?.values?.length > 0)
                     )
 
                     if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
@@ -176,7 +179,13 @@ export class PostHogSurveys {
                     survey.conditions?.events &&
                     survey.conditions?.events?.values &&
                     survey.conditions?.events?.values.length > 0
-                const eventBasedTargetingFlagCheck = hasEvents ? activatedSurveys?.includes(survey.id) : true
+
+                const hasActions =
+                    survey.conditions?.actions &&
+                    survey.conditions?.actions?.values &&
+                    survey.conditions?.actions?.values.length > 0
+                const eventBasedTargetingFlagCheck =
+                    hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
                 return (
                     linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck
                 )
