@@ -1,5 +1,5 @@
 diff --git a/dist/rrweb.js b/dist/rrweb.js
-index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..5ca9a765a23e0a44f793728701352e2d6e1b291e 100644
+index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..71be9fddf7ae925099cccba73057fffaa110e11b 100644
 --- a/dist/rrweb.js
 +++ b/dist/rrweb.js
 @@ -661,9 +661,17 @@ function serializeElementNode(n2, options) {
@@ -76,7 +76,7 @@ index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..5ca9a765a23e0a44f793728701352e2d
  }
  const { addCustomEvent } = record;
  const { freezePage } = record;
-+const version = '2.0.0-alpha.16';
++const version = "2.0.0-alpha.16"
  export {
    EventType,
    IncrementalSource,
