@@ -1,6 +1,5 @@
-const { version } = require('rrweb/package.json')
-
-import { record as rrwebRecord } from 'rrweb'
+// @ts-expect-error - Patched to include the version
+import { record as rrwebRecord, version } from 'rrweb'
 import { getRecordConsolePlugin } from '@rrweb/rrweb-plugin-console-record'
 
 // rrweb/network@1 code starts

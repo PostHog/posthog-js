@@ -1,5 +1,5 @@
 diff --git a/dist/rrweb.js b/dist/rrweb.js
-index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..a0b51af0402a23af1e99a5d395f065c61c54864e 100644
+index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..5ca9a765a23e0a44f793728701352e2d6e1b291e 100644
 --- a/dist/rrweb.js
 +++ b/dist/rrweb.js
 @@ -661,9 +661,17 @@ function serializeElementNode(n2, options) {
@@ -18,7 +18,7 @@ index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..a0b51af0402a23af1e99a5d395f065c6
 +    if (!stylesheet && href.includes('.css')) {
 +      const stylesheetPath = href.replace(window.location.href, '');
 +      const potentialStylesheetHref = window.location.origin + '/' + stylesheetPath;
-+      stylesheet = findStylesheet(potentialStylesheetHref);      
++      stylesheet = findStylesheet(potentialStylesheetHref);
 +    }
      let cssText = null;
      if (stylesheet) {
@@ -72,3 +72,20 @@ index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..a0b51af0402a23af1e99a5d395f065c6
              dataURLOptions: options.dataURLOptions
            },
            [bitmap]
+@@ -9805,6 +9828,7 @@ class Replayer {
+ }
+ const { addCustomEvent } = record;
+ const { freezePage } = record;
++const version = '2.0.0-alpha.16';
+ export {
+   EventType,
+   IncrementalSource,
+@@ -9816,6 +9840,7 @@ export {
+   freezePage,
+   _mirror as mirror,
+   record,
+-  utils
++  utils,
++  version,
+ };
+ //# sourceMappingURL=rrweb.js.map

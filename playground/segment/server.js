@@ -10,7 +10,7 @@ app.get('/segment.html', function (req, res) {
 })
 
 app.get('/static/recorder.js', function (req, res) {
-    let filePath = path.join(__dirname, '/../../node_modules/rrweb/dist/rrweb.umd.min.cjs')
+    let filePath = path.join(__dirname, '/../../node_modules/rrweb/dist/rrweb.js')
     res.sendFile(filePath)
 })
 
