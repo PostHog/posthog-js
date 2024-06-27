@@ -1,11 +1,6 @@
-import { version } from 'rrweb/package.json'
+const { version } = require('rrweb/package.json')
 
-// Same as loader-globals.ts except includes rrweb2 scripts.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import rrwebRecord from 'rrweb'
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+import { record as rrwebRecord } from 'rrweb'
 import { getRecordConsolePlugin } from '@rrweb/rrweb-plugin-console-record'
 
 // rrweb/network@1 code starts
