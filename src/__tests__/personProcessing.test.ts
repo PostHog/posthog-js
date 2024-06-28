@@ -5,12 +5,14 @@ import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 
 jest.mock('../utils/logger')
 
-const mockReferrerGetter = jest.fn()
-const mockURLGetter = jest.fn()
 jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
+    const mockURLGetter = jest.fn()
+    const mockReferrerGetter = jest.fn()
     return {
         ...orig,
+        mockURLGetter,
+        mockReferrerGetter,
         document: {
             ...orig.document,
             createElement: (...args: any[]) => orig.document.createElement(...args),
@@ -30,6 +32,9 @@ jest.mock('../utils/globals', () => {
         },
     }
 })
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
 
 describe('person processing', () => {
     const distinctId = '123'

@@ -11,7 +11,7 @@ import { getRecordConsolePlugin } from '@rrweb/rrweb-plugin-console-record'
 // and assumes it is running in a browser with the Request API (i.e. not IE11)
 // copying here so that we can use it before rrweb adopt it
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
-import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from './types'
+import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../types'
 import {
     isArray,
     isBoolean,
@@ -22,12 +22,12 @@ import {
     isObject,
     isString,
     isUndefined,
-} from './utils/type-utils'
-import { logger } from './utils/logger'
-import { window } from './utils/globals'
-import { defaultNetworkOptions } from './extensions/replay/config'
-import { formDataToQuery } from './utils/request-utils'
-import { patch } from './extensions/replay/rrweb-plugins/patch'
+} from '../utils/type-utils'
+import { logger } from '../utils/logger'
+import { window } from '../utils/globals'
+import { defaultNetworkOptions } from '../extensions/replay/config'
+import { formDataToQuery } from '../utils/request-utils'
+import { patch } from '../extensions/replay/rrweb-plugins/patch'
 
 export type NetworkData = {
     requests: CapturedNetworkRequest[]

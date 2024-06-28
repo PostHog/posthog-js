@@ -5,7 +5,6 @@ import { DecideResponse, Properties } from '../../types'
 import { isObject } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE, EXCEPTION_CAPTURE_ENDPOINT } from '../../constants'
-import { loadScript } from '../../utils'
 import Config from '../../config'
 
 // TODO: move this to /x/ as default
@@ -51,7 +50,7 @@ export class ExceptionObserver {
             cb()
         }
 
-        loadScript(
+        this.instance.requestRouter.loadScript(
             this.instance.requestRouter.endpointFor(
                 'assets',
                 `/static/exception-autocapture.js?v=${Config.LIB_VERSION}`

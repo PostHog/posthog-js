@@ -6,11 +6,6 @@ import { assignableWindow, window } from '../../utils/globals'
 import { RequestRouter } from '../../utils/request-router'
 import { TOOLBAR_ID } from '../../constants'
 
-jest.mock('../../utils', () => ({
-    ...jest.requireActual('../../utils'),
-    loadScript: jest.fn((_path: any, callback: any) => callback()),
-}))
-
 const makeToolbarParams = (overrides: Partial<ToolbarParams>): ToolbarParams => ({
     token: 'test_token',
     ...overrides,
@@ -31,6 +26,8 @@ describe('Toolbar', () => {
 
             set_config: jest.fn(),
         } as unknown as PostHog
+
+        instance.requestRouter.loadScript = jest.fn((_path: any, callback: any) => callback())
         toolbar = new Toolbar(instance)
     })
 
