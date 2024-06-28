@@ -1,3 +1,7 @@
+## 1.142.0 - 2024-06-28
+
+- feat: Improved various bundles (#1265)
+
 ## 1.141.4 - 2024-06-26
 
 - fix: use includes over contains (#1275)
