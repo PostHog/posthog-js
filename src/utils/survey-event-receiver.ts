@@ -30,6 +30,10 @@ export class SurveyEventReceiver {
     }
 
     on(event: string): void {
+        if (!this.eventToSurveys.has(event)) {
+            return
+        }
+
         const observedEvents = this.persistence?.props[SURVEY_EVENTS_OBSERVED] || []
         observedEvents.push(event)
         this._saveEventsToStorage(observedEvents)
