@@ -7,9 +7,8 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, loadScript, isCrossDomainCookie, _base64Encode } from '../utils'
+import { _copyAndTruncateStrings, isCrossDomainCookie, _base64Encode } from '../utils'
 import { Info } from '../utils/event-utils'
-import { document } from '../utils/globals'
 import { isBlockedUA, DEFAULT_BLOCKED_UA_STRS } from '../utils/blocked-uas'
 
 function userAgentFor(botString: string) {
@@ -101,47 +100,6 @@ describe('utils', () => {
 
             expect(properties['$lib']).toEqual('web')
             expect(properties['$device_type']).toEqual('Desktop')
-        })
-    })
-
-    describe('loadScript', () => {
-        beforeEach(() => {
-            document!.getElementsByTagName('html')![0].innerHTML = ''
-        })
-
-        it('should insert the given script before the one already on the page', () => {
-            document!.body.appendChild(document!.createElement('script'))
-            const callback = jest.fn()
-            loadScript('https://fake_url', callback)
-            const scripts = document!.getElementsByTagName('script')
-            const new_script = scripts[0]
-
-            expect(scripts.length).toBe(2)
-            expect(new_script.type).toBe('text/javascript')
-            expect(new_script.src).toBe('https://fake_url/')
-            const event = new Event('test')
-            new_script.onload!(event)
-            expect(callback).toHaveBeenCalledWith(undefined, event)
-        })
-
-        it("should add the script to the page when there aren't any preexisting scripts on the page", () => {
-            const callback = jest.fn()
-            loadScript('https://fake_url', callback)
-            const scripts = document!.getElementsByTagName('script')
-
-            expect(scripts?.length).toBe(1)
-            expect(scripts![0].type).toBe('text/javascript')
-            expect(scripts![0].src).toBe('https://fake_url/')
-        })
-
-        it('should respond with an error if one happens', () => {
-            const callback = jest.fn()
-            loadScript('https://fake_url', callback)
-            const scripts = document!.getElementsByTagName('script')
-            const new_script = scripts[0]
-
-            new_script.onerror!('uh-oh')
-            expect(callback).toHaveBeenCalledWith('uh-oh')
         })
     })
 

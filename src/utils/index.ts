@@ -1,7 +1,7 @@
 import { Breaker, EventHandler, Properties } from '../types'
 import { isArray, isFormData, isFunction, isNull, isNullish, isString, hasOwnProperty } from './type-utils'
 import { logger } from './logger'
-import { window, document, nativeForEach, nativeIndexOf } from './globals'
+import { window, nativeForEach, nativeIndexOf } from './globals'
 
 const breaker: Breaker = {}
 
@@ -401,33 +401,6 @@ export const registerEvent = (function () {
 
     return register_event
 })()
-
-export function loadScript(scriptUrlToLoad: string, callback: (error?: string | Event, event?: Event) => void): void {
-    const addScript = () => {
-        if (!document) {
-            return callback('document not found')
-        }
-        const scriptTag = document.createElement('script')
-        scriptTag.type = 'text/javascript'
-        scriptTag.src = scriptUrlToLoad
-        scriptTag.onload = (event) => callback(undefined, event)
-        scriptTag.onerror = (error) => callback(error)
-
-        const scripts = document.querySelectorAll('body > script')
-        if (scripts.length > 0) {
-            scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
-        } else {
-            // In exceptional situations this call might load before the DOM is fully ready.
-            document.body.appendChild(scriptTag)
-        }
-    }
-
-    if (document?.body) {
-        addScript()
-    } else {
-        document?.addEventListener('DOMContentLoaded', addScript)
-    }
-}
 
 export function isCrossDomainCookie(documentLocation: Location | undefined) {
     const hostname = documentLocation?.hostname

@@ -1,4 +1,3 @@
-import { loadScript } from './utils'
 import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
@@ -73,7 +72,7 @@ export class Decide {
 
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
 
-                    loadScript(scriptUrl, (err) => {
+                    this.instance.requestRouter.loadScript(scriptUrl, (err) => {
                         if (err) {
                             logger.error(`Error while initializing PostHog app with config id ${id}`, err)
                         }

@@ -1,4 +1,4 @@
-import { registerEvent, trySafe, loadScript } from '../utils'
+import { registerEvent, trySafe } from '../utils'
 import { PostHog } from '../posthog-core'
 import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
@@ -163,12 +163,8 @@ export class Toolbar {
             const fiveMinutesInMillis = 5 * 60 * 1000
             // this ensures that we bust the cache periodically
             const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
-            const toolbarUrl = this.instance.requestRouter.endpointFor(
-                'assets',
-                `/static/toolbar.js?t=${timestampToNearestFiveMinutes}`
-            )
 
-            loadScript(toolbarUrl, (err) => {
+            this.instance.requestRouter.loadScript(`/static/toolbar.js?t=${timestampToNearestFiveMinutes}`, (err) => {
                 if (err) {
                     logger.error('Failed to load toolbar', err)
                     this.setToolbarState(ToolbarState.UNINITIALIZED)

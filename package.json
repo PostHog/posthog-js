@@ -23,8 +23,8 @@
         "prepare": "husky install",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs"
     },
-    "main": "dist/module.js",
-    "module": "dist/es.js",
+    "main": "dist/main.js",
+    "module": "dist/module.js",
     "types": "dist/module.d.ts",
     "files": [
         "lib/*",

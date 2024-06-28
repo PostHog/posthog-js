@@ -24,6 +24,6 @@
         "jsxFactory": "h",
         "jsxFragmentFactory": "Fragment"
     },
-    "include": ["src/*.ts*"],
+    "include": ["src/**/*.ts*"],
     "exclude": ["src/__tests__/**/*.ts*"]
 }

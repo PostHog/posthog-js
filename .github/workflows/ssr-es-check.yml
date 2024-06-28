@@ -20,7 +20,7 @@ jobs:
       - run: pnpm install && pnpm build
 
       - name: Run es-check to check if our bundle is ES5 compatible
-        run: npx es-check@6.1.1 es5 dist/{array,module}.js
+        run: npx es-check@6.1.1 es5 dist/{array,main}.js
 
       - name: Require module via node
-        run: cd dist; node -e "require('./module')"
+        run: cd dist; node -e "require('./main')"

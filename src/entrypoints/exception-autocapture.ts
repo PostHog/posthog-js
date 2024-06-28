@@ -1,7 +1,7 @@
-import { errorToProperties, unhandledRejectionToProperties } from './extensions/exception-autocapture/error-conversion'
-import { window } from './utils/globals'
-import { ErrorEventArgs, Properties } from './types'
-import { logger } from './utils/logger'
+import { errorToProperties, unhandledRejectionToProperties } from '../extensions/exception-autocapture/error-conversion'
+import { window } from '../utils/globals'
+import { ErrorEventArgs, Properties } from '../types'
+import { logger } from '../utils/logger'
 
 const wrapOnError = (captureFn: (props: Properties) => void) => {
     const win = window as any
