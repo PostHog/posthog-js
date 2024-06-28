@@ -20,16 +20,17 @@ export class ActionMatcher {
 
     init() {
         if (!isUndefined(this.instance?._addCaptureHook)) {
-            const onEventName = (eventName: string, eventPayload: any) => {
+            const matchEventToAction = (eventName: string, eventPayload: any) => {
                 this.on(eventName, eventPayload)
             }
-            this.instance?._addCaptureHook(onEventName)
+            this.instance?._addCaptureHook(matchEventToAction)
         }
     }
 
     register(actions: ActionType[]): void {
-        // const eventMap = new Map<number, ActionType> (actions?.map((a) => [a.action_id, a])) =
-        // this.actionRegistry = new Map<number, ActionType> (actions?.map((a) => [a.action_id, a]))
+        if (isUndefined(this.instance?._addCaptureHook)) {
+            return
+        }
 
         actions.forEach((action) => {
             this.actionRegistry?.add(action)
@@ -39,6 +40,18 @@ export class ActionMatcher {
                     this.actionEvents?.add(step.event!)
                 })
         })
+
+        if (this.instance?.autocapture) {
+            const selectorsToWatch: Set<string> = new Set<string>()
+            actions.forEach((action) => {
+                action.steps?.forEach((step) => {
+                    if (step?.selector) {
+                        selectorsToWatch.add(step?.selector)
+                    }
+                })
+            })
+            this.instance?.autocapture.setElementSelectors(selectorsToWatch)
+        }
     }
 
     on(eventName: string, eventPayload?: CaptureResult) {
@@ -82,12 +95,17 @@ export class ActionMatcher {
     }
 
     private checkStep = (event?: CaptureResult, step?: ActionStepType): boolean => {
+        // eslint-disable-next-line no-console
+        console.log(
+            ` in checkStep,  event is [${event?.event}],  checkStepEvent is [${this.checkStepEvent(
+                event,
+                step
+            )}] checkStepUrl  is [${this.checkStepUrl(event, step)}] checkStepElement is [${this.checkStepElement(
+                event,
+                step
+            )}]`
+        )
         return this.checkStepEvent(event, step) && this.checkStepUrl(event, step) && this.checkStepElement(event, step)
-        // &&
-        //    this.checkStepEvent(event, step) &&
-        //    // The below checks are less performant may parse the elements chain or do a database query hence moved to the end
-        //    this.checkStepElement(event, step) &&
-        //    (await this.checkStepFilters(event, step))
     }
 
     private checkStepEvent = (event?: CaptureResult, step?: ActionStepType): boolean => {
@@ -184,11 +202,22 @@ export class ActionMatcher {
             }
         }
         // eslint-disable-next-line no-console
-        console.log(` in action matcher, checkStepElement, selector is `, event?.properties?.$element_selector)
-        if (step?.selector === event?.properties?.$element_selector) {
+        console.log(
+            ` in action matcher, event is ${event?.event} checkStepElement, selector is `,
+            event?.properties?.$element_selector
+        )
+
+        // eslint-disable-next-line no-console
+        console.log(
+            ` in action matcher, event is ${event?.event} step?.selector is [${
+                step?.selector
+            }, step?.selector !== event?.properties?.$element_selector is ${
+                step?.selector !== event?.properties?.$element_selector
+            } event?.properties?.$element_selector is ${event?.properties?.$element_selector}`
+        )
+        if (step?.selector && step?.selector !== event?.properties?.$element_selector) {
             // eslint-disable-next-line no-console
-            console.log(`SELECTOR MATCHED!! in step `, step)
-        } else {
+            console.log(` in action matcher, event is ${event?.event} checkStepElement is returning false`)
             return false // SELECTOR IS A MISMATCH
         }
 

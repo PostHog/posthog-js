@@ -13,7 +13,6 @@ import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
 import { loadScript } from './utils'
 import { logger } from './utils/logger'
-import { isUndefined } from './utils/type-utils'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -110,7 +109,7 @@ export class PostHogSurveys {
                     }
                     const surveys = response.json.surveys || []
 
-                    const eventBasedSurveys = surveys.filter(
+                    const eventOrActionBasedSurveys = surveys.filter(
                         (survey: Survey) =>
                             (survey.conditions?.events &&
                                 survey.conditions?.events?.values &&
@@ -120,12 +119,8 @@ export class PostHogSurveys {
                                 survey.conditions?.actions?.values?.length > 0)
                     )
 
-                    if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
-                        this._surveyEventReceiver?.register(eventBasedSurveys)
-                        const onEventName = (eventName: string) => {
-                            this._surveyEventReceiver?.onEvent(eventName)
-                        }
-                        this.instance._addCaptureHook(onEventName)
+                    if (eventOrActionBasedSurveys.length > 0) {
+                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
                     }
 
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
