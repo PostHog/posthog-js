@@ -87,18 +87,13 @@ describe('survey-event-receiver', () => {
     it('register makes receiver listen for all surveys with events', () => {
         const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
         surveyEventReceiver.register(surveysWithEvents)
-        const registry = surveyEventReceiver.getEventRegistry()
-        expect(registry.has('second-survey')).toBeFalsy()
-        expect(registry.has('first-survey')).toBeTruthy()
-        expect(registry.get('first-survey')).toEqual([
-            'user_subscribed',
-            'user_unsubscribed',
-            'billing_changed',
-            'billing_removed',
-        ])
+        const registry = surveyEventReceiver.getEventToSurveys()
+        expect(registry.has('random-event')).toBeFalsy()
+        expect(registry.has('user_subscribed')).toBeTruthy()
+        expect(registry.get('user_subscribed')).toEqual(['first-survey', 'third-survey'])
 
-        expect(registry.has('third-survey')).toBeTruthy()
-        expect(registry.get('third-survey')).toEqual(['user_subscribed', 'user_unsubscribed', 'address_changed'])
+        expect(registry.has('address_changed')).toBeTruthy()
+        expect(registry.get('address_changed')).toEqual(['third-survey'])
     })
 
     it('receiver activates survey on event', () => {
@@ -132,5 +127,19 @@ describe('survey-event-receiver', () => {
         expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         surveyEventReceiver.on('address_changed')
         expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey', 'third-survey'])
+    })
+
+    it('receiver does not activate survey if event has changed', () => {
+        const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
+        surveyEventReceiver.register(surveysWithEvents)
+        surveyEventReceiver.on('billing_changed')
+        expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
+        surveysWithEvents[0].conditions.events.values = [
+            {
+                name: 'account_deleted',
+            },
+        ]
+        surveyEventReceiver.register(surveysWithEvents)
+        expect(surveyEventReceiver.getSurveys()).toEqual([])
     })
 })
