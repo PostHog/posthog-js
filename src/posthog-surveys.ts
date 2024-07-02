@@ -66,11 +66,12 @@ export class PostHogSurveys {
 
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
-        if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
-        }
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
+            if (this._surveyEventReceiver == null) {
+                this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+            }
+
             this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)

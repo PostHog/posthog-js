@@ -181,6 +181,9 @@ describe('surveys', () => {
                 enumerable: true,
                 value: originalWindowLocation,
             })
+
+            delete assignableWindow.__PosthogExtensions__
+            delete assignableWindow.extendPostHogWithSurveys
         })
 
         it('getSurveys gets a list of surveys if not present already', () => {
