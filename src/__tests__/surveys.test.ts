@@ -250,6 +250,9 @@ describe('surveys', () => {
         })
 
         it('getSurveys returns empty array if surveys are undefined', () => {
+            // need to be sure that set-up didn't populate surveys
+            instance.persistence?.clear()
+
             surveysResponse = { status: 0 }
             instance.surveys.getSurveys((data) => {
                 expect(data).toEqual([])
