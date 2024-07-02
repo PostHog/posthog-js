@@ -10,7 +10,7 @@ import {
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
-import { DecideResponse } from './types'
+import { CaptureResult, DecideResponse } from './types'
 import { loadScript } from './utils'
 import { logger } from './utils/logger'
 import { isUndefined } from './utils/type-utils'
@@ -120,8 +120,8 @@ export class PostHogSurveys {
 
                     if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
                         this._surveyEventReceiver?.register(eventBasedSurveys)
-                        const onEventName = (eventName: string) => {
-                            this._surveyEventReceiver?.on(eventName)
+                        const onEventName = (eventName: string, eventPayload?: CaptureResult) => {
+                            this._surveyEventReceiver?.on(eventName, eventPayload)
                         }
                         this.instance._addCaptureHook(onEventName)
                     }
