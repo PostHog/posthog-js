@@ -9,9 +9,10 @@ import {
 } from './posthog-surveys-types'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { assignableWindow, document, window } from './utils/globals'
-import { CaptureResult, DecideResponse, IReceiveSurveyEvents } from './types'
+import { CaptureResult, DecideResponse } from './types'
 import { logger } from './utils/logger'
 import { isUndefined } from './utils/type-utils'
+import { SurveyEventReceiver } from './extensions/surveys/survey-event-receiver'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -50,7 +51,7 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
 
 export class PostHogSurveys {
     private _decideServerResponse?: boolean
-    public _surveyEventReceiver: IReceiveSurveyEvents | null
+    public _surveyEventReceiver: SurveyEventReceiver | null
 
     constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -65,6 +66,9 @@ export class PostHogSurveys {
 
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
+        if (this._surveyEventReceiver == null) {
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+        }
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
@@ -73,11 +77,6 @@ export class PostHogSurveys {
                 }
 
                 assignableWindow.extendPostHogWithSurveys(this.instance)
-                if (this._surveyEventReceiver == null) {
-                    const SurveyEventReceiver = assignableWindow?.__PosthogExtensions__?.SurveysEventReceiver
-
-                    this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
-                }
             })
         }
     }

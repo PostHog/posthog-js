@@ -1,8 +1,6 @@
 import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import type { SegmentAnalytics } from './extensions/segment-integration'
-import { PostHogPersistence } from './posthog-persistence'
-import { Survey } from './posthog-surveys-types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -517,19 +515,4 @@ export interface ErrorProperties {
 export interface ErrorConversions {
     errorToProperties: (args: ErrorEventArgs) => ErrorProperties
     unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
-}
-
-export interface IReceiveSurveyEvents {
-    eventRegistry: Map<string, string[]>
-    persistence?: PostHogPersistence
-
-    register(surveys: Survey[]): void
-
-    on(event: string, eventPayload?: CaptureResult): void
-
-    getSurveys(): string[]
-
-    getEventRegistry(): Map<string, string[]>
-
-    _saveSurveysToStorage(surveys: string[]): void
 }
