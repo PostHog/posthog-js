@@ -626,12 +626,7 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
 }
 
 export const hasEvents = (survey: Survey): boolean => {
-    return !!(
-        survey.conditions &&
-        survey.conditions?.events &&
-        survey.conditions?.events?.values &&
-        survey.conditions?.events?.values?.length > 0
-    )
+    return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
 }
 
 export const canActivateRepeatedly = (survey: Survey): boolean => {
