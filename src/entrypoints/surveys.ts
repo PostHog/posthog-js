@@ -1,6 +1,6 @@
 import { generateSurveys } from '../extensions/surveys'
 import { SurveyEventReceiver } from '../extensions/surveys/survey-event-receiver'
-import { canActivateRepeatedly, hasEvents } from './extensions/surveys/surveys-utils'
+import { canActivateRepeatedly, hasEvents } from '../extensions/surveys/surveys-utils'
 
 import { window } from '../utils/globals'
 
