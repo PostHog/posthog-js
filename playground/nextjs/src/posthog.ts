@@ -1,3 +1,9 @@
+// NOTE: This is how you can include the external dependencies so they are in your bundle and not loaded async at runtime
+// import 'posthog-js/dist/recorder'
+// import 'posthog-js/dist/surveys'
+// import 'posthog-js/dist/exception-autocapture'
+// import 'posthog-js/dist/tracing-headers'
+
 import posthog, { PostHogConfig } from 'posthog-js'
 import { User } from './auth'
 

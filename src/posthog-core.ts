@@ -860,6 +860,13 @@ export class PostHog {
         if (event_name === '$snapshot') {
             const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
             properties['distinct_id'] = persistenceProps.distinct_id
+            if (
+                // we spotted one customer that was managing to send `false` for ~9k events a day
+                !(isString(properties['distinct_id']) || isNumber(properties['distinct_id'])) ||
+                isEmptyString(properties['distinct_id'])
+            ) {
+                logger.error('Invalid distinct_id for replay event. This indicates a bug in your implementation')
+            }
             return properties
         }
 

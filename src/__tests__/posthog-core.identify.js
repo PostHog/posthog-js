@@ -1,12 +1,12 @@
 import { USER_STATE } from '../constants'
-import _posthog from '../loader-module'
 import { PostHogPersistence } from '../posthog-persistence'
 import { uuidv7 } from '../uuidv7'
+import { defaultPostHog } from './helpers/posthog-instance'
 
 jest.mock('../decide')
 
 given('lib', () => {
-    const posthog = _posthog.init('testtoken', given.config, uuidv7())
+    const posthog = defaultPostHog().init('testtoken', given.config, uuidv7())
     return Object.assign(posthog, given.overrides)
 })
 

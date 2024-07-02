@@ -3,7 +3,6 @@ import { DecideResponse } from '../../types'
 import { logger } from '../../utils/logger'
 import { isBoolean, isNullish, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
-import { loadScript } from '../../utils'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
@@ -57,7 +56,7 @@ export class WebVitalsAutocapture {
             cb()
         }
 
-        loadScript(
+        this.instance.requestRouter.loadScript(
             this.instance.requestRouter.endpointFor('assets', `/static/web-vitals.js?v=${Config.LIB_VERSION}`),
             (err) => {
                 if (err) {

@@ -5,8 +5,8 @@ import { ExceptionObserver } from '../../../extensions/exception-autocapture'
 import { assignableWindow, window } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { uuidv7 } from '../../../uuidv7'
-import { loadScript } from '../../../utils'
-import posthogErrorWrappingFunctions from '../../../loader-exception-autocapture'
+
+import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
 import { afterEach } from '@jest/globals'
 
 /** help out jsdom */
@@ -31,17 +31,11 @@ export class PromiseRejectionEvent extends Event {
 
 /* finished helping js-dom */
 
-jest.mock('../../../utils', () => ({
-    ...jest.requireActual('../../../utils'),
-    loadScript: jest.fn(),
-}))
-
-const loadScriptMock = loadScript as jest.Mock
-
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
     let posthog: PostHog
     const mockCapture = jest.fn()
+    const loadScriptMock = jest.fn()
 
     const addErrorWrappingFlagToWindow = () => {
         // assignableWindow.onerror = jest.fn()
@@ -57,6 +51,8 @@ describe('Exception Observer', () => {
         })
 
         posthog = await createPosthogInstance(uuidv7(), { _onCapture: mockCapture })
+        posthog.requestRouter.loadScript = loadScriptMock
+
         exceptionObserver = new ExceptionObserver(posthog)
     })
 
