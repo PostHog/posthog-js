@@ -1,3 +1,7 @@
+## 1.142.1 - 2024-06-28
+
+- feat: warn when distinct id invalid for replay (#1277)
+
 ## 1.142.0 - 2024-06-28
 
 - feat: Improved various bundles (#1265)
