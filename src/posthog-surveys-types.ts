@@ -138,8 +138,8 @@ export interface Survey {
         selector?: string
         seenSurveyWaitPeriodInDays?: number
         urlMatchType?: SurveyUrlMatchType
-        repeatedActivation?: boolean
         events: {
+            repeatedActivation?: boolean
             values: {
                 name: string
             }[]
