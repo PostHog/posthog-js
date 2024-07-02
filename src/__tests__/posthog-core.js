@@ -115,8 +115,12 @@ describe('posthog core', () => {
             given.lib._addCaptureHook(hook)
 
             given.subject()
-
-            expect(hook).toHaveBeenCalledWith('$event')
+            expect(hook).toHaveBeenCalledWith(
+                '$event',
+                expect.objectContaining({
+                    event: '$event',
+                })
+            )
         })
 
         it('calls update_campaign_params and update_referrer_info on sessionPersistence', () => {
@@ -190,7 +194,12 @@ describe('posthog core', () => {
             const hook = jest.fn()
             given.lib._addCaptureHook(hook)
             const event = given.subject()
-            expect(hook).toHaveBeenCalledWith('$event')
+            expect(hook).toHaveBeenCalledWith(
+                '$event',
+                expect.objectContaining({
+                    event: '$event',
+                })
+            )
             expect(event.properties['$browser_type']).toEqual('bot')
 
             // eslint-disable-next-line no-import-assign

@@ -18,7 +18,7 @@ import {
     getContrastingTextColor,
     SurveyContext,
     getDisplayOrderQuestions,
-    getSurveySeenKey,
+    getSurveySeen,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -73,7 +73,8 @@ export class SurveyManager {
             }
         }
 
-        if (!localStorage.getItem(getSurveySeenKey(survey))) {
+        const surveySeen = getSurveySeen(survey)
+        if (!surveySeen) {
             this.addSurveyToFocus(survey.id)
             const shadow = createShadow(style(survey?.appearance), survey.id)
             Preact.render(

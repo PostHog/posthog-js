@@ -1,10 +1,12 @@
 import { Survey } from '../posthog-surveys-types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SURVEYS_ACTIVATED } from '../constants'
+import { CaptureResult } from '../types'
 
 export class SurveyEventReceiver {
     private readonly eventRegistry: Map<string, string[]>
     private readonly persistence?: PostHogPersistence
+    private static SURVEY_SHOWN_EVENT_NAME = 'survey shown'
 
     constructor(persistence?: PostHogPersistence) {
         this.persistence = persistence
@@ -26,18 +28,32 @@ export class SurveyEventReceiver {
         })
     }
 
-    on(event: string): void {
+    on(event: string, eventPayload?: CaptureResult): void {
         const activatedSurveys: string[] = []
+        const existingActivatedSurveys: string[] = this.persistence?.props[SURVEYS_ACTIVATED] || []
 
-        this.eventRegistry.forEach((events, surveyID) => {
-            if (events.includes(event)) {
-                activatedSurveys.push(surveyID)
+        if (
+            SurveyEventReceiver.SURVEY_SHOWN_EVENT_NAME == event &&
+            eventPayload &&
+            existingActivatedSurveys.length > 0
+        ) {
+            // remove survey that from activatedSurveys here.
+            const surveyId = eventPayload?.properties?.$survey_id
+            if (surveyId) {
+                const index = existingActivatedSurveys.indexOf(surveyId)
+                if (index >= 0) {
+                    existingActivatedSurveys.splice(index, 1)
+                }
             }
-        })
+        } else {
+            this.eventRegistry.forEach((events, surveyID) => {
+                if (events.includes(event)) {
+                    activatedSurveys.push(surveyID)
+                }
+            })
+        }
 
-        const existingActivatedSurveys = this.persistence?.props[SURVEYS_ACTIVATED]
-        const existingSurveys: string[] = existingActivatedSurveys ? existingActivatedSurveys : []
-        const updatedSurveys = existingSurveys.concat(activatedSurveys)
+        const updatedSurveys = existingActivatedSurveys.concat(activatedSurveys)
         this._saveSurveysToStorage(updatedSurveys)
     }
 

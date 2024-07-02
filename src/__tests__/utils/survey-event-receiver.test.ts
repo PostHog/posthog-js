@@ -109,6 +109,27 @@ describe('survey-event-receiver', () => {
         expect(activatedSurveys).toContain('first-survey')
     })
 
+    it('receiver removes survey from list after its shown', () => {
+        const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
+        surveyEventReceiver.register(surveysWithEvents)
+        surveyEventReceiver.on('billing_changed')
+        const activatedSurveys = surveyEventReceiver.getSurveys()
+        expect(activatedSurveys).toContain('first-survey')
+
+        surveyEventReceiver.on('survey shown', {
+            $set: undefined,
+            $set_once: undefined,
+            event: 'survey shown',
+            timestamp: undefined,
+            uuid: '',
+            properties: {
+                $survey_id: 'first-survey',
+            },
+        })
+
+        expect(surveyEventReceiver.getSurveys()).toEqual([])
+    })
+
     it('receiver activates same survey on multiple event', () => {
         const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
         surveyEventReceiver.register(surveysWithEvents)
