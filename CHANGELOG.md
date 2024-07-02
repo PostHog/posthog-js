@@ -1,3 +1,7 @@
+## 1.143.0 - 2024-07-02
+
+- feat(survey): Allow events to repeatedly activate surveys (#1273)
+
 ## 1.142.1 - 2024-06-28
 
 - feat: warn when distinct id invalid for replay (#1277)
