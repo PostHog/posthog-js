@@ -133,7 +133,7 @@ export class PostHogSurveys {
         }
     }
 
-    getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false) => {
+    getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
             const activeSurveys = surveys.filter((survey) => {
                 return !!(survey.start_date && !survey.end_date)
