@@ -1,6 +1,5 @@
 /// <reference lib="dom" />
 
-import { PostHogSurveys } from '../posthog-surveys'
 import {
     SurveyType,
     SurveyQuestionType,
@@ -15,20 +14,19 @@ import {
     getDisplayOrderQuestions,
     hasEvents,
 } from '../extensions/surveys/surveys-utils'
-import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, PostHogConfig, Properties } from '../types'
+import { DecideResponse, PostHogConfig } from '../types'
 import { window } from '../utils/globals'
-import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
-import { expectScriptToExist, expectScriptToNotExist } from './helpers/script-utils'
+import { defaultPostHog } from './helpers/posthog-instance'
+import { uuidv7 } from '../uuidv7'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { generateSurveys } from '../extensions/surveys'
 import { SurveyEventReceiver } from '../extensions/surveys/survey-event-receiver'
+import { expect } from '@jest/globals'
 
 describe('surveys', () => {
-    let config: PostHogConfig
     let instance: PostHog
-    let surveys: PostHogSurveys
     let surveysResponse: { status?: number; surveys?: Survey[] }
 
     const loadScriptMock = jest.fn()
@@ -128,69 +126,51 @@ describe('surveys', () => {
         } as unknown as Survey,
     ]
 
+    beforeEach(() => {
+        surveysResponse = { surveys: firstSurveys }
+
+        const config = {
+            token: 'testtoken',
+            api_host: 'https://app.posthog.com',
+            persistence: 'memory',
+            disable_surveys: undefined,
+        } as unknown as PostHogConfig
+
+        instance = defaultPostHog().init('testtoken', { ...config }, uuidv7())!
+
+        loadScriptMock.mockImplementation((_path, callback) => {
+            assignableWindow.__PosthogExtensions__ = assignableWindow.__Posthog__ || {}
+            assignableWindow.extendPostHogWithSurveys = generateSurveys
+            assignableWindow.__PosthogExtensions__.SurveysEventReceiver = SurveyEventReceiver
+            assignableWindow.__PosthogExtensions__.canActivateRepeatedly = canActivateRepeatedly
+            assignableWindow.__PosthogExtensions__.hasEvents = hasEvents
+
+            callback()
+        })
+
+        instance.requestRouter.loadScript = loadScriptMock
+
+        instance._send_request = jest
+            .fn()
+            .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse }))
+
+        instance.featureFlags = {
+            getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+            isFeatureEnabled: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+        } as unknown as PostHogFeatureFlags
+
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            // eslint-disable-next-line compat/compat
+            value: new URL('https://example.com'),
+        })
+    })
+
     describe('when enabled by decide', () => {
         beforeEach(() => {
-            surveysResponse = { surveys: firstSurveys }
-
-            config = {
-                token: 'testtoken',
-                api_host: 'https://app.posthog.com',
-                persistence: 'memory',
-            } as unknown as PostHogConfig
-
-            instance = {
-                config: config,
-                persistence: new PostHogPersistence(config),
-                requestRouter: new RequestRouter({ config } as any),
-                _addCaptureHook: jest.fn(),
-                register: (props: Properties) => instance.persistence?.register(props),
-                unregister: (key: string) => instance.persistence?.unregister(key),
-                get_property: (key: string) => instance.persistence?.props[key],
-                _send_request: jest
-                    .fn()
-                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
-                featureFlags: {
-                    _send_request: jest
-                        .fn()
-                        .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
-                    getFeatureFlag: jest
-                        .fn()
-                        .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
-                    isFeatureEnabled: jest
-                        .fn()
-                        .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
-                },
-            } as unknown as PostHog
-
-            loadScriptMock.mockImplementation((_path, callback) => {
-                assignableWindow.__PosthogExtensions__ = assignableWindow.__Posthog__ || {}
-                assignableWindow.extendPostHogWithSurveys = generateSurveys
-                assignableWindow.__PosthogExtensions__.SurveysEventReceiver = SurveyEventReceiver
-                assignableWindow.__PosthogExtensions__.canActivateRepeatedly = canActivateRepeatedly
-                assignableWindow.__PosthogExtensions__.hasEvents = hasEvents
-
-                callback()
-            })
-
-            instance.requestRouter.loadScript = loadScriptMock
-
-            surveys = new PostHogSurveys(instance)
-
-            // TODO wat
-            instance.surveys = surveys
-            // TODO oh mocks, you fun
-            instance.getActiveMatchingSurveys = surveys.getActiveMatchingSurveys
-
-            surveys.afterDecideResponse(decideResponse)
-            surveys.loadIfEnabled()
-
-            Object.defineProperty(window, 'location', {
-                configurable: true,
-                enumerable: true,
-                writable: true,
-                // eslint-disable-next-line compat/compat
-                value: new URL('https://example.com'),
-            })
+            instance.surveys.afterDecideResponse(decideResponse)
         })
 
         afterEach(() => {
@@ -204,7 +184,7 @@ describe('surveys', () => {
         })
 
         it('getSurveys gets a list of surveys if not present already', () => {
-            surveys.getSurveys((data) => {
+            instance.surveys.getSurveys((data) => {
                 expect(data).toEqual(firstSurveys)
             })
             expect(instance._send_request).toHaveBeenCalledWith({
@@ -217,7 +197,7 @@ describe('surveys', () => {
             expect(instance.persistence?.props.$surveys).toEqual(firstSurveys)
 
             surveysResponse = { surveys: secondSurveys }
-            surveys.getSurveys((data) => {
+            instance.surveys.getSurveys((data) => {
                 expect(data).toEqual(firstSurveys)
             })
             // request again, shouldn't call _send_request again, so 1 total call instead of 2
@@ -226,11 +206,11 @@ describe('surveys', () => {
 
         it('getSurveys registers the survey event receiver if a survey has events', () => {
             surveysResponse = { surveys: surveysWithEvents }
-            surveys.getSurveys((data) => {
+            instance.surveys.getSurveys((data) => {
                 expect(data).toEqual(surveysWithEvents)
             }, true)
 
-            const registry = surveys._surveyEventReceiver?.getEventRegistry()
+            const registry = instance.surveys._surveyEventReceiver?.getEventRegistry()
             expect(registry.has('second-survey')).toBeFalsy()
             expect(registry.has('first-survey')).toBeTruthy()
             expect(registry.get('first-survey')).toEqual([
@@ -245,7 +225,7 @@ describe('surveys', () => {
         })
 
         it('getSurveys force reloads when called with true', () => {
-            surveys.getSurveys((data) => {
+            instance.surveys.getSurveys((data) => {
                 expect(data).toEqual(firstSurveys)
             })
             expect(instance._send_request).toHaveBeenCalledWith({
@@ -259,7 +239,7 @@ describe('surveys', () => {
 
             surveysResponse = { surveys: secondSurveys }
 
-            surveys.getSurveys((data) => {
+            instance.surveys.getSurveys((data) => {
                 expect(data).toEqual(secondSurveys)
             }, true)
             expect(instance.persistence?.props.$surveys).toEqual(secondSurveys)
@@ -268,14 +248,14 @@ describe('surveys', () => {
 
         it('getSurveys returns empty array if surveys are undefined', () => {
             surveysResponse = { status: 0 }
-            surveys.getSurveys((data) => {
+            instance.surveys.getSurveys((data) => {
                 expect(data).toEqual([])
             })
         })
 
         it('getSurveys returns empty array if surveys are disabled', () => {
             instance.config.disable_surveys = true
-            surveys.getSurveys((data) => {
+            instance.surveys.getSurveys((data) => {
                 expect(data).toEqual([])
             })
             expect(instance._send_request).not.toHaveBeenCalled()
@@ -488,7 +468,7 @@ describe('surveys', () => {
             it('returns surveys that are active', () => {
                 surveysResponse = { surveys: [draftSurvey, activeSurvey, completedSurvey] }
 
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([activeSurvey])
                 })
             })
@@ -499,13 +479,13 @@ describe('surveys', () => {
                 }
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://posthog.com') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithUrl])
                 })
                 assignableWindow.location = originalWindowLocation
 
                 document.body.appendChild(document.createElement('div')).className = 'test-selector'
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithSelector])
                 })
                 const testSelectorEl = document!.querySelector('.test-selector')
@@ -517,7 +497,7 @@ describe('surveys', () => {
                 assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
                 document.body.appendChild(document.createElement('div')).id = 'foo'
 
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithUrlAndSelector])
                 })
                 const child = document.querySelector('#foo')
@@ -540,35 +520,35 @@ describe('surveys', () => {
                 const originalWindowLocation = assignableWindow.location
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithRegexUrl])
                 })
                 assignableWindow.location = originalWindowLocation
 
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://example.com?name=something') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithParamRegexUrl])
                 })
                 assignableWindow.location = originalWindowLocation
 
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://app.subdomain.com') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithWildcardSubdomainUrl])
                 })
                 assignableWindow.location = originalWindowLocation
 
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://wildcard.com/something/other') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithWildcardRouteUrl])
                 })
                 assignableWindow.location = originalWindowLocation
 
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithExactUrlMatch])
                 })
                 assignableWindow.location = originalWindowLocation
@@ -581,7 +561,7 @@ describe('surveys', () => {
 
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://posthog.com') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     // returns surveyWithIsNotUrlMatch and surveyWithUrlDoesNotContainRegex because they don't contain posthog.com
                     expect(data).toEqual([surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex])
                 })
@@ -589,7 +569,7 @@ describe('surveys', () => {
 
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     // returns surveyWithUrlDoesNotContain and surveyWithUrlDoesNotContainRegex because they are not exact matches
                     expect(data).toEqual([surveyWithUrlDoesNotContain, surveyWithUrlDoesNotContainRegex])
                 })
@@ -597,7 +577,7 @@ describe('surveys', () => {
 
                 // eslint-disable-next-line compat/compat
                 assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     // returns surveyWithUrlDoesNotContain and surveyWithIsNotUrlMatch because they are not regex matches
                     expect(data).toEqual([surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch])
                 })
@@ -606,7 +586,7 @@ describe('surveys', () => {
 
             it('returns surveys that match linked and targeting feature flags', () => {
                 surveysResponse = { surveys: [activeSurvey, surveyWithFlags, surveyWithEverything] }
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     // active survey is returned because it has no flags aka there are no restrictions on flag enabled for it
                     expect(data).toEqual([activeSurvey, surveyWithFlags])
                 })
@@ -614,7 +594,7 @@ describe('surveys', () => {
 
             it('does not return surveys that have flag keys but no matching flags', () => {
                 surveysResponse = { surveys: [surveyWithFlags, surveyWithUnmatchedFlags] }
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithFlags])
                 })
             })
@@ -623,7 +603,7 @@ describe('surveys', () => {
                 surveysResponse = {
                     surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
                 }
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithEnabledInternalFlag])
                 })
             })
@@ -632,7 +612,7 @@ describe('surveys', () => {
                 surveysResponse = {
                     surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
                 }
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithEnabledInternalFlag])
                 })
             })
@@ -642,14 +622,14 @@ describe('surveys', () => {
                     surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
                 }
 
-                surveys._surveyEventReceiver?.on('user_subscribed')
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys._surveyEventReceiver?.on('user_subscribed')
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithEnabledInternalFlag])
                 })
             })
             it('does not return surveys that have internal flag keys but no matching internal flags', () => {
                 surveysResponse = { surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag] }
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithEnabledInternalFlag])
                 })
             })
@@ -660,7 +640,7 @@ describe('surveys', () => {
                 document.body.appendChild(document.createElement('div')).className = 'test-selector'
                 surveysResponse = { surveys: [activeSurvey, surveyWithSelector, surveyWithEverything] }
                 // activeSurvey returns because there are no restrictions on conditions or flags on it
-                surveys.getActiveMatchingSurveys((data) => {
+                instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([activeSurvey, surveyWithSelector, surveyWithEverything])
                 })
             })
@@ -804,33 +784,6 @@ describe('surveys', () => {
         })
     })
 
-    describe('decide response', () => {
-        beforeEach(() => {
-            // clean the JSDOM to prevent interdependencies between tests
-            document.body.innerHTML = ''
-            document.head.innerHTML = ''
-        })
-
-        it('should not load when decide response says no', () => {
-            surveys.afterDecideResponse({ surveys: false } as DecideResponse)
-            // Make sure the script is not loaded
-            expectScriptToNotExist('https://us-assets.i.posthog.com/static/surveys.js')
-        })
-
-        it('should load when decide response says so', () => {
-            surveys.afterDecideResponse({ surveys: true } as DecideResponse)
-            // Make sure the script is loaded
-            expectScriptToExist('https://us-assets.i.posthog.com/static/surveys.js')
-        })
-
-        it('should not load when config says no', () => {
-            config.disable_surveys = true
-            surveys.afterDecideResponse({ surveys: true } as DecideResponse)
-            // Make sure the script is not loaded
-            expectScriptToNotExist('https://us-assets.i.posthog.com/static/surveys.js')
-        })
-    })
-
     describe('branching logic', () => {
         const survey: Survey = {
             name: 'My survey',
@@ -847,8 +800,10 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Question A' },
                 { type: SurveyQuestionType.Open, question: 'Question B' },
             ] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 1, 'Some response')).toEqual(SurveyQuestionBranchingType.End)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(1)
+            expect(instance.surveys.getNextSurveyStep(survey, 1, 'Some response')).toEqual(
+                SurveyQuestionBranchingType.End
+            )
         })
 
         it('should branch out to `end`', () => {
@@ -860,7 +815,9 @@ describe('surveys', () => {
                 },
                 { type: SurveyQuestionType.Open, question: 'Question B' },
             ] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(SurveyQuestionBranchingType.End)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(
+                SurveyQuestionBranchingType.End
+            )
         })
 
         it('should branch out to a specific question', () => {
@@ -873,7 +830,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Question B' },
                 { type: SurveyQuestionType.Open, question: 'Question C' },
             ] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(2)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(2)
         })
 
         // Single-choice
@@ -893,9 +850,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Why no?' },
                 { type: SurveyQuestionType.Open, question: 'Why maybe?' },
             ] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Yes')).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 'No')).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 'Yes')).toEqual(1)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 'No')).toEqual(2)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
         })
 
         // Response-based branching, scale 1-3
@@ -915,9 +872,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
 
-            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 2)).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(3)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 2)).toEqual(2)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 3)).toEqual(3)
         })
 
         // Response-based branching, scale 1-5
@@ -937,9 +894,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
 
-            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 5)).toEqual(3)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 3)).toEqual(2)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 5)).toEqual(3)
         })
 
         // Response-based branching, scale 0-10 (NPS)
@@ -959,9 +916,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
 
-            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 8)).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 10)).toEqual(3)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 8)).toEqual(2)
+            expect(instance.surveys.getNextSurveyStep(survey, 0, 10)).toEqual(3)
         })
 
         it('should display questions in the order AGCEHDFB', () => {
@@ -1015,7 +972,7 @@ describe('surveys', () => {
             for (let i = 0; i < survey.questions.length; i++) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, 'Some response')
+                currentStep = instance.surveys.getNextSurveyStep(survey, currentStep, 'Some response')
             }
 
             expect(desiredOrder).toEqual(actualOrder)
@@ -1074,7 +1031,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+                currentStep = instance.surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
@@ -1087,7 +1044,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+                currentStep = instance.surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
@@ -1100,7 +1057,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+                currentStep = instance.surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
@@ -1117,7 +1074,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+                currentStep = instance.surveys.getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
@@ -1138,7 +1095,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
-            expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 10')
+            expect(() => instance.surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 10')
         })
 
         it('should throw an error for a response value out of the valid range', () => {
@@ -1156,13 +1113,15 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
-            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
+            expect(() => instance.surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
 
             survey.questions[0].scale = 5
-            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
+            expect(() => instance.surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
 
             survey.questions[0].scale = 10
-            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 0-10')
+            expect(() => instance.surveys.getNextSurveyStep(survey, 0, 20)).toThrow(
+                'The response must be in range 0-10'
+            )
         })
 
         it('should throw an error for if a response value in a rating question is not an integer', () => {
@@ -1180,8 +1139,10 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
-            expect(() => surveys.getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
-            expect(() => surveys.getNextSurveyStep(survey, 0, 'some_string')).toThrow(
+            expect(() => instance.surveys.getNextSurveyStep(survey, 0, '2')).toThrow(
+                'The response type must be an integer'
+            )
+            expect(() => instance.surveys.getNextSurveyStep(survey, 0, 'some_string')).toThrow(
                 'The response type must be an integer'
             )
         })

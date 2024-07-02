@@ -49,7 +49,6 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
 }
 
 export class PostHogSurveys {
-    instance: PostHog
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: IReceiveSurveyEvents | null
 
