@@ -63,7 +63,7 @@ export class PostHogSurveys {
         this.loadIfEnabled()
     }
 
-    loadIfEnabled = () => {
+    loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
