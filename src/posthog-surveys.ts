@@ -8,7 +8,7 @@ import {
     SurveyUrlMatchType,
 } from './posthog-surveys-types'
 import { isUrlMatchingRegex } from './utils/request-utils'
-import { SurveyEventReceiver } from './utils/survey-event-receiver'
+import { SurveyEventReceiver } from './extensions/surveys/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
 import { CaptureResult, DecideResponse } from './types'
 import { logger } from './utils/logger'

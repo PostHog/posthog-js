@@ -4,7 +4,7 @@ import { SurveyType, SurveyQuestionType, Survey } from '../../posthog-surveys-ty
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
-import { SurveyEventReceiver } from '../../utils/survey-event-receiver'
+import { SurveyEventReceiver } from './survey-event-receiver'
 
 describe('survey-event-receiver', () => {
     let config: PostHogConfig

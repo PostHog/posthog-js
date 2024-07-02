@@ -1,7 +1,7 @@
-import { Survey } from '../posthog-surveys-types'
-import { PostHogPersistence } from '../posthog-persistence'
-import { SURVEYS_ACTIVATED } from '../constants'
-import { CaptureResult } from '../types'
+import { Survey } from '../../posthog-surveys-types'
+import { PostHogPersistence } from '../../posthog-persistence'
+import { SURVEYS_ACTIVATED } from '../../constants'
+import { CaptureResult } from '../../types'
 
 export class SurveyEventReceiver {
     private readonly eventRegistry: Map<string, string[]>
