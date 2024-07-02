@@ -57,7 +57,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               border-color: ${appearance?.borderColor || '#c9c6c6'};
               margin-top: 14px;
           }
-          .survey-box:has(.survey-question:empty) textarea {
+          .survey-box:has(.survey-question:empty):not(:has(.description)) textarea {
               margin-top: 0;
           }
           .form-submit {
@@ -201,7 +201,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               margin-top: 13px;
               font-size: 14px;
           }
-          .survey-box > div:has(.survey-question:empty) + .multiple-choice-options {
+          .survey-box:has(.survey-question:empty):not(:has(.description)) .multiple-choice-options {
               margin-top: 0;
           }
           .multiple-choice-options .choice-option {
