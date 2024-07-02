@@ -1,11 +1,11 @@
 import { Survey } from '../../posthog-surveys-types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { SURVEYS_ACTIVATED } from '../../constants'
-import { CaptureResult } from '../../types'
+import { CaptureResult, IReceiveSurveyEvents } from '../../types'
 
-export class SurveyEventReceiver {
-    private readonly eventRegistry: Map<string, string[]>
-    private readonly persistence?: PostHogPersistence
+export class SurveyEventReceiver implements IReceiveSurveyEvents {
+    readonly eventRegistry: Map<string, string[]>
+    readonly persistence?: PostHogPersistence
     private static SURVEY_SHOWN_EVENT_NAME = 'survey shown'
 
     constructor(persistence?: PostHogPersistence) {
@@ -66,7 +66,7 @@ export class SurveyEventReceiver {
         return this.eventRegistry
     }
 
-    private _saveSurveysToStorage(surveys: string[]): void {
+    _saveSurveysToStorage(surveys: string[]): void {
         // we use a new Set here to remove duplicates.
         this.persistence?.register({
             [SURVEYS_ACTIVATED]: [...new Set(surveys)],

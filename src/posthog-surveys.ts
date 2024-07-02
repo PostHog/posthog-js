@@ -8,9 +8,8 @@ import {
     SurveyUrlMatchType,
 } from './posthog-surveys-types'
 import { isUrlMatchingRegex } from './utils/request-utils'
-import { SurveyEventReceiver } from './extensions/surveys/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
-import { CaptureResult, DecideResponse } from './types'
+import { CaptureResult, DecideResponse, IReceiveSurveyEvents } from './types'
 import { logger } from './utils/logger'
 import { isUndefined } from './utils/type-utils'
 import { canActivateRepeatedly, hasEvents } from './extensions/surveys/surveys-utils'
@@ -53,7 +52,7 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
 export class PostHogSurveys {
     instance: PostHog
     private _decideServerResponse?: boolean
-    public _surveyEventReceiver: SurveyEventReceiver | null
+    public _surveyEventReceiver: IReceiveSurveyEvents | null
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -69,6 +68,7 @@ export class PostHogSurveys {
 
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
+        const SurveyEventReceiver = assignableWindow?.__PosthogExtensions__?.SurveysEventReceiver
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             if (this._surveyEventReceiver == null) {
@@ -92,7 +92,8 @@ export class PostHogSurveys {
         }
 
         if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+            logger.error('SurveyEventReceiver is not initialized. Must init surveys before calling getSurveys')
+            return callback([])
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
