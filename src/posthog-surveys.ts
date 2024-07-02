@@ -53,8 +53,7 @@ export class PostHogSurveys {
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: IReceiveSurveyEvents | null
 
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
         this._surveyEventReceiver = null
@@ -65,20 +64,21 @@ export class PostHogSurveys {
         this.loadIfEnabled()
     }
 
-    loadIfEnabled() {
+    loadIfEnabled = () => {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
-        const SurveyEventReceiver = assignableWindow?.__PosthogExtensions__?.SurveysEventReceiver
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
-            if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
-            }
             this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)
                 }
 
                 assignableWindow.extendPostHogWithSurveys(this.instance)
+                if (this._surveyEventReceiver == null) {
+                    const SurveyEventReceiver = assignableWindow?.__PosthogExtensions__?.SurveysEventReceiver
+
+                    this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+                }
             })
         }
     }
@@ -134,7 +134,7 @@ export class PostHogSurveys {
         }
     }
 
-    getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
+    getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false) => {
         this.getSurveys((surveys) => {
             const activeSurveys = surveys.filter((survey) => {
                 return !!(survey.start_date && !survey.end_date)
