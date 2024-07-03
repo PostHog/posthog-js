@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     testPathIgnorePatterns: ['/node_modules/', '/cypress/', '/react/', '/test_data/', '/testcafe/'],
     moduleFileExtensions: ['js', 'json', 'ts', 'tsx'],
     setupFilesAfterEnv: ['given2/setup', './src/__tests__/setup.js'],

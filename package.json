@@ -26,6 +26,19 @@
     "main": "dist/main.js",
     "module": "dist/module.js",
     "types": "dist/module.d.ts",
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/module.d.ts",
+            "import": "./dist/es.js",
+            "require": "./dist/module.js"
+        },
+        "./react": {
+            "types": "./react/dist/types/index.d.ts",
+            "import": "./react/dist/esm/index.js",
+            "require": "./react/dist/umd/index.js"
+        }
+    },
     "files": [
         "lib/*",
         "dist/*",
@@ -118,5 +131,8 @@
         "patchedDependencies": {
             "rrweb@2.0.0-alpha.13": "patches/rrweb@2.0.0-alpha.13.patch"
         }
+    },
+    "engines": {
+        "node": ">=20.1.0"
     }
 }
