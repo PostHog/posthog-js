@@ -1,3 +1,7 @@
+## 1.144.0 - 2024-07-03
+
+- feat: add payload host denylist (#1282)
+
 ## 1.143.0 - 2024-07-02
 
 - feat(survey): Allow events to repeatedly activate surveys (#1273)
