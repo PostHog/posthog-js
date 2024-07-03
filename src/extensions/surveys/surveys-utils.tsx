@@ -146,7 +146,6 @@ export const style = (appearance: SurveyAppearance | null) => {
               background: ${appearance?.backgroundColor || '#eeeded'};
           }
           .ratings-number {
-              background-color: ${appearance?.ratingButtonColor || 'white'};
               font-size: 16px;
               font-weight: 600;
               padding: 8px 0px;
@@ -190,7 +189,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               fill: ${appearance?.ratingButtonActiveColor || 'black'};
           }
           .emoji-svg {
-              fill: ${appearance?.ratingButtonColor || '#c9c6c6'};
+              fill: '#939393';
           }
           .rating-text {
               display: flex;

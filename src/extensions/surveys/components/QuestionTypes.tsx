@@ -140,6 +140,12 @@ export function RatingQuestion({
                                         onClick={() => {
                                             setRating(idx + 1)
                                         }}
+                                        style={{
+                                            fill: active
+                                                ? appearance.ratingButtonActiveColor
+                                                : appearance.ratingButtonColor,
+                                            borderColor: appearance.borderColor,
+                                        }}
                                     >
                                         {emoji}
                                     </button>
@@ -195,7 +201,7 @@ export function RatingButton({
     num: number
     active: boolean
     displayQuestionIndex: number
-    appearance: any
+    appearance: SurveyAppearance
     setActiveNumber: (num: number) => void
 }) {
     const { textColor, ref } = useContrastingTextColor({ appearance, defaultTextColor: 'black', forceUpdate: active })
