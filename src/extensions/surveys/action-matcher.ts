@@ -34,12 +34,12 @@ export class ActionMatcher {
 
         actions.forEach((action) => {
             this.actionRegistry?.add(action)
-            action.steps
-                ?.filter((step) => step?.event != null)
-                .forEach((step) => {
-                    this.actionEvents?.add(step.event!)
-                })
+            action.steps?.forEach((step) => {
+                this.actionEvents?.add(step?.event || '')
+            })
         })
+        // eslint-disable-next-line no-console
+        console.log(`in action-matcher eventNames known are `, this.actionEvents.values())
 
         if (this.instance?.autocapture) {
             const selectorsToWatch: Set<string> = new Set<string>()
@@ -52,6 +52,10 @@ export class ActionMatcher {
             })
             this.instance?.autocapture.setElementSelectors(selectorsToWatch)
         }
+
+        // if (eventNames.length > 0) {
+        //     throw new Error(`I know about these events : ${eventNames}`)
+        // }
     }
 
     on(eventName: string, eventPayload?: CaptureResult) {
@@ -60,12 +64,15 @@ export class ActionMatcher {
         }
 
         if (!this.actionEvents.has(eventName) && !this.actionEvents.has(<string>eventPayload?.event)) {
+            // throw new Error(`unknown event ${eventName}, I only know about : ${JSON.stringify(this.actionEvents.values())}`)
             return
         }
 
         if (this.actionRegistry && this.actionRegistry?.size > 0) {
             this.actionRegistry.forEach((action) => {
                 if (this.checkAction(eventPayload, action)) {
+                    // // eslint-disable-next-line no-console
+                    // console.log(`in action-matcher emitting observed event for action`, action.name)
                     this._debugEventEmitter.emit('actionCaptured', action.name)
                 }
             })
@@ -97,13 +104,12 @@ export class ActionMatcher {
     private checkStep = (event?: CaptureResult, step?: ActionStepType): boolean => {
         // eslint-disable-next-line no-console
         console.log(
-            ` in checkStep,  event is [${event?.event}],  checkStepEvent is [${this.checkStepEvent(
+            ` in checkStep,  event is [${event?.event}],  step.event is ${
+                step?.event
+            } checkStepEvent is [${this.checkStepEvent(event, step)}] checkStepUrl  is [${this.checkStepUrl(
                 event,
                 step
-            )}] checkStepUrl  is [${this.checkStepUrl(event, step)}] checkStepElement is [${this.checkStepElement(
-                event,
-                step
-            )}]`
+            )}] checkStepElement is [${this.checkStepElement(event, step)}]`
         )
         return this.checkStepEvent(event, step) && this.checkStepUrl(event, step) && this.checkStepElement(event, step)
     }

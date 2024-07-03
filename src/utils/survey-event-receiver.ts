@@ -2,9 +2,9 @@ import { Survey } from '../posthog-surveys-types'
 import { SURVEYS_ACTIVATED } from '../constants'
 
 import { CaptureResult } from '../types'
-import {ActionMatcher} from "../extensions/surveys/action-matcher";
-import {PostHog} from "../posthog-core";
-import {isUndefined} from "./type-utils";
+import { ActionMatcher } from '../extensions/surveys/action-matcher'
+import { PostHog } from '../posthog-core'
+import { isUndefined } from './type-utils'
 
 export class SurveyEventReceiver {
     // eventToSurveys is a mapping of event name to all the surveys that are activated by it
@@ -74,11 +74,6 @@ export class SurveyEventReceiver {
                         this.actionToSurveys.set(action.name, knownSurveys || [survey.id])
                     }
                 })
-
-                this.actionToSurveys.set(
-                    survey.id,
-                    survey.conditions?.actions?.values?.map((e) => e.name!)
-                )
             }
         })
     }

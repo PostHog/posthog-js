@@ -200,7 +200,7 @@ describe('survey-event-receiver', () => {
         ): ActionType => {
             return {
                 id: id,
-                name: 'Ignored certain elements',
+                name: `${eventName || 'user defined '} action`,
                 description: '',
                 post_to_slack: false,
                 slack_message_format: '',
@@ -256,15 +256,22 @@ describe('survey-event-receiver', () => {
                 type: SurveyType.Popover,
                 questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
                 conditions: {
-                    actions: [createAction(3, '$mypageview') as unknown as ActionType],
+                    actions: {
+                        values: [createAction(3, '$mypageview') as unknown as ActionType],
+                    },
                 },
             } as unknown as Survey
             autoCaptureSurvey.conditions.actions.values = [createAction(2, '$match_event_name')]
             const surveyEventReceiver = new SurveyEventReceiver(instance)
+            console.log(`TEST:: registering surveys to observe`)
             surveyEventReceiver.register([autoCaptureSurvey, myPageViewSurvey])
             surveyEventReceiver._getActionMatcher().on('$match_event_name', createCaptureResult('$match_event_name'))
+            console.log(`TEST:: getting surveys to test`)
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
-            surveyEventReceiver._getActionMatcher().on('$mypageview', createCaptureResult('$mypageview'))
+
+            surveyEventReceiver
+                ._getActionMatcher()
+                .on('$mypageview', createCaptureResult(myPageViewSurvey.conditions.actions.values[0].steps[0].event))
             expect(surveyEventReceiver.getSurveys()).toContain('my-pageview-survey')
         })
 
@@ -313,7 +320,6 @@ describe('survey-event-receiver', () => {
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         })
 
-        //
         // it('can match action with only element selector', () => {
         //     console.log(actionWithOnlySelector)
         // })
