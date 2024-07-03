@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { assignableWindow, document, location, userAgent, window } from './utils/globals'
+import { assignableWindow, document, location, POSTHOG_LOWER, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
@@ -1271,7 +1271,11 @@ export class PostHog {
 
         if (isDistinctIdStringLike(new_distinct_id)) {
             logger.critical(
-                `The string "${new_distinct_id}" was set in posthog.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.`
+                'The string "' +
+                    new_distinct_id +
+                    '" was set in ' +
+                    POSTHOG_LOWER +
+                    '.identify which indicates an error. This ID should be unique to the user and not a hardcoded string.'
             )
             return
         }

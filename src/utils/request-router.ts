@@ -1,5 +1,5 @@
 import { PostHog } from '../posthog-core'
-import { document } from '../utils/globals'
+import { document, POSTHOG_LOWER } from '../utils/globals'
 import { logger } from './logger'
 
 /**
@@ -7,6 +7,8 @@ import { logger } from './logger'
  * The basic idea is that for a given region (US or EU), we have a set of endpoints that we should call depending
  * on the type of request (events, replays, decide, etc.) and handle overrides that may come from configs or the decide endpoint
  */
+
+const DOMAIN = POSTHOG_LOWER + '.com'
 
 export enum RequestRouterRegion {
     US = 'us',
@@ -16,7 +18,7 @@ export enum RequestRouterRegion {
 
 export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 
-const ingestionDomain = 'i.posthog.com'
+const ingestionDomain = 'i.' + DOMAIN
 
 export class RequestRouter {
     instance: PostHog
@@ -32,8 +34,8 @@ export class RequestRouter {
     get uiHost(): string | undefined {
         const host = this.instance.config.ui_host?.replace(/\/$/, '')
 
-        if (host === 'https://app.posthog.com') {
-            return 'https://us.posthog.com'
+        if (host === 'https://app.' + DOMAIN) {
+            return 'https://us.' + DOMAIN
         }
         return host
     }
@@ -58,7 +60,7 @@ export class RequestRouter {
         }
 
         if (target === 'ui') {
-            return (this.uiHost || this.apiHost.replace(`.${ingestionDomain}`, '.posthog.com')) + path
+            return (this.uiHost || this.apiHost.replace(`.${ingestionDomain}`, '.' + DOMAIN)) + path
         }
 
         if (this.region === RequestRouterRegion.CUSTOM) {

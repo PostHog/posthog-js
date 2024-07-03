@@ -1,6 +1,6 @@
 import Config from '../config'
 import { isUndefined } from './type-utils'
-import { assignableWindow, window } from './globals'
+import { assignableWindow, POSTHOG, window } from './globals'
 
 const LOGGER_PREFIX = '[PostHog.js]'
 export const logger = {
@@ -40,6 +40,6 @@ export const logger = {
     },
 
     uninitializedWarning: (methodName: string) => {
-        logger.error(`You must initialize PostHog before calling ${methodName}`)
+        logger.error('You must initialize ' + POSTHOG + ` before calling ${methodName}`)
     },
 }

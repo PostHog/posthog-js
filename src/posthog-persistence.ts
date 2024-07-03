@@ -15,6 +15,7 @@ import {
 import { isObject, isUndefined } from './utils/type-utils'
 import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
+import { POSTHOG_LOWER } from './utils/globals'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',
@@ -33,7 +34,7 @@ const parseName = (config: PostHogConfig): string => {
     if (config['persistence_name']) {
         return 'ph_' + config['persistence_name']
     } else {
-        return 'ph_' + token + '_posthog'
+        return 'ph_' + token + '_' + POSTHOG_LOWER
     }
 }
 

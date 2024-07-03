@@ -36,6 +36,8 @@ import { logger } from '../utils/logger'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
+const POSTHOG_WIDGET = 'PostHogWidget'
+const POSTHOG_WIDGET_SURVEY_CLICK_LISTENER = 'PHWidgetSurveyClickListener'
 
 export class SurveyManager {
     private posthog: PostHog
@@ -108,13 +110,13 @@ export class SurveyManager {
         const selectorOnPage =
             survey.appearance?.widgetSelector && document.querySelector(survey.appearance.widgetSelector)
         if (selectorOnPage) {
-            if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0) {
+            if (document.querySelectorAll(`.${POSTHOG_WIDGET}${survey.id}`).length === 0) {
                 this.handleWidget(survey)
-            } else if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 1) {
+            } else if (document.querySelectorAll(`.${POSTHOG_WIDGET}${survey.id}`).length === 1) {
                 // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
-                if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
+                if (!selectorOnPage.getAttribute(POSTHOG_WIDGET_SURVEY_CLICK_LISTENER)) {
                     const surveyPopup = document
-                        .querySelector(`.PostHogWidget${survey.id}`)
+                        .querySelector(`.${POSTHOG_WIDGET}${survey.id}`)
                         ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
                     selectorOnPage.addEventListener('click', () => {
                         if (surveyPopup) {
@@ -125,7 +127,7 @@ export class SurveyManager {
                             })
                         }
                     })
-                    selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
+                    selectorOnPage.setAttribute(POSTHOG_WIDGET_SURVEY_CLICK_LISTENER, 'true')
                 }
             }
         }
@@ -159,7 +161,7 @@ export class SurveyManager {
                 if (survey.type === SurveyType.Widget) {
                     if (
                         survey.appearance?.widgetType === 'tab' &&
-                        document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0
+                        document.querySelectorAll(`.${POSTHOG_WIDGET}${survey.id}`).length === 0
                     ) {
                         this.handleWidget(survey)
                     }
@@ -578,7 +580,7 @@ export function FeedbackWidget({
             widget?.addEventListener('click', () => {
                 setShowSurvey(!showSurvey)
             })
-            widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
+            widget?.setAttribute(POSTHOG_WIDGET_SURVEY_CLICK_LISTENER, 'true')
         }
     }, [])
 

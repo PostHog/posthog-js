@@ -8,6 +8,9 @@
  * to handle the case where the global is not available.
  */
 
+export const POSTHOG = 'PostHog'
+export const POSTHOG_LOWER = POSTHOG.toLowerCase()
+
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
 

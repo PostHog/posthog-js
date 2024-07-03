@@ -2,6 +2,7 @@ import { CAPTURE_RATE_LIMIT } from './constants'
 import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
 import { logger } from './utils/logger'
+import { POSTHOG_LOWER } from './utils/globals'
 
 const ONE_MINUTE_IN_MILLISECONDS = 60 * 1000
 const RATE_LIMIT_EVENT = '$$client_ingestion_warning'
@@ -59,7 +60,9 @@ export class RateLimiter {
             this.instance.capture(
                 RATE_LIMIT_EVENT,
                 {
-                    $$client_ingestion_warning_message: `posthog-js client rate limited. Config is set to ${this.captureEventsPerSecond} events per second and ${this.captureEventsBurstLimit} events burst limit.`,
+                    $$client_ingestion_warning_message:
+                        POSTHOG_LOWER +
+                        `-js client rate limited. Config is set to ${this.captureEventsPerSecond} events per second and ${this.captureEventsBurstLimit} events burst limit.`,
                 },
                 {
                     skip_client_rate_limiting: true,

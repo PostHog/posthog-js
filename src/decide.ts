@@ -3,7 +3,7 @@ import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 import { logger } from './utils/logger'
-import { document, assignableWindow } from './utils/globals'
+import { document, assignableWindow, POSTHOG } from './utils/globals'
 
 export class Decide {
     constructor(private readonly instance: PostHog) {
@@ -74,7 +74,7 @@ export class Decide {
 
                     this.instance.requestRouter.loadScript(scriptUrl, (err) => {
                         if (err) {
-                            logger.error(`Error while initializing PostHog app with config id ${id}`, err)
+                            logger.error('Error while initializing ' + POSTHOG + ' app with config id ' + id, err)
                         }
                     })
                 }

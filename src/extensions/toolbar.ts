@@ -3,13 +3,13 @@ import { PostHog } from '../posthog-core'
 import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { logger } from '../utils/logger'
-import { window, document, assignableWindow } from '../utils/globals'
+import { window, document, assignableWindow, POSTHOG_LOWER } from '../utils/globals'
 import { TOOLBAR_ID } from '../constants'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
 const STATE_FROM_WINDOW = window?.location
-    ? _getHashParam(window.location.hash, '__posthog') || _getHashParam(location.hash, 'state')
+    ? _getHashParam(window.location.hash, '__' + POSTHOG_LOWER) || _getHashParam(location.hash, 'state')
     : null
 
 const LOCALSTORAGE_KEY = '_postHogToolbarParams'
@@ -75,7 +75,9 @@ export class Toolbar {
              */
 
             const stateHash =
-                STATE_FROM_WINDOW || _getHashParam(location.hash, '__posthog') || _getHashParam(location.hash, 'state')
+                STATE_FROM_WINDOW ||
+                _getHashParam(location.hash, '__' + POSTHOG_LOWER) ||
+                _getHashParam(location.hash, 'state')
 
             let toolbarParams: ToolbarParams
             const state = stateHash
