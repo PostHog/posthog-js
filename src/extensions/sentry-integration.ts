@@ -17,6 +17,7 @@
  */
 
 import { PostHog } from '../posthog-core'
+import { SeverityLevel } from '../types'
 
 // NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
 // We only use a small subset of the types, so we can just define the integration overall and use any for the rest
@@ -46,11 +47,6 @@ interface _SentryIntegration {
     processEvent(event: _SentryEvent): _SentryEvent
 }
 
-// levels copied from Sentry to avoid relying on a frequently changing @sentry/types dependency
-// but provided as an array of literal types, so we can constrain the level below
-const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
-declare type _SeverityLevel = typeof severityLevels[number]
-
 interface SentryExceptionProperties {
     $sentry_event_id: any
     $sentry_exception: any
@@ -71,7 +67,7 @@ export type SentryIntegrationOptions = {
      * e.g. ['error'] to send only errors -- the default when omitted
      * e.g. '*' to send all events
      */
-    severityAllowList?: _SeverityLevel[] | '*'
+    severityAllowList?: SeverityLevel[] | '*'
 }
 
 const NAME = 'posthog-js'
@@ -81,8 +77,7 @@ export function createEventProcessor(
     { organization, projectId, prefix, severityAllowList = ['error'] }: SentryIntegrationOptions = {}
 ): (event: _SentryEvent) => _SentryEvent {
     return (event) => {
-        const shouldProcessLevel =
-            severityAllowList === '*' || severityAllowList.includes(event.level as _SeverityLevel)
+        const shouldProcessLevel = severityAllowList === '*' || severityAllowList.includes(event.level as SeverityLevel)
         if (!shouldProcessLevel || !_posthog.__loaded) return event
         if (!event.tags) event.tags = {}
 
@@ -103,12 +98,14 @@ export function createEventProcessor(
             $exception_message: any
             $exception_type: any
             $exception_personURL: string
-            $level: _SeverityLevel
+            $exception_level: SeverityLevel
+            $level: SeverityLevel
         } = {
             // PostHog Exception Properties,
             $exception_message: exceptions[0]?.value || event.message,
             $exception_type: exceptions[0]?.type,
             $exception_personURL: personUrl,
+            $exception_level: event.level,
             // Sentry Exception Properties
             $sentry_event_id: event.event_id,
             $sentry_exception: event.exception,
@@ -163,7 +160,7 @@ export class SentryIntegration implements _SentryIntegrationClass {
          * e.g. ['error'] to send only errors -- the default when omitted
          * e.g. '*' to send all events
          */
-        severityAllowList?: _SeverityLevel[] | '*'
+        severityAllowList?: SeverityLevel[] | '*'
     ) {
         // setupOnce gets called by Sentry when it intializes the plugin
         this.name = NAME

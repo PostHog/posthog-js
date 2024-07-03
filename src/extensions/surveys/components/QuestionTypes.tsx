@@ -18,7 +18,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { defaultSurveyAppearance, getDisplayOrderChoices, SurveyContext } from '../surveys-utils'
+import { SurveyContext, defaultSurveyAppearance, getDisplayOrderChoices } from '../surveys-utils'
 import { BottomSection } from './BottomSection'
 import { Cancel, QuestionHeader } from './QuestionHeader'
 

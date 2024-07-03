@@ -10,6 +10,7 @@ env:
   BROWSERSTACK_CONSOLE: 'info'
   BROWSERSTACK_FORCE_PROXY: 'true'
   BROWSERSTACK_USE_AUTOMATE: 'true'
+  BROWSERSTACK_PROJECT_NAME: 'PostHog JS SDK'
 
 jobs:
   browsers:
@@ -32,7 +33,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v4
         with:
           version: 8.x.x
       - uses: actions/setup-node@v4

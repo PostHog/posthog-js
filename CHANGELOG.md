@@ -1,3 +1,62 @@
+## 1.144.0 - 2024-07-03
+
+- feat: add payload host denylist (#1282)
+
+## 1.143.0 - 2024-07-02
+
+- feat(survey): Allow events to repeatedly activate surveys (#1273)
+
+## 1.142.1 - 2024-06-28
+
+- feat: warn when distinct id invalid for replay (#1277)
+
+## 1.142.0 - 2024-06-28
+
+- feat: Improved various bundles (#1265)
+
+## 1.141.4 - 2024-06-26
+
+- fix: use includes over contains (#1275)
+- chore: add browsertack build name (#1271)
+
+## 1.141.3 - 2024-06-25
+
+- fix: dropped styles on route transition (#1272)
+
+## 1.141.2 - 2024-06-25
+
+
+
+## 1.141.1 - 2024-06-25
+
+- fix: exception autocapture (#1261)
+
+## 1.141.0 - 2024-06-24
+
+- feat(surveys): add configurable delay to popup surveys (#1228)
+- chore: update pnpm action setup worfklow version (#1268)
+
+## 1.140.1 - 2024-06-21
+
+- fix: unwind recent changes things seem less stable (#1267)
+
+## 1.140.0 - 2024-06-21
+
+- feat(web-analytics): Add property for autocapture link click (#1259)
+- chore: add sanitization test to heatmaps tests (#1256)
+
+## 1.139.8 - 2024-06-21
+
+- fix(surveys branching): rename confirmation_message -> end (#1257)
+
+## 1.139.7 - 2024-06-21
+
+- fix(surveys): fix missing confirmation message state (#1263)
+
+## 1.139.6 - 2024-06-20
+
+- fix(surveys): handle missing getNextSurveyStep (#1260)
+
 ## 1.139.5 - 2024-06-20
 
 - fix: Allow no capture of $opt_in event (#1250)

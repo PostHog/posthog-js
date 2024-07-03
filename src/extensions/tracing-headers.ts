@@ -1,7 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { loadScript } from '../utils'
 import Config from '../config'
 import { isUndefined } from '../utils/type-utils'
 
@@ -19,15 +18,12 @@ export class TracingHeaders {
             cb()
         }
 
-        loadScript(
-            this.instance.requestRouter.endpointFor('assets', `/static/tracing-headers.js?v=${Config.LIB_VERSION}`),
-            (err) => {
-                if (err) {
-                    logger.error(LOGGER_PREFIX + ' failed to load script', err)
-                }
-                cb()
+        this.instance.requestRouter.loadScript(`/static/tracing-headers.js?v=${Config.LIB_VERSION}`, (err) => {
+            if (err) {
+                logger.error(LOGGER_PREFIX + ' failed to load script', err)
             }
-        )
+            cb()
+        })
     }
     public startIfEnabledOrStop() {
         if (this.instance.config.__add_tracing_headers) {

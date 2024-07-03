@@ -2,6 +2,8 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
+import { isObject } from '../utils/type-utils'
+
 jest.mock('../utils/logger')
 
 describe('heatmaps', () => {
@@ -18,7 +20,25 @@ describe('heatmaps', () => {
 
     beforeEach(async () => {
         onCapture = jest.fn()
-        posthog = await createPosthogInstance(uuidv7(), { _onCapture: onCapture })
+        posthog = await createPosthogInstance(uuidv7(), {
+            _onCapture: onCapture,
+            sanitize_properties: (props) => {
+                // what ever sanitization makes sense
+                const sanitizeUrl = (url: string) => url.replace(/https?:\/\/[^/]+/g, 'http://replaced')
+                if (props['$current_url']) {
+                    props['$current_url'] = sanitizeUrl(props['$current_url'])
+                }
+                if (isObject(props['$heatmap_data'])) {
+                    // the keys of the heatmap data are URLs, so we might need to sanitize them to
+                    // this sanitized URL would need to be entered in the toolbar for the heatmap display to work
+                    props['$heatmap_data'] = Object.entries(props['$heatmap_data']).reduce((acc, [url, data]) => {
+                        acc[sanitizeUrl(url)] = data
+                        return acc
+                    }, {})
+                }
+                return props
+            },
+        })
     })
 
     it('should include generated heatmap data', async () => {
@@ -32,7 +52,7 @@ describe('heatmaps', () => {
                 event: 'test event',
                 properties: {
                     $heatmap_data: {
-                        'http://localhost/': [
+                        'http://replaced/': [
                             {
                                 target_fixed: false,
                                 type: 'click',
@@ -54,8 +74,8 @@ describe('heatmaps', () => {
         posthog.capture('test event')
 
         expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://localhost/']).toHaveLength(4)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://localhost/'].map((x) => x.type)).toEqual([
+        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(4)
+        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/'].map((x) => x.type)).toEqual([
             'click',
             'click',
             'rageclick',
@@ -68,7 +88,7 @@ describe('heatmaps', () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.capture('test event')
         expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://localhost/']).toHaveLength(2)
+        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
 
         posthog.capture('test event 2')
         expect(onCapture).toBeCalledTimes(2)

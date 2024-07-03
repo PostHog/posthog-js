@@ -1,4 +1,6 @@
 import { PostHog } from '../posthog-core'
+import { document } from '../utils/globals'
+import { logger } from './logger'
 
 /**
  * The request router helps simplify the logic to determine which endpoints should be called for which things
@@ -70,6 +72,40 @@ export class RequestRouter {
                 return `https://${this.region}-assets.${suffix}`
             case 'api':
                 return `https://${this.region}.${suffix}`
+        }
+    }
+
+    loadScript(scriptUrlToLoad: string, callback: (error?: string | Event, event?: Event) => void): void {
+        if (this.instance.config.disable_external_dependency_loading) {
+            logger.warn(`${scriptUrlToLoad} was requested but loading of external scripts is disabled.`)
+            return callback('Loading of external scripts is disabled')
+        }
+
+        const url = scriptUrlToLoad[0] === '/' ? this.endpointFor('assets', scriptUrlToLoad) : scriptUrlToLoad
+
+        const addScript = () => {
+            if (!document) {
+                return callback('document not found')
+            }
+            const scriptTag = document.createElement('script')
+            scriptTag.type = 'text/javascript'
+            scriptTag.src = url
+            scriptTag.onload = (event) => callback(undefined, event)
+            scriptTag.onerror = (error) => callback(error)
+
+            const scripts = document.querySelectorAll('body > script')
+            if (scripts.length > 0) {
+                scripts[0].parentNode?.insertBefore(scriptTag, scripts[0])
+            } else {
+                // In exceptional situations this call might load before the DOM is fully ready.
+                document.body.appendChild(scriptTag)
+            }
+        }
+
+        if (document?.body) {
+            addScript()
+        } else {
+            document?.addEventListener('DOMContentLoaded', addScript)
         }
     }
 }

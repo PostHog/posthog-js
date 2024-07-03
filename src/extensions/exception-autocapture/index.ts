@@ -1,139 +1,127 @@
 import { window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
-import { ErrorEventArgs, ErrorProperties, errorToProperties, unhandledRejectionToProperties } from './error-conversion'
-import { isPrimitive } from './type-checking'
 
-import { isArray, isObject, isUndefined } from '../../utils/type-utils'
+import { isObject } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
+import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE, EXCEPTION_CAPTURE_ENDPOINT } from '../../constants'
+import Config from '../../config'
 
-export const extendPostHog = (instance: PostHog, response: DecideResponse) => {
-    const exceptionObserver = new ExceptionObserver(instance)
-    exceptionObserver.afterDecideResponse(response)
-    return exceptionObserver
-}
+// TODO: move this to /x/ as default
+const BASE_ENDPOINT = '/e/'
+const LOGGER_PREFIX = '[Exception Capture]'
 
 export class ExceptionObserver {
+    private _endpoint: string = BASE_ENDPOINT
     instance: PostHog
     remoteEnabled: boolean | undefined
-    private originalOnErrorHandler: Window['onerror'] | null | undefined = undefined
     private originalOnUnhandledRejectionHandler: Window['onunhandledrejection'] | null | undefined = undefined
-
-    private errorsToIgnore: RegExp[] = []
+    private unwrapOnError: (() => void) | undefined
+    private unwrapUnhandledRejection: (() => void) | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
+        this.remoteEnabled = !!this.instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
+        this.startIfEnabled()
     }
 
-    startCapturing() {
-        if (!window || !this.isEnabled() || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
+    get isEnabled() {
+        return this.remoteEnabled ?? false
+    }
+
+    get isCapturing() {
+        return !!(window?.onerror as any)?.__POSTHOG_INSTRUMENTED__
+    }
+
+    get hasHandlers() {
+        return this.originalOnUnhandledRejectionHandler || this.unwrapOnError
+    }
+
+    startIfEnabled(): void {
+        if (this.isEnabled && !this.isCapturing) {
+            logger.info(LOGGER_PREFIX + ' enabled, starting...')
+            this.loadScript(this.startCapturing)
+        }
+    }
+
+    private loadScript(cb: () => void): void {
+        if (this.hasHandlers) {
+            // already loaded
+            cb()
+        }
+
+        this.instance.requestRouter.loadScript(
+            this.instance.requestRouter.endpointFor(
+                'assets',
+                `/static/exception-autocapture.js?v=${Config.LIB_VERSION}`
+            ),
+            (err) => {
+                if (err) {
+                    logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                }
+                cb()
+            }
+        )
+    }
+
+    private startCapturing = () => {
+        if (!window || !this.isEnabled || this.hasHandlers || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
+            return
+        }
+
+        const wrapOnError = (window as any).posthogErrorWrappingFunctions.wrapOnError
+        const wrapUnhandledRejection = (window as any).posthogErrorWrappingFunctions.wrapUnhandledRejection
+
+        if (!wrapOnError || !wrapUnhandledRejection) {
+            logger.error(LOGGER_PREFIX + ' failed to load error wrapping functions - cannot start')
             return
         }
 
         try {
-            this.originalOnErrorHandler = window.onerror
-
-            window.onerror = function (this: ExceptionObserver, ...args: ErrorEventArgs): boolean {
-                this.captureException(args)
-
-                if (this.originalOnErrorHandler) {
-                    // eslint-disable-next-line prefer-rest-params
-                    return this.originalOnErrorHandler.apply(this, args)
-                }
-
-                return false
-            }.bind(this)
-            ;(window.onerror as any).__POSTHOG_INSTRUMENTED__ = true
-
-            this.originalOnUnhandledRejectionHandler = window.onunhandledrejection
-
-            window.onunhandledrejection = function (
-                this: ExceptionObserver,
-                ...args: [ev: PromiseRejectionEvent]
-            ): boolean {
-                const errorProperties: ErrorProperties = unhandledRejectionToProperties(args)
-                this.sendExceptionEvent(errorProperties)
-
-                if (window && this.originalOnUnhandledRejectionHandler) {
-                    // eslint-disable-next-line prefer-rest-params
-                    return this.originalOnUnhandledRejectionHandler.apply(window, args)
-                }
-
-                return true
-            }.bind(this)
-            ;(window.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__ = true
+            this.unwrapOnError = wrapOnError(this.captureException.bind(this))
+            this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
         } catch (e) {
-            logger.error('PostHog failed to start exception autocapture', e)
+            logger.error(LOGGER_PREFIX + ' failed to start', e)
             this.stopCapturing()
         }
     }
 
-    stopCapturing() {
-        if (!window) {
-            return
-        }
-        if (!isUndefined(this.originalOnErrorHandler)) {
-            window.onerror = this.originalOnErrorHandler
-            this.originalOnErrorHandler = null
-        }
-        delete (window.onerror as any)?.__POSTHOG_INSTRUMENTED__
-
-        if (!isUndefined(this.originalOnUnhandledRejectionHandler)) {
-            window.onunhandledrejection = this.originalOnUnhandledRejectionHandler
-            this.originalOnUnhandledRejectionHandler = null
-        }
-        delete (window.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__
-    }
-
-    isCapturing() {
-        return !!(window?.onerror as any)?.__POSTHOG_INSTRUMENTED__
-    }
-
-    isEnabled() {
-        return this.remoteEnabled ?? false
+    private stopCapturing() {
+        this.unwrapOnError?.()
+        this.unwrapUnhandledRejection?.()
     }
 
     afterDecideResponse(response: DecideResponse) {
         const autocaptureExceptionsResponse = response.autocaptureExceptions
-        this.remoteEnabled = !!autocaptureExceptionsResponse || false
-        if (
-            !isPrimitive(autocaptureExceptionsResponse) &&
-            'errors_to_ignore' in autocaptureExceptionsResponse &&
-            isArray(autocaptureExceptionsResponse.errors_to_ignore)
-        ) {
-            const dropRules = autocaptureExceptionsResponse.errors_to_ignore
 
-            this.errorsToIgnore = dropRules.map((rule) => {
-                return new RegExp(rule)
+        // store this in-memory in case persistence is disabled
+        this.remoteEnabled = !!autocaptureExceptionsResponse || false
+        this._endpoint = isObject(autocaptureExceptionsResponse)
+            ? autocaptureExceptionsResponse.endpoint || BASE_ENDPOINT
+            : BASE_ENDPOINT
+
+        if (this.instance.persistence) {
+            this.instance.persistence.register({
+                [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this.remoteEnabled,
+            })
+            // when we come to moving the endpoint to not /e/ we'll want that to persist between startup and decide response
+            // TODO: once BASE_ENDPOINT is no longer /e/ this can be removed
+            this.instance.persistence.register({
+                [EXCEPTION_CAPTURE_ENDPOINT]: this._endpoint,
             })
         }
 
-        if (this.isEnabled()) {
-            this.startCapturing()
-            logger.info(
-                '[Exception Capture] Remote config for exception autocapture is enabled, starting with config: ',
-                isObject(autocaptureExceptionsResponse) ? autocaptureExceptionsResponse : {}
-            )
-        }
+        this.startIfEnabled()
     }
 
-    captureException(args: ErrorEventArgs, properties?: Properties) {
-        const errorProperties = errorToProperties(args)
-
-        if (this.errorsToIgnore.some((regex) => regex.test(errorProperties.$exception_message || ''))) {
-            logger.info('[Exception Capture] Ignoring exception based on remote config', errorProperties)
-            return
-        }
-
-        const propertiesToSend = { ...properties, ...errorProperties }
-
+    captureException(errorProperties: Properties) {
         const posthogHost = this.instance.requestRouter.endpointFor('ui')
 
         errorProperties.$exception_personURL = `${posthogHost}/project/${
             this.instance.config.token
         }/person/${this.instance.get_distinct_id()}`
 
-        this.sendExceptionEvent(propertiesToSend)
+        this.sendExceptionEvent(errorProperties)
     }
 
     /**
@@ -144,6 +132,7 @@ export class ExceptionObserver {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
             _noHeatmaps: true,
+            _url: this._endpoint,
         })
     }
 }

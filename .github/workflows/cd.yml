@@ -36,7 +36,7 @@ jobs:
                   fetch-depth: 0
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
-            - uses: pnpm/action-setup@v2
+            - uses: pnpm/action-setup@v4
               with:
                 version: 8.x.x
 
@@ -109,7 +109,7 @@ jobs:
                   token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
             - name: Install pnpm
-              uses: pnpm/action-setup@v2
+              uses: pnpm/action-setup@v4
 
             - name: Set up Node.js
               uses: actions/setup-node@v3

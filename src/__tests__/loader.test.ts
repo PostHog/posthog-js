@@ -5,11 +5,15 @@
  * currently not supported in the browser lib).
  */
 
-import posthog, { PostHog } from '../loader-module'
+import { PostHog } from '../posthog-core'
+import { defaultPostHog } from './helpers/posthog-instance'
+
 import sinon from 'sinon'
 import { window } from '../utils/globals'
 
 describe(`Module-based loader in Node env`, () => {
+    const posthog = defaultPostHog()
+
     beforeEach(() => {
         jest.useFakeTimers()
         jest.spyOn(posthog, '_send_request').mockReturnValue()

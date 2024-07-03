@@ -11,8 +11,8 @@ import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
-import { loadScript } from './utils'
 import { logger } from './utils/logger'
+import { canActivateRepeatedly } from './extensions/surveys/surveys-utils'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -73,7 +73,7 @@ export class PostHogSurveys {
             if (this._surveyEventReceiver == null) {
                 this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
             }
-            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/surveys.js'), (err) => {
+            this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
                 if (err) {
                     return logger.error(`Could not load surveys script`, err)
                 }
@@ -166,10 +166,6 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
 
-                const internalTargetingFlagCheck = survey.internal_targeting_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
-                    : true
-
                 const hasEvents =
                     survey.conditions?.events &&
                     survey.conditions?.events?.values &&
@@ -181,6 +177,13 @@ export class PostHogSurveys {
                     survey.conditions?.actions?.values.length > 0
                 const eventBasedTargetingFlagCheck =
                     hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
+
+                const overrideInternalTargetingFlagCheck = canActivateRepeatedly(survey)
+                const internalTargetingFlagCheck =
+                    survey.internal_targeting_flag_key && !overrideInternalTargetingFlagCheck
+                        ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
+                        : true
+
                 return (
                     linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck
                 )
@@ -196,14 +199,14 @@ export class PostHogSurveys {
 
         if (!question.branching?.type) {
             if (currentQuestionIndex === survey.questions.length - 1) {
-                return SurveyQuestionBranchingType.ConfirmationMessage
+                return SurveyQuestionBranchingType.End
             }
 
             return nextQuestionIndex
         }
 
-        if (question.branching.type === SurveyQuestionBranchingType.ConfirmationMessage) {
-            return SurveyQuestionBranchingType.ConfirmationMessage
+        if (question.branching.type === SurveyQuestionBranchingType.End) {
+            return SurveyQuestionBranchingType.End
         } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
             if (Number.isInteger(question.branching.index)) {
                 return question.branching.index
@@ -223,8 +226,8 @@ export class PostHogSurveys {
                         return nextStep
                     }
 
-                    if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
-                        return SurveyQuestionBranchingType.ConfirmationMessage
+                    if (nextStep === SurveyQuestionBranchingType.End) {
+                        return SurveyQuestionBranchingType.End
                     }
 
                     return nextQuestionIndex
@@ -244,8 +247,8 @@ export class PostHogSurveys {
                         return nextStep
                     }
 
-                    if (nextStep === SurveyQuestionBranchingType.ConfirmationMessage) {
-                        return SurveyQuestionBranchingType.ConfirmationMessage
+                    if (nextStep === SurveyQuestionBranchingType.End) {
+                        return SurveyQuestionBranchingType.End
                     }
 
                     return nextQuestionIndex

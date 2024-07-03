@@ -1,8 +1,10 @@
-import _posthog, { PostHog, PostHogConfig } from '../loader-module'
+import { PostHog } from '../posthog-core'
+import { defaultPostHog } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 
 import { isNull } from '../utils/type-utils'
 import { document, assignableWindow, navigator } from '../utils/globals'
+import { PostHogConfig } from '../types'
 
 const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
 const CUSTOM_PERSISTENCE_PREFIX = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
@@ -20,7 +22,7 @@ function deleteAllCookies() {
 
 describe('consentManager', () => {
     const createPostHog = (config: Partial<PostHogConfig> = {}) => {
-        const posthog = _posthog.init('testtoken', { ...config }, uuidv7())!
+        const posthog = defaultPostHog().init('testtoken', { ...config }, uuidv7())!
         posthog.debug()
         return posthog
     }

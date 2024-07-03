@@ -557,6 +557,7 @@ describe('Autocapture system', () => {
             expect(props['$elements'][1]).toHaveProperty('tag_name', 'span')
             expect(props['$elements'][2]).toHaveProperty('tag_name', 'div')
             expect(props['$elements'][props['$elements'].length - 1]).toHaveProperty('tag_name', 'body')
+            expect(props['$external_click_url']).toEqual('https://test.com')
         })
 
         it('truncate any element property value to 1024 bytes', () => {
@@ -594,7 +595,27 @@ describe('Autocapture system', () => {
                     target: elTarget,
                 })
             )
-            expect(captureMock.mock.calls[0][1]['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
+            const props = captureMock.mock.calls[0][1]
+            expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
+            expect(props['$external_click_url']).toEqual('https://test.com')
+        })
+
+        it('does not include $click_external_href for same site', () => {
+            window!.location = new URL('https://www.example.com/location') as unknown as Location
+            const elTarget = document.createElement('img')
+            const elParent = document.createElement('span')
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'https://www.example.com/link')
+            elGrandparent.appendChild(elParent)
+            autocapture['_captureEvent'](
+                makeMouseEvent({
+                    target: elTarget,
+                })
+            )
+            const props = captureMock.mock.calls[0][1]
+            expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://www.example.com/link')
+            expect(props['$external_click_url']).toBeUndefined()
         })
 
         it('does not capture href attribute values from password elements', () => {

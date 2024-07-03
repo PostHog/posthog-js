@@ -62,7 +62,7 @@ export const initPosthog = (config) => {
 
 // NOTE: Ingestion delays events by up to 60 seconds for new IDs hence we need to wait at least 60 seconds
 // This is annoying but essentially we are allowing up to 3 minutes for the test to complete
-export async function retryUntilResults(operation, target_results, limit = 6, delay = 30000) {
+export async function retryUntilResults(operation, target_results, limit = 18, delay = 15000) {
     const attempt = (count, resolve, reject) => {
         if (count === limit) {
             return reject(new Error(`Failed to fetch results in ${limit} attempts`))

@@ -1,5 +1,6 @@
-import _posthog, { PostHogConfig } from '../loader-module'
+import { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
+import { defaultPostHog } from './helpers/posthog-instance'
 
 describe('posthog core', () => {
     describe('capture()', () => {
@@ -9,7 +10,7 @@ describe('posthog core', () => {
         }
         const setup = (config: Partial<PostHogConfig> = {}) => {
             const onCapture = jest.fn()
-            const posthog = _posthog.init('testtoken', { ...config, _onCapture: onCapture }, uuidv7())!
+            const posthog = defaultPostHog().init('testtoken', { ...config, _onCapture: onCapture }, uuidv7())!
             posthog.debug()
             return { posthog, onCapture }
         }
@@ -59,7 +60,7 @@ describe('posthog core', () => {
                 onCapture.mockClear()
                 ;(console.error as any).mockClear()
                 posthog.capture(eventName, properties)
-                expect(onCapture).toHaveBeenCalledTimes(0)
+                expect(onCapture.mock.calls).toEqual([])
                 expect(console.error).toHaveBeenCalledTimes(1)
                 expect(console.error).toHaveBeenCalledWith(
                     '[PostHog.js]',

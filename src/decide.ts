@@ -1,17 +1,12 @@
-import { loadScript } from './utils'
 import { PostHog } from './posthog-core'
 import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
-import { isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { window, document, assignableWindow } from './utils/globals'
+import { document, assignableWindow } from './utils/globals'
 
 export class Decide {
-    instance: PostHog
-
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private readonly instance: PostHog) {
         // don't need to wait for `decide` to return if flags were provided on initialisation
         this.instance.decideEndpointWasHit = this.instance._hasBootstrappedFeatureFlags()
     }
@@ -70,25 +65,6 @@ export class Decide {
 
         this.instance._afterDecideResponse(response)
 
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const exceptionAutoCaptureAddedToWindow = window?.extendPostHogWithExceptionAutoCapture
-        if (
-            response['autocaptureExceptions'] &&
-            !!response['autocaptureExceptions'] &&
-            isUndefined(exceptionAutoCaptureAddedToWindow)
-        ) {
-            loadScript(this.instance.requestRouter.endpointFor('assets', '/static/exception-autocapture.js'), (err) => {
-                if (err) {
-                    return logger.error(`Could not load exception autocapture script`, err)
-                }
-
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                window.extendPostHogWithExceptionAutocapture(this.instance, response)
-            })
-        }
-
         if (response['siteApps']) {
             if (this.instance.config.opt_in_site_apps) {
                 for (const { id, url } of response['siteApps']) {
@@ -96,7 +72,7 @@ export class Decide {
 
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
 
-                    loadScript(scriptUrl, (err) => {
+                    this.instance.requestRouter.loadScript(scriptUrl, (err) => {
                         if (err) {
                             logger.error(`Error while initializing PostHog app with config id ${id}`, err)
                         }

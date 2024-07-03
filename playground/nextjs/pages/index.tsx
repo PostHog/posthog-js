@@ -36,6 +36,7 @@ export default function Home() {
                 <a className="Button" data-attr="autocapture-button" href="#">
                     <span>Autocapture a &gt; span</span>
                 </a>
+                <a href={'https://www.google.com'}>External link</a>
 
                 <button className="ph-no-capture">Ignore certain elements</button>
 

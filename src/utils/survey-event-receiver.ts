@@ -1,8 +1,10 @@
 import { Survey } from '../posthog-surveys-types'
 import { SURVEYS_ACTIVATED } from '../constants'
-import { ActionMatcher } from '../extensions/surveys/action-matcher'
-import { PostHog } from '../posthog-core'
-import { isUndefined } from './type-utils'
+
+import { CaptureResult } from '../types'
+import {ActionMatcher} from "../extensions/surveys/action-matcher";
+import {PostHog} from "../posthog-core";
+import {isUndefined} from "./type-utils";
 
 export class SurveyEventReceiver {
     // eventToSurveys is a mapping of event name to all the surveys that are activated by it
@@ -12,6 +14,7 @@ export class SurveyEventReceiver {
     // actionMatcher can look at CaptureResult payloads and match an event to its corresponding action.
     private actionMatcher?: ActionMatcher | null
     private readonly instance?: PostHog
+    private static SURVEY_SHOWN_EVENT_NAME = 'survey shown'
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -110,25 +113,40 @@ export class SurveyEventReceiver {
         })
     }
 
-    onEvent(event: string): void {
-        if (this.eventToSurveys.has(event)) {
-            this._updateActivatedSurveys(this.eventToSurveys.get(event) || [])
+    onEvent(event: string, eventPayload?: CaptureResult): void {
+        const existingActivatedSurveys: string[] = this.instance?.persistence?.props[SURVEYS_ACTIVATED] || []
+        if (
+            SurveyEventReceiver.SURVEY_SHOWN_EVENT_NAME == event &&
+            eventPayload &&
+            existingActivatedSurveys.length > 0
+        ) {
+            // remove survey that from activatedSurveys here.
+            const surveyId = eventPayload?.properties?.$survey_id
+            if (surveyId) {
+                const index = existingActivatedSurveys.indexOf(surveyId)
+                if (index >= 0) {
+                    existingActivatedSurveys.splice(index, 1)
+                    this._updateActivatedSurveys(existingActivatedSurveys)
+                }
+            }
+        } else {
+            if (this.eventToSurveys.has(event)) {
+                this._updateActivatedSurveys(existingActivatedSurveys.concat(this.eventToSurveys.get(event) || []))
+            }
         }
     }
 
     onAction(actionName: string): void {
+        const existingActivatedSurveys: string[] = this.instance?.persistence?.props[SURVEYS_ACTIVATED] || []
         if (this.actionToSurveys.has(actionName)) {
-            this._updateActivatedSurveys(this.actionToSurveys.get(actionName) || [])
+            this._updateActivatedSurveys(existingActivatedSurveys.concat(this.actionToSurveys.get(actionName) || []))
         }
     }
 
     private _updateActivatedSurveys(activatedSurveys: string[]) {
-        const existingActivatedSurveys = this.instance?.persistence?.props[SURVEYS_ACTIVATED]
-        const existingSurveys: string[] = existingActivatedSurveys ? existingActivatedSurveys : []
-        const updatedSurveys = existingSurveys.concat(activatedSurveys)
         // we use a new Set here to remove duplicates.
         this.instance?.persistence?.register({
-            [SURVEYS_ACTIVATED]: [...new Set(updatedSurveys)],
+            [SURVEYS_ACTIVATED]: [...new Set(activatedSurveys)],
         })
     }
 

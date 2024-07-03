@@ -7,6 +7,7 @@ import {
 } from '../../../extensions/exception-autocapture/error-conversion'
 
 import { isNull } from '../../../utils/type-utils'
+import { expect } from '@jest/globals'
 
 // ugh, jest
 // can't reference PromiseRejectionEvent to construct it 🤷
@@ -36,6 +37,7 @@ describe('Error conversion', () => {
             $exception_type: 'InternalError',
             $exception_message: 'but somehow still a string',
             $exception_is_synthetic: true,
+            $exception_level: 'error',
         }
         expect(errorToProperties(['Uncaught exception: InternalError: but somehow still a string'])).toEqual(expected)
     })
@@ -45,6 +47,7 @@ describe('Error conversion', () => {
             $exception_type: 'Error',
             $exception_message: 'Non-Error exception captured with keys: foo, string',
             $exception_is_synthetic: true,
+            $exception_level: 'error',
         }
         expect(errorToProperties([{ string: 'candidate', foo: 'bar' } as unknown as Event])).toEqual(expected)
     })
@@ -54,6 +57,7 @@ describe('Error conversion', () => {
             $exception_type: 'MouseEvent',
             $exception_message: 'Non-Error exception captured with keys: isTrusted',
             $exception_is_synthetic: true,
+            $exception_level: 'error',
         }
         const event = new MouseEvent('click', { bubbles: true, cancelable: true, composed: true })
         expect(errorToProperties([event])).toEqual(expected)
@@ -67,9 +71,10 @@ describe('Error conversion', () => {
             throw new Error("this mustn't be null")
         }
 
-        expect(Object.keys(errorProperties)).toHaveLength(3)
+        expect(Object.keys(errorProperties)).toHaveLength(4)
         expect(errorProperties.$exception_type).toEqual('Error')
         expect(errorProperties.$exception_message).toEqual('oh no an error has happened')
+        expect(errorProperties.$exception_level).toEqual('error')
         // the stack trace changes between runs, so we just check that it's there
         expect(errorProperties.$exception_stack_trace_raw).toBeDefined()
         expect(errorProperties.$exception_stack_trace_raw).toContain('{"filename')
@@ -84,6 +89,7 @@ describe('Error conversion', () => {
         const expected: ErrorProperties = {
             $exception_type: 'DOMError',
             $exception_message: 'click: foo',
+            $exception_level: 'error',
         }
         const event = new FakeDomError('click', 'foo')
         expect(errorToProperties([event as unknown as Event])).toEqual(expected)
@@ -97,9 +103,10 @@ describe('Error conversion', () => {
             throw new Error("this mustn't be null")
         }
 
-        expect(Object.keys(errorProperties)).toHaveLength(4)
+        expect(Object.keys(errorProperties)).toHaveLength(5)
         expect(errorProperties.$exception_type).toEqual('dom-exception')
         expect(errorProperties.$exception_message).toEqual('oh no disaster')
+        expect(errorProperties.$exception_level).toEqual('error')
         // the stack trace changes between runs, so we just check that it's there
         expect(errorProperties.$exception_stack_trace_raw).toBeDefined()
         expect(errorProperties.$exception_stack_trace_raw).toContain('{"filename')
@@ -113,9 +120,10 @@ describe('Error conversion', () => {
             throw new Error("this mustn't be null")
         }
 
-        expect(Object.keys(errorProperties)).toHaveLength(3)
+        expect(Object.keys(errorProperties)).toHaveLength(4)
         expect(errorProperties.$exception_type).toEqual('Error')
         expect(errorProperties.$exception_message).toEqual('the real error is hidden inside')
+        expect(errorProperties.$exception_level).toEqual('error')
         // the stack trace changes between runs, so we just check that it's there
         expect(errorProperties.$exception_stack_trace_raw).toBeDefined()
         expect(errorProperties.$exception_stack_trace_raw).toContain('{"filename')
@@ -129,6 +137,7 @@ describe('Error conversion', () => {
             $exception_message: 'string candidate',
             $exception_source: 'a source',
             $exception_type: 'Error',
+            $exception_level: 'error',
         }
         expect(errorToProperties(['string candidate', 'a source', 12, 200])).toEqual(expected)
     })
@@ -143,10 +152,11 @@ describe('Error conversion', () => {
         const errorProperties: ErrorProperties = unhandledRejectionToProperties([
             ce as unknown as PromiseRejectionEvent,
         ])
-        expect(Object.keys(errorProperties)).toHaveLength(4)
+        expect(Object.keys(errorProperties)).toHaveLength(5)
         expect(errorProperties.$exception_type).toEqual('UnhandledRejection')
         expect(errorProperties.$exception_message).toEqual('a wrapped rejection event')
         expect(errorProperties.$exception_handled).toEqual(false)
+        expect(errorProperties.$exception_level).toEqual('error')
         // the stack trace changes between runs, so we just check that it's there
         expect(errorProperties.$exception_stack_trace_raw).toBeDefined()
         expect(errorProperties.$exception_stack_trace_raw).toContain('{"filename')
@@ -160,11 +170,12 @@ describe('Error conversion', () => {
         const errorProperties: ErrorProperties = unhandledRejectionToProperties([
             pre as unknown as PromiseRejectionEvent,
         ])
-        expect(Object.keys(errorProperties)).toHaveLength(3)
+        expect(Object.keys(errorProperties)).toHaveLength(4)
         expect(errorProperties.$exception_type).toEqual('UnhandledRejection')
         expect(errorProperties.$exception_message).toEqual(
             'Non-Error promise rejection captured with value: My house is on fire'
         )
         expect(errorProperties.$exception_handled).toEqual(false)
+        expect(errorProperties.$exception_level).toEqual('error')
     })
 })
