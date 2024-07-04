@@ -679,7 +679,6 @@ export class SessionRecording {
                         return
                     }
                     this._tryAddCustomEvent('$pageview', { href })
-                    this._tryTakeFullSnapshot()
                 }
             } catch (e) {
                 logger.error('Could not add $pageview to rrweb session', e)

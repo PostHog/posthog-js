@@ -8,7 +8,7 @@ import { each } from '../../utils'
 const LOGGER_PREFIX = '[SessionRecording]'
 const REDACTED = 'redacted'
 
-export const defaultNetworkOptions: NetworkRecordOptions = {
+export const defaultNetworkOptions: Required<NetworkRecordOptions> = {
     initiatorTypes: [
         'audio',
         'beacon',
@@ -47,6 +47,7 @@ export const defaultNetworkOptions: NetworkRecordOptions = {
         'resource',
     ],
     payloadSizeLimitBytes: 1000000,
+    payloadHostDenyList: ['.lr-ingest.io', '.ingest.sentry.io'],
 }
 
 const HEADER_DENY_LIST = [
@@ -186,11 +187,18 @@ function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): Cap
  */
 export const buildNetworkRequestOptions = (
     instanceConfig: PostHogConfig,
-    remoteNetworkOptions: Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
+    remoteNetworkOptions: Pick<
+        NetworkRecordOptions,
+        'recordHeaders' | 'recordBody' | 'recordPerformance' | 'payloadHostDenyList'
+    >
 ): NetworkRecordOptions => {
     const config: NetworkRecordOptions = {
         payloadSizeLimitBytes: defaultNetworkOptions.payloadSizeLimitBytes,
         performanceEntryTypeToObserve: [...defaultNetworkOptions.performanceEntryTypeToObserve],
+        payloadHostDenyList: [
+            ...(remoteNetworkOptions.payloadHostDenyList || []),
+            ...defaultNetworkOptions.payloadHostDenyList,
+        ],
     }
     // client can always disable despite remote options
     const canRecordHeaders =

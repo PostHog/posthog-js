@@ -451,6 +451,14 @@ export type NetworkRecordOptions = {
      * NB this will be at most 1MB even if set larger
      */
     payloadSizeLimitBytes: number
+    /**
+     * some domains we should never record the payload
+     * for example other companies session replay ingestion payloads aren't super useful but are gigantic
+     * if this isn't provided we use a default list
+     * if this is provided - we add the provided list to the default list
+     * i.e. we never record the payloads on the default deny list
+     */
+    payloadHostDenyList?: string[]
 }
 
 /** @deprecated - use CapturedNetworkRequest instead  */

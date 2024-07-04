@@ -1,3 +1,15 @@
+## 1.144.1 - 2024-07-04
+
+- fix: only take scheduled full snapshots (#1285)
+
+## 1.144.0 - 2024-07-03
+
+- feat: add payload host denylist (#1282)
+
+## 1.143.0 - 2024-07-02
+
+- feat(survey): Allow events to repeatedly activate surveys (#1273)
+
 ## 1.142.1 - 2024-06-28
 
 - feat: warn when distinct id invalid for replay (#1277)
