@@ -28,6 +28,7 @@ export const CAMPAIGN_PARAMS = [
     'mc_cid', // mailchimp campaign id
     'igshid', // instagram
     'ttclid', // tiktok
+    'rdt_cid', // reddit
 ]
 
 export const Info = {
