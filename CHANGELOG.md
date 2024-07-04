@@ -1,3 +1,7 @@
+## 1.144.1 - 2024-07-04
+
+- fix: only take scheduled full snapshots (#1285)
+
 ## 1.144.0 - 2024-07-03
 
 - feat: add payload host denylist (#1282)
