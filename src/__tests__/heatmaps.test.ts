@@ -56,95 +56,93 @@ describe('heatmaps', () => {
         posthog.register({ $current_test_name: expect.getState().currentTestName })
     })
 
-    describe('when heatmaps is running', () => {
-        it('should send generated heatmap data', async () => {
-            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+    it('should send generated heatmap data', async () => {
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
-            expect(onCapture).toBeCalledTimes(1)
-            expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
-            expect(onCapture.mock.lastCall[1]).toMatchObject({
-                event: '$$heatmap',
-                properties: {
-                    $heatmap_data: {
-                        'http://replaced/': [
-                            {
-                                target_fixed: false,
-                                type: 'click',
-                                x: 10,
-                                y: 20,
-                            },
-                        ],
-                    },
+        expect(onCapture).toBeCalledTimes(1)
+        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
+        expect(onCapture.mock.lastCall[1]).toMatchObject({
+            event: '$$heatmap',
+            properties: {
+                $heatmap_data: {
+                    'http://replaced/': [
+                        {
+                            target_fixed: false,
+                            type: 'click',
+                            x: 10,
+                            y: 20,
+                        },
+                    ],
                 },
+            },
+        })
+    })
+
+    it('requires interval to pass before sending data', async () => {
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds - 1)
+
+        expect(onCapture).toBeCalledTimes(0)
+        expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
+    })
+
+    it('should send rageclick events in the same area', async () => {
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(onCapture).toBeCalledTimes(1)
+        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
+        const heatmapData = onCapture.mock.lastCall[1].properties.$heatmap_data
+        expect(heatmapData).toBeDefined()
+        expect(heatmapData['http://replaced/']).toHaveLength(4)
+        expect(heatmapData['http://replaced/'].map((x) => x.type)).toEqual(['click', 'click', 'rageclick', 'click'])
+    })
+
+    it('should clear the buffer after each call', async () => {
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(onCapture).toBeCalledTimes(1)
+        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
+        expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeDefined()
+        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
+
+        expect(posthog.heatmaps!['buffer']).toEqual(undefined)
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(onCapture).toBeCalledTimes(1)
+    })
+
+    it('should ignore clicks if they come from the toolbar', async () => {
+        posthog.heatmaps?.['_onClick']?.(
+            createMockMouseEvent({
+                target: { id: '__POSTHOG_TOOLBAR__' } as Element,
             })
-        })
+        )
+        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
 
-        it('requires interval to pass before sending data', async () => {
-            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+        posthog.heatmaps?.['_onClick']?.(
+            createMockMouseEvent({
+                target: { closest: () => ({}) } as unknown as Element,
+            })
+        )
+        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
 
-            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds - 1)
-
-            expect(onCapture).toBeCalledTimes(0)
-            expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
-        })
-
-        it('should send rageclick events in the same area', async () => {
-            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-
-            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
-
-            expect(onCapture).toBeCalledTimes(1)
-            expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
-            const heatmapData = onCapture.mock.lastCall[1].properties.$heatmap_data
-            expect(heatmapData).toBeDefined()
-            expect(heatmapData['http://replaced/']).toHaveLength(4)
-            expect(heatmapData['http://replaced/'].map((x) => x.type)).toEqual(['click', 'click', 'rageclick', 'click'])
-        })
-
-        it('should clear the buffer after each call', async () => {
-            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-
-            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
-
-            expect(onCapture).toBeCalledTimes(1)
-            expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
-            expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeDefined()
-            expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
-
-            expect(posthog.heatmaps!['buffer']).toEqual(undefined)
-
-            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
-
-            expect(onCapture).toBeCalledTimes(1)
-        })
-
-        it('should ignore clicks if they come from the toolbar', async () => {
-            posthog.heatmaps?.['_onClick']?.(
-                createMockMouseEvent({
-                    target: { id: '__POSTHOG_TOOLBAR__' } as Element,
-                })
-            )
-            expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
-
-            posthog.heatmaps?.['_onClick']?.(
-                createMockMouseEvent({
-                    target: { closest: () => ({}) } as unknown as Element,
-                })
-            )
-            expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
-
-            posthog.heatmaps?.['_onClick']?.(
-                createMockMouseEvent({
-                    target: document.body,
-                })
-            )
-            expect(posthog.heatmaps?.['buffer']).not.toEqual(undefined)
-        })
+        posthog.heatmaps?.['_onClick']?.(
+            createMockMouseEvent({
+                target: document.body,
+            })
+        )
+        expect(posthog.heatmaps?.['buffer']).not.toEqual(undefined)
     })
 
     describe('isEnabled()', () => {
