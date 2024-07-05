@@ -65,17 +65,17 @@ export class Heatmaps {
     public get flushIntervalMilliseconds(): number {
         let flushInterval = DEFAULT_FLUSH_INTERVAL
         if (
-            isObject(this.instance.config.heatmap_capture) &&
-            this.instance.config.heatmap_capture.flush_interval_milliseconds
+            isObject(this.instance.config.capture_heatmaps) &&
+            this.instance.config.capture_heatmaps.flush_interval_milliseconds
         ) {
-            flushInterval = this.instance.config.heatmap_capture.flush_interval_milliseconds
+            flushInterval = this.instance.config.capture_heatmaps.flush_interval_milliseconds
         }
         return flushInterval
     }
 
     public get isEnabled(): boolean {
-        if (!isUndefined(this.instance.config.heatmap_capture)) {
-            return this.instance.config.heatmap_capture !== false
+        if (!isUndefined(this.instance.config.capture_heatmaps)) {
+            return this.instance.config.capture_heatmaps !== false
         }
         if (!isUndefined(this.instance.config.enable_heatmaps)) {
             return this.instance.config.enable_heatmaps

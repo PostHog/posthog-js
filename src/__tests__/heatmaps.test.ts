@@ -47,7 +47,7 @@ describe('heatmaps', () => {
             capture_pageview: false,
         })
 
-        posthog.config.heatmap_capture = true
+        posthog.config.capture_heatmaps = true
 
         // make sure we start fresh
         posthog.heatmaps!.startIfEnabled()
@@ -153,7 +153,7 @@ describe('heatmaps', () => {
         ])('when stored remote config is %p - heatmaps enabled should be %p', (stored, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: stored })
             posthog.config.enable_heatmaps = undefined
-            posthog.config.heatmap_capture = undefined
+            posthog.config.capture_heatmaps = undefined
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
         })
@@ -165,7 +165,7 @@ describe('heatmaps', () => {
         ])('when local deprecated config is %p - heatmaps enabled should be %p', (deprecatedConfig, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
             posthog.config.enable_heatmaps = deprecatedConfig
-            posthog.config.heatmap_capture = undefined
+            posthog.config.capture_heatmaps = undefined
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
         })
@@ -177,7 +177,7 @@ describe('heatmaps', () => {
         ])('when local current config is %p - heatmaps enabled should be %p', (localConfig, expected) => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
             posthog.config.enable_heatmaps = localConfig
-            posthog.config.heatmap_capture = undefined
+            posthog.config.capture_heatmaps = undefined
             const heatmaps = new Heatmaps(posthog)
             expect(heatmaps.isEnabled).toBe(expected)
         })
@@ -206,7 +206,7 @@ describe('heatmaps', () => {
             'when deprecated client side config is %p, current client side config is %p, and remote opt in is %p - heatmaps enabled should be %p',
             (deprecatedclientSideOptIn, clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.enable_heatmaps = deprecatedclientSideOptIn
-                posthog.config.heatmap_capture = clientSideOptIn
+                posthog.config.capture_heatmaps = clientSideOptIn
                 posthog.heatmaps!.afterDecideResponse({
                     heatmaps: serverSideOptIn,
                 } as DecideResponse)

@@ -173,9 +173,9 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
     segment?: SegmentAnalytics
     __preview_send_client_session_params?: boolean
-    /* @deprecated - use `heatmap_capture` instead */
+    /* @deprecated - use `capture_heatmaps` instead */
     enable_heatmaps?: boolean
-    heatmap_capture?: boolean | HeatmapConfig
+    capture_heatmaps?: boolean | HeatmapConfig
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
