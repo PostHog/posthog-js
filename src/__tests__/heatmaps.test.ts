@@ -50,13 +50,15 @@ describe('heatmaps', () => {
 
     describe('when heatmaps is running', () => {
         beforeEach(() => {
+            onCapture = onCapture.mockClear()
             posthog.config.heatmap_capture = true
             posthog.heatmaps!.startIfEnabled()
         })
-        it('should include generated heatmap data', async () => {
+
+        it('should send generated heatmap data', async () => {
             posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-            jest.advanceTimersByTime(1001) // default timer is 1000ms
+            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
             expect(onCapture).toBeCalledTimes(1)
             expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
@@ -77,12 +79,20 @@ describe('heatmaps', () => {
             })
         })
 
-        it('should add rageclick events in the same area', async () => {
+        it('requires interval to pass before sending data', async () => {
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+
+            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds - 1)
+
+            expect(onCapture).toBeCalledTimes(0)
+        })
+
+        it('should send rageclick events in the same area', async () => {
             posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
             posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
             posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-            jest.advanceTimersByTime(1001)
+            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
             expect(onCapture).toBeCalledTimes(1)
             const heatmapData = onCapture.mock.lastCall[1].properties.$heatmap_data
@@ -95,7 +105,7 @@ describe('heatmaps', () => {
             posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
             posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-            jest.advanceTimersByTime(1001)
+            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
             expect(onCapture).toBeCalledTimes(1)
             expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeDefined()
@@ -103,7 +113,7 @@ describe('heatmaps', () => {
 
             expect(posthog.heatmaps!['buffer']).toEqual(undefined)
 
-            jest.advanceTimersByTime(1001)
+            jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
             expect(onCapture).toBeCalledTimes(1)
         })
