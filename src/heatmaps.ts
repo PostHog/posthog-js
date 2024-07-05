@@ -9,7 +9,7 @@ import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
 import { isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 
-const DEFAULT_FLUSH_INTERVAL = 3000
+const DEFAULT_FLUSH_INTERVAL = 5000
 const HEATMAPS = 'heatmaps'
 const LOGGER_PREFIX = '[' + HEATMAPS + ']'
 
