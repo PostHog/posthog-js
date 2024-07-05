@@ -56,6 +56,10 @@ export class Heatmaps {
     constructor(instance: PostHog) {
         this.instance = instance
         this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
+
+        window?.addEventListener('beforeunload', () => {
+            this.flush()
+        })
     }
 
     private get flushIntervalMilliseconds(): number {
@@ -86,6 +90,7 @@ export class Heatmaps {
             }, this.flushIntervalMilliseconds)
         } else {
             clearInterval(this._flushInterval ?? undefined)
+            this.getAndClearBuffer()
         }
     }
 
