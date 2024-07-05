@@ -3,8 +3,12 @@ import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
 import { isObject } from '../utils/type-utils'
+import { beforeEach, expect } from '@jest/globals'
+import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
+import { Heatmaps } from '../heatmaps'
 
 jest.mock('../utils/logger')
+jest.useFakeTimers()
 
 describe('heatmaps', () => {
     let posthog: PostHog
@@ -19,7 +23,8 @@ describe('heatmaps', () => {
         } as unknown as MouseEvent)
 
     beforeEach(async () => {
-        onCapture = jest.fn()
+        onCapture = onCapture.mockClear()
+
         posthog = await createPosthogInstance(uuidv7(), {
             _onCapture: onCapture,
             sanitize_properties: (props) => {
@@ -38,18 +43,25 @@ describe('heatmaps', () => {
                 }
                 return props
             },
+            // simplifies assertions by not needing to ignore events
+            capture_pageview: false,
         })
     })
 
-    it('should include generated heatmap data', async () => {
-        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.capture('test event')
+    describe('when heatmaps is running', () => {
+        beforeEach(() => {
+            posthog.config.heatmap_capture = true
+            posthog.heatmaps!.startIfEnabled()
+        })
+        it('should include generated heatmap data', async () => {
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-        expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall).toMatchObject([
-            'test event',
-            {
-                event: 'test event',
+            jest.advanceTimersByTime(1001) // default timer is 1000ms
+
+            expect(onCapture).toBeCalledTimes(1)
+            expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap_data')
+            expect(onCapture.mock.lastCall[1]).toMatchObject({
+                event: '$$heatmap_data',
                 properties: {
                     $heatmap_data: {
                         'http://replaced/': [
@@ -62,74 +74,79 @@ describe('heatmaps', () => {
                         ],
                     },
                 },
-            },
-        ])
-    })
-
-    it('should add rageclick events in the same area', async () => {
-        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-
-        posthog.capture('test event')
-
-        expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(4)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/'].map((x) => x.type)).toEqual([
-            'click',
-            'click',
-            'rageclick',
-            'click',
-        ])
-    })
-
-    it('should clear the buffer after each call', async () => {
-        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.capture('test event')
-        expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
-
-        posthog.capture('test event 2')
-        expect(onCapture).toBeCalledTimes(2)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeUndefined()
-    })
-
-    it('should not include generated heatmap data for $snapshot events with _noHeatmaps', async () => {
-        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.capture('$snapshot', undefined, { _noHeatmaps: true })
-
-        expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall).toMatchObject(['$snapshot', {}])
-        expect(onCapture.mock.lastCall[1].properties).not.toHaveProperty('$heatmap_data')
-    })
-
-    it('should ignore clicks if they come from the toolbar', async () => {
-        posthog.heatmaps?.['_onClick']?.(
-            createMockMouseEvent({
-                target: { id: '__POSTHOG_TOOLBAR__' } as Element,
             })
-        )
-        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+        })
 
-        posthog.heatmaps?.['_onClick']?.(
-            createMockMouseEvent({
-                target: { closest: () => ({}) } as unknown as Element,
-            })
-        )
-        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+        it('should add rageclick events in the same area', async () => {
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-        posthog.heatmaps?.['_onClick']?.(
-            createMockMouseEvent({
-                target: document.body,
-            })
-        )
-        expect(posthog.heatmaps?.['buffer']).not.toEqual(undefined)
+            jest.advanceTimersByTime(1001)
+
+            expect(onCapture).toBeCalledTimes(1)
+            const heatmapData = onCapture.mock.lastCall[1].properties.$heatmap_data
+            expect(heatmapData).toBeDefined()
+            expect(heatmapData['http://replaced/']).toHaveLength(4)
+            expect(heatmapData['http://replaced/'].map((x) => x.type)).toEqual(['click', 'click', 'rageclick', 'click'])
+        })
+
+        it('should clear the buffer after each call', async () => {
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+            posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+
+            jest.advanceTimersByTime(1001)
+
+            expect(onCapture).toBeCalledTimes(1)
+            expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeDefined()
+            expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
+
+            expect(posthog.heatmaps!['buffer']).toEqual(undefined)
+
+            jest.advanceTimersByTime(1001)
+
+            expect(onCapture).toBeCalledTimes(1)
+        })
+
+        it('should ignore clicks if they come from the toolbar', async () => {
+            posthog.heatmaps?.['_onClick']?.(
+                createMockMouseEvent({
+                    target: { id: '__POSTHOG_TOOLBAR__' } as Element,
+                })
+            )
+            expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+
+            posthog.heatmaps?.['_onClick']?.(
+                createMockMouseEvent({
+                    target: { closest: () => ({}) } as unknown as Element,
+                })
+            )
+            expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+
+            posthog.heatmaps?.['_onClick']?.(
+                createMockMouseEvent({
+                    target: document.body,
+                })
+            )
+            expect(posthog.heatmaps?.['buffer']).not.toEqual(undefined)
+        })
     })
 
     describe('afterDecideResponse()', () => {
         it('should not be enabled before the decide response', () => {
             expect(posthog.heatmaps!.isEnabled).toBe(false)
+        })
+
+        it('stored remote enabled flag can enable before the decide response', () => {
+            posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: true })
+            const heatmapsInstance = new Heatmaps(posthog)
+            expect(heatmapsInstance.isEnabled).toBe(true)
+        })
+
+        it('stored remote disabled flag can disabled before the decide response', () => {
+            posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: false })
+            const heatmapsInstance = new Heatmaps(posthog)
+            expect(heatmapsInstance.isEnabled).toBe(false)
         })
 
         it('should be enabled if client config option is enabled', () => {

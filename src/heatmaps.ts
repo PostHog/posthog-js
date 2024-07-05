@@ -6,8 +6,12 @@ import { PostHog } from './posthog-core'
 import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
-import { isUndefined } from './utils/type-utils'
+import { isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+
+const DEFAULT_FLUSH_INTERVAL = 1000
+const HEATMAPS = 'heatmaps'
+const LOGGER_PREFIX = '[' + HEATMAPS + ']'
 
 type HeatmapEventBuffer =
     | {
@@ -47,23 +51,42 @@ export class Heatmaps {
 
     // TODO: Periodically flush this if no other event has taken care of it
     private buffer: HeatmapEventBuffer
+    private _flushInterval: number | null = null
 
     constructor(instance: PostHog) {
         this.instance = instance
         this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
     }
 
-    public startIfEnabled(): void {
-        if (this.isEnabled && !this._initialized) {
-            logger.info('[heatmaps] Heatmaps enabled, starting...')
-            this._setupListeners()
+    private get flushIntervalMilliseconds(): number {
+        let flushInterval = DEFAULT_FLUSH_INTERVAL
+        if (
+            isObject(this.instance.config.heatmap_capture) &&
+            this.instance.config.heatmap_capture.flush_interval_milliseconds
+        ) {
+            flushInterval = this.instance.config.heatmap_capture.flush_interval_milliseconds
         }
+        return flushInterval
     }
 
     public get isEnabled(): boolean {
         return !isUndefined(this.instance.config.enable_heatmaps)
             ? this.instance.config.enable_heatmaps
+            : !isUndefined(this.instance.config.heatmap_capture)
+            ? !!this.instance.config.heatmap_capture
             : this._enabledServerSide
+    }
+
+    public startIfEnabled(): void {
+        if (this.isEnabled && !this._initialized) {
+            logger.info(LOGGER_PREFIX + ' starting...')
+            this._setupListeners()
+            this._flushInterval = setInterval(() => {
+                this.flush()
+            }, this.flushIntervalMilliseconds)
+        } else {
+            clearInterval(this._flushInterval ?? undefined)
+        }
     }
 
     public afterDecideResponse(response: DecideResponse) {
@@ -159,5 +182,15 @@ export class Heatmaps {
         }
 
         this.buffer[url].push(properties)
+    }
+
+    private flush(): void {
+        if (!this.buffer) {
+            return
+        }
+
+        this.instance.capture('$$heatmap_data', {
+            $heatmap_data: this.getAndClearBuffer(),
+        })
     }
 }
