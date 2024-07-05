@@ -95,6 +95,7 @@ describe('heatmaps', () => {
             jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
             expect(onCapture).toBeCalledTimes(1)
+            expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
             const heatmapData = onCapture.mock.lastCall[1].properties.$heatmap_data
             expect(heatmapData).toBeDefined()
             expect(heatmapData['http://replaced/']).toHaveLength(4)
@@ -108,6 +109,7 @@ describe('heatmaps', () => {
             jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
             expect(onCapture).toBeCalledTimes(1)
+            expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
             expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeDefined()
             expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
 
