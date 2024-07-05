@@ -51,8 +51,9 @@ describe('heatmaps', () => {
 
         // make sure we start fresh
         posthog.heatmaps!.startIfEnabled()
-        posthog.heatmaps!.getAndClearBuffer()
-        expect(posthog.heatmaps!['buffer']).toEqual(undefined)
+        expect(posthog.heatmaps!.getAndClearBuffer()).toBeUndefined()
+
+        posthog.register({ $current_test_name: expect.getState().currentTestName })
     })
 
     describe('when heatmaps is running', () => {
@@ -86,6 +87,7 @@ describe('heatmaps', () => {
             jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds - 1)
 
             expect(onCapture).toBeCalledTimes(0)
+            expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
         })
 
         it('should send rageclick events in the same area', async () => {
@@ -94,8 +96,6 @@ describe('heatmaps', () => {
             posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
             jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
-
-            expect(onCapture.mock.calls).toEqual([])
 
             expect(onCapture).toBeCalledTimes(1)
             expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
