@@ -194,7 +194,7 @@ export class Heatmaps {
             return
         }
 
-        this.instance.capture('$$heatmap_data', {
+        this.instance.capture('$$heatmap', {
             $heatmap_data: this.getAndClearBuffer(),
         })
     }

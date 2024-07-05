@@ -59,9 +59,9 @@ describe('heatmaps', () => {
             jest.advanceTimersByTime(1001) // default timer is 1000ms
 
             expect(onCapture).toBeCalledTimes(1)
-            expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap_data')
+            expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
             expect(onCapture.mock.lastCall[1]).toMatchObject({
-                event: '$$heatmap_data',
+                event: '$$heatmap',
                 properties: {
                     $heatmap_data: {
                         'http://replaced/': [
