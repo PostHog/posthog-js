@@ -74,11 +74,13 @@ export class Heatmaps {
     }
 
     public get isEnabled(): boolean {
-        return !isUndefined(this.instance.config.enable_heatmaps)
-            ? this.instance.config.enable_heatmaps
-            : !isUndefined(this.instance.config.heatmap_capture)
-            ? !!this.instance.config.heatmap_capture
-            : this._enabledServerSide
+        if (!isUndefined(this.instance.config.heatmap_capture)) {
+            return this.instance.config.heatmap_capture !== false
+        }
+        if (!isUndefined(this.instance.config.enable_heatmaps)) {
+            return this.instance.config.enable_heatmaps
+        }
+        return this._enabledServerSide
     }
 
     public startIfEnabled(): void {
