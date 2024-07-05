@@ -6,7 +6,7 @@ import { PostHog } from './posthog-core'
 import { document, window } from './utils/globals'
 import { getParentElement, isTag } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
-import { isObject, isUndefined } from './utils/type-utils'
+import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
@@ -192,7 +192,7 @@ export class Heatmaps {
     }
 
     private flush(): void {
-        if (!this.buffer) {
+        if (!this.buffer || isEmptyObject(this.buffer)) {
             return
         }
 

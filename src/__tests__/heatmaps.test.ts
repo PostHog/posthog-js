@@ -142,7 +142,18 @@ describe('heatmaps', () => {
                 target: document.body,
             })
         )
-        expect(posthog.heatmaps?.['buffer']).not.toEqual(undefined)
+        expect(posthog.heatmaps?.getAndClearBuffer()).not.toEqual(undefined)
+        expect(onCapture.mock.calls).toEqual([])
+    })
+
+    it('should ignore an empty buffer', async () => {
+        expect(onCapture.mock.calls).toEqual([])
+
+        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(onCapture.mock.calls).toEqual([])
     })
 
     describe('isEnabled()', () => {
