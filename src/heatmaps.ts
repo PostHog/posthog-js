@@ -87,9 +87,7 @@ export class Heatmaps {
         if (this.isEnabled && !this._initialized) {
             logger.info(LOGGER_PREFIX + ' starting...')
             this._setupListeners()
-            this._flushInterval = setInterval(() => {
-                this.flush()
-            }, this.flushIntervalMilliseconds)
+            this._flushInterval = setInterval(this.flush.bind(this), this.flushIntervalMilliseconds)
         } else {
             clearInterval(this._flushInterval ?? undefined)
             this.getAndClearBuffer()
