@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-// import { SurveyType, SurveyQuestionType, Survey } from '../../posthog-surveys-types'
+import { SurveyType, SurveyQuestionType, Survey } from '../../posthog-surveys-types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
@@ -10,62 +10,62 @@ describe.skip('survey-event-receiver', () => {
     let config: PostHogConfig
     let instance: PostHog
 
-    // const surveysWithEvents: Survey[] = [
-    //     {
-    //         name: 'first survey',
-    //         id: 'first-survey',
-    //         description: 'first survey description',
-    //         type: SurveyType.Popover,
-    //         questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
-    //         conditions: {
-    //             events: {
-    //                 values: [
-    //                     {
-    //                         name: 'user_subscribed',
-    //                     },
-    //                     {
-    //                         name: 'user_unsubscribed',
-    //                     },
-    //                     {
-    //                         name: 'billing_changed',
-    //                     },
-    //                     {
-    //                         name: 'billing_removed',
-    //                     },
-    //                 ],
-    //             },
-    //         },
-    //     } as unknown as Survey,
-    //     {
-    //         name: 'second survey',
-    //         id: 'second-survey',
-    //         description: 'second survey description',
-    //         type: SurveyType.Popover,
-    //         questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
-    //     } as unknown as Survey,
-    //     {
-    //         name: 'third survey',
-    //         id: 'third-survey',
-    //         description: 'third survey description',
-    //         type: SurveyType.Popover,
-    //         questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
-    //         conditions: {
-    //             events: {
-    //                 values: [
-    //                     {
-    //                         name: 'user_subscribed',
-    //                     },
-    //                     {
-    //                         name: 'user_unsubscribed',
-    //                     },
-    //                     {
-    //                         name: 'address_changed',
-    //                     },
-    //                 ],
-    //             },
-    //         },
-    //     } as unknown as Survey,
-    // ]
+    const surveysWithEvents: Survey[] = [
+        {
+            name: 'first survey',
+            id: 'first-survey',
+            description: 'first survey description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
+            conditions: {
+                events: {
+                    values: [
+                        {
+                            name: 'user_subscribed',
+                        },
+                        {
+                            name: 'user_unsubscribed',
+                        },
+                        {
+                            name: 'billing_changed',
+                        },
+                        {
+                            name: 'billing_removed',
+                        },
+                    ],
+                },
+            },
+        } as unknown as Survey,
+        {
+            name: 'second survey',
+            id: 'second-survey',
+            description: 'second survey description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
+        } as unknown as Survey,
+        {
+            name: 'third survey',
+            id: 'third-survey',
+            description: 'third survey description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
+            conditions: {
+                events: {
+                    values: [
+                        {
+                            name: 'user_subscribed',
+                        },
+                        {
+                            name: 'user_unsubscribed',
+                        },
+                        {
+                            name: 'address_changed',
+                        },
+                    ],
+                },
+            },
+        } as unknown as Survey,
+    ]
 
     beforeEach(() => {
         config = {
@@ -86,7 +86,7 @@ describe.skip('survey-event-receiver', () => {
 
     it('register makes receiver listen for all surveys with events', () => {
         const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
-        // // surveyEventReceiver.register(surveysWithEvents)
+        surveyEventReceiver.register(surveysWithEvents)
         const registry = surveyEventReceiver.getEventRegistry()
         expect(registry.has('second-survey')).toBeFalsy()
         expect(registry.has('first-survey')).toBeTruthy()
@@ -103,7 +103,7 @@ describe.skip('survey-event-receiver', () => {
 
     it('receiver activates survey on event', () => {
         const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
-        // surveyEventReceiver.register(surveysWithEvents)
+        surveyEventReceiver.register(surveysWithEvents)
         surveyEventReceiver.on('billing_changed')
         const activatedSurveys = surveyEventReceiver.getSurveys()
         expect(activatedSurveys).toContain('first-survey')
@@ -111,7 +111,7 @@ describe.skip('survey-event-receiver', () => {
 
     it('receiver removes survey from list after its shown', () => {
         const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
-        // surveyEventReceiver.register(surveysWithEvents)
+        surveyEventReceiver.register(surveysWithEvents)
         surveyEventReceiver.on('billing_changed')
         const activatedSurveys = surveyEventReceiver.getSurveys()
         expect(activatedSurveys).toContain('first-survey')
@@ -132,7 +132,7 @@ describe.skip('survey-event-receiver', () => {
 
     it('receiver activates same survey on multiple event', () => {
         const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
-        // surveyEventReceiver.register(surveysWithEvents)
+        surveyEventReceiver.register(surveysWithEvents)
         surveyEventReceiver.on('billing_changed')
         expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         surveyEventReceiver.on('billing_removed')
@@ -141,14 +141,14 @@ describe.skip('survey-event-receiver', () => {
 
     it('receiver activates multiple surveys on same event', () => {
         const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
-        // surveyEventReceiver.register(surveysWithEvents)
+        surveyEventReceiver.register(surveysWithEvents)
         surveyEventReceiver.on('user_subscribed')
         expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey', 'third-survey'])
     })
 
     it('receiver activates multiple surveys on different events', () => {
         const surveyEventReceiver = new SurveyEventReceiver(instance.persistence)
-        // surveyEventReceiver.register(surveysWithEvents)
+        surveyEventReceiver.register(surveysWithEvents)
         surveyEventReceiver.on('billing_changed')
         expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         surveyEventReceiver.on('address_changed')
