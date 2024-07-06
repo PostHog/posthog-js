@@ -84,7 +84,13 @@ export class Heatmaps {
     }
 
     public startIfEnabled(): void {
-        if (this.isEnabled && !this._initialized) {
+        if (this.isEnabled) {
+            // nested if here since we only want to run the else
+            // if this.enabled === false
+            // not if this method is called more than once
+            if (this._initialized) {
+                return
+            }
             logger.info(LOGGER_PREFIX + ' starting...')
             this._setupListeners()
             this._flushInterval = setInterval(this.flush.bind(this), this.flushIntervalMilliseconds)
