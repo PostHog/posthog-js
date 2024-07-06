@@ -6,7 +6,7 @@ import { PostHog } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
 import { SurveyEventReceiver } from '../../utils/survey-event-receiver'
 
-describe.skip('survey-event-receiver', () => {
+describe('survey-event-receiver', () => {
     let config: PostHogConfig
     let instance: PostHog
 
