@@ -32,7 +32,7 @@ beforeEach(() => {
 
     cy.readFile('dist/recorder.js').then((body) => {
         cy.intercept('/static/recorder.js*', { body }).as('recorder')
-        cy.intercept('/static/recorder-v2.js*', { body }).as('recorder')
+        cy.intercept('/static/recorder-v2.js*', { body }).as('recorderv2')
     })
 
     cy.readFile('dist/recorder.js.map').then((body) => {
@@ -48,7 +48,7 @@ beforeEach(() => {
     })
 
     cy.readFile('dist/exception-autocapture.js').then((body) => {
-        cy.intercept('/static/exception-autocapture.js*', { body })
+        cy.intercept('/static/exception-autocapture.js*', { body }).as('exception-autocapture-script')
     })
 
     cy.readFile('dist/exception-autocapture.js.map').then((body) => {
