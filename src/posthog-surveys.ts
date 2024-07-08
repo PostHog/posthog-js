@@ -11,8 +11,10 @@ import { isUrlMatchingRegex } from './utils/request-utils'
 import { assignableWindow, document, window } from './utils/globals'
 import { CaptureResult, DecideResponse } from './types'
 import { logger } from './utils/logger'
-import { isUndefined } from './utils/type-utils'
+import { isNullish, isUndefined } from './utils/type-utils'
 import { SurveyEventReceiver } from './extensions/surveys/survey-event-receiver'
+
+const LOGGER_PREFIX = '[PostHog Surveys]'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -74,7 +76,7 @@ export class PostHogSurveys {
 
             this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
                 if (err) {
-                    return logger.error(`Could not load surveys script`, err)
+                    return logger.error(LOGGER_PREFIX + `Could not load surveys.js`, err)
                 }
 
                 assignableWindow.extendPostHogWithSurveys(this.instance)
@@ -90,7 +92,7 @@ export class PostHogSurveys {
         }
 
         if (this._surveyEventReceiver == null) {
-            logger.error('SurveyEventReceiver is not initialized. Must init surveys before calling getSurveys')
+            logger.error(LOGGER_PREFIX + 'SurveyEventReceiver not initialized. Must init before calling getSurveys')
             return callback([])
         }
 
@@ -167,12 +169,11 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
 
-                const eventBasedTargetingFlagCheck = assignableWindow.__PosthogExtensions__.hasEvents(survey)
+                const eventBasedTargetingFlagCheck = this._hasEvents(survey)
                     ? activatedSurveys?.includes(survey.id)
                     : true
 
-                const overrideInternalTargetingFlagCheck =
-                    assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
+                const overrideInternalTargetingFlagCheck = this._canActivateRepeatedly(survey)
                 const internalTargetingFlagCheck =
                     survey.internal_targeting_flag_key && !overrideInternalTargetingFlagCheck
                         ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
@@ -254,5 +255,21 @@ export class PostHogSurveys {
 
         console.warn('Falling back to next question index due to unexpected branching type') // eslint-disable-line no-console
         return nextQuestionIndex
+    }
+
+    // these methods are lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
+    private _hasEvents(survey: Survey) {
+        if (isNullish(assignableWindow.__PosthogExtensions__.hasEvents)) {
+            logger.warn(LOGGER_PREFIX + 'hasEvents is not defined, must init before calling')
+        }
+        return assignableWindow.__PosthogExtensions__.hasEvents(survey)
+    }
+
+    // these methods are lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
+    private _canActivateRepeatedly(survey: Survey) {
+        if (isNullish(assignableWindow.__PosthogExtensions__.canActivateRepeatedly)) {
+            logger.warn(LOGGER_PREFIX + 'canActivateRepeatedly is not defined, must init before calling')
+        }
+        return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 }
