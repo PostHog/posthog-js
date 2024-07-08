@@ -1,3 +1,8 @@
+## 1.144.2 - 2024-07-05
+
+- fix(surveys): polishing the popup survey UI (#1279)
+- add rdt_cid as a campaign parameter (#1286)
+
 ## 1.144.1 - 2024-07-04
 
 - fix: only take scheduled full snapshots (#1285)
