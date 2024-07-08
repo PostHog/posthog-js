@@ -34,7 +34,7 @@
 
 ## 1.141.2 - 2024-06-25
 
-
+- feat: add lazily loaded web vitals collection (#1203)
 
 ## 1.141.1 - 2024-06-25
 
