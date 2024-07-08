@@ -1,3 +1,8 @@
+## 1.145.0 - 2024-07-08
+
+- feat: send errors one way (#1289)
+- chore: missing changelog entry (#1290)
+
 ## 1.144.2 - 2024-07-05
 
 - fix(surveys): polishing the popup survey UI (#1279)
