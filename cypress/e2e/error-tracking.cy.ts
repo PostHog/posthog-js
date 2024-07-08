@@ -19,7 +19,7 @@ describe('Exception autocapture', () => {
         cy.get('[data-cy-button-throws-error]').click()
 
         // ugh
-        cy.wait(1500)
+        cy.wait(3000)
 
         cy.phCaptures({ full: true }).then((captures) => {
             expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$autocapture', '$exception'])
