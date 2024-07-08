@@ -8,11 +8,11 @@ import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE, EXCEPTION_CAPTURE_ENDPOINT } fro
 import Config from '../../config'
 
 // TODO: move this to /x/ as default
-const BASE_ENDPOINT = '/e/'
+export const BASE_ERROR_ENDPOINT = '/e/'
 const LOGGER_PREFIX = '[Exception Capture]'
 
 export class ExceptionObserver {
-    private _endpoint: string = BASE_ENDPOINT
+    private _endpoint: string
     instance: PostHog
     remoteEnabled: boolean | undefined
     private originalOnUnhandledRejectionHandler: Window['onunhandledrejection'] | null | undefined = undefined
@@ -22,7 +22,15 @@ export class ExceptionObserver {
     constructor(instance: PostHog) {
         this.instance = instance
         this.remoteEnabled = !!this.instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
+
+        // TODO: once BASE_ERROR_ENDPOINT is no longer /e/ this can be removed
+        this._endpoint = this.instance.persistence?.props[EXCEPTION_CAPTURE_ENDPOINT] || BASE_ERROR_ENDPOINT
+
         this.startIfEnabled()
+    }
+
+    get endpoint() {
+        return this._endpoint
     }
 
     get isEnabled() {
@@ -97,14 +105,15 @@ export class ExceptionObserver {
         // store this in-memory in case persistence is disabled
         this.remoteEnabled = !!autocaptureExceptionsResponse || false
         this._endpoint = isObject(autocaptureExceptionsResponse)
-            ? autocaptureExceptionsResponse.endpoint || BASE_ENDPOINT
-            : BASE_ENDPOINT
+            ? autocaptureExceptionsResponse.endpoint || BASE_ERROR_ENDPOINT
+            : BASE_ERROR_ENDPOINT
 
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this.remoteEnabled,
             })
-            // when we come to moving the endpoint to not /e/ we'll want that to persist between startup and decide response
+            // when we come to moving the endpoint to not /e/
+            // we'll want that to persist between startup and decide response
             // TODO: once BASE_ENDPOINT is no longer /e/ this can be removed
             this.instance.persistence.register({
                 [EXCEPTION_CAPTURE_ENDPOINT]: this._endpoint,
@@ -132,7 +141,7 @@ export class ExceptionObserver {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
             _noHeatmaps: true,
-            _url: this._endpoint,
+            _url: this.endpoint,
         })
     }
 }
