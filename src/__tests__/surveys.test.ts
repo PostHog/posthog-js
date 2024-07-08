@@ -24,6 +24,7 @@ import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { generateSurveys } from '../extensions/surveys'
 import { SurveyEventReceiver } from '../extensions/surveys/survey-event-receiver'
 import { expect } from '@jest/globals'
+import { PostHogSurveys } from '../posthog-surveys'
 
 describe('surveys', () => {
     let instance: PostHog
@@ -166,6 +167,8 @@ describe('surveys', () => {
             // eslint-disable-next-line compat/compat
             value: new URL('https://example.com'),
         })
+
+        instance.persistence!.props['$surveys'] = undefined
     })
 
     describe('when enabled by decide', () => {
@@ -261,13 +264,19 @@ describe('surveys', () => {
 
         it('getSurveys returns empty array if surveys are disabled', () => {
             instance.config.disable_surveys = true
-            instance.surveys.getSurveys((data) => {
+            instance._send_request.mockClear()
+            const disabledSurveys = new PostHogSurveys(instance)
+            disabledSurveys.getSurveys((data) => {
                 expect(data).toEqual([])
             })
             expect(instance._send_request).not.toHaveBeenCalled()
         })
 
         describe('getActiveMatchingSurveys', () => {
+            beforeEach(() => {
+                instance.persistence!.props['$surveys'] = undefined
+            })
+
             const draftSurvey: Survey = {
                 name: 'draft survey',
                 description: 'draft survey description',
