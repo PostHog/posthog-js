@@ -1,3 +1,16 @@
+## 1.144.2 - 2024-07-05
+
+- fix(surveys): polishing the popup survey UI (#1279)
+- add rdt_cid as a campaign parameter (#1286)
+
+## 1.144.1 - 2024-07-04
+
+- fix: only take scheduled full snapshots (#1285)
+
+## 1.144.0 - 2024-07-03
+
+- feat: add payload host denylist (#1282)
+
 ## 1.143.0 - 2024-07-02
 
 - feat(survey): Allow events to repeatedly activate surveys (#1273)

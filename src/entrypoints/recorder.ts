@@ -18,22 +18,13 @@ import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugin
 // copying here so that we can use it before rrweb adopt it
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../types'
-import {
-    isArray,
-    isBoolean,
-    isDocument,
-    isFormData,
-    isNull,
-    isNullish,
-    isObject,
-    isString,
-    isUndefined,
-} from '../utils/type-utils'
+import { isArray, isBoolean, isDocument, isFormData, isNull, isNullish, isObject, isString } from '../utils/type-utils'
 import { logger } from '../utils/logger'
 import { window } from '../utils/globals'
 import { defaultNetworkOptions } from '../extensions/replay/config'
 import { formDataToQuery } from '../utils/request-utils'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
+import { isHostOnDenyList } from '../extensions/replay/external/denylist'
 
 export type NetworkData = {
     requests: CapturedNetworkRequest[]
@@ -120,11 +111,16 @@ function shouldRecordHeaders(type: 'request' | 'response', recordHeaders: Networ
     return !!recordHeaders && (isBoolean(recordHeaders) || recordHeaders[type])
 }
 
-function shouldRecordBody(
-    type: 'request' | 'response',
-    recordBody: NetworkRecordOptions['recordBody'],
+function shouldRecordBody({
+    type,
+    recordBody,
+    headers,
+}: {
+    type: 'request' | 'response'
+    recordBody: NetworkRecordOptions['recordBody']
     headers: Headers
-) {
+    url: string | URL | RequestInfo
+}) {
     function matchesContentType(contentTypes: string[]) {
         const contentTypeHeader = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type')
         const contentType = contentTypeHeader && headers[contentTypeHeader]
@@ -174,9 +170,22 @@ async function getRequestPerformanceEntry(
  *
  * XHR request body is Document | XMLHttpRequestBodyInit | null | undefined
  */
-function _tryReadXHRBody(body: Document | XMLHttpRequestBodyInit | any | null | undefined): string | null {
+function _tryReadXHRBody({
+    body,
+    options,
+    url,
+}: {
+    body: Document | XMLHttpRequestBodyInit | any | null | undefined
+    options: NetworkRecordOptions
+    url: string | URL | RequestInfo
+}): string | null {
     if (isNullish(body)) {
         return null
+    }
+
+    const { hostname, isHostDenied } = isHostOnDenyList(url, options)
+    if (isHostDenied) {
+        return hostname + ' is in deny list'
     }
 
     if (isString(body)) {
@@ -248,12 +257,15 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
 
                 const originalSend = xhr.send.bind(xhr)
                 xhr.send = (body) => {
-                    if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
-                        if (isUndefined(body) || isNull(body)) {
-                            networkRequest.requestBody = null
-                        } else {
-                            networkRequest.requestBody = _tryReadXHRBody(body)
-                        }
+                    if (
+                        shouldRecordBody({
+                            type: 'request',
+                            headers: requestHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
                     }
                     after = win.performance.now()
                     return originalSend(body)
@@ -278,13 +290,15 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     if (recordResponseHeaders) {
                         networkRequest.responseHeaders = responseHeaders
                     }
-                    if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                        if (isNullish(xhr.response)) {
-                            networkRequest.responseBody = null
-                        } else {
-                            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                            networkRequest.responseBody = _tryReadXHRBody(xhr.response)
-                        }
+                    if (
+                        shouldRecordBody({
+                            type: 'response',
+                            headers: responseHeaders,
+                            url,
+                            recordBody: options.recordBody,
+                        })
+                    ) {
+                        networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
                     }
                     getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
                         .then((entry) => {
@@ -372,7 +386,15 @@ function prepareRequest(
 
 const contentTypePrefixDenyList = ['video/', 'audio/']
 
-function _checkForCannotReadResponseBody(r: Response): string | null {
+function _checkForCannotReadResponseBody({
+    r,
+    options,
+    url,
+}: {
+    r: Response
+    options: NetworkRecordOptions
+    url: string | URL | RequestInfo
+}): string | null {
     if (r.headers.get('Transfer-Encoding') === 'chunked') {
         return 'Chunked Transfer-Encoding is not supported'
     }
@@ -383,6 +405,11 @@ function _checkForCannotReadResponseBody(r: Response): string | null {
     const contentTypeIsDenied = contentTypePrefixDenyList.some((prefix) => contentType?.startsWith(prefix))
     if (contentType && contentTypeIsDenied) {
         return `Content-Type ${contentType} is not supported`
+    }
+
+    const { hostname, isHostDenied } = isHostOnDenyList(url, options)
+    if (isHostDenied) {
+        return hostname + ' is in deny list'
     }
 
     return null
@@ -403,8 +430,33 @@ function _tryReadBody(r: Request | Response): Promise<string> {
     })
 }
 
-async function _tryReadResponseBody(r: Response): Promise<string> {
-    const cannotReadBodyReason: string | null = _checkForCannotReadResponseBody(r)
+async function _tryReadRequestBody({
+    r,
+    options,
+    url,
+}: {
+    r: Request
+    options: NetworkRecordOptions
+    url: string | URL | RequestInfo
+}): Promise<string> {
+    const { hostname, isHostDenied } = isHostOnDenyList(url, options)
+    if (isHostDenied) {
+        return Promise.resolve(hostname + ' is in deny list')
+    }
+
+    return _tryReadBody(r)
+}
+
+async function _tryReadResponseBody({
+    r,
+    options,
+    url,
+}: {
+    r: Response
+    options: NetworkRecordOptions
+    url: string | URL | RequestInfo
+}): Promise<string> {
+    const cannotReadBodyReason: string | null = _checkForCannotReadResponseBody({ r, options, url })
     if (!isNull(cannotReadBodyReason)) {
         return Promise.resolve(cannotReadBodyReason)
     }
@@ -443,8 +495,15 @@ function initFetchObserver(
                 if (recordRequestHeaders) {
                     networkRequest.requestHeaders = requestHeaders
                 }
-                if (shouldRecordBody('request', options.recordBody, requestHeaders)) {
-                    networkRequest.requestBody = await _tryReadBody(req)
+                if (
+                    shouldRecordBody({
+                        type: 'request',
+                        headers: requestHeaders,
+                        url,
+                        recordBody: options.recordBody,
+                    })
+                ) {
+                    networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
                 }
 
                 after = win.performance.now()
@@ -458,8 +517,15 @@ function initFetchObserver(
                 if (recordResponseHeaders) {
                     networkRequest.responseHeaders = responseHeaders
                 }
-                if (shouldRecordBody('response', options.recordBody, responseHeaders)) {
-                    networkRequest.responseBody = await _tryReadResponseBody(res)
+                if (
+                    shouldRecordBody({
+                        type: 'response',
+                        headers: responseHeaders,
+                        url,
+                        recordBody: options.recordBody,
+                    })
+                ) {
+                    networkRequest.responseBody = await _tryReadResponseBody({ r: res, options, url })
                 }
 
                 return res
@@ -484,6 +550,7 @@ function initFetchObserver(
 }
 
 let initialisedHandler: listenerHandler | null = null
+
 function initNetworkObserver(
     callback: networkCallback,
     win: IWindow, // top window or in an iframe
