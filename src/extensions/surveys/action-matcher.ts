@@ -209,8 +209,8 @@ export class ActionMatcher {
         }
         // eslint-disable-next-line no-console
         console.log(
-            ` in action matcher, event is ${event?.event} checkStepElement, selector is `,
-            event?.properties?.$element_selector
+            ` in action matcher, event is ${event?.event} checkStepElement, selectors are `,
+            event?.properties?.$element_selectors
         )
 
         // eslint-disable-next-line no-console
@@ -221,7 +221,11 @@ export class ActionMatcher {
                 step?.selector !== event?.properties?.$element_selector
             } event?.properties?.$element_selector is ${event?.properties?.$element_selector}`
         )
-        if (step?.selector && step?.selector !== event?.properties?.$element_selector) {
+        if (
+            step?.selector &&
+            event?.properties?.$element_selectors &&
+            !event?.properties.$element_selectors?.contains(step?.selector)
+        ) {
             // eslint-disable-next-line no-console
             console.log(` in action matcher, event is ${event?.event} checkStepElement is returning false`)
             return false // SELECTOR IS A MISMATCH

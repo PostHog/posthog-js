@@ -115,16 +115,19 @@ export class Autocapture {
         this._elementSelectors = selectors
     }
 
-    public getElementSelector(element: Element | null): string | null {
-        let elementSelector = ''
+    public getElementSelectors(element: Element | null): string[] | null {
+        const elementSelectors = ['']
 
         this._elementSelectors?.forEach((selector) => {
-            if (element == document?.querySelector(selector)) {
-                elementSelector = selector
-            }
+            const matchedElements = document?.querySelectorAll(selector)
+            matchedElements?.forEach((matchedElement: Element) => {
+                if (element === matchedElement) {
+                    elementSelectors.push(selector)
+                }
+            })
         })
 
-        return elementSelector
+        return elementSelectors
     }
 
     public get isEnabled(): boolean {
@@ -370,9 +373,9 @@ export class Autocapture {
                 autocaptureAugmentProperties
             )
 
-            const elementSelector = this.getElementSelector(target)
-            if (elementSelector && elementSelector.length > 0) {
-                props['$element_selector'] = elementSelector
+            const elementSelectors = this.getElementSelectors(target)
+            if (elementSelectors && elementSelectors.length > 0) {
+                props['$element_selectors'] = elementSelectors
             }
 
             if (eventName === COPY_AUTOCAPTURE_EVENT) {

@@ -319,9 +319,5 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver._getActionMatcher().on('$autocapture', result)
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         })
-
-        // it('can match action with only element selector', () => {
-        //     console.log(actionWithOnlySelector)
-        // })
     })
 })
