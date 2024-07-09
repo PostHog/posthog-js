@@ -195,18 +195,12 @@ describe('surveys', () => {
             expect(data).toEqual(surveysWithEvents)
         }, true)
 
-        const registry = surveys._surveyEventReceiver?.getEventRegistry()
-        expect(registry.has('second-survey')).toBeFalsy()
-        expect(registry.has('first-survey')).toBeTruthy()
-        expect(registry.get('first-survey')).toEqual([
-            'user_subscribed',
-            'user_unsubscribed',
-            'billing_changed',
-            'billing_removed',
-        ])
+        const registry = surveys._surveyEventReceiver?.getEventToSurveys()
+        expect(registry.has('user_subscribed')).toBeTruthy()
+        expect(registry.get('user_subscribed')).toEqual(['first-survey', 'third-survey'])
 
-        expect(registry.has('third-survey')).toBeTruthy()
-        expect(registry.get('third-survey')).toEqual(['user_subscribed', 'user_unsubscribed', 'address_changed'])
+        expect(registry.has('address_changed')).toBeTruthy()
+        expect(registry.get('address_changed')).toEqual(['third-survey'])
     })
 
     it('getSurveys force reloads when called with true', () => {
