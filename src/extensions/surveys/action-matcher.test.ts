@@ -49,9 +49,6 @@ describe('action-matcher', () => {
         return {
             id: id,
             name: `${eventName || 'user defined '} action`,
-            description: '',
-            post_to_slack: false,
-            slack_message_format: '',
             steps: [
                 {
                     event: eventName,
@@ -65,8 +62,6 @@ describe('action-matcher', () => {
             ],
             created_at: '2024-06-20T14:39:23.616676Z',
             deleted: false,
-            is_calculating: false,
-            last_calculated_at: '2024-06-20T14:39:23.616051Z',
             is_action: true,
             tags: [],
         }

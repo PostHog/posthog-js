@@ -50,10 +50,6 @@ export class ActionMatcher {
             })
             this.instance?.autocapture.setElementSelectors(selectorsToWatch)
         }
-
-        // if (eventNames.length > 0) {
-        //     throw new Error(`I know about these events : ${eventNames}`)
-        // }
     }
 
     on(eventName: string, eventPayload?: CaptureResult) {
@@ -62,7 +58,6 @@ export class ActionMatcher {
         }
 
         if (!this.actionEvents.has(eventName) && !this.actionEvents.has(<string>eventPayload?.event)) {
-            // throw new Error(`unknown event ${eventName}, I only know about : ${JSON.stringify(this.actionEvents.values())}`)
             return
         }
 
@@ -204,12 +199,4 @@ export class ActionMatcher {
 
         return event?.properties.$elements as unknown as SurveyElement[]
     }
-
-    // private mutateCaptureResultWithElementsList(event: CaptureResult: Element[] {
-    //      event.elementsList = event.elementsList.map((element) => ({
-    //     ...element,
-    //     attr_class: element.attributes?.attr__class ?? element.attr_class,
-    //     $el_text: element.text,
-    // }))
-    // }
 }
