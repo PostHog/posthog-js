@@ -116,7 +116,7 @@ export class Autocapture {
     }
 
     public getElementSelectors(element: Element | null): string[] | null {
-        const elementSelectors = ['']
+        const elementSelectors: string[] = []
 
         this._elementSelectors?.forEach((selector) => {
             const matchedElements = document?.querySelectorAll(selector)
