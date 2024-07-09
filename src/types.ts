@@ -280,16 +280,23 @@ export interface RetriableRequestOptions extends QueuedRequestOptions {
 }
 
 export interface CaptureOptions {
-    $set?: Properties /** used with $identify */
-    $set_once?: Properties /** used with $identify */
+    $set?: Properties
+    /** used with $identify */
+    $set_once?: Properties
+    /** used with $identify */
     _url?: string /** Used to override the desired endpoint for the captured event */
     /** Some events are sent as passengers inside other events - e.g. heatmaps and web vitals, not all ingestion routes can process passengers */
     _noHeatmaps?: boolean
-    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
-    _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
-    send_instantly?: boolean /** if set skips the batched queue */
-    skip_client_rate_limiting?: boolean /** if set skips the client side rate limiting */
-    transport?: RequestOptions['transport'] /** if set, overrides the desired transport method */
+    _batchKey?: string
+    /** key of queue, e.g. 'sessionRecording' vs 'event' */
+    _noTruncate?: boolean
+    /** if set, overrides and disables config.properties_string_max_length */
+    send_instantly?: boolean
+    /** if set skips the batched queue */
+    skip_client_rate_limiting?: boolean
+    /** if set skips the client side rate limiting */
+    transport?: RequestOptions['transport']
+    /** if set, overrides the desired transport method */
     timestamp?: Date
 }
 
@@ -336,8 +343,10 @@ export interface DecideResponse {
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
-    editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
-    toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
+    editorParams?: ToolbarParams
+    /** @deprecated, renamed to toolbarParams, still present on older API responses */
+    toolbarVersion: 'toolbar'
+    /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
     heatmaps?: boolean
@@ -370,8 +379,10 @@ export type ToolbarVersion = 'toolbar'
 
 /* sync with posthog */
 export interface ToolbarParams {
-    token?: string /** public posthog-js token */
-    temporaryToken?: string /** private temporary user token */
+    token?: string
+    /** public posthog-js token */
+    temporaryToken?: string
+    /** private temporary user token */
     actionId?: number
     userIntent?: ToolbarUserIntent
     source?: ToolbarSource
@@ -475,7 +486,12 @@ export type NetworkRequest = {
 //     readonly name: string;
 //     readonly startTime: DOMHighResTimeStamp;
 // NB: properties below here are ALPHA, don't rely on them, they may change without notice
-export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
+
+type Writable<T> = { -readonly [P in keyof T]: T[P] }
+
+type CapturedNetworkRequestBase = Writable<Omit<PerformanceEntry, 'toJSON'>>
+
+type CapturedNetworkRequest = CapturedNetworkRequestBase & {
     // properties below here are ALPHA, don't rely on them, they may change without notice
     method?: string
     initiatorType?: InitiatorType
