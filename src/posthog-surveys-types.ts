@@ -159,6 +159,9 @@ export interface Survey {
                 name: string
             }[]
         } | null
+        actions: {
+            values: ActionType[]
+        } | null
     } | null
     start_date: string | null
     end_date: string | null

@@ -10,10 +10,9 @@ import {
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
-import { CaptureResult, DecideResponse } from './types'
+import { DecideResponse } from './types'
 import { logger } from './utils/logger'
-import { isUndefined } from './utils/type-utils'
-import { canActivateRepeatedly, hasEvents } from './extensions/surveys/surveys-utils'
+import { canActivateRepeatedly } from './extensions/surveys/surveys-utils'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -72,7 +71,7 @@ export class PostHogSurveys {
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
             }
             this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
                 if (err) {
@@ -92,7 +91,7 @@ export class PostHogSurveys {
         }
 
         if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
@@ -110,19 +109,18 @@ export class PostHogSurveys {
                     }
                     const surveys = response.json.surveys || []
 
-                    const eventBasedSurveys = surveys.filter(
+                    const eventOrActionBasedSurveys = surveys.filter(
                         (survey: Survey) =>
-                            survey.conditions?.events &&
-                            survey.conditions?.events?.values &&
-                            survey.conditions?.events?.values?.length > 0
+                            (survey.conditions?.events &&
+                                survey.conditions?.events?.values &&
+                                survey.conditions?.events?.values?.length > 0) ||
+                            (survey.conditions?.actions &&
+                                survey.conditions?.actions?.values &&
+                                survey.conditions?.actions?.values?.length > 0)
                     )
 
-                    if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
-                        this._surveyEventReceiver?.register(eventBasedSurveys)
-                        const onEventName = (eventName: string, eventPayload?: CaptureResult) => {
-                            this._surveyEventReceiver?.on(eventName, eventPayload)
-                        }
-                        this.instance._addCaptureHook(onEventName)
+                    if (eventOrActionBasedSurveys.length > 0) {
+                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
                     }
 
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
@@ -168,7 +166,17 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
 
-                const eventBasedTargetingFlagCheck = hasEvents(survey) ? activatedSurveys?.includes(survey.id) : true
+                const hasEvents =
+                    survey.conditions?.events &&
+                    survey.conditions?.events?.values &&
+                    survey.conditions?.events?.values.length > 0
+
+                const hasActions =
+                    survey.conditions?.actions &&
+                    survey.conditions?.actions?.values &&
+                    survey.conditions?.actions?.values.length > 0
+                const eventBasedTargetingFlagCheck =
+                    hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
 
                 const overrideInternalTargetingFlagCheck = canActivateRepeatedly(survey)
                 const internalTargetingFlagCheck =
