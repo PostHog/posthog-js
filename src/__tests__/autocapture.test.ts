@@ -583,6 +583,32 @@ describe('Autocapture system', () => {
             expect(props['$elements'][0]).toHaveProperty('attr__data-props', 'prop'.repeat(256) + '...')
         })
 
+        it('assigns element_selector if htmlelement matches known selectors', () => {
+            const elTarget = document.createElement('img')
+            elTarget.id = 'primary_button'
+            const elParent = document.createElement('span')
+            elParent.appendChild(elTarget)
+
+            document.querySelectorAll = function () {
+                return [elTarget] as unknown as NodeListOf<Element>
+            }
+
+            autocapture.setElementSelectors(new Set<string>(['#primary_button']))
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'https://test.com')
+            elGrandparent.appendChild(elParent)
+            autocapture['_captureEvent'](
+                makeMouseEvent({
+                    target: elTarget,
+                })
+            )
+
+            const props = captureMock.mock.calls[0][1]
+            expect(props['$element_selectors']).toContain('#primary_button')
+            expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
+            expect(props['$external_click_url']).toEqual('https://test.com')
+        })
+
         it('gets the href attribute from parent anchor tags', () => {
             const elTarget = document.createElement('img')
             const elParent = document.createElement('span')
