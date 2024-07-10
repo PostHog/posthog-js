@@ -475,7 +475,12 @@ export type NetworkRequest = {
 //     readonly name: string;
 //     readonly startTime: DOMHighResTimeStamp;
 // NB: properties below here are ALPHA, don't rely on them, they may change without notice
-export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
+
+// we mirror PerformanceEntry since we read into this type from a PerformanceObserver,
+// but we don't want to inherit its readonly-iness
+type Writable<T> = { -readonly [P in keyof T]: T[P] }
+
+export type CapturedNetworkRequest = Writable<Omit<PerformanceEntry, 'toJSON'>> & {
     // properties below here are ALPHA, don't rely on them, they may change without notice
     method?: string
     initiatorType?: InitiatorType
