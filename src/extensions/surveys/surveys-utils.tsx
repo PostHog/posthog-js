@@ -16,7 +16,7 @@ export const style = (appearance: SurveyAppearance | null) => {
           `,
     }
     return `
-          .survey-form {
+          .survey-form, .thank-you-message {
               position: fixed;
               margin: 0px;
               bottom: 0px;
@@ -25,23 +25,33 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
               text-align: left;
               max-width: ${parseInt(appearance?.maxWidth || '300')}px;
+              width: 100%;
               z-index: ${parseInt(appearance?.zIndex || '99999')};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
-              width: 100%;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}
-          }
-          .form-submit[disabled] {
-              opacity: 0.6;
-              filter: grayscale(50%);
-              cursor: not-allowed;
-          }
-          .survey-form {
               flex-direction: column;
               background: ${appearance?.backgroundColor || '#eeeded'};
               border-top-left-radius: 10px;
               border-top-right-radius: 10px;
               box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
+          }
+          
+          .survey-box, .thank-you-message-container {
+              padding: 20px 25px 10px;
+              display: flex;
+              flex-direction: column;
+              border-radius: 10px;
+          }
+
+          .thank-you-message {
+              text-align: center;
+          }
+
+          .form-submit[disabled] {
+              opacity: 0.6;
+              filter: grayscale(50%);
+              cursor: not-allowed;
           }
           .survey-form textarea {
               color: #2d2d2d;
@@ -56,6 +66,9 @@ export const style = (appearance: SurveyAppearance | null) => {
               border-radius: 6px;
               border-color: ${appearance?.borderColor || '#c9c6c6'};
               margin-top: 14px;
+          }
+          .survey-box:has(.survey-question:empty):not(:has(.description)) textarea {
+              margin-top: 0;
           }
           .form-submit {
               box-sizing: border-box;
@@ -118,12 +131,6 @@ export const style = (appearance: SurveyAppearance | null) => {
               background: ${appearance?.backgroundColor || '#eeeded'};
               text-decoration: none;
           }
-          .survey-box {
-              padding: 20px 25px 10px;
-              display: flex;
-              flex-direction: column;
-              border-radius: 10px;
-          }
           .survey-question {
               font-weight: 500;
               font-size: 14px;
@@ -139,7 +146,6 @@ export const style = (appearance: SurveyAppearance | null) => {
               background: ${appearance?.backgroundColor || '#eeeded'};
           }
           .ratings-number {
-              background-color: ${appearance?.ratingButtonColor || 'white'};
               font-size: 16px;
               font-weight: 600;
               padding: 8px 0px;
@@ -183,7 +189,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               fill: ${appearance?.ratingButtonActiveColor || 'black'};
           }
           .emoji-svg {
-              fill: ${appearance?.ratingButtonColor || '#c9c6c6'};
+              fill: '#939393';
           }
           .rating-text {
               display: flex;
@@ -197,6 +203,9 @@ export const style = (appearance: SurveyAppearance | null) => {
           .multiple-choice-options {
               margin-top: 13px;
               font-size: 14px;
+          }
+          .survey-box:has(.survey-question:empty):not(:has(.description)) .multiple-choice-options {
+              margin-top: 0;
           }
           .multiple-choice-options .choice-option {
               display: flex;
@@ -265,23 +274,6 @@ export const style = (appearance: SurveyAppearance | null) => {
               flex-grow: 1;
               border: 0;
               outline: 0;
-          }
-          .thank-you-message {
-              position: fixed;
-              bottom: 0px;
-              z-index: ${parseInt(appearance?.zIndex || '99999')};
-              box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
-              font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-              border-top-left-radius: 10px;
-              border-top-right-radius: 10px;
-              padding: 20px 25px 10px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
-              text-align: center;
-              max-width: ${parseInt(appearance?.maxWidth || '300')}px;
-              min-width: 150px;
-              width: 100%;
-              ${positions[appearance?.position || 'right'] || 'right: 30px;'}
           }
           .thank-you-message-body {
               margin-top: 6px;

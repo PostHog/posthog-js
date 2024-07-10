@@ -1,3 +1,19 @@
+## 1.145.1 - 2024-07-10
+
+- fix: capture network recording type (#1296)
+- feat(surveys): added close button text customization feature (#1288)
+- chore: fix error tests listener registration (#1291)
+
+## 1.145.0 - 2024-07-08
+
+- feat: send errors one way (#1289)
+- chore: missing changelog entry (#1290)
+
+## 1.144.2 - 2024-07-05
+
+- fix(surveys): polishing the popup survey UI (#1279)
+- add rdt_cid as a campaign parameter (#1286)
+
 ## 1.144.1 - 2024-07-04
 
 - fix: only take scheduled full snapshots (#1285)
@@ -29,7 +45,7 @@
 
 ## 1.141.2 - 2024-06-25
 
-
+- feat: add lazily loaded web vitals collection (#1203)
 
 ## 1.141.1 - 2024-06-25
 

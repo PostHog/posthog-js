@@ -2,17 +2,18 @@ import { start } from '../support/setup'
 
 describe('Exception autocapture', () => {
     beforeEach(() => {
+        cy.on('uncaught:exception', () => {
+            // otherwise the exception we throw on purpose causes the test to fail
+            return false
+        })
+
         start({
             decideResponseOverrides: {
                 autocaptureExceptions: true,
             },
             url: './playground/cypress',
         })
-
-        cy.on('uncaught:exception', () => {
-            // otherwise the exception we throw on purpose causes the test to fail
-            return false
-        })
+        cy.wait('@exception-autocapture-script')
     })
 
     it('captures exceptions', () => {

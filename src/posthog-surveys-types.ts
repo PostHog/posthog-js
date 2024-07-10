@@ -22,6 +22,7 @@ export interface SurveyAppearance {
     thankYouMessageHeader?: string
     thankYouMessageDescription?: string
     thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
+    thankYouMessageCloseButtonText?: string
     borderColor?: string
     position?: 'left' | 'right' | 'center'
     placeholder?: string

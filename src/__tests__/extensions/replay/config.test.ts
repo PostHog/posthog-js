@@ -216,6 +216,22 @@ describe('config', () => {
             })
         })
 
+        it('can amend the provided object', () => {
+            const posthogConfig = defaultConfig()
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
+                data.name = 'changed'
+                return data
+            }
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'changed',
+            })
+        })
+
         it('should remove the Authorization header from requests even when a mask request fn is set', () => {
             const posthogConfig = defaultConfig()
             posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => {
