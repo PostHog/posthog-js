@@ -1,3 +1,7 @@
+## 1.146.0 - 2024-07-10
+
+- feat: move heatmaps to their own event (#1287)
+
 ## 1.145.1 - 2024-07-10
 
 - fix: capture network recording type (#1296)
