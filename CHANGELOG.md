@@ -1,3 +1,9 @@
+## 1.145.1 - 2024-07-10
+
+- fix: capture network recording type (#1296)
+- feat(surveys): added close button text customization feature (#1288)
+- chore: fix error tests listener registration (#1291)
+
 ## 1.145.0 - 2024-07-08
 
 - feat: send errors one way (#1289)
