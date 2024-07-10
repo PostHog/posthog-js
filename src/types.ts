@@ -84,6 +84,14 @@ export interface PerformanceCaptureConfig {
     web_vitals?: boolean
 }
 
+export interface HeatmapConfig {
+    /*
+     * how often to send batched data in $$heatmap_data events
+     * if set to 0 or not set, sends using the default interval of 1 second
+     * */
+    flush_interval_milliseconds: number
+}
+
 export interface PostHogConfig {
     api_host: string
     /** @deprecated - This property is no longer supported */
@@ -165,7 +173,9 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
     segment?: SegmentAnalytics
     __preview_send_client_session_params?: boolean
+    /* @deprecated - use `capture_heatmaps` instead */
     enable_heatmaps?: boolean
+    capture_heatmaps?: boolean | HeatmapConfig
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
@@ -283,8 +293,6 @@ export interface CaptureOptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
     _url?: string /** Used to override the desired endpoint for the captured event */
-    /** Some events are sent as passengers inside other events - e.g. heatmaps and web vitals, not all ingestion routes can process passengers */
-    _noHeatmaps?: boolean
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     send_instantly?: boolean /** if set skips the batched queue */

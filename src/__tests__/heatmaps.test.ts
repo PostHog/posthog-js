@@ -3,8 +3,12 @@ import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
 import { DecideResponse } from '../types'
 import { isObject } from '../utils/type-utils'
+import { beforeEach, expect } from '@jest/globals'
+import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
+import { Heatmaps } from '../heatmaps'
 
 jest.mock('../utils/logger')
+jest.useFakeTimers()
 
 describe('heatmaps', () => {
     let posthog: PostHog
@@ -19,7 +23,8 @@ describe('heatmaps', () => {
         } as unknown as MouseEvent)
 
     beforeEach(async () => {
-        onCapture = jest.fn()
+        onCapture = onCapture.mockClear()
+
         posthog = await createPosthogInstance(uuidv7(), {
             _onCapture: onCapture,
             sanitize_properties: (props) => {
@@ -38,70 +43,83 @@ describe('heatmaps', () => {
                 }
                 return props
             },
+            // simplifies assertions by not needing to ignore events
+            capture_pageview: false,
+        })
+
+        posthog.config.capture_heatmaps = true
+
+        // make sure we start fresh
+        posthog.heatmaps!.startIfEnabled()
+        expect(posthog.heatmaps!.getAndClearBuffer()).toBeUndefined()
+
+        posthog.register({ $current_test_name: expect.getState().currentTestName })
+    })
+
+    it('should send generated heatmap data', async () => {
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(onCapture).toBeCalledTimes(1)
+        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
+        expect(onCapture.mock.lastCall[1]).toMatchObject({
+            event: '$$heatmap',
+            properties: {
+                $heatmap_data: {
+                    'http://replaced/': [
+                        {
+                            target_fixed: false,
+                            type: 'click',
+                            x: 10,
+                            y: 20,
+                        },
+                    ],
+                },
+            },
         })
     })
 
-    it('should include generated heatmap data', async () => {
+    it('requires interval to pass before sending data', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.capture('test event')
 
-        expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall).toMatchObject([
-            'test event',
-            {
-                event: 'test event',
-                properties: {
-                    $heatmap_data: {
-                        'http://replaced/': [
-                            {
-                                target_fixed: false,
-                                type: 'click',
-                                x: 10,
-                                y: 20,
-                            },
-                        ],
-                    },
-                },
-            },
-        ])
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds - 1)
+
+        expect(onCapture).toBeCalledTimes(0)
+        expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
     })
 
-    it('should add rageclick events in the same area', async () => {
+    it('should send rageclick events in the same area', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 
-        posthog.capture('test event')
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(4)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/'].map((x) => x.type)).toEqual([
-            'click',
-            'click',
-            'rageclick',
-            'click',
-        ])
+        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
+        const heatmapData = onCapture.mock.lastCall[1].properties.$heatmap_data
+        expect(heatmapData).toBeDefined()
+        expect(heatmapData['http://replaced/']).toHaveLength(4)
+        expect(heatmapData['http://replaced/'].map((x) => x.type)).toEqual(['click', 'click', 'rageclick', 'click'])
     })
 
     it('should clear the buffer after each call', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.capture('test event')
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
         expect(onCapture).toBeCalledTimes(1)
+        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
+        expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeDefined()
         expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
 
-        posthog.capture('test event 2')
-        expect(onCapture).toBeCalledTimes(2)
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeUndefined()
-    })
+        expect(posthog.heatmaps!['buffer']).toEqual(undefined)
 
-    it('should not include generated heatmap data for $snapshot events with _noHeatmaps', async () => {
-        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
-        posthog.capture('$snapshot', undefined, { _noHeatmaps: true })
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall).toMatchObject(['$snapshot', {}])
-        expect(onCapture.mock.lastCall[1].properties).not.toHaveProperty('$heatmap_data')
     })
 
     it('should ignore clicks if they come from the toolbar', async () => {
@@ -124,35 +142,82 @@ describe('heatmaps', () => {
                 target: document.body,
             })
         )
-        expect(posthog.heatmaps?.['buffer']).not.toEqual(undefined)
+        expect(posthog.heatmaps?.getAndClearBuffer()).not.toEqual(undefined)
+        expect(onCapture.mock.calls).toEqual([])
     })
 
-    describe('afterDecideResponse()', () => {
-        it('should not be enabled before the decide response', () => {
-            expect(posthog.heatmaps!.isEnabled).toBe(false)
-        })
+    it('should ignore an empty buffer', async () => {
+        expect(onCapture.mock.calls).toEqual([])
 
-        it('should be enabled if client config option is enabled', () => {
-            posthog.config.enable_heatmaps = true
-            expect(posthog.heatmaps!.isEnabled).toBe(true)
+        expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(onCapture.mock.calls).toEqual([])
+    })
+
+    describe('isEnabled()', () => {
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])('when stored remote config is %p - heatmaps enabled should be %p', (stored, expected) => {
+            posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: stored })
+            posthog.config.enable_heatmaps = undefined
+            posthog.config.capture_heatmaps = undefined
+            const heatmaps = new Heatmaps(posthog)
+            expect(heatmaps.isEnabled).toBe(expected)
         })
 
         it.each([
-            // Client not defined
-            [undefined, false, false],
-            [undefined, true, true],
-            [undefined, false, false],
-            // Client false
-            [false, false, false],
-            [false, true, false],
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])('when local deprecated config is %p - heatmaps enabled should be %p', (deprecatedConfig, expected) => {
+            posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
+            posthog.config.enable_heatmaps = deprecatedConfig
+            posthog.config.capture_heatmaps = undefined
+            const heatmaps = new Heatmaps(posthog)
+            expect(heatmaps.isEnabled).toBe(expected)
+        })
 
-            // Client true
-            [true, false, true],
-            [true, true, true],
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])('when local current config is %p - heatmaps enabled should be %p', (localConfig, expected) => {
+            posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
+            posthog.config.enable_heatmaps = localConfig
+            posthog.config.capture_heatmaps = undefined
+            const heatmaps = new Heatmaps(posthog)
+            expect(heatmaps.isEnabled).toBe(expected)
+        })
+
+        it.each([
+            // deprecated client side not defined
+            [undefined, undefined, false, false],
+            [undefined, undefined, true, true],
+            [undefined, true, false, true],
+            [undefined, false, false, false],
+            // deprecated client false
+            [false, undefined, false, false],
+            [false, undefined, true, false],
+            [false, false, false, false],
+            [false, false, true, false],
+            [false, true, false, true],
+            [false, true, true, true],
+
+            // deprecated client true
+            [true, undefined, false, true],
+            [true, undefined, true, true],
+            // current config overrides deprecated
+            [true, false, false, false],
+            [true, true, true, true],
         ])(
-            'when client side config is %p and remote opt in is %p - heatmaps enabled should be %p',
-            (clientSideOptIn, serverSideOptIn, expected) => {
-                posthog.config.enable_heatmaps = clientSideOptIn
+            'when deprecated client side config is %p, current client side config is %p, and remote opt in is %p - heatmaps enabled should be %p',
+            (deprecatedclientSideOptIn, clientSideOptIn, serverSideOptIn, expected) => {
+                posthog.config.enable_heatmaps = deprecatedclientSideOptIn
+                posthog.config.capture_heatmaps = clientSideOptIn
                 posthog.heatmaps!.afterDecideResponse({
                     heatmaps: serverSideOptIn,
                 } as DecideResponse)
