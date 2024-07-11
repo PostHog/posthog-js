@@ -1,3 +1,7 @@
+## 1.146.2 - 2024-07-11
+
+- fix: warn when on xhr error used (#1298)
+
 ## 1.146.1 - 2024-07-11
 
 - fix: add web vitals to array full (#1297)
