@@ -1,3 +1,9 @@
+## 1.146.1 - 2024-07-11
+
+- fix: add web vitals to array full (#1297)
+- feat(Surveys): Activate surveys based on actions (#1295)
+- feat(Surveys): Add ActionMatcher to match CaptureResult to any known actions (#1294)
+
 ## 1.146.0 - 2024-07-10
 
 - feat: move heatmaps to their own event (#1287)
