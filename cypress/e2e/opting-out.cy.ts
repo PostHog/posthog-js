@@ -1,4 +1,5 @@
 import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
+import { start } from '../support/setup'
 
 function assertThatRecordingStarted() {
     cy.phCaptures({ full: true }).then((captures) => {
@@ -186,6 +187,20 @@ describe('opting out', () => {
             cy.get('[data-cy-input]').type('hello posthog!')
 
             pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
+        })
+    })
+
+    describe('user opts out after start', () => {
+        it('does not send any autocapture/custom events after that', () => {
+            start({})
+
+            cy.posthog().invoke('opt_out_capturing')
+
+            cy.get('[data-cy-custom-event-button]').click()
+            cy.get('[data-cy-feature-flag-button]').click()
+            cy.reload()
+
+            cy.phCaptures().should('deep.equal', ['$pageview'])
         })
     })
 })
