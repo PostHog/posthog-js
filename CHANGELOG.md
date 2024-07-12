@@ -1,3 +1,7 @@
+## 1.147.0 - 2024-07-12
+
+- feat: add url_ignorelist for autocapture config (#1302)
+
 ## 1.146.3 - 2024-07-12
 
 - feat: add new google crawler (#1300)
