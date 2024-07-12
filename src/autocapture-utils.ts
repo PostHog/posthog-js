@@ -18,7 +18,7 @@ export function splitClassString(s: string): string[] {
  * when being used as an ignore list, the expected result is false
  *
  */
-function whenURLMatches(urlsList: (string | RegExp)[], resultOnMatch: boolean): boolean {
+function checkForURLMatches(urlsList: (string | RegExp)[], resultOnMatch: boolean): boolean {
     const url = window?.location.href
     if (url && urlsList && urlsList.some((regex) => url.match(regex))) {
         return resultOnMatch
@@ -218,13 +218,13 @@ export function shouldCaptureDomEvent(
     }
 
     if (autocaptureConfig?.url_allowlist) {
-        if (whenURLMatches(autocaptureConfig.url_allowlist, true) === false) {
+        if (checkForURLMatches(autocaptureConfig.url_allowlist, true) === false) {
             return false
         }
     }
 
     if (autocaptureConfig?.url_ignorelist) {
-        if (whenURLMatches(autocaptureConfig.url_ignorelist, false) === false) {
+        if (checkForURLMatches(autocaptureConfig.url_ignorelist, false) === false) {
             return false
         }
     }
