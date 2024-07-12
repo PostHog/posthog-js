@@ -9,6 +9,15 @@ export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
 }
 
+/**
+ * this is used by both an allowlist and an ignore list
+ *
+ * so the expected result can be passed in
+ *
+ * when being used as an allowlist, the expected result is true
+ * when being used as an ignore list, the expected result is false
+ *
+ */
 function whenURLMatches(urlsList: (string | RegExp)[], resultOnMatch: boolean): boolean {
     const url = window?.location.href
     if (url && urlsList && urlsList.some((regex) => url.match(regex))) {
