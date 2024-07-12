@@ -25,8 +25,24 @@ export interface AutocaptureConfig {
     /**
      * List of URLs to allow autocapture on, can be strings to match
      * or regexes e.g. ['https://example.com', 'test.com/.*']
+     * this is useful when you want to autocapture on specific pages only
+     *
+     * if you set both url_allowlist and url_ignorelist,
+     * we check the allowlist first and then the ignorelist.
+     * the ignorelist can override the allowlist
      */
     url_allowlist?: (string | RegExp)[]
+
+    /**
+     * List of URLs to not allow autocapture on, can be strings to match
+     * or regexes e.g. ['https://example.com', 'test.com/.*']
+     * this is useful when you want to autocapture on most pages but not some specific ones
+     *
+     * if you set both url_allowlist and url_ignorelist,
+     * we check the allowlist first and then the ignorelist.
+     * the ignorelist can override the allowlist
+     */
+    url_ignorelist?: (string | RegExp)[]
 
     /**
      * List of DOM events to allow autocapture on  e.g. ['click', 'change', 'submit']

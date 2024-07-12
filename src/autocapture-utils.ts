@@ -9,6 +9,11 @@ export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
 }
 
+function checkForURLMatches(urlsList: (string | RegExp)[]): boolean {
+    const url = window?.location.href
+    return !!(url && urlsList && urlsList.some((regex) => url.match(regex)))
+}
+
 /*
  * Get the className of an element, accounting for edge cases where element.className is an object
  *
@@ -201,9 +206,15 @@ export function shouldCaptureDomEvent(
     }
 
     if (autocaptureConfig?.url_allowlist) {
-        const url = window.location.href
-        const allowlist = autocaptureConfig.url_allowlist
-        if (allowlist && !allowlist.some((regex) => url.match(regex))) {
+        // if the current URL is not in the allow list, don't capture
+        if (!checkForURLMatches(autocaptureConfig.url_allowlist)) {
+            return false
+        }
+    }
+
+    if (autocaptureConfig?.url_ignorelist) {
+        // if the current URL is in the ignore list, don't capture
+        if (checkForURLMatches(autocaptureConfig.url_ignorelist)) {
             return false
         }
     }
