@@ -36,6 +36,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 
     // a whole bunch of goog-specific crawlers
     // https://developers.google.com/search/docs/advanced/crawling/overview-google-crawlers
+    'Google-HotelAdsVerifier',
     'adsbot-google',
     'apis-google',
     'duplexweb-google',

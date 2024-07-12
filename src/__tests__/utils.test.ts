@@ -122,6 +122,9 @@ describe('utils', () => {
             [
                 'Mozilla/5.0 (Linux; Android 5.0) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36 (compatible; Bytespider; spider-feedback@bytedance.com)',
             ],
+            [
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.175 Safari/537.36 (compatible; Google-HotelAdsVerifier/2.0)',
+            ],
         ])('blocks based on user agent', (botString) => {
             expect(isBlockedUA(botString, [])).toBe(true)
             expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)
