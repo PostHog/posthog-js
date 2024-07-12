@@ -53,6 +53,7 @@ export class Autocapture {
         const config = isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
         // precompile the regex
         config.url_allowlist = config.url_allowlist?.map((url) => new RegExp(url))
+        config.url_ignorelist = config.url_ignorelist?.map((url) => new RegExp(url))
         return config
     }
 

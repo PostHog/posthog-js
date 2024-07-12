@@ -1112,6 +1112,27 @@ describe('Autocapture system', () => {
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
+        it('not capture urls which match the url regex ignorelist', () => {
+            const main_el = document.createElement('some-element')
+            const button = document.createElement('a')
+            button.innerHTML = 'bla'
+            main_el.appendChild(button)
+            const e = makeMouseEvent({
+                target: main_el,
+                composedPath: () => [button, main_el],
+            })
+            const autocapture_config = {
+                url_ignorelist: ['https://posthog.com/test/*'],
+            }
+
+            window!.location = new URL('https://posthog.com/test/captured') as unknown as Location
+
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
+
+            window!.location = new URL('https://posthog.com/docs/not-captured') as unknown as Location
+            expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
+        })
+
         it('an empty url regex allowlist does not match any url', () => {
             const main_el = document.createElement('some-element')
             const button = document.createElement('a')
