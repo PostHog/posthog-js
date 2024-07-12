@@ -1104,11 +1104,11 @@ describe('Autocapture system', () => {
                 url_allowlist: ['https://posthog.com/test/*'],
             }
 
-            window!.location = new URL('https://posthog.com/test/captured') as unknown as Location
+            window!.location = new URL('https://posthog.com/test/matching') as unknown as Location
 
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
 
-            window!.location = new URL('https://posthog.com/docs/not-captured') as unknown as Location
+            window!.location = new URL('https://posthog.com/docs/not-matching') as unknown as Location
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
@@ -1125,11 +1125,11 @@ describe('Autocapture system', () => {
                 url_ignorelist: ['https://posthog.com/test/*'],
             }
 
-            window!.location = new URL('https://posthog.com/test/captured') as unknown as Location
+            window!.location = new URL('https://posthog.com/test/matching') as unknown as Location
 
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
 
-            window!.location = new URL('https://posthog.com/docs/not-captured') as unknown as Location
+            window!.location = new URL('https://posthog.com/docs/not-matching') as unknown as Location
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
         })
 
