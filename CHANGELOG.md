@@ -1,3 +1,8 @@
+## 1.146.3 - 2024-07-12
+
+- feat: add new google crawler (#1300)
+- chore: add a test (#1299)
+
 ## 1.146.2 - 2024-07-11
 
 - fix: warn when on xhr error used (#1298)
