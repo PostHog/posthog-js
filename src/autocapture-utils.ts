@@ -9,21 +9,9 @@ export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
 }
 
-/**
- * this is used by both an allowlist and an ignore list
- *
- * so the expected result can be passed in
- *
- * when being used as an allowlist, the expected result is true
- * when being used as an ignore list, the expected result is false
- *
- */
-function checkForURLMatches(urlsList: (string | RegExp)[], resultOnMatch: boolean): boolean {
+function checkForURLMatches(urlsList: (string | RegExp)[]): boolean {
     const url = window?.location.href
-    if (url && urlsList && urlsList.some((regex) => url.match(regex))) {
-        return resultOnMatch
-    }
-    return !resultOnMatch
+    return !!(url && urlsList && urlsList.some((regex) => url.match(regex)))
 }
 
 /*
@@ -218,13 +206,15 @@ export function shouldCaptureDomEvent(
     }
 
     if (autocaptureConfig?.url_allowlist) {
-        if (checkForURLMatches(autocaptureConfig.url_allowlist, true) === false) {
+        // if the current URL is not in the allow list, don't capture
+        if (!checkForURLMatches(autocaptureConfig.url_allowlist)) {
             return false
         }
     }
 
     if (autocaptureConfig?.url_ignorelist) {
-        if (checkForURLMatches(autocaptureConfig.url_ignorelist, false) === false) {
+        // if the current URL is in the ignore list, don't capture
+        if (checkForURLMatches(autocaptureConfig.url_ignorelist)) {
             return false
         }
     }
