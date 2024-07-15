@@ -8,11 +8,13 @@ import {
     SESSION_RECORDING_SAMPLE_RATE,
 } from '../../constants'
 import {
+    estimateSize,
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
     recordOptions,
     rrwebRecord,
+    splitBuffer,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
@@ -32,7 +34,7 @@ import {
     isUndefined,
 } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { document, assignableWindow, window } from '../../utils/globals'
+import { assignableWindow, document, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
@@ -69,7 +71,7 @@ const ACTIVE_SOURCES = [
  */
 type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering'
 
-interface SnapshotBuffer {
+export interface SnapshotBuffer {
     size: number
     data: any[]
     sessionId: string
@@ -90,32 +92,6 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 })
 
 const LOGGER_PREFIX = '[SessionRecording]'
-
-// taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
-function circularReferenceReplacer() {
-    const ancestors: any[] = []
-    return function (_key: string, value: any) {
-        if (isObject(value)) {
-            // `this` is the object that value is contained in,
-            // i.e., its direct parent.
-            // @ts-expect-error - TS was unhappy with `this` on the next line but the code is copied in from MDN
-            while (ancestors.length > 0 && ancestors.at(-1) !== this) {
-                ancestors.pop()
-            }
-            if (ancestors.includes(value)) {
-                return '[Circular]'
-            }
-            ancestors.push(value)
-            return value
-        } else {
-            return value
-        }
-    }
-}
-
-function estimateSize(event: eventWithTime): number {
-    return JSON.stringify(event, circularReferenceReplacer()).length
-}
 
 export class SessionRecording {
     private _endpoint: string
@@ -882,11 +858,14 @@ export class SessionRecording {
         }
 
         if (this.buffer.data.length > 0) {
-            this._captureSnapshot({
-                $snapshot_bytes: this.buffer.size,
-                $snapshot_data: this.buffer.data,
-                $session_id: this.buffer.sessionId,
-                $window_id: this.buffer.windowId,
+            const snapshotEvents = splitBuffer(this.buffer)
+            snapshotEvents.forEach((snapshotBuffer) => {
+                this._captureSnapshot({
+                    $snapshot_bytes: snapshotBuffer.size,
+                    $snapshot_data: snapshotBuffer.data,
+                    $session_id: snapshotBuffer.sessionId,
+                    $window_id: snapshotBuffer.windowId,
+                })
             })
         }
 

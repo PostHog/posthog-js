@@ -12,6 +12,33 @@ import type {
 import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, Mirror, SlimDOMOptions } from 'rrweb-snapshot'
 
 import { isObject } from '../../utils/type-utils'
+import { SnapshotBuffer } from './sessionrecording'
+
+// taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
+function circularReferenceReplacer() {
+    const ancestors: any[] = []
+    return function (_key: string, value: any) {
+        if (isObject(value)) {
+            // `this` is the object that value is contained in,
+            // i.e., its direct parent.
+            // @ts-expect-error - TS was unhappy with `this` on the next line but the code is copied in from MDN
+            while (ancestors.length > 0 && ancestors.at(-1) !== this) {
+                ancestors.pop()
+            }
+            if (ancestors.includes(value)) {
+                return '[Circular]'
+            }
+            ancestors.push(value)
+            return value
+        } else {
+            return value
+        }
+    }
+}
+
+export function estimateSize(sizeable: unknown): number {
+    return JSON.stringify(sizeable, circularReferenceReplacer()).length
+}
 
 export const replacementImageURI =
     'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSJibGFjayIvPgo8cGF0aCBkPSJNOCAwSDE2TDAgMTZWOEw4IDBaIiBmaWxsPSIjMkQyRDJEIi8+CjxwYXRoIGQ9Ik0xNiA4VjE2SDhMMTYgOFoiIGZpbGw9IiMyRDJEMkQiLz4KPC9zdmc+Cg=='
@@ -134,4 +161,32 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
         return _event
     }
     return _event
+}
+
+export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle room)
+
+// recursively splits large buffers into smaller ones
+// uses a pretty high size limit to avoid splitting too much
+export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
+    if (buffer.size >= sizeLimit && buffer.data.length > 1) {
+        const half = Math.floor(buffer.data.length / 2)
+        const firstHalf = buffer.data.slice(0, half)
+        const secondHalf = buffer.data.slice(half)
+        return [
+            splitBuffer({
+                size: estimateSize(firstHalf),
+                data: firstHalf,
+                sessionId: buffer.sessionId,
+                windowId: buffer.windowId,
+            }),
+            splitBuffer({
+                size: estimateSize(secondHalf),
+                data: secondHalf,
+                sessionId: buffer.sessionId,
+                windowId: buffer.windowId,
+            }),
+        ].flatMap((x) => x)
+    } else {
+        return [buffer]
+    }
 }
