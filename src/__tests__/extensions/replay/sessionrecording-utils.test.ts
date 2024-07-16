@@ -5,6 +5,9 @@ import {
     CONSOLE_LOG_PLUGIN_NAME,
     PLUGIN_EVENT_TYPE,
     FULL_SNAPSHOT_EVENT_TYPE,
+    splitBuffer,
+    SEVEN_MEGABYTES,
+    estimateSize,
 } from '../../../extensions/replay/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
 import { eventWithTime } from '@rrweb/types'
@@ -237,6 +240,97 @@ describe(`SessionRecording utility functions`, () => {
                     },
                 },
             })
+        })
+    })
+
+    describe('splitBuffer', () => {
+        it('should return the same buffer if size is less than SEVEN_MEGABYTES', () => {
+            const buffer = {
+                size: 5 * 1024 * 1024,
+                data: new Array(100).fill(0),
+                sessionId: 'session1',
+                windowId: 'window1',
+            }
+
+            const result = splitBuffer(buffer)
+            expect(result).toEqual([buffer])
+        })
+
+        it('should split the buffer into two halves if size is greater than or equal to SEVEN_MEGABYTES', () => {
+            const data = new Array(100).fill(0)
+            const expectedSize = estimateSize(new Array(50).fill(0))
+            const buffer = {
+                size: estimateSize(data),
+                data: data,
+                sessionId: 'session1',
+                windowId: 'window1',
+            }
+
+            // size limit just below the size of the buffer
+            const result = splitBuffer(buffer, 200)
+
+            expect(result).toHaveLength(2)
+            expect(result[0].data).toEqual(buffer.data.slice(0, 50))
+            expect(result[0].size).toEqual(expectedSize)
+            expect(result[1].data).toEqual(buffer.data.slice(50))
+            expect(result[1].size).toEqual(expectedSize)
+        })
+
+        it('should recursively split the buffer until each part is smaller than SEVEN_MEGABYTES', () => {
+            const largeDataArray = new Array(100).fill('a'.repeat(1024 * 1024))
+            const largeDataSize = estimateSize(largeDataArray) // >100mb
+            const buffer = {
+                size: largeDataSize,
+                data: largeDataArray,
+                sessionId: 'session1',
+                windowId: 'window1',
+            }
+
+            const result = splitBuffer(buffer)
+
+            expect(result.length).toBe(20)
+            let partTotal = 0
+            let sentArray: any[] = []
+            result.forEach((part) => {
+                expect(part.size).toBeLessThan(SEVEN_MEGABYTES)
+                sentArray = sentArray.concat(part.data)
+                partTotal += part.size
+            })
+
+            // it's a bit bigger because we have extra square brackets and commas when stringified
+            expect(partTotal).toBeGreaterThan(largeDataSize)
+            // but not much bigger!
+            expect(partTotal).toBeLessThan(largeDataSize * 1.001)
+            // we sent the same data overall
+            expect(JSON.stringify(sentArray)).toEqual(JSON.stringify(largeDataArray))
+        })
+
+        it('should handle buffer with size exactly SEVEN_MEGABYTES', () => {
+            const buffer = {
+                size: SEVEN_MEGABYTES,
+                data: new Array(100).fill(0),
+                sessionId: 'session1',
+                windowId: 'window1',
+            }
+
+            const result = splitBuffer(buffer)
+
+            expect(result).toHaveLength(2)
+            expect(result[0].data).toEqual(buffer.data.slice(0, 50))
+            expect(result[1].data).toEqual(buffer.data.slice(50))
+        })
+
+        it('should not split buffer if it has only one element', () => {
+            const buffer = {
+                size: 10 * 1024 * 1024,
+                data: [0],
+                sessionId: 'session1',
+                windowId: 'window1',
+            }
+
+            const result = splitBuffer(buffer)
+
+            expect(result).toEqual([buffer])
         })
     })
 })
