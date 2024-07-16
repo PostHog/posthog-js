@@ -12,7 +12,7 @@ import {
 } from '@rrweb/types'
 import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, Mirror, SlimDOMOptions } from 'rrweb-snapshot'
 
-import { isObject } from '../../utils/type-utils'
+import { isNullish, isObject } from '../../utils/type-utils'
 import { SnapshotBuffer } from './sessionrecording'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
@@ -192,13 +192,20 @@ function sliceBuffer(buffer: SnapshotBuffer, sizeLimit: number): SnapshotBuffer[
 }
 
 function hasIncrementalContent(buffer: SnapshotBuffer): boolean {
-    return buffer.data.some(
-        (item) =>
-            item.data?.adds?.length ||
-            item.data?.removes?.length ||
-            item.data?.texts?.length ||
-            item.data?.attributes?.length
-    )
+    return buffer.data.some((item) => {
+        const mutationData = item.data as mutationData
+        return (
+            !isNullish(mutationData) &&
+            (mutationData?.adds?.length ||
+                mutationData?.removes?.length ||
+                mutationData?.texts?.length ||
+                mutationData?.attributes?.length)
+        )
+    })
+}
+
+function countChildren(xs: any[][]): number {
+    return xs.reduce((acc, x) => acc + x.length, 0)
 }
 
 // uses a pretty high size limit to avoid splitting too much
@@ -222,6 +229,15 @@ export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_ME
             const adds = sliceList(bufferedMutations.adds, sizeLimit)
             const texts = sliceList(bufferedMutations.texts, sizeLimit)
             const attributes = sliceList(bufferedMutations.attributes, sizeLimit)
+
+            // the incoming data has a single timestamp, so we need to adjust the timestamps of the split data,
+            // so we count how many children we have in total, and then we adjust the timestamp
+            // so that if there are 10 the first item is 9 milliseconds before the original timestamp
+            // and the final item has the original timestamp
+            const alteration =
+                countChildren(removes) + countChildren(adds) + countChildren(texts) + countChildren(attributes)
+            let timestampWiggleMarker = 1
+
             return [
                 ...removes.map((remove) => ({
                     size: estimateSize(remove),
@@ -235,6 +251,7 @@ export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_ME
                                 attributes: [],
                                 removes: remove,
                             },
+                            timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
                         },
                     ],
                     sessionId: buffer.sessionId,
@@ -252,6 +269,7 @@ export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_ME
                                 attributes: [],
                                 removes: [],
                             },
+                            timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
                         },
                     ],
                     sessionId: buffer.sessionId,
@@ -269,6 +287,7 @@ export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_ME
                                 attributes: [],
                                 removes: [],
                             },
+                            timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
                         },
                     ],
                     sessionId: buffer.sessionId,
@@ -286,6 +305,7 @@ export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_ME
                                 attributes: attribute,
                                 removes: [],
                             },
+                            timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
                         },
                     ],
                     sessionId: buffer.sessionId,

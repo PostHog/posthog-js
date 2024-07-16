@@ -73,7 +73,7 @@ type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering'
 
 export interface SnapshotBuffer {
     size: number
-    data: any[]
+    data: eventWithTime[]
     sessionId: string
     windowId: string
 }

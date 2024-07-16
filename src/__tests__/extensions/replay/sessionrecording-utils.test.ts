@@ -249,15 +249,16 @@ describe(`SessionRecording utility functions`, () => {
 
     describe('splitBuffer', () => {
         describe('when many items in the buffer', () => {
-            it('should return the same buffer if size is less than SEVEN_MEGABYTES', () => {
+            it('should return the same buffer if size is less than the limit', () => {
+                const theData = new Array(100).fill(0)
                 const buffer = {
-                    size: 5 * 1024 * 1024,
-                    data: new Array(100).fill(0),
+                    size: estimateSize(theData),
+                    data: theData,
                     sessionId: 'session1',
                     windowId: 'window1',
                 }
 
-                const result = splitBuffer(buffer)
+                const result = splitBuffer(buffer, estimateSize(theData) + 1)
                 expect(result).toEqual([buffer])
             })
 
@@ -353,8 +354,9 @@ describe(`SessionRecording utility functions`, () => {
             })
 
             it('should split incremental adds', () => {
-                const incrementalSnapshot: incrementalSnapshotEvent = {
+                const incrementalSnapshot: eventWithTime = {
                     type: 3,
+                    timestamp: 12345,
                     data: {
                         source: IncrementalSource.Mutation,
                         adds: [
@@ -389,6 +391,7 @@ describe(`SessionRecording utility functions`, () => {
                     size: 23,
                     data: [
                         {
+                            timestamp: 12343,
                             type: 3,
                             data: {
                                 // removes are processed first by the replayer, so we need to be sure we're emitting them first
@@ -410,6 +413,7 @@ describe(`SessionRecording utility functions`, () => {
                         size: 1048616,
                         data: [
                             {
+                                timestamp: 12344,
                                 type: 3,
                                 data: {
                                     source: 0,
@@ -433,6 +437,7 @@ describe(`SessionRecording utility functions`, () => {
                     size: 1048616,
                     data: [
                         {
+                            timestamp: 12345,
                             type: 3,
                             data: {
                                 source: 0,
