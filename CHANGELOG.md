@@ -1,3 +1,7 @@
+## 1.148.0 - 2024-07-16
+
+- feat: split large replay buffers before sending (#1305)
+
 ## 1.147.0 - 2024-07-12
 
 - feat: add url_ignorelist for autocapture config (#1302)
