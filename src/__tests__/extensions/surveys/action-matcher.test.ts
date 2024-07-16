@@ -1,10 +1,10 @@
 /// <reference lib="dom" />
 
-import { ActionType, ActionStepStringMatching } from '../../posthog-surveys-types'
-import { PostHogPersistence } from '../../posthog-persistence'
-import { PostHog } from '../../posthog-core'
-import { CaptureResult, PostHogConfig } from '../../types'
-import { ActionMatcher } from './action-matcher'
+import { ActionType, ActionStepStringMatching } from '../../../posthog-surveys-types'
+import { PostHogPersistence } from '../../../posthog-persistence'
+import { PostHog } from '../../../posthog-core'
+import { CaptureResult, PostHogConfig } from '../../../types'
+import { ActionMatcher } from '../../../extensions/surveys/action-matcher'
 
 describe('action-matcher', () => {
     let config: PostHogConfig
