@@ -1,10 +1,11 @@
-import type {
+import {
     blockClass,
     eventWithTime,
     hooksParam,
     KeepIframeSrcFn,
     listenerHandler,
     maskTextClass,
+    mutationData,
     pluginEvent,
     RecordPlugin,
     SamplingStrategy,
@@ -165,27 +166,134 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
 
 export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle room)
 
-// recursively splits large buffers into smaller ones
+function sliceList(list: any[], sizeLimit: number): any[][] {
+    const size = estimateSize(list)
+    if (size < sizeLimit) {
+        return [list]
+    } else {
+        const times = Math.ceil(size / sizeLimit)
+        const chunkLength = Math.ceil(list.length / times)
+        const chunks = []
+        for (let i = 0; i < list.length; i += chunkLength) {
+            chunks.push(list.slice(i, i + chunkLength))
+        }
+        return chunks
+    }
+}
+
+function sliceBuffer(buffer: SnapshotBuffer, sizeLimit: number): SnapshotBuffer[] {
+    const bufferChunks = sliceList(buffer.data, sizeLimit)
+    return bufferChunks.map((data) => ({
+        size: estimateSize(data),
+        data,
+        sessionId: buffer.sessionId,
+        windowId: buffer.windowId,
+    }))
+}
+
+function hasIncrementalContent(buffer: SnapshotBuffer): boolean {
+    return buffer.data.some(
+        (item) =>
+            item.data?.adds?.length ||
+            item.data?.removes?.length ||
+            item.data?.texts?.length ||
+            item.data?.attributes?.length
+    )
+}
+
 // uses a pretty high size limit to avoid splitting too much
 export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
     if (buffer.size >= sizeLimit && buffer.data.length > 1) {
-        const half = Math.floor(buffer.data.length / 2)
-        const firstHalf = buffer.data.slice(0, half)
-        const secondHalf = buffer.data.slice(half)
-        return [
-            splitBuffer({
-                size: estimateSize(firstHalf),
-                data: firstHalf,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-            splitBuffer({
-                size: estimateSize(secondHalf),
-                data: secondHalf,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-        ].flatMap((x) => x)
+        return sliceBuffer(buffer, sizeLimit)
+    } else if (buffer.size >= sizeLimit && buffer.data.length === 1) {
+        // we can maybe split up incremental snapshots, or directly edit data image urls here
+        const bufferedData = buffer.data[0]
+        if (
+            bufferedData.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
+            bufferedData.data.source === MUTATION_SOURCE_TYPE
+        ) {
+            // so at this point we know that the buffer is too large, and we have a single incremental snapshot
+            // it may be that a single item in the buffer is too large
+            // or that there are many small items of one or more types that end up being too large
+            // rrweb processes removes, then adds, then texts, the attributes,
+            // so we can split them in that order
+            const bufferedMutations = bufferedData.data as mutationData
+            const removes = sliceList(bufferedMutations.removes, sizeLimit)
+            const adds = sliceList(bufferedMutations.adds, sizeLimit)
+            const texts = sliceList(bufferedMutations.texts, sizeLimit)
+            const attributes = sliceList(bufferedMutations.attributes, sizeLimit)
+            return [
+                ...removes.map((remove) => ({
+                    size: estimateSize(remove),
+                    data: [
+                        {
+                            type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                            data: {
+                                source: MUTATION_SOURCE_TYPE,
+                                adds: [],
+                                texts: [],
+                                attributes: [],
+                                removes: remove,
+                            },
+                        },
+                    ],
+                    sessionId: buffer.sessionId,
+                    windowId: buffer.windowId,
+                })),
+                ...adds.map((add) => ({
+                    size: estimateSize(add),
+                    data: [
+                        {
+                            type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                            data: {
+                                source: MUTATION_SOURCE_TYPE,
+                                adds: add,
+                                texts: [],
+                                attributes: [],
+                                removes: [],
+                            },
+                        },
+                    ],
+                    sessionId: buffer.sessionId,
+                    windowId: buffer.windowId,
+                })),
+                ...texts.map((text) => ({
+                    size: estimateSize(text),
+                    data: [
+                        {
+                            type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                            data: {
+                                source: MUTATION_SOURCE_TYPE,
+                                adds: [],
+                                texts: text,
+                                attributes: [],
+                                removes: [],
+                            },
+                        },
+                    ],
+                    sessionId: buffer.sessionId,
+                    windowId: buffer.windowId,
+                })),
+                ...attributes.map((attribute) => ({
+                    size: estimateSize(attribute),
+                    data: [
+                        {
+                            type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                            data: {
+                                source: MUTATION_SOURCE_TYPE,
+                                adds: [],
+                                texts: [],
+                                attributes: attribute,
+                                removes: [],
+                            },
+                        },
+                    ],
+                    sessionId: buffer.sessionId,
+                    windowId: buffer.windowId,
+                })),
+            ].filter(hasIncrementalContent)
+        }
+        return [buffer]
     } else {
         return [buffer]
     }
