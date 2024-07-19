@@ -1,13 +1,13 @@
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
 import { logger } from '../../utils/logger'
-import { isBoolean, isNullish, isObject, isUndefined } from '../../utils/type-utils'
+import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
 export const FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 8000
-export const ONE_HOUR_IN_MILLIS = 60 * 60 * 1000
+export const FIFTEEN_MINUTES_IN_MILLIS = 15 * 60 * 1000
 const LOGGER_PREFIX = '[Web Vitals]'
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
@@ -23,11 +23,11 @@ export class WebVitalsAutocapture {
         this.startIfEnabled()
     }
 
-    public get _applyMaxLimit(): boolean {
-        return !(
-            isObject(this.instance.config.capture_performance) &&
-            this.instance.config.capture_performance.__apply_web_vitals_max_limit === false
-        )
+    public get _maxAllowedValue(): number {
+        return isObject(this.instance.config.capture_performance) &&
+            isNumber(this.instance.config.capture_performance.__web_vitals_max_value)
+            ? this.instance.config.capture_performance.__web_vitals_max_value
+            : FIFTEEN_MINUTES_IN_MILLIS
     }
 
     public get isEnabled(): boolean {
@@ -126,8 +126,8 @@ export class WebVitalsAutocapture {
 
         // we observe some very large values sometimes, we'll ignore them
         // since the likelihood of LCP > 1 hour being correct is very low
-        if (this._applyMaxLimit && metric.value >= ONE_HOUR_IN_MILLIS) {
-            logger.error(LOGGER_PREFIX + 'Ignoring metric with value >= 1 hour', metric)
+        if (this._maxAllowedValue && metric.value >= this._maxAllowedValue) {
+            logger.error(LOGGER_PREFIX + 'Ignoring metric with value >= ' + this._maxAllowedValue, metric)
             return
         }
 

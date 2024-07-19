@@ -3,7 +3,7 @@ import { uuidv7 } from '../../uuidv7'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
 import { assignableWindow } from '../../utils/globals'
-import { FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, ONE_HOUR_IN_MILLIS } from '../../extensions/web-vitals'
+import { FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
 jest.mock('../../utils/logger')
 jest.useFakeTimers()
@@ -125,7 +125,7 @@ describe('web vitals', () => {
         })
 
         it('should ignore a ridiculous value', async () => {
-            randomlyAddAMetric('LCP', ONE_HOUR_IN_MILLIS, { extra: 'property' })
+            randomlyAddAMetric('LCP', FIFTEEN_MINUTES_IN_MILLIS, { extra: 'property' })
 
             expect(onCapture).toBeCalledTimes(0)
 
@@ -135,8 +135,8 @@ describe('web vitals', () => {
         })
 
         it('can be configured not to ignore a ridiculous value', async () => {
-            posthog.config.capture_performance = { __apply_web_vitals_max_limit: false }
-            randomlyAddAMetric('LCP', ONE_HOUR_IN_MILLIS, { extra: 'property' })
+            posthog.config.capture_performance = { __web_vitals_max_value: 0 }
+            randomlyAddAMetric('LCP', FIFTEEN_MINUTES_IN_MILLIS, { extra: 'property' })
 
             expect(onCapture).toBeCalledTimes(0)
 

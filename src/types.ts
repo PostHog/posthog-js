@@ -101,9 +101,10 @@ export interface PerformanceCaptureConfig {
     /**
      * We observe very large values reported by the Chrome web vitals library
      * These outliers are likely not real, useful values, and we exclude them
-     * You can set this to false in order to include them, NB this is not recommended
+     * You can set this to 0 in order to include all values, NB this is not recommended
+     * if not set this defaults to 15 minutes
      */
-    __apply_web_vitals_max_limit?: boolean
+    __web_vitals_max_value?: number
 }
 
 export interface HeatmapConfig {
