@@ -98,6 +98,12 @@ export interface PerformanceCaptureConfig {
     network_timing?: boolean
     /** works as a passenger event to use chrome's web vitals library to wrap fetch and capture web vitals */
     web_vitals?: boolean
+    /**
+     * We observe very large values reported by the Chrome web vitals library
+     * These outliers are likely not real, useful values, and we exclude them
+     * You can set this to false in order to include them, NB this is not recommended
+     */
+    __apply_web_vitals_max_limit?: boolean
 }
 
 export interface HeatmapConfig {

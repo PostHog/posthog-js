@@ -7,6 +7,7 @@ import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
 export const FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 8000
+export const ONE_HOUR_IN_MILLIS = 60 * 60 * 1000
 const LOGGER_PREFIX = '[Web Vitals]'
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
@@ -20,6 +21,13 @@ export class WebVitalsAutocapture {
     constructor(private readonly instance: PostHog) {
         this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
         this.startIfEnabled()
+    }
+
+    public get _applyMaxLimit(): boolean {
+        return !(
+            isObject(this.instance.config.capture_performance) &&
+            this.instance.config.capture_performance.__apply_web_vitals_max_limit === false
+        )
     }
 
     public get isEnabled(): boolean {
@@ -116,6 +124,13 @@ export class WebVitalsAutocapture {
             return
         }
 
+        // we observe some very large values sometimes, we'll ignore them
+        // since the likelihood of LCP > 1 hour being correct is very low
+        if (this._applyMaxLimit && metric.value >= ONE_HOUR_IN_MILLIS) {
+            logger.error(LOGGER_PREFIX + 'Ignoring metric with value > 1 hour', metric)
+            return
+        }
+
         const urlHasChanged = this.buffer.url !== $currentUrl
 
         if (urlHasChanged) {
@@ -151,6 +166,11 @@ export class WebVitalsAutocapture {
 
     private _startCapturing = () => {
         const { onLCP, onCLS, onFCP, onINP } = assignableWindow.postHogWebVitalsCallbacks
+
+        if (!onLCP || !onCLS || !onFCP || !onINP) {
+            logger.error(LOGGER_PREFIX + 'web vitals callbacks not loaded - not starting')
+            return
+        }
 
         // register performance observers
         onLCP(this._addToBuffer)
