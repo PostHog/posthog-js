@@ -7,7 +7,9 @@ import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
 export const FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 8000
-export const FIFTEEN_MINUTES_IN_MILLIS = 15 * 60 * 1000
+const ONE_MINUTE_IN_MILLIS = 60 * 1000
+export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
+
 const LOGGER_PREFIX = '[Web Vitals]'
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
@@ -24,10 +26,14 @@ export class WebVitalsAutocapture {
     }
 
     public get _maxAllowedValue(): number {
-        return isObject(this.instance.config.capture_performance) &&
+        const configured =
+            isObject(this.instance.config.capture_performance) &&
             isNumber(this.instance.config.capture_performance.__web_vitals_max_value)
-            ? this.instance.config.capture_performance.__web_vitals_max_value
-            : FIFTEEN_MINUTES_IN_MILLIS
+                ? this.instance.config.capture_performance.__web_vitals_max_value
+                : FIFTEEN_MINUTES_IN_MILLIS
+        // you can set to 0 to disable the check or any value over ten seconds
+        // 1 milli to 1 minute will be set to 15 minutes, cos that would be a silly low maximum
+        return 0 < configured && configured <= ONE_MINUTE_IN_MILLIS ? FIFTEEN_MINUTES_IN_MILLIS : configured
     }
 
     public get isEnabled(): boolean {
