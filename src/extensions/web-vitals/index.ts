@@ -127,7 +127,7 @@ export class WebVitalsAutocapture {
         // we observe some very large values sometimes, we'll ignore them
         // since the likelihood of LCP > 1 hour being correct is very low
         if (this._applyMaxLimit && metric.value >= ONE_HOUR_IN_MILLIS) {
-            logger.error(LOGGER_PREFIX + 'Ignoring metric with value > 1 hour', metric)
+            logger.error(LOGGER_PREFIX + 'Ignoring metric with value >= 1 hour', metric)
             return
         }
 
