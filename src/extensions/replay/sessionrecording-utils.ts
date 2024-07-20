@@ -275,7 +275,8 @@ export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_ME
         // it may be because one or more incremental snapshots is very large
         const splitData = buffer.data.map((bd) => splitIncrementalData(bd, sizeLimit)).flat()
         const splitBuffer: SnapshotBuffer = {
-            size: estimateSize(splitData),
+            // NB this is no longer totally accurate but will be replaced in sliceBuffer below
+            size: buffer.size,
             data: splitData,
             sessionId: buffer.sessionId,
             windowId: buffer.windowId,
