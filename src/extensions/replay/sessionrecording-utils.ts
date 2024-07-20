@@ -5,6 +5,7 @@ import {
     KeepIframeSrcFn,
     listenerHandler,
     maskTextClass,
+    mutationCallbackParam,
     mutationData,
     pluginEvent,
     RecordPlugin,
@@ -206,6 +207,21 @@ function countChildren(xs: any[][]): number {
     return xs.reduce((acc, x) => acc + x.length, 0)
 }
 
+function incrementalSnapshotFrom(mutationData: Partial<mutationCallbackParam>, timestamp: number) {
+    return {
+        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+        data: {
+            source: MUTATION_SOURCE_TYPE,
+            removes: [],
+            adds: [],
+            texts: [],
+            attributes: [],
+            ...mutationData,
+        },
+        timestamp: timestamp,
+    }
+}
+
 function splitIncrementalData(bufferedData: eventWithTime, sizeLimit: number): eventWithTime[] {
     // NB: this isn't checking the size so will _always_ split incremental snapshots
     if (bufferedData.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && bufferedData.data.source === MUTATION_SOURCE_TYPE) {
@@ -229,50 +245,24 @@ function splitIncrementalData(bufferedData: eventWithTime, sizeLimit: number): e
         let timestampWiggleMarker = 1
 
         return [
-            ...removes.map((remove) => ({
-                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                data: {
-                    source: MUTATION_SOURCE_TYPE,
-                    removes: remove,
-                    adds: [],
-                    texts: [],
-                    attributes: [],
-                },
-                timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
-            })),
-            ...adds.map((add) => ({
-                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                data: {
-                    source: MUTATION_SOURCE_TYPE,
-                    removes: [],
-                    adds: add,
-                    texts: [],
-                    attributes: [],
-                },
-                timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
-            })),
-            ...texts.map((text) => ({
-                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                data: {
-                    source: MUTATION_SOURCE_TYPE,
-                    removes: [],
-                    adds: [],
-                    texts: text,
-                    attributes: [],
-                },
-                timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
-            })),
-            ...attributes.map((attribute) => ({
-                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                data: {
-                    source: MUTATION_SOURCE_TYPE,
-                    removes: [],
-                    adds: [],
-                    texts: [],
-                    attributes: attribute,
-                },
-                timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
-            })),
+            ...removes.map((remove) =>
+                incrementalSnapshotFrom(
+                    { removes: remove },
+                    bufferedData.timestamp - alteration + timestampWiggleMarker++
+                )
+            ),
+            ...adds.map((add) =>
+                incrementalSnapshotFrom({ adds: add }, bufferedData.timestamp - alteration + timestampWiggleMarker++)
+            ),
+            ...texts.map((text) =>
+                incrementalSnapshotFrom({ texts: text }, bufferedData.timestamp - alteration + timestampWiggleMarker++)
+            ),
+            ...attributes.map((attribute) =>
+                incrementalSnapshotFrom(
+                    { attributes: attribute },
+                    bufferedData.timestamp - alteration + timestampWiggleMarker++
+                )
+            ),
         ].filter(hasIncrementalContent)
     } else {
         return [bufferedData]
