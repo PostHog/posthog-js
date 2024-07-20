@@ -12,7 +12,7 @@ import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
 import { logger } from './utils/logger'
-import { canActivateRepeatedly } from './extensions/surveys/surveys-utils'
+import { isNullish } from './utils/type-utils'
 
 const LOGGER_PREFIX = '[Surveys]'
 
@@ -59,6 +59,7 @@ export class PostHogSurveys {
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
         this._surveyEventReceiver = null
+        this.loadIfEnabled()
     }
 
     afterDecideResponse(response: DecideResponse) {
@@ -178,7 +179,7 @@ export class PostHogSurveys {
                 const eventBasedTargetingFlagCheck =
                     hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
 
-                const overrideInternalTargetingFlagCheck = canActivateRepeatedly(survey)
+                const overrideInternalTargetingFlagCheck = this._canActivateRepeatedly(survey)
                 const internalTargetingFlagCheck =
                     survey.internal_targeting_flag_key && !overrideInternalTargetingFlagCheck
                         ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
@@ -260,5 +261,13 @@ export class PostHogSurveys {
 
         logger.warn(LOGGER_PREFIX, 'Falling back to next question index due to unexpected branching type')
         return nextQuestionIndex
+    }
+
+    // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
+    private _canActivateRepeatedly(survey: Survey) {
+        if (isNullish(assignableWindow.__PosthogExtensions__.canActivateRepeatedly)) {
+            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+        }
+        return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 }
