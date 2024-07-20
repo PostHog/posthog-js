@@ -5,7 +5,6 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     PLUGIN_EVENT_TYPE,
     replacementImageURI,
-    SEVEN_MEGABYTES,
     splitBuffer,
     truncateLargeConsoleLogs,
 } from '../../../extensions/replay/sessionrecording-utils'
@@ -15,6 +14,7 @@ import { serializedNodeWithId } from 'rrweb-snapshot'
 import { SnapshotBuffer } from '../../../extensions/replay/sessionrecording'
 
 const ONE_MEGABYTE = 1024 * 1024
+const SEVEN_MEGABYTES = ONE_MEGABYTE * 7 * 0.9 // ~7mb (with some wiggle room)
 const ONE_MEGABYTE_OF_DATA = 'a'.repeat(1024 * 1024)
 
 describe(`SessionRecording utility functions`, () => {
@@ -293,7 +293,7 @@ describe(`SessionRecording utility functions`, () => {
                     windowId: 'window1',
                 }
 
-                const result = splitBuffer(buffer)
+                const result = splitBuffer(buffer, SEVEN_MEGABYTES)
 
                 expect(result.length).toBe(15)
                 let partTotal = 0

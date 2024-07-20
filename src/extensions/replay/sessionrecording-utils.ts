@@ -165,8 +165,6 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
     return _event
 }
 
-export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle room)
-
 function sliceList(list: any[], sizeLimit: number): any[][] {
     const size = estimateSize(list)
     if (size < sizeLimit) {
@@ -270,7 +268,7 @@ function splitIncrementalData(bufferedData: eventWithTime, sizeLimit: number): e
 }
 
 // uses a pretty high size limit to avoid splitting too much
-export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
+export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = MAX_MESSAGE_SIZE): SnapshotBuffer[] {
     if (buffer.size >= sizeLimit) {
         // it may be because one or more incremental snapshots is very large
         const splitData = buffer.data.map((bd) => splitIncrementalData(bd, sizeLimit)).flat()
