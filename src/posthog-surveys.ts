@@ -14,6 +14,8 @@ import { DecideResponse } from './types'
 import { logger } from './utils/logger'
 import { canActivateRepeatedly } from './extensions/surveys/surveys-utils'
 
+const LOGGER_PREFIX = '[Surveys]'
+
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
         !!window && window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
@@ -50,12 +52,10 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
 }
 
 export class PostHogSurveys {
-    instance: PostHog
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
 
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
         this._surveyEventReceiver = null
@@ -75,7 +75,7 @@ export class PostHogSurveys {
             }
             this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
                 if (err) {
-                    return logger.error(`Could not load surveys script`, err)
+                    return logger.error(LOGGER_PREFIX, 'Could not load surveys script', err)
                 }
 
                 assignableWindow.extendPostHogWithSurveys(this.instance)
@@ -258,7 +258,7 @@ export class PostHogSurveys {
             return nextQuestionIndex
         }
 
-        console.warn('Falling back to next question index due to unexpected branching type') // eslint-disable-line no-console
+        logger.warn(LOGGER_PREFIX, 'Falling back to next question index due to unexpected branching type')
         return nextQuestionIndex
     }
 }
