@@ -191,129 +191,107 @@ function sliceBuffer(buffer: SnapshotBuffer, sizeLimit: number): SnapshotBuffer[
     }))
 }
 
-function hasIncrementalContent(buffer: SnapshotBuffer): boolean {
-    return buffer.data.some((item) => {
-        const mutationData = item.data as mutationData
-        return (
-            !isNullish(mutationData) &&
-            (mutationData?.adds?.length ||
-                mutationData?.removes?.length ||
-                mutationData?.texts?.length ||
-                mutationData?.attributes?.length)
-        )
-    })
+function hasIncrementalContent(e: eventWithTime): boolean {
+    const mutationData = e.data as mutationData
+    return (
+        !isNullish(mutationData) &&
+        (!!mutationData?.adds?.length ||
+            !!mutationData?.removes?.length ||
+            !!mutationData?.texts?.length ||
+            !!mutationData?.attributes?.length)
+    )
 }
 
 function countChildren(xs: any[][]): number {
     return xs.reduce((acc, x) => acc + x.length, 0)
 }
 
+function splitIncrementalData(bufferedData: eventWithTime, sizeLimit: number): eventWithTime[] {
+    // NB: this isn't checking the size so will _always_ split incremental snapshots
+    if (bufferedData.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && bufferedData.data.source === MUTATION_SOURCE_TYPE) {
+        // so at this point we know that the buffer is too large, and we have a single incremental snapshot
+        // it may be that a single item in the buffer is too large
+        // or that there are many small items of one or more types that end up being too large
+        // rrweb processes removes, then adds, then texts, the attributes,
+        // so we can split them in that order
+        const bufferedMutations = bufferedData.data as mutationData
+        const removes = sliceList(bufferedMutations.removes || [], sizeLimit)
+        const adds = sliceList(bufferedMutations.adds || [], sizeLimit)
+        const texts = sliceList(bufferedMutations.texts || [], sizeLimit)
+        const attributes = sliceList(bufferedMutations.attributes || [], sizeLimit)
+
+        // the incoming data has a single timestamp, so we need to adjust the timestamps of the split data,
+        // so we count how many children we have in total, and then we adjust the timestamp
+        // so that if there are 10 the first item is 9 milliseconds before the original timestamp
+        // and the final item has the original timestamp
+        const alteration =
+            countChildren(removes) + countChildren(adds) + countChildren(texts) + countChildren(attributes)
+        let timestampWiggleMarker = 1
+
+        return [
+            ...removes.map((remove) => ({
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: MUTATION_SOURCE_TYPE,
+                    adds: [],
+                    texts: [],
+                    attributes: [],
+                    removes: remove,
+                },
+                timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
+            })),
+            ...adds.map((add) => ({
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: MUTATION_SOURCE_TYPE,
+                    adds: add,
+                    texts: [],
+                    attributes: [],
+                    removes: [],
+                },
+                timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
+            })),
+            ...texts.map((text) => ({
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: MUTATION_SOURCE_TYPE,
+                    adds: [],
+                    texts: text,
+                    attributes: [],
+                    removes: [],
+                },
+                timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
+            })),
+            ...attributes.map((attribute) => ({
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: MUTATION_SOURCE_TYPE,
+                    adds: [],
+                    texts: [],
+                    attributes: attribute,
+                    removes: [],
+                },
+                timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
+            })),
+        ].filter(hasIncrementalContent)
+    } else {
+        return [bufferedData]
+    }
+}
+
 // uses a pretty high size limit to avoid splitting too much
 export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
-    if (buffer.size >= sizeLimit && buffer.data.length > 1) {
-        return sliceBuffer(buffer, sizeLimit)
-    } else if (buffer.size >= sizeLimit && buffer.data.length === 1) {
-        // we can maybe split up incremental snapshots, or directly edit data image urls here
-        const bufferedData = buffer.data[0]
-        if (
-            bufferedData.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
-            bufferedData.data.source === MUTATION_SOURCE_TYPE
-        ) {
-            // so at this point we know that the buffer is too large, and we have a single incremental snapshot
-            // it may be that a single item in the buffer is too large
-            // or that there are many small items of one or more types that end up being too large
-            // rrweb processes removes, then adds, then texts, the attributes,
-            // so we can split them in that order
-            const bufferedMutations = bufferedData.data as mutationData
-            const removes = sliceList(bufferedMutations.removes, sizeLimit)
-            const adds = sliceList(bufferedMutations.adds, sizeLimit)
-            const texts = sliceList(bufferedMutations.texts, sizeLimit)
-            const attributes = sliceList(bufferedMutations.attributes, sizeLimit)
-
-            // the incoming data has a single timestamp, so we need to adjust the timestamps of the split data,
-            // so we count how many children we have in total, and then we adjust the timestamp
-            // so that if there are 10 the first item is 9 milliseconds before the original timestamp
-            // and the final item has the original timestamp
-            const alteration =
-                countChildren(removes) + countChildren(adds) + countChildren(texts) + countChildren(attributes)
-            let timestampWiggleMarker = 1
-
-            return [
-                ...removes.map((remove) => ({
-                    size: estimateSize(remove),
-                    data: [
-                        {
-                            type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                            data: {
-                                source: MUTATION_SOURCE_TYPE,
-                                adds: [],
-                                texts: [],
-                                attributes: [],
-                                removes: remove,
-                            },
-                            timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
-                        },
-                    ],
-                    sessionId: buffer.sessionId,
-                    windowId: buffer.windowId,
-                })),
-                ...adds.map((add) => ({
-                    size: estimateSize(add),
-                    data: [
-                        {
-                            type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                            data: {
-                                source: MUTATION_SOURCE_TYPE,
-                                adds: add,
-                                texts: [],
-                                attributes: [],
-                                removes: [],
-                            },
-                            timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
-                        },
-                    ],
-                    sessionId: buffer.sessionId,
-                    windowId: buffer.windowId,
-                })),
-                ...texts.map((text) => ({
-                    size: estimateSize(text),
-                    data: [
-                        {
-                            type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                            data: {
-                                source: MUTATION_SOURCE_TYPE,
-                                adds: [],
-                                texts: text,
-                                attributes: [],
-                                removes: [],
-                            },
-                            timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
-                        },
-                    ],
-                    sessionId: buffer.sessionId,
-                    windowId: buffer.windowId,
-                })),
-                ...attributes.map((attribute) => ({
-                    size: estimateSize(attribute),
-                    data: [
-                        {
-                            type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-                            data: {
-                                source: MUTATION_SOURCE_TYPE,
-                                adds: [],
-                                texts: [],
-                                attributes: attribute,
-                                removes: [],
-                            },
-                            timestamp: bufferedData.timestamp - alteration + timestampWiggleMarker++,
-                        },
-                    ],
-                    sessionId: buffer.sessionId,
-                    windowId: buffer.windowId,
-                })),
-            ].filter(hasIncrementalContent)
+    if (buffer.size >= sizeLimit) {
+        // it may be because one or more incremental snapshots is very large
+        const splitData = buffer.data.map((bd) => splitIncrementalData(bd, sizeLimit)).flat()
+        const splitBuffer: SnapshotBuffer = {
+            size: estimateSize(splitData),
+            data: splitData,
+            sessionId: buffer.sessionId,
+            windowId: buffer.windowId,
         }
-        return [buffer]
+        // or because the array of snapshots in the buffer is now too large
+        return sliceBuffer(splitBuffer, sizeLimit)
     } else {
         return [buffer]
     }
