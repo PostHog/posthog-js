@@ -59,7 +59,6 @@ export class PostHogSurveys {
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
         this._surveyEventReceiver = null
-        this.loadIfEnabled()
     }
 
     afterDecideResponse(response: DecideResponse) {
