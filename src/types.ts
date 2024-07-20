@@ -25,8 +25,24 @@ export interface AutocaptureConfig {
     /**
      * List of URLs to allow autocapture on, can be strings to match
      * or regexes e.g. ['https://example.com', 'test.com/.*']
+     * this is useful when you want to autocapture on specific pages only
+     *
+     * if you set both url_allowlist and url_ignorelist,
+     * we check the allowlist first and then the ignorelist.
+     * the ignorelist can override the allowlist
      */
     url_allowlist?: (string | RegExp)[]
+
+    /**
+     * List of URLs to not allow autocapture on, can be strings to match
+     * or regexes e.g. ['https://example.com', 'test.com/.*']
+     * this is useful when you want to autocapture on most pages but not some specific ones
+     *
+     * if you set both url_allowlist and url_ignorelist,
+     * we check the allowlist first and then the ignorelist.
+     * the ignorelist can override the allowlist
+     */
+    url_ignorelist?: (string | RegExp)[]
 
     /**
      * List of DOM events to allow autocapture on  e.g. ['click', 'change', 'submit']
@@ -82,6 +98,14 @@ export interface PerformanceCaptureConfig {
     network_timing?: boolean
     /** works as a passenger event to use chrome's web vitals library to wrap fetch and capture web vitals */
     web_vitals?: boolean
+}
+
+export interface HeatmapConfig {
+    /*
+     * how often to send batched data in $$heatmap_data events
+     * if set to 0 or not set, sends using the default interval of 1 second
+     * */
+    flush_interval_milliseconds: number
 }
 
 export interface PostHogConfig {
@@ -165,7 +189,9 @@ export interface PostHogConfig {
     bootstrap: BootstrapConfig
     segment?: SegmentAnalytics
     __preview_send_client_session_params?: boolean
+    /* @deprecated - use `capture_heatmaps` instead */
     enable_heatmaps?: boolean
+    capture_heatmaps?: boolean | HeatmapConfig
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
@@ -283,8 +309,6 @@ export interface CaptureOptions {
     $set?: Properties /** used with $identify */
     $set_once?: Properties /** used with $identify */
     _url?: string /** Used to override the desired endpoint for the captured event */
-    /** Some events are sent as passengers inside other events - e.g. heatmaps and web vitals, not all ingestion routes can process passengers */
-    _noHeatmaps?: boolean
     _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
     _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
     send_instantly?: boolean /** if set skips the batched queue */
@@ -475,7 +499,12 @@ export type NetworkRequest = {
 //     readonly name: string;
 //     readonly startTime: DOMHighResTimeStamp;
 // NB: properties below here are ALPHA, don't rely on them, they may change without notice
-export type CapturedNetworkRequest = Omit<PerformanceEntry, 'toJSON'> & {
+
+// we mirror PerformanceEntry since we read into this type from a PerformanceObserver,
+// but we don't want to inherit its readonly-iness
+type Writable<T> = { -readonly [P in keyof T]: T[P] }
+
+export type CapturedNetworkRequest = Writable<Omit<PerformanceEntry, 'toJSON'>> & {
     // properties below here are ALPHA, don't rely on them, they may change without notice
     method?: string
     initiatorType?: InitiatorType

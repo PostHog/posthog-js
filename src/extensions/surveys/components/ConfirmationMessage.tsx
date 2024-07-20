@@ -39,7 +39,7 @@ export function ConfirmationMessage({
                             style: { color: textColor },
                         })}
                     <BottomSection
-                        text={'Close'}
+                        text={appearance.thankYouMessageCloseButtonText || 'Close'}
                         submitDisabled={false}
                         appearance={appearance}
                         onSubmit={() => onClose()}

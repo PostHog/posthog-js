@@ -7,6 +7,7 @@ import {
     MultipleSurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestion,
+    RatingSurveyQuestion,
 } from '../posthog-surveys-types'
 import {
     canActivateRepeatedly,
@@ -216,18 +217,12 @@ describe('surveys', () => {
                 expect(data).toEqual(surveysWithEvents)
             }, true)
 
-            const registry = instance.surveys._surveyEventReceiver?.getEventRegistry()
-            expect(registry.has('second-survey')).toBeFalsy()
-            expect(registry.has('first-survey')).toBeTruthy()
-            expect(registry.get('first-survey')).toEqual([
-                'user_subscribed',
-                'user_unsubscribed',
-                'billing_changed',
-                'billing_removed',
-            ])
+            const registry = instance.surveys._surveyEventReceiver?.getEventToSurveys()
+            expect(registry?.has('user_subscribed')).toBeTruthy()
+            expect(registry?.get('user_subscribed')).toEqual(['first-survey', 'third-survey'])
 
-            expect(registry.has('third-survey')).toBeTruthy()
-            expect(registry.get('third-survey')).toEqual(['user_subscribed', 'user_unsubscribed', 'address_changed'])
+            expect(registry?.has('address_changed')).toBeTruthy()
+            expect(registry?.get('address_changed')).toEqual(['third-survey'])
         })
 
         it('getSurveys force reloads when called with true', () => {
@@ -264,7 +259,7 @@ describe('surveys', () => {
 
         it('getSurveys returns empty array if surveys are disabled', () => {
             instance.config.disable_surveys = true
-            instance._send_request.mockClear()
+            ;(instance._send_request as any).mockClear()
             const disabledSurveys = new PostHogSurveys(instance)
             disabledSurveys.getSurveys((data) => {
                 expect(data).toEqual([])
@@ -637,7 +632,7 @@ describe('surveys', () => {
                     surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
                 }
 
-                instance.surveys._surveyEventReceiver?.on('user_subscribed')
+                instance.surveys._surveyEventReceiver?.onEvent('user_subscribed')
                 instance.surveys.getActiveMatchingSurveys((data) => {
                     expect(data).toEqual([surveyWithEnabledInternalFlag])
                 })
@@ -1129,11 +1124,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as SurveyQuestion[]
             expect(() => instance.surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
-
-            survey.questions[0].scale = 5
+            ;(survey.questions[0] as RatingSurveyQuestion).scale = 5
             expect(() => instance.surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
-
-            survey.questions[0].scale = 10
+            ;(survey.questions[0] as RatingSurveyQuestion).scale = 10
             expect(() => instance.surveys.getNextSurveyStep(survey, 0, 20)).toThrow(
                 'The response must be in range 0-10'
             )

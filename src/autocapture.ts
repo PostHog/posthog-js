@@ -40,17 +40,20 @@ export class Autocapture {
     instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
+    _elementSelectors: Set<string> | null
     rageclicks = new RageClick()
     _elementsChainAsString = false
 
     constructor(instance: PostHog) {
         this.instance = instance
+        this._elementSelectors = null
     }
 
     private get config(): AutocaptureConfig {
         const config = isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
         // precompile the regex
         config.url_allowlist = config.url_allowlist?.map((url) => new RegExp(url))
+        config.url_ignorelist = config.url_ignorelist?.map((url) => new RegExp(url))
         return config
     }
 
@@ -109,6 +112,25 @@ export class Autocapture {
         this.startIfEnabled()
     }
 
+    public setElementSelectors(selectors: Set<string>): void {
+        this._elementSelectors = selectors
+    }
+
+    public getElementSelectors(element: Element | null): string[] | null {
+        const elementSelectors: string[] = []
+
+        this._elementSelectors?.forEach((selector) => {
+            const matchedElements = document?.querySelectorAll(selector)
+            matchedElements?.forEach((matchedElement: Element) => {
+                if (element === matchedElement) {
+                    elementSelectors.push(selector)
+                }
+            })
+        })
+
+        return elementSelectors
+    }
+
     public get isEnabled(): boolean {
         const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
         const memoryDisabled = this._isDisabledServerSide
@@ -155,6 +177,7 @@ export class Autocapture {
                 }
             }
         })
+
         return props
     }
 
@@ -350,6 +373,11 @@ export class Autocapture {
                 externalHref && e.type === 'click' ? { $external_click_url: externalHref } : {},
                 autocaptureAugmentProperties
             )
+
+            const elementSelectors = this.getElementSelectors(target)
+            if (elementSelectors && elementSelectors.length > 0) {
+                props['$element_selectors'] = elementSelectors
+            }
 
             if (eventName === COPY_AUTOCAPTURE_EVENT) {
                 // you can't read the data from the clipboard event,

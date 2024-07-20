@@ -386,6 +386,10 @@ export class PostHog {
             })
         )
 
+        if (this.config.on_xhr_error) {
+            logger.error('[posthog] on_xhr_error is deprecated. Use on_request_error instead')
+        }
+
         this.compression = config.disable_compression ? undefined : Compression.Base64
 
         this.persistence = new PostHogPersistence(this.config)
@@ -790,7 +794,7 @@ export class PostHog {
         let data: CaptureResult = {
             uuid: uuidv7(),
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}, options),
+            properties: this._calculate_event_properties(event_name, properties || {}),
         }
 
         if (clientRateLimitContext) {
@@ -843,11 +847,7 @@ export class PostHog {
         this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    _calculate_event_properties(
-        event_name: string,
-        event_properties: Properties,
-        options?: CaptureOptions
-    ): Properties {
+    _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
         }
@@ -933,13 +933,6 @@ export class PostHog {
         )
 
         properties['$is_identified'] = this._isIdentified()
-
-        if (!options?._noHeatmaps) {
-            const heatmapsBuffer = this.heatmaps?.getAndClearBuffer()
-            if (heatmapsBuffer) {
-                properties['$heatmap_data'] = heatmapsBuffer
-            }
-        }
 
         if (isArray(this.config.property_denylist)) {
             each(this.config.property_denylist, function (denylisted_prop) {

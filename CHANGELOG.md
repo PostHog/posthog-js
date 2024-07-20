@@ -1,3 +1,41 @@
+## 1.148.0 - 2024-07-16
+
+- feat: split large replay buffers before sending (#1305)
+
+## 1.147.0 - 2024-07-12
+
+- feat: add url_ignorelist for autocapture config (#1302)
+
+## 1.146.3 - 2024-07-12
+
+- feat: add new google crawler (#1300)
+- chore: add a test (#1299)
+
+## 1.146.2 - 2024-07-11
+
+- fix: warn when on xhr error used (#1298)
+
+## 1.146.1 - 2024-07-11
+
+- fix: add web vitals to array full (#1297)
+- feat(Surveys): Activate surveys based on actions (#1295)
+- feat(Surveys): Add ActionMatcher to match CaptureResult to any known actions (#1294)
+
+## 1.146.0 - 2024-07-10
+
+- feat: move heatmaps to their own event (#1287)
+
+## 1.145.1 - 2024-07-10
+
+- fix: capture network recording type (#1296)
+- feat(surveys): added close button text customization feature (#1288)
+- chore: fix error tests listener registration (#1291)
+
+## 1.145.0 - 2024-07-08
+
+- feat: send errors one way (#1289)
+- chore: missing changelog entry (#1290)
+
 ## 1.144.2 - 2024-07-05
 
 - fix(surveys): polishing the popup survey UI (#1279)
@@ -34,7 +72,7 @@
 
 ## 1.141.2 - 2024-06-25
 
-
+- feat: add lazily loaded web vitals collection (#1203)
 
 ## 1.141.1 - 2024-06-25
 
