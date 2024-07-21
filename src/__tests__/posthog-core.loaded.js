@@ -1,91 +1,84 @@
-import { PostHog } from '../posthog-core'
-import { PostHogPersistence } from '../posthog-persistence'
-import { RequestRouter } from '../utils/request-router'
+import { createPosthogInstance } from './helpers/posthog-instance'
+import { uuidv7 } from '../uuidv7'
 
 jest.useFakeTimers()
 
-given('lib', () => Object.assign(new PostHog(), given.overrides))
-
 describe('loaded() with flags', () => {
+    let instance
+    const config = { loaded: jest.fn(), persistence: 'memory', api_host: 'https://app.posthog.com' }
+
+    const overrides = {
+        capture: jest.fn(),
+        _send_request: jest.fn(({ callback }) => callback?.({ status: 200, json: {} })),
+        _start_queue_if_opted_in: jest.fn(),
+    }
+
     beforeAll(() => {
         jest.unmock('../decide')
     })
 
-    given('subject', () => () => given.lib._loaded())
-
-    given('overrides', () => ({
-        config: given.config,
-        capture: jest.fn(),
-        featureFlags: {
-            setReloadingPaused: jest.fn(),
-            resetRequestQueue: jest.fn(),
-            _startReloadTimer: jest.fn(),
-            receivedFeatureFlags: jest.fn(),
-        },
-        requestRouter: new RequestRouter({ config: given.config }),
-        _start_queue_if_opted_in: jest.fn(),
-        persistence: new PostHogPersistence(given.config),
-        _send_request: jest.fn(({ callback }) => callback?.({ status: 200, json: {} })),
-    }))
-    given('config', () => ({ loaded: jest.fn(), persistence: 'memory', api_host: 'https://app.posthog.com' }))
+    beforeEach(async () => {
+        const posthog = await createPosthogInstance(uuidv7(), config)
+        instance = Object.assign(posthog, {
+            ...overrides,
+            featureFlags: {
+                setReloadingPaused: jest.fn(),
+                resetRequestQueue: jest.fn(),
+                _startReloadTimer: jest.fn(),
+                receivedFeatureFlags: jest.fn(),
+            },
+            _send_request: jest.fn(({ callback }) => callback?.({ status: 200, json: {} })),
+        })
+    })
 
     describe('toggling flag reloading', () => {
-        given('config', () => ({
-            loaded: (ph) => {
-                ph.group('org', 'bazinga', { name: 'Shelly' })
-                setTimeout(() => {
-                    ph.group('org', 'bazinga2', { name: 'Shelly' })
-                }, 100)
-            },
-            persistence: 'memory',
-            api_host: 'https://app.posthog.com',
-        }))
+        beforeEach(async () => {
+            const posthog = await createPosthogInstance(uuidv7(), {
+                ...config,
+                loaded: (ph) => {
+                    ph.group('org', 'bazinga', { name: 'Shelly' })
+                    setTimeout(() => {
+                        ph.group('org', 'bazinga2', { name: 'Shelly' })
+                    }, 100)
+                },
+            })
+            instance = Object.assign(posthog, overrides)
 
-        given('overrides', () => ({
-            config: given.config,
-            capture: jest.fn(),
-            _send_request: jest.fn(({ callback }) => setTimeout(() => callback?.({ status: 200, json: {} }), 1000)),
-            _start_queue_if_opted_in: jest.fn(),
-            persistence: new PostHogPersistence(given.config),
-            requestRouter: new RequestRouter({ config: given.config }),
-        }))
-
-        beforeEach(() => {
-            jest.spyOn(given.lib.featureFlags, 'setGroupPropertiesForFlags')
-            jest.spyOn(given.lib.featureFlags, 'setReloadingPaused')
-            jest.spyOn(given.lib.featureFlags, '_startReloadTimer')
-            jest.spyOn(given.lib.featureFlags, 'resetRequestQueue')
-            jest.spyOn(given.lib.featureFlags, '_reloadFeatureFlagsRequest')
+            jest.spyOn(instance.featureFlags, 'setGroupPropertiesForFlags')
+            jest.spyOn(instance.featureFlags, 'setReloadingPaused')
+            jest.spyOn(instance.featureFlags, '_startReloadTimer')
+            jest.spyOn(instance.featureFlags, 'resetRequestQueue')
+            jest.spyOn(instance.featureFlags, '_reloadFeatureFlagsRequest')
         })
 
         it('doesnt call flags while initial load is happening', () => {
-            given.subject()
+            instance._loaded()
 
             jest.runOnlyPendingTimers()
 
-            expect(given.lib.featureFlags.setGroupPropertiesForFlags).toHaveBeenCalled() // loaded ph.group() calls setGroupPropertiesForFlags
-            expect(given.lib.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
-            expect(given.lib.featureFlags.resetRequestQueue).toHaveBeenCalledTimes(1)
-            expect(given.lib.featureFlags._startReloadTimer).toHaveBeenCalled()
-            expect(given.lib.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
+            expect(instance.featureFlags.setGroupPropertiesForFlags).toHaveBeenCalled() // loaded ph.group() calls setGroupPropertiesForFlags
+            expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
+            expect(instance.featureFlags.resetRequestQueue).toHaveBeenCalledTimes(1)
+            expect(instance.featureFlags._startReloadTimer).toHaveBeenCalled()
+            expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
 
             // we should call _reloadFeatureFlagsRequest for `group` only after the initial load
             // because it ought to be paused until decide returns
-            expect(given.overrides._send_request).toHaveBeenCalledTimes(1)
-            expect(given.lib.featureFlags._reloadFeatureFlagsRequest).toHaveBeenCalledTimes(0)
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance.featureFlags._reloadFeatureFlagsRequest).toHaveBeenCalledTimes(0)
 
             jest.runOnlyPendingTimers()
-            expect(given.overrides._send_request).toHaveBeenCalledTimes(2)
-            expect(given.lib.featureFlags._reloadFeatureFlagsRequest).toHaveBeenCalledTimes(1)
+            expect(instance._send_request).toHaveBeenCalledTimes(2)
+            expect(instance.featureFlags._reloadFeatureFlagsRequest).toHaveBeenCalledTimes(1)
         })
     })
 
     it('toggles feature flags on and off', () => {
-        given.subject()
+        instance._loaded()
 
-        expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
-        expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
-        expect(given.overrides.featureFlags._startReloadTimer).toHaveBeenCalled()
-        expect(given.overrides.featureFlags.receivedFeatureFlags).toHaveBeenCalledTimes(1)
+        expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
+        expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(false)
+        expect(instance.featureFlags._startReloadTimer).toHaveBeenCalled()
+        expect(instance.featureFlags.receivedFeatureFlags).toHaveBeenCalledTimes(1)
     })
 })
