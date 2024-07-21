@@ -1,12 +1,13 @@
 import { USER_STATE } from '../constants'
 import { uuidv7 } from '../uuidv7'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
+import { PostHog } from '../posthog-core'
 
 jest.mock('../decide')
 
 describe('identify()', () => {
-    let instance
-    let captureMock
+    let instance: PostHog
+    let captureMock: jest.Mock
 
     beforeEach(() => {
         captureMock = jest.fn()
@@ -28,9 +29,9 @@ describe('identify()', () => {
             unregister: jest.fn(),
         })
 
-        instance.persistence.set_property(USER_STATE, 'anonymous')
-        instance.persistence.props['distinct_id'] = 'oldIdentity'
-        instance.persistence.props['$device_id'] = 'oldIdentity'
+        instance.persistence!.set_property(USER_STATE, 'anonymous')
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
+        instance.persistence!.props['$device_id'] = 'oldIdentity'
     })
 
     it('registers new user id and updates alias', () => {
@@ -41,7 +42,7 @@ describe('identify()', () => {
     })
 
     it('calls capture when identity changes', () => {
-        instance.persistence.props['distinct_id'] = 'oldIdentity'
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
 
         instance.identify('calls capture when identity changes')
 
@@ -58,16 +59,16 @@ describe('identify()', () => {
     })
 
     it('sets user state when identifying', () => {
-        instance.persistence.props['distinct_id'] = 'oldIdentity'
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
 
         instance.identify('calls capture when identity changes')
 
-        expect(instance.persistence.get_property(USER_STATE)).toEqual('identified')
+        expect(instance.persistence!.get_property(USER_STATE)).toEqual('identified')
     })
 
     it('adds props to next capture when there is no device id', () => {
-        instance.persistence.set_property('$device_id', null)
-        instance.persistence.set_property('distinct_id', 'oldIdentity')
+        instance.persistence!.set_property('$device_id', null)
+        instance.persistence!.set_property('distinct_id', 'oldIdentity')
 
         instance.identify('a-new-id')
 
@@ -84,9 +85,9 @@ describe('identify()', () => {
     })
 
     it('calls capture when there is no device id (on first check) even if user is not set to anonymous', () => {
-        instance.persistence.set_property(USER_STATE, undefined)
-        instance.persistence.props['distinct_id'] = 'oldIdentity'
-        instance.persistence.props['$device_id'] = null
+        instance.persistence!.set_property(USER_STATE, undefined)
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
+        instance.persistence!.props['$device_id'] = null
 
         instance.identify('a-new-id')
 
@@ -106,11 +107,11 @@ describe('identify()', () => {
         /**
          * originally this was a proxy for back-to-back identify calls
          */
-        instance.persistence.props['$device_id'] = 'not the oldIdentity'
+        instance.persistence!.props['$device_id'] = 'not the oldIdentity'
         // now this is set explicitly by identify
-        instance.persistence.set_property(USER_STATE, 'identified')
+        instance.persistence!.set_property(USER_STATE, 'identified')
 
-        instance.persistence.props['distinct_id'] = 'oldIdentity'
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
 
         instance.identify('a-new-id')
 
@@ -122,10 +123,10 @@ describe('identify()', () => {
         /**
          * user_state does not override existing behavior
          */
-        instance.persistence.props['distinct_id'] = 'oldIdentity'
-        instance.persistence.props['$device_id'] = 'not the oldIdentity'
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
+        instance.persistence!.props['$device_id'] = 'not the oldIdentity'
 
-        instance.persistence.set_property(USER_STATE, 'identified')
+        instance.persistence!.set_property(USER_STATE, 'identified')
 
         instance.identify('a-new-id')
 
@@ -134,9 +135,9 @@ describe('identify()', () => {
     })
 
     it('does call capture when distinct_id changes and device id does not match the previous_id but user is marked as anonymous', () => {
-        instance.persistence.props['distinct_id'] = 'oldIdentity'
-        instance.persistence.props['$device_id'] = 'not the oldIdentity'
-        instance.persistence.set_property(USER_STATE, 'anonymous')
+        instance.persistence!.props['distinct_id'] = 'oldIdentity'
+        instance.persistence!.props['$device_id'] = 'not the oldIdentity'
+        instance.persistence!.set_property(USER_STATE, 'anonymous')
 
         instance.identify('a-new-id')
 
@@ -171,7 +172,7 @@ describe('identify()', () => {
     describe('identity did not change', () => {
         beforeEach(() => {
             // set the current/old identity
-            instance.persistence.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.props['distinct_id'] = 'a-new-id'
         })
 
         it('does not capture or set user properties', () => {
@@ -206,7 +207,7 @@ describe('identify()', () => {
 
             instance.debug()
 
-            instance.identify(null)
+            instance.identify(null as unknown as string)
 
             expect(captureMock).not.toHaveBeenCalled()
             expect(instance.register).not.toHaveBeenCalled()
@@ -226,7 +227,7 @@ describe('identify()', () => {
         })
 
         it('does not reload feature flags if identity does not change', () => {
-            instance.persistence.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.props['distinct_id'] = 'a-new-id'
 
             instance.identify('a-new-id')
 
@@ -235,7 +236,7 @@ describe('identify()', () => {
         })
 
         it('reloads feature flags if identity does not change but properties do', () => {
-            instance.persistence.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.props['distinct_id'] = 'a-new-id'
 
             instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
 
@@ -267,7 +268,7 @@ describe('identify()', () => {
 
     describe('setPersonProperties', () => {
         beforeEach(() => {
-            instance.persistence.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.props['distinct_id'] = 'a-new-id'
         })
 
         it('captures a $set event', () => {
@@ -320,7 +321,7 @@ describe('identify()', () => {
 })
 
 describe('reset()', () => {
-    let instance
+    let instance: PostHog
 
     beforeEach(async () => {
         instance = await createPosthogInstance(uuidv7(), {
@@ -330,30 +331,30 @@ describe('reset()', () => {
     })
 
     it('clears persistence', () => {
-        instance.persistence.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
-        expect(instance.persistence.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
+        instance.persistence!.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
+        expect(instance.persistence!.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
 
         instance.reset()
 
-        expect(instance.persistence.props['$enabled_feature_flags']).toEqual(undefined)
+        expect(instance.persistence!.props['$enabled_feature_flags']).toEqual(undefined)
     })
 
     it('resets the session_id and window_id', () => {
-        const initialSessionAndWindowId = instance.sessionManager.checkAndGetSessionAndWindowId()
+        const initialSessionAndWindowId = instance.sessionManager!.checkAndGetSessionAndWindowId()
 
         instance.reset()
 
-        const nextSessionAndWindowId = instance.sessionManager.checkAndGetSessionAndWindowId()
+        const nextSessionAndWindowId = instance.sessionManager!.checkAndGetSessionAndWindowId()
         expect(initialSessionAndWindowId.sessionId).not.toEqual(nextSessionAndWindowId.sessionId)
         expect(initialSessionAndWindowId.windowId).not.toEqual(nextSessionAndWindowId.windowId)
     })
 
     it('sets the user as anonymous', () => {
-        instance.persistence.set_property(USER_STATE, 'identified')
+        instance.persistence!.set_property(USER_STATE, 'identified')
 
         instance.reset()
 
-        expect(instance.persistence.get_property(USER_STATE)).toEqual('anonymous')
+        expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
     })
 
     it('does not reset the device id', () => {
