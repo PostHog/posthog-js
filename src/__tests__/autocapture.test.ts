@@ -1049,9 +1049,15 @@ describe('Autocapture system', () => {
             }
         )
 
-        it('should call _addDomEventHandlders if autocapture is true', () => {
+        it('should call _addDomEventHandlders if autocapture is true in client config', () => {
+            posthog.config.autocapture = true
             autocapture.afterDecideResponse({} as DecideResponse)
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalled()
+        })
+
+        it('should not call _addDomEventHandlders if autocapture is opted out in server config', () => {
+            autocapture.afterDecideResponse({ autocapture_opt_out: true } as DecideResponse)
+            expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
         })
 
         it('should not call _addDomEventHandlders if autocapture is disabled in client config', () => {
