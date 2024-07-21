@@ -1,11 +1,12 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
+import { PostHog } from '../posthog-core'
 
 jest.useFakeTimers()
 
 describe('loaded() with flags', () => {
-    let instance
-    const config = { loaded: jest.fn(), persistence: 'memory', api_host: 'https://app.posthog.com' }
+    let instance: PostHog
+    const config = { loaded: jest.fn(), api_host: 'https://app.posthog.com' }
 
     const overrides = {
         capture: jest.fn(),
