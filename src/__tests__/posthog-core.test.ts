@@ -108,7 +108,6 @@ describe('posthog core', () => {
                 // arrange
                 const token = uuidv7()
                 mockReferrerGetter.mockReturnValue('https://referrer.example.com/some/path')
-                mockURLGetter.mockReturnValue('')
                 const { posthog, onCapture } = setup({
                     token,
                     persistence_name: token,
@@ -129,7 +128,6 @@ describe('posthog core', () => {
                 // arrange
                 const token = uuidv7()
                 mockReferrerGetter.mockReturnValue('https://referrer1.example.com/some/path')
-                mockURLGetter.mockReturnValue('')
                 const { posthog: posthog1 } = setup({
                     token,
                     persistence_name: token,
@@ -160,7 +158,6 @@ describe('posthog core', () => {
                 // arrange
                 const token = uuidv7()
                 mockReferrerGetter.mockReturnValue('https://referrer1.example.com/some/path')
-                mockURLGetter.mockReturnValue('')
                 const { posthog: posthog1 } = setup({
                     token,
                     persistence_name: token,
@@ -185,6 +182,26 @@ describe('posthog core', () => {
                 expect($set_once['$initial_referring_domain']).toBe('referrer1.example.com')
                 expect(properties['$referrer']).toBe('https://referrer2.example.com/some/path')
                 expect(properties['$referring_domain']).toBe('referrer2.example.com')
+            })
+
+            it('should use $direct when there is no referrer', () => {
+                // arrange
+                const token = uuidv7()
+                mockReferrerGetter.mockReturnValue('')
+                const { posthog, onCapture } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture(eventName, eventProperties)
+
+                // assert
+                const { $set_once, properties } = onCapture.mock.calls[0][1]
+                expect($set_once['$initial_referrer']).toBe('$direct')
+                expect($set_once['$initial_referring_domain']).toBe('$direct')
+                expect(properties['$referrer']).toBe('$direct')
+                expect(properties['$referring_domain']).toBe('$direct')
             })
         })
     })
