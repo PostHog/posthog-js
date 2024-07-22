@@ -1,3 +1,8 @@
+## 1.148.1 - 2024-07-22
+
+- fix: ignore ridonculously large web vitals values (#1309)
+- chore: move test file (#1306)
+
 ## 1.148.0 - 2024-07-16
 
 - feat: split large replay buffers before sending (#1305)
