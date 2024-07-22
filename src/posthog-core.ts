@@ -76,6 +76,7 @@ import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
+import { PosthogExperiments } from './posthog-experiments'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -240,6 +241,7 @@ export class PostHog {
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
+    experiments: PosthogExperiments
     toolbar: Toolbar
     consent: ConsentManager
 
@@ -291,6 +293,7 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.experiments = new PosthogExperiments(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
@@ -515,6 +518,7 @@ export class PostHog {
         this.sessionRecording?.afterDecideResponse(response)
         this.autocapture?.afterDecideResponse(response)
         this.heatmaps?.afterDecideResponse(response)
+        this.experiments?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
         this.webVitalsAutocapture?.afterDecideResponse(response)
         this.exceptionObserver?.afterDecideResponse(response)
