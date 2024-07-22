@@ -140,7 +140,6 @@ export class ExceptionObserver {
         this.instance.capture('$exception', properties, {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
-            _noHeatmaps: true,
             _url: this.endpoint,
         })
     }

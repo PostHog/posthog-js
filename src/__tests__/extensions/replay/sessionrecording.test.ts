@@ -712,7 +712,6 @@ describe('SessionRecording', () => {
                 {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
-                    _noHeatmaps: true,
                     _batchKey: 'recordings',
                 }
             )
@@ -748,7 +747,6 @@ describe('SessionRecording', () => {
                 {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
-                    _noHeatmaps: true,
                     _batchKey: 'recordings',
                 }
             )
@@ -831,7 +829,6 @@ describe('SessionRecording', () => {
                 {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
-                    _noHeatmaps: true,
                     _batchKey: 'recordings',
                 }
             )
@@ -1497,7 +1494,6 @@ describe('SessionRecording', () => {
                 {
                     _batchKey: 'recordings',
                     _noTruncate: true,
-                    _noHeatmaps: true,
                     _url: 'https://test.com/s/',
                 }
             )
@@ -1591,7 +1587,6 @@ describe('SessionRecording', () => {
                 {
                     _batchKey: 'recordings',
                     _noTruncate: true,
-                    _noHeatmaps: true,
                     _url: 'https://test.com/s/',
                 }
             )
@@ -1620,7 +1615,6 @@ describe('SessionRecording', () => {
                 {
                     _batchKey: 'recordings',
                     _noTruncate: true,
-                    _noHeatmaps: true,
                     _url: 'https://test.com/s/',
                 }
             )
