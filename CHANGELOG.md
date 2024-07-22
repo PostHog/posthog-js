@@ -1,3 +1,8 @@
+## 1.148.2 - 2024-07-22
+
+- fix: don't load preact until you have to (#1311)
+- chore: one less posthog mock and two fewer given tests (#1312)
+
 ## 1.148.1 - 2024-07-22
 
 - fix: ignore ridonculously large web vitals values (#1309)
