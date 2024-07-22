@@ -1,8 +1,8 @@
 import { getQueryParam, convertToURL } from './request-utils'
-import { isNull } from './type-utils'
+import { isNull, isString } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties, stripLeadingDollar, timestamp } from './index'
+import { each, extend, some, stripEmptyProperties, stripLeadingDollar, timestamp } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 
@@ -30,6 +30,17 @@ export const CAMPAIGN_PARAMS = [
     'ttclid', // tiktok
     'rdt_cid', // reddit
 ]
+
+export const defaultReferrerInfo = {
+    $referrer: '$direct',
+    $referring_domain: '$direct',
+}
+
+// This gets stored in the cookie, so don't make any backwards-incompatible changes, e.g. new non-optional fields
+interface InitialPersonInfo {
+    r: string
+    u: string | undefined
+}
 
 export const Info = {
     campaignParams: function (customParams?: string[]): Record<string, string> {
@@ -126,6 +137,16 @@ export const Info = {
 
     deviceType: detectDeviceType,
 
+    _isOnDenyList: function (referringDomain: string, referringDomainDenyList: (string | RegExp)[]) {
+        return some(referringDomainDenyList, function (denyListItem) {
+            if (isString(denyListItem)) {
+                return denyListItem === referringDomain
+            } else {
+                return denyListItem.test(referringDomain)
+            }
+        })
+    },
+
     referrer: function (): string {
         return document?.referrer || '$direct'
     },
@@ -137,14 +158,22 @@ export const Info = {
         return convertToURL(document.referrer)?.host || '$direct'
     },
 
-    referrerInfo: function (): Record<string, any> {
+    referrerInfo: function (
+        referringDomainDenyList: (string | RegExp)[]
+    ): { $referrer: string; $referring_domain: string } | undefined {
+        const referringDomain = this.referringDomain()
+
+        if (this._isOnDenyList(referringDomain, referringDomainDenyList)) {
+            return undefined
+        }
+
         return {
             $referrer: this.referrer(),
-            $referring_domain: this.referringDomain(),
+            $referring_domain: referringDomain,
         }
     },
 
-    initialPersonInfo: function (): Record<string, any> {
+    initialPersonInfo: function (): InitialPersonInfo {
         // we're being a bit more economical with bytes here because this is stored in the cookie
         return {
             r: this.referrer(),
@@ -152,14 +181,28 @@ export const Info = {
         }
     },
 
-    initialPersonPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
-        const { r: initial_referrer, u: initial_current_url } = info
-        const referring_domain =
+    initialPersonPropsFromInfo: function (
+        info: InitialPersonInfo,
+        referringDomainDenyList: (string | RegExp)[]
+    ): Record<string, any> {
+        let initial_referrer = info.r
+        const initial_current_url = info.u
+        let referring_domain =
             initial_referrer == null
                 ? undefined
                 : initial_referrer == '$direct'
                 ? '$direct'
                 : convertToURL(initial_referrer)?.host
+
+        if (
+            referring_domain &&
+            referring_domain !== 'direct' &&
+            this._isOnDenyList(referring_domain, referringDomainDenyList)
+        ) {
+            // If the initial domain is on the denylist, treat it as a direct referrer
+            initial_referrer = '$direct'
+            referring_domain = '$direct'
+        }
 
         const props: Record<string, string | undefined> = {
             $initial_referrer: initial_referrer,

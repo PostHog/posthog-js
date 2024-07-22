@@ -16,6 +16,7 @@ const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' 
 export const ArrayProto = Array.prototype
 export const nativeForEach = ArrayProto.forEach
 export const nativeIndexOf = ArrayProto.indexOf
+export const nativeSome = ArrayProto.some
 
 export const navigator = global?.navigator
 export const document = global?.document

@@ -13,7 +13,7 @@ import {
 } from './constants'
 
 import { isObject, isUndefined } from './utils/type-utils'
-import { Info } from './utils/event-utils'
+import { defaultReferrerInfo, Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
@@ -227,7 +227,15 @@ export class PostHogPersistence {
     }
 
     update_referrer_info(): void {
-        this.register(Info.referrerInfo())
+        const referrerInfo = Info.referrerInfo(this.config.referring_domain_denylist)
+        if (referrerInfo) {
+            this.register(referrerInfo)
+        } else {
+            // If referrerInfo was undefined, this means that the referring domain is on the denylist.
+            // If this is the only referrer we have seen for this user, treat it as a direct referrer.
+            // If there is another referrer, do not overwrite it.
+            this.register_once(defaultReferrerInfo, undefined)
+        }
     }
 
     set_initial_person_info(): void {
@@ -266,7 +274,10 @@ export class PostHogPersistence {
         })
         const initialPersonInfo = this.props[INITIAL_PERSON_INFO]
         if (initialPersonInfo) {
-            const initialPersonProps = Info.initialPersonPropsFromInfo(initialPersonInfo)
+            const initialPersonProps = Info.initialPersonPropsFromInfo(
+                initialPersonInfo,
+                this.config.referring_domain_denylist
+            )
             extend(p, initialPersonProps)
         }
 

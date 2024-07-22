@@ -137,6 +137,7 @@ export interface PostHogConfig {
     // defaults to the empty array
     custom_blocked_useragents: string[]
     save_referrer: boolean
+    referring_domain_denylist: (string | RegExp)[]
     verbose: boolean
     capture_pageview: boolean
     capture_pageleave: boolean | 'if_capture_pageview'

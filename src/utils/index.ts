@@ -1,7 +1,7 @@
 import { Breaker, EventHandler, Properties } from '../types'
 import { isArray, isFormData, isFunction, isNull, isNullish, isString, hasOwnProperty } from './type-utils'
 import { logger } from './logger'
-import { window, nativeForEach, nativeIndexOf } from './globals'
+import { window, nativeForEach, nativeIndexOf, nativeSome } from './globals'
 
 const breaker: Breaker = {}
 
@@ -56,6 +56,22 @@ export function each(obj: any, iterator: (value: any, key: any) => void | Breake
             }
         }
     }
+}
+
+export function some<T>(obj: T[], f: (value: T, i: number, arr: T[]) => boolean) {
+    if (obj && nativeSome && obj.some === nativeSome) {
+        return obj.some(f)
+    }
+
+    let result = false
+    // @ts-expect-error The iterator function should have a final `return` to stop TS complaining, but that's extra bundle size that serves no actual purpose
+    eachArray(obj, function (value, i) {
+        if (f(value, i, obj)) {
+            result = true
+            return breaker
+        }
+    })
+    return result
 }
 
 export const extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
