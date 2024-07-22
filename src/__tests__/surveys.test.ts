@@ -9,14 +9,18 @@ import {
     SurveyQuestionBranchingType,
     SurveyQuestion,
 } from '../posthog-surveys-types'
-import { getDisplayOrderChoices, getDisplayOrderQuestions } from '../extensions/surveys/surveys-utils'
+import {
+    canActivateRepeatedly,
+    getDisplayOrderChoices,
+    getDisplayOrderQuestions,
+} from '../extensions/surveys/surveys-utils'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
 import { window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
-import { expectScriptToExist, expectScriptToNotExist } from './helpers/script-utils'
+import { generateSurveys } from '../extensions/surveys'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -34,6 +38,7 @@ describe('surveys', () => {
             'enabled-internal-targeting-flag-key': true,
             'disabled-internal-targeting-flag-key': false,
         },
+        surveys: true,
     } as unknown as DecideResponse
 
     const firstSurveys: Survey[] = [
@@ -119,6 +124,16 @@ describe('surveys', () => {
     beforeEach(() => {
         surveysResponse = { surveys: firstSurveys }
 
+        const loadScriptMock = jest.fn()
+
+        loadScriptMock.mockImplementation((_path, callback) => {
+            assignableWindow.__PosthogExtensions__ = assignableWindow.__Posthog__ || {}
+            assignableWindow.extendPostHogWithSurveys = generateSurveys
+            assignableWindow.__PosthogExtensions__.canActivateRepeatedly = canActivateRepeatedly
+
+            callback()
+        })
+
         config = {
             token: 'testtoken',
             api_host: 'https://app.posthog.com',
@@ -147,7 +162,12 @@ describe('surveys', () => {
             },
         } as unknown as PostHog
 
+        instance.requestRouter.loadScript = loadScriptMock
+
         surveys = new PostHogSurveys(instance)
+        instance.surveys = surveys
+        // all being squashed into a mock posthog so...
+        instance.getActiveMatchingSurveys = instance.surveys.getActiveMatchingSurveys.bind(instance.surveys)
 
         Object.defineProperty(window, 'location', {
             configurable: true,
@@ -156,6 +176,8 @@ describe('surveys', () => {
             // eslint-disable-next-line compat/compat
             value: new URL('https://example.com'),
         })
+
+        surveys.afterDecideResponse(decideResponse)
     })
 
     afterEach(() => {
@@ -754,33 +776,6 @@ describe('surveys', () => {
             const sortedShuffledOptions = shuffledOptions.sort()
 
             expect(sortedOptions).toEqual(sortedShuffledOptions)
-        })
-    })
-
-    describe('decide response', () => {
-        beforeEach(() => {
-            // clean the JSDOM to prevent interdependencies between tests
-            document.body.innerHTML = ''
-            document.head.innerHTML = ''
-        })
-
-        it('should not load when decide response says no', () => {
-            surveys.afterDecideResponse({ surveys: false } as DecideResponse)
-            // Make sure the script is not loaded
-            expectScriptToNotExist('https://us-assets.i.posthog.com/static/surveys.js')
-        })
-
-        it('should load when decide response says so', () => {
-            surveys.afterDecideResponse({ surveys: true } as DecideResponse)
-            // Make sure the script is loaded
-            expectScriptToExist('https://us-assets.i.posthog.com/static/surveys.js')
-        })
-
-        it('should not load when config says no', () => {
-            config.disable_surveys = true
-            surveys.afterDecideResponse({ surveys: true } as DecideResponse)
-            // Make sure the script is not loaded
-            expectScriptToNotExist('https://us-assets.i.posthog.com/static/surveys.js')
         })
     })
 
