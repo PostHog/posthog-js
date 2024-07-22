@@ -1,12 +1,15 @@
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
 import { logger } from '../../utils/logger'
-import { isBoolean, isNullish, isObject, isUndefined } from '../../utils/type-utils'
+import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
 export const FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 8000
+const ONE_MINUTE_IN_MILLIS = 60 * 1000
+export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
+
 const LOGGER_PREFIX = '[Web Vitals]'
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
@@ -20,6 +23,17 @@ export class WebVitalsAutocapture {
     constructor(private readonly instance: PostHog) {
         this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
         this.startIfEnabled()
+    }
+
+    public get _maxAllowedValue(): number {
+        const configured =
+            isObject(this.instance.config.capture_performance) &&
+            isNumber(this.instance.config.capture_performance.__web_vitals_max_value)
+                ? this.instance.config.capture_performance.__web_vitals_max_value
+                : FIFTEEN_MINUTES_IN_MILLIS
+        // you can set to 0 to disable the check or any value over ten seconds
+        // 1 milli to 1 minute will be set to 15 minutes, cos that would be a silly low maximum
+        return 0 < configured && configured <= ONE_MINUTE_IN_MILLIS ? FIFTEEN_MINUTES_IN_MILLIS : configured
     }
 
     public get isEnabled(): boolean {
@@ -116,6 +130,13 @@ export class WebVitalsAutocapture {
             return
         }
 
+        // we observe some very large values sometimes, we'll ignore them
+        // since the likelihood of LCP > 1 hour being correct is very low
+        if (this._maxAllowedValue && metric.value >= this._maxAllowedValue) {
+            logger.error(LOGGER_PREFIX + 'Ignoring metric with value >= ' + this._maxAllowedValue, metric)
+            return
+        }
+
         const urlHasChanged = this.buffer.url !== $currentUrl
 
         if (urlHasChanged) {
@@ -151,6 +172,11 @@ export class WebVitalsAutocapture {
 
     private _startCapturing = () => {
         const { onLCP, onCLS, onFCP, onINP } = assignableWindow.postHogWebVitalsCallbacks
+
+        if (!onLCP || !onCLS || !onFCP || !onINP) {
+            logger.error(LOGGER_PREFIX + 'web vitals callbacks not loaded - not starting')
+            return
+        }
 
         // register performance observers
         onLCP(this._addToBuffer)
