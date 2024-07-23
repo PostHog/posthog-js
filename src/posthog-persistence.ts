@@ -227,7 +227,7 @@ export class PostHogPersistence {
     }
 
     update_referrer_info(): void {
-        this.register(Info.referrerInfo())
+        this.register_once(Info.referrerInfo(), undefined)
     }
 
     set_initial_person_info(): void {
