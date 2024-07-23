@@ -1,3 +1,7 @@
+## 1.149.0 - 2024-07-23
+
+- fix: Fix the referrer changing mid-session (#1314)
+
 ## 1.148.2 - 2024-07-22
 
 - fix: don't load preact until you have to (#1311)
