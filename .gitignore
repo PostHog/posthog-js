@@ -27,5 +27,6 @@ react/dist
 test-result.json
 yarn-error.log
 stats.html
+bundle-stats*.html
 .eslintcache
 cypress/downloads/downloads.html

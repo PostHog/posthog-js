@@ -18,14 +18,14 @@ const plugins = [
         presets: ['@babel/preset-env'],
     }),
     terser({ toplevel: true }),
-    visualizer(),
 ]
 
 /** @type {import('rollup').RollupOptions[]} */
 
 const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
     const fileParts = file.split('.')
-    const extension = fileParts.pop()
+    // pop the extension
+    fileParts.pop()
 
     let format = fileParts[fileParts.length - 1]
     // NOTE: Sadly we can't just use the file extensions as tsc won't compile things correctly
@@ -37,6 +37,8 @@ const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
 
     const fileName = fileParts.join('.')
 
+    // we're allowed to console log in this file :)
+    // eslint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
     return {
         input: `src/entrypoints/${file}`,
@@ -56,7 +58,7 @@ const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
                 ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
-        plugins: [...plugins],
+        plugins: [...plugins, visualizer({ filename: `bundle-stats-${fileName}.html` })],
     }
 })
 
