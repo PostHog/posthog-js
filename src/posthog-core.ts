@@ -429,6 +429,10 @@ export class PostHog {
         // if any instance on the page has debug = true, we set the
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
+        if (Config.DEBUG) {
+            // eslint-disable-next-line no-console
+            console.log('[PostHog.js] Starting in debug mode', this)
+        }
 
         this._sync_opt_out_with_persistence()
 
