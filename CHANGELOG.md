@@ -1,3 +1,7 @@
+## 1.149.2 - 2024-07-24
+
+- feat: add debug startup log message (#1318)
+
 ## 1.149.1 - 2024-07-24
 
 - fix: web vitals ignored error on init (#1317)
