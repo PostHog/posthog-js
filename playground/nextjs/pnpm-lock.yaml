@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -30,8 +30,8 @@ dependencies:
     specifier: 13.5.6
     version: 13.5.6(react-dom@18.2.0)(react@18.2.0)
   posthog-js:
-    specifier: 1.128.3
-    version: 1.128.3
+    specifier: 1.149.0
+    version: 1.149.0
   react:
     specifier: 18.2.0
     version: 18.2.0
@@ -2264,11 +2264,12 @@ packages:
       source-map-js: 1.0.2
     dev: true
 
-  /posthog-js@1.128.3:
-    resolution: {integrity: sha512-ES5FLTw/u2JTHocJZJtJibVkbk+xc4u9XTxWQPGE1ZVbUOH4lVjSXbEtI56fJvSJaaAuGSQ43kB5crJZ2gNG+g==}
+  /posthog-js@1.149.0:
+    resolution: {integrity: sha512-uIknyqxv5uDAToPaYVBzGqWwTiuga56cHs+3OeiXKZgjkm97yWh9VA5/gRD/3LEq3iszxHEOU4I5pVIaUrMNtg==}
     dependencies:
       fflate: 0.4.8
       preact: 10.20.2
+      web-vitals: 4.2.2
     dev: false
 
   /preact@10.20.2:
@@ -2811,6 +2812,10 @@ packages:
     dependencies:
       glob-to-regexp: 0.4.1
       graceful-fs: 4.2.11
+    dev: false
+
+  /web-vitals@4.2.2:
+    resolution: {integrity: sha512-nYfoOqb4EmElljyXU2qdeE76KsvoHdftQKY4DzA9Aw8DervCg2bG634pHLrJ/d6+B4mE3nWTSJv8Mo7B2mbZkw==}
     dev: false
 
   /which-boxed-primitive@1.0.2:

@@ -18,24 +18,24 @@ export default function App({ Component, pageProps }: AppProps) {
 
     const user = useUser()
 
-    useEffect(() => {
-        if (user) {
-            posthogHelpers.setUser(user)
-        }
-    }, [user])
+    // useEffect(() => {
+    //     if (user) {
+    //         posthogHelpers.setUser(user)
+    //     }
+    // }, [user])
 
     useEffect(() => {
         // Track page views
-        const handleRouteChange = () => posthog.capture('$pageview')
-        router.events.on('routeChangeComplete', handleRouteChange)
+        // const handleRouteChange = () => posthog.capture('$pageview')
+        // router.events.on('routeChangeComplete', handleRouteChange)
 
-        return () => {
-            router.events.off('routeChangeComplete', handleRouteChange)
-        }
+        // return () => {
+        //     router.events.off('routeChangeComplete', handleRouteChange)
+        // }
     }, [])
 
     return (
-        <PostHogProvider client={posthog}>
+        <>
             <Head>
                 <title>PostHog</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -46,6 +46,6 @@ export default function App({ Component, pageProps }: AppProps) {
                 <Component {...pageProps} />
                 <CookieBanner />
             </main>
-        </PostHogProvider>
+        </>
     )
 }

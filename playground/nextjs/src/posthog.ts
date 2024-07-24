@@ -57,7 +57,8 @@ if (typeof window !== 'undefined') {
         ...configForConsent(),
     })
 
-    // Help with debugging(window as any).posthog = posthog
+    // Help with debugging
+    ;(window as any).posthog = posthog
 }
 
 export const posthogHelpers = {
