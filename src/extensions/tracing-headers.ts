@@ -20,7 +20,7 @@ export class TracingHeaders {
 
         this.instance.requestRouter.loadScript(`/static/tracing-headers.js?v=${Config.LIB_VERSION}`, (err) => {
             if (err) {
-                logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                return logger.error(LOGGER_PREFIX + ' failed to load script', err)
             }
             cb()
         })

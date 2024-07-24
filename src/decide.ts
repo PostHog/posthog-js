@@ -74,7 +74,7 @@ export class Decide {
 
                     this.instance.requestRouter.loadScript(scriptUrl, (err) => {
                         if (err) {
-                            logger.error(`Error while initializing PostHog app with config id ${id}`, err)
+                            return logger.error(`Error while initializing PostHog app with config id ${id}`, err)
                         }
                     })
                 }
