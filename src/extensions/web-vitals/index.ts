@@ -75,6 +75,7 @@ export class WebVitalsAutocapture {
             (err) => {
                 if (err) {
                     logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                    return
                 }
                 cb()
             }
