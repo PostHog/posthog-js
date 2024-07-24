@@ -65,7 +65,7 @@ export class ExceptionObserver {
             ),
             (err) => {
                 if (err) {
-                    logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                    return logger.error(LOGGER_PREFIX + ' failed to load script', err)
                 }
                 cb()
             }
