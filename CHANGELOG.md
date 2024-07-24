@@ -1,3 +1,8 @@
+## 1.149.1 - 2024-07-24
+
+- fix: web vitals ignored error on init (#1317)
+- chore: fix the rollup bundle visualiser output (#1315)
+
 ## 1.149.0 - 2024-07-23
 
 - fix: Fix the referrer changing mid-session (#1314)
