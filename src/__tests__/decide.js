@@ -23,7 +23,7 @@ const expectDecodedSendRequest = (send_request, data, noCompression, posthog) =>
 describe('Decide', () => {
     let posthog
 
-    given('decide', () => new Decide(posthog))
+    const decide = () => new Decide(posthog)
 
     const defaultConfig = { token: 'testtoken', api_host: 'https://test.com', persistence: 'memory' }
 
@@ -55,10 +55,10 @@ describe('Decide', () => {
     })
 
     describe('constructor', () => {
-        given('subject', () => () => given.decide.call())
+        const subject = () => decide().call()
 
         it('should call instance._send_request on constructor', () => {
-            given.subject()
+            subject()
 
             expectDecodedSendRequest(
                 posthog._send_request,
@@ -77,7 +77,7 @@ describe('Decide', () => {
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
-            given.subject()
+            subject()
 
             expectDecodedSendRequest(
                 posthog._send_request,
@@ -105,7 +105,7 @@ describe('Decide', () => {
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
-            given.subject()
+            subject()
 
             expectDecodedSendRequest(
                 posthog._send_request,
@@ -134,7 +134,7 @@ describe('Decide', () => {
                 $stored_person_properties: {},
                 $stored_group_properties: {},
             })
-            given.subject()
+            subject()
 
             // noCompression is true
             expectDecodedSendRequest(
@@ -163,7 +163,7 @@ describe('Decide', () => {
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
-            given.subject()
+            subject()
 
             expectDecodedSendRequest(
                 posthog._send_request,
@@ -182,7 +182,7 @@ describe('Decide', () => {
     })
 
     describe('parseDecideResponse', () => {
-        const subject = (decideResponse) => given.decide.parseDecideResponse(decideResponse)
+        const subject = (decideResponse) => decide().parseDecideResponse(decideResponse)
 
         it('properly parses decide response', () => {
             subject({})
