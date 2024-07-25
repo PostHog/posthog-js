@@ -1117,32 +1117,38 @@ describe('posthog core', () => {
     })
 
     describe('session_id', () => {
-        given('overrides', () => ({
-            sessionManager: {
-                checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
-                    windowId: 'windowId',
-                    sessionId: 'sessionId',
-                    sessionStartTimestamp: new Date().getTime() - 30000,
-                }),
-            },
-        }))
+        let instance
+        let token
+
+        beforeEach(async () => {
+            token = uuidv7()
+            instance = await createPosthogInstance(token, {
+                api_host: 'https://us.posthog.com',
+            })
+            instance.sessionManager.checkAndGetSessionAndWindowId = jest.fn().mockReturnValue({
+                windowId: 'windowId',
+                sessionId: 'sessionId',
+                sessionStartTimestamp: new Date().getTime() - 30000,
+            })
+        })
+
         it('returns the session_id', () => {
-            expect(given.lib.get_session_id()).toEqual('sessionId')
+            expect(instance.get_session_id()).toEqual('sessionId')
         })
 
         it('returns the replay URL', () => {
-            expect(given.lib.get_session_replay_url()).toEqual(
-                'https://us.posthog.com/project/testtoken/replay/sessionId'
+            expect(instance.get_session_replay_url()).toEqual(
+                `https://us.posthog.com/project/${token}/replay/sessionId`
             )
         })
 
         it('returns the replay URL including timestamp', () => {
-            expect(given.lib.get_session_replay_url({ withTimestamp: true })).toEqual(
-                'https://us.posthog.com/project/testtoken/replay/sessionId?t=20' // default lookback is 10 seconds
+            expect(instance.get_session_replay_url({ withTimestamp: true })).toEqual(
+                `https://us.posthog.com/project/${token}/replay/sessionId?t=20` // default lookback is 10 seconds
             )
 
-            expect(given.lib.get_session_replay_url({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
-                'https://us.posthog.com/project/testtoken/replay/sessionId?t=30'
+            expect(instance.get_session_replay_url({ withTimestamp: true, timestampLookBack: 0 })).toEqual(
+                `https://us.posthog.com/project/${token}/replay/sessionId?t=30`
             )
         })
     })
