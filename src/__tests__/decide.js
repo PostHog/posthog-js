@@ -25,8 +25,6 @@ describe('Decide', () => {
 
     given('decide', () => new Decide(posthog))
 
-    given('decideResponse', () => ({}))
-
     given('config', () => ({ token: 'testtoken', api_host: 'https://test.com', persistence: 'memory' }))
 
     beforeEach(() => {
@@ -44,7 +42,7 @@ describe('Decide', () => {
             _addCaptureHook: jest.fn(),
             _afterDecideResponse: jest.fn(),
             get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: given.decideResponse })),
+            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {
                 receivedFeatureFlags: jest.fn(),
                 setReloadingPaused: jest.fn(),
@@ -190,31 +188,26 @@ describe('Decide', () => {
     })
 
     describe('parseDecideResponse', () => {
-        given('subject', () => () => given.decide.parseDecideResponse(given.decideResponse))
+        const subject = (decideResponse) => given.decide.parseDecideResponse(decideResponse)
 
         it('properly parses decide response', () => {
-            given('decideResponse', () => ({}))
-            given.subject()
+            subject({})
 
-            expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, false)
+            expect(posthog._afterDecideResponse).toHaveBeenCalledWith({})
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
-            given('decideResponse', () => undefined)
             window.POSTHOG_DEBUG = true
             console.error = jest.fn()
 
-            given.subject()
+            subject(undefined)
 
             expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, true)
             expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
         })
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags_on_first_load is set', () => {
-            given('decideResponse', () => ({
-                featureFlags: { 'test-flag': true },
-            }))
             posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
@@ -222,16 +215,16 @@ describe('Decide', () => {
                 advanced_disable_feature_flags_on_first_load: true,
             }
 
-            given.subject()
+            const decideResponse = {
+                featureFlags: { 'test-flag': true },
+            }
+            subject(decideResponse)
 
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(decideResponse)
             expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags is set', () => {
-            given('decideResponse', () => ({
-                featureFlags: { 'test-flag': true },
-            }))
             posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
@@ -239,25 +232,27 @@ describe('Decide', () => {
                 advanced_disable_feature_flags: true,
             }
 
-            given.subject()
+            const decideResponse = {
+                featureFlags: { 'test-flag': true },
+            }
+            subject(decideResponse)
 
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(decideResponse)
             expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
 
         it('runs site apps if opted in', () => {
             posthog.config = { api_host: 'https://test.com', opt_in_site_apps: true, persistence: 'memory' }
-            given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
-            given.subject()
+            subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] })
             expectScriptToExist('https://test.com/site_app/1/tokentoken/hash/')
         })
 
         it('does not run site apps code if not opted in', () => {
             window.POSTHOG_DEBUG = true
             given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: false, persistence: 'memory' }))
-            given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
+
             expect(() => {
-                given.subject()
+                subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] })
             }).toThrow(
                 // throwing only in tests, just an error in production
                 'Unexpected console.error: [PostHog.js],PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
