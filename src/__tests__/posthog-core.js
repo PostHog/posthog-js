@@ -6,7 +6,7 @@ import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
 import { USER_STATE } from '../constants'
-import { defaultPostHog } from './helpers/posthog-instance'
+import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 
 jest.mock('../decide')
 
@@ -28,6 +28,7 @@ describe('posthog core', () => {
         // Make sure there's no cached persistence
         given.lib.persistence?.clear?.()
     })
+
     describe('capture()', () => {
         given('eventName', () => '$event')
 
@@ -1114,6 +1115,7 @@ describe('posthog core', () => {
             })
         })
     })
+
     describe('session_id', () => {
         given('overrides', () => ({
             sessionManager: {
@@ -1145,8 +1147,9 @@ describe('posthog core', () => {
         })
     })
 
-    test('deprecated web performance observer still exposes _forceAllowLocalhost', () => {
-        expect(given.lib.webPerformance._forceAllowLocalhost).toBe(false)
-        expect(() => given.lib.webPerformance._forceAllowLocalhost).not.toThrow()
+    it('deprecated web performance observer still exposes _forceAllowLocalhost', async () => {
+        const posthog = await createPosthogInstance(uuidv7())
+        expect(posthog.webPerformance._forceAllowLocalhost).toBe(false)
+        expect(() => posthog.webPerformance._forceAllowLocalhost).not.toThrow()
     })
 })
